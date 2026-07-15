@@ -1,4 +1,4 @@
----
+﻿---
 name: ca-review
 description: Review pending changes against the Clean Architecture template's conventions — layer boundaries, Result-based error handling, slice structure, validation, endpoints, and test coverage. Use when the user asks to review changes, check conventions, or audit a feature before committing.
 argument-hint: [optional: specific files or feature to review; defaults to the working-tree diff]
@@ -12,12 +12,12 @@ Review the given scope (default: `git diff` + untracked files) against this temp
 
 ### Layer boundaries (violations are blockers)
 - Domain references only `SharedKernel` — no EF Core, no Application/Infrastructure/Web.Api types.
-- Application references Domain + SharedKernel only; data access exclusively through `IApplicationDbContext`; no `using Infrastructure.*` anywhere in Application.
+- Application references Domain + SharedKernel only; data access exclusively through `IApplicationDbContext`; no `using TickestPristine.Infrastructure.*` anywhere in Application.
 - Persistence details (keys, conversions, relationships) live in Infrastructure `IEntityTypeConfiguration<>` classes, not on entities.
 - Web.Api endpoints contain no business logic — only request→command mapping and result matching.
 
 ### Slice structure
-- One folder per use case under `src/Application/{Feature}/{UseCase}/`; the endpoint mirrors it at `src/Web.Api/Endpoints/{Feature}/{UseCase}.cs`.
+- One folder per use case under `src/TickestPristine.Application/{Feature}/{UseCase}/`; the endpoint mirrors it at `src/TickestPristine.Web.Api/Endpoints/{Feature}/{UseCase}.cs`.
 - Naming: `{Verb}{Entity}Command` / `Get{X}Query` / `...Handler` / `...Validator` / `{X}Response`.
 - Handlers are `internal sealed` with primary constructors, implementing the custom `ICommandHandler<>`/`IQueryHandler<>` — no MediatR, no manual DI registration for handlers/validators/endpoints.
 - Response DTOs are per-slice; queries project with `.Select(...)` and never return domain entities.

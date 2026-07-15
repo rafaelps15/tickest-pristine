@@ -1,4 +1,4 @@
-# Clean Architecture Template
+# TickestPristine
 
 A pragmatic Clean Architecture starter for **.NET 10**. Batteries included, opinionated where it matters, and easy to extend.
 
@@ -25,22 +25,22 @@ A pragmatic Clean Architecture starter for **.NET 10**. Batteries included, opin
 - **Seq** for searching and analyzing structured logs
   - Seq is available at http://localhost:8081 by default
 - **Testing** projects
-  - Architecture testing (`ArchitectureTests`)
-  - Unit testing (`Application.UnitTests`)
-  - Integration testing with **Testcontainers** (`IntegrationTests`)
+  - Architecture testing (`TickestPristine.ArchitectureTests`)
+  - Unit testing (`TickestPristine.Application.UnitTests`)
+  - Integration testing with **Testcontainers** (`TickestPristine.IntegrationTests`)
 
 ## Getting started
 
 ```bash
 docker compose up -d        # PostgreSQL + Seq
-dotnet run --project src/Web.Api
+dotnet run --project src/TickestPristine.Web.Api
 ```
 
 Run the full test suite (the integration tests spin up a throwaway PostgreSQL container, so
 Docker must be running):
 
 ```bash
-dotnet test CleanArchitecture.slnx
+dotnet test TickestPristine.slnx
 ```
 
 To target .NET 8 or .NET 9 instead of .NET 10, see the notes in `Directory.Build.props`.

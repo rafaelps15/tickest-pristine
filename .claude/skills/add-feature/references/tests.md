@@ -1,22 +1,22 @@
-# Test Templates
+﻿# Test Templates
 
 Stack: xUnit + Shouldly + NSubstitute (unit), FluentValidation.TestHelper (validators), WebApplicationFactory + Testcontainers (integration). Every new use case gets all three.
 
 ## Handler unit tests
 
-`tests/Application.UnitTests/{Feature}/{UseCase}{Command|Query}HandlerTests.cs`. Inherit `BaseHandlerTest` — it provides `CreateDbContext()` (in-memory `TestDbContext` implementing `IApplicationDbContext`) and `CreateCache()` (real `HybridCache`). Mock only interfaces (`IUserContext`, `IDateTimeProvider`) with NSubstitute.
+`tests/TickestPristine.Application.UnitTests/{Feature}/{UseCase}{Command|Query}HandlerTests.cs`. Inherit `BaseHandlerTest` — it provides `CreateDbContext()` (in-memory `TestDbContext` implementing `IApplicationDbContext`) and `CreateCache()` (real `HybridCache`). Mock only interfaces (`IUserContext`, `IDateTimeProvider`) with NSubstitute.
 
 Cover: each failure path (one test per guard clause) and the happy path including persisted state and raised domain events.
 
 ```csharp
-using Application.Abstractions.Authentication;
-using Application.Todos.Archive;
-using Application.UnitTests.Abstractions;
-using Domain.Todos;
+using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Application.Todos.Archive;
+using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Domain.Todos;
 using Microsoft.EntityFrameworkCore;
-using SharedKernel;
+using TickestPristine.SharedKernel;
 
-namespace Application.UnitTests.Todos;
+namespace TickestPristine.Application.UnitTests.Todos;
 
 public sealed class ArchiveTodoCommandHandlerTests : BaseHandlerTest
 {
@@ -87,7 +87,7 @@ Conventions:
 
 ## Validator tests
 
-`tests/Application.UnitTests/{Feature}/{Feature}ValidatorsTests.cs` (extend the existing file if present). One class covers all validators of a feature.
+`tests/TickestPristine.Application.UnitTests/{Feature}/{Feature}ValidatorsTests.cs` (extend the existing file if present). One class covers all validators of a feature.
 
 ```csharp
 [Fact]
@@ -110,7 +110,7 @@ Cover each rule's failure plus one fully-valid command (`ShouldNotHaveAnyValidat
 
 ## Integration tests
 
-`tests/IntegrationTests/{Feature}/{Feature}Tests.cs` (extend the existing file if present). Inherit `BaseIntegrationTest(factory)` — it runs the real API against a Testcontainers Postgres and provides `HttpClient`, `RegisterAndLoginAsync()`, and `Authenticate(token)`. Tests go through real HTTP, never call handlers directly.
+`tests/TickestPristine.IntegrationTests/{Feature}/{Feature}Tests.cs` (extend the existing file if present). Inherit `BaseIntegrationTest(factory)` — it runs the real API against a Testcontainers Postgres and provides `HttpClient`, `RegisterAndLoginAsync()`, and `Authenticate(token)`. Tests go through real HTTP, never call handlers directly.
 
 ```csharp
 [Fact]

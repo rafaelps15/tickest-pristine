@@ -1,4 +1,4 @@
----
+﻿---
 name: add-tests
 description: Backfill missing tests for existing use cases in the Clean Architecture template — handler unit tests, FluentValidation validator tests, and HTTP integration tests. Use when the user asks to add, improve, or backfill test coverage.
 argument-hint: <use case or feature to cover, e.g. "CopyTodoCommand" or "the Users feature">
@@ -11,7 +11,7 @@ Backfill the three test types this template expects for every slice. Read the ta
 ## Workflow
 
 1. **Locate the slice.** Find the command/query, handler, validator, and endpoint for the target use case. List every distinct outcome: each guard clause (`return Result.Failure(...)`) and the happy path.
-2. **Check what already exists** in `tests/Application.UnitTests/{Feature}/` and `tests/IntegrationTests/{Feature}/` — extend existing classes, don't duplicate.
+2. **Check what already exists** in `tests/TickestPristine.Application.UnitTests/{Feature}/` and `tests/TickestPristine.IntegrationTests/{Feature}/` — extend existing classes, don't duplicate.
 3. **Write handler unit tests** — one test per failure path plus one happy path asserting persisted state and raised domain events.
 4. **Write validator tests** (commands only) — one failing test per rule plus one fully-valid command.
 5. **Write integration tests** — happy path over real HTTP with state asserted via a follow-up GET; error translation (404/409/400) where the handler has failure paths; 401 without a token if the route family is new.

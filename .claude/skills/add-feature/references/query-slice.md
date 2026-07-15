@@ -1,13 +1,13 @@
-# Query Slice Templates
+﻿# Query Slice Templates
 
-Files go in `src/Application/{Feature}/{UseCase}/`. Queries are reads: no validator, no domain events, no `SaveChangesAsync`.
+Files go in `src/TickestPristine.Application/{Feature}/{UseCase}/`. Queries are reads: no validator, no domain events, no `SaveChangesAsync`.
 
 ## Query
 
 ```csharp
-using Application.Abstractions.Messaging;
+using TickestPristine.Application.Abstractions.Messaging;
 
-namespace Application.Todos.GetOverdue;
+namespace TickestPristine.Application.Todos.GetOverdue;
 
 public sealed record GetOverdueTodosQuery : IQuery<List<TodoResponse>>;
 ```
@@ -19,7 +19,7 @@ With parameters: `public sealed record GetTodoByIdQuery(Guid TodoItemId) : IQuer
 Lives next to the query. Flat, serialization-friendly, never a domain entity.
 
 ```csharp
-namespace Application.Todos.GetOverdue;
+namespace TickestPristine.Application.Todos.GetOverdue;
 
 public sealed class TodoResponse
 {
@@ -41,13 +41,13 @@ Each use-case folder owns its own `TodoResponse` — do not share DTOs across sl
 Scope to the current user, project with `.Select` straight into the DTO:
 
 ```csharp
-using Application.Abstractions.Authentication;
-using Application.Abstractions.Data;
-using Application.Abstractions.Messaging;
+using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Application.Abstractions.Messaging;
 using Microsoft.EntityFrameworkCore;
-using SharedKernel;
+using TickestPristine.SharedKernel;
 
-namespace Application.Todos.GetOverdue;
+namespace TickestPristine.Application.Todos.GetOverdue;
 
 internal sealed class GetOverdueTodosQueryHandler(
     IApplicationDbContext context,
@@ -88,7 +88,7 @@ For single-item queries, return `Result.Failure<TodoResponse>(TodoItemErrors.Not
 Wrap the database query in `HybridCache.GetOrCreateAsync` with a key from the feature's cache-keys class (see `GetTodoByIdQueryHandler` for the live example):
 
 ```csharp
-namespace Application.Todos;
+namespace TickestPristine.Application.Todos;
 
 internal static class TodoCacheKeys
 {

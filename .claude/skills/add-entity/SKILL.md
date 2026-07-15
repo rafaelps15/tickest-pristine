@@ -1,4 +1,4 @@
----
+﻿---
 name: add-entity
 description: Add a new domain entity to the Clean Architecture template — entity class, error catalog, domain events, EF Core configuration, DbContext wiring, and migration. Use when the user asks to add an entity, aggregate, domain model, or table.
 argument-hint: <entity description, e.g. "Project with a name, owner, and list of todos">
@@ -10,12 +10,12 @@ Create a new entity and wire it through every layer, following the `TodoItem` pa
 
 ## Files to create/modify
 
-1. **Entity** — `src/Domain/{Feature}/{Entity}.cs`
+1. **Entity** — `src/TickestPristine.Domain/{Feature}/{Entity}.cs`
 
 ```csharp
-using SharedKernel;
+using TickestPristine.SharedKernel;
 
-namespace Domain.Projects;
+namespace TickestPristine.Domain.Projects;
 
 public sealed class Project : Entity
 {
@@ -28,12 +28,12 @@ public sealed class Project : Entity
 
 `sealed class`, inherits `Entity` (gives it `DomainEvents` + `Raise(...)`), `Guid Id`, plain settable properties, collections initialized with `= [];`.
 
-2. **Error catalog** — `src/Domain/{Feature}/{Entity}Errors.cs`
+2. **Error catalog** — `src/TickestPristine.Domain/{Feature}/{Entity}Errors.cs`
 
 ```csharp
-using SharedKernel;
+using TickestPristine.SharedKernel;
 
-namespace Domain.Projects;
+namespace TickestPristine.Domain.Projects;
 
 public static class ProjectErrors
 {
@@ -45,27 +45,27 @@ public static class ProjectErrors
 
 Codes are `"{FeaturePlural}.{Reason}"`. Pick the factory by semantics: `Error.NotFound` (404), `Error.Conflict` (409), `Error.Problem` (400), `Error.Failure` (500).
 
-3. **Domain events** — one record per file, `src/Domain/{Feature}/{Entity}{PastTenseVerb}DomainEvent.cs`
+3. **Domain events** — one record per file, `src/TickestPristine.Domain/{Feature}/{Entity}{PastTenseVerb}DomainEvent.cs`
 
 ```csharp
-using SharedKernel;
+using TickestPristine.SharedKernel;
 
-namespace Domain.Projects;
+namespace TickestPristine.Domain.Projects;
 
 public sealed record ProjectCreatedDomainEvent(Guid ProjectId) : IDomainEvent;
 ```
 
 Create at minimum the `Created` event; add others as commands need them. Events carry ids, not entities.
 
-4. **EF configuration** — `src/Infrastructure/{Feature}/{Entity}Configuration.cs`
+4. **EF configuration** — `src/TickestPristine.Infrastructure/{Feature}/{Entity}Configuration.cs`
 
 ```csharp
-using Domain.Projects;
-using Domain.Users;
+using TickestPristine.Domain.Projects;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace Infrastructure.Projects;
+namespace TickestPristine.Infrastructure.Projects;
 
 internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
 {
@@ -81,15 +81,15 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
 Relationships are configured shadow-style (`HasOne<User>().WithMany()`) — entities hold foreign-key ids, not navigation properties. Configurations are picked up automatically by `ApplyConfigurationsFromAssembly`.
 
 5. **DbContext wiring** — add `DbSet<{Entity}> {Plural}` to **both**:
-   - `src/Application/Abstractions/Data/IApplicationDbContext.cs`
-   - `src/Infrastructure/Database/ApplicationDbContext.cs`
+   - `src/TickestPristine.Application/Abstractions/Data/IApplicationDbContext.cs`
+   - `src/TickestPristine.Infrastructure/Database/ApplicationDbContext.cs`
 
-   Also add the `DbSet` to `tests/Application.UnitTests/Abstractions/TestDbContext.cs` so handlers stay unit-testable.
+   Also add the `DbSet` to `tests/TickestPristine.Application.UnitTests/Abstractions/TestDbContext.cs` so handlers stay unit-testable.
 
 6. **Migration** — from the repo root:
 
 ```
-dotnet ef migrations add Add_{Plural} --project src/Infrastructure --startup-project src/Web.Api
+dotnet ef migrations add Add_{Plural} --project src/TickestPristine.Infrastructure --startup-project src/TickestPristine.Web.Api
 ```
 
 Migration names are `PascalCase_With_Underscores` (see `Add_RefreshTokens`).

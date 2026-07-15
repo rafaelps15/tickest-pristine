@@ -1,15 +1,15 @@
-# Command Slice Templates
+﻿# Command Slice Templates
 
-Files go in `src/Application/{Feature}/{UseCase}/`. Replace `{Feature}` (plural, e.g. `Todos`), `{Entity}` (e.g. `TodoItem`), and use-case names throughout.
+Files go in `src/TickestPristine.Application/{Feature}/{UseCase}/`. Replace `{Feature}` (plural, e.g. `Todos`), `{Entity}` (e.g. `TodoItem`), and use-case names throughout.
 
 ## Command
 
 Positional record for few parameters:
 
 ```csharp
-using Application.Abstractions.Messaging;
+using TickestPristine.Application.Abstractions.Messaging;
 
-namespace Application.Todos.Archive;
+namespace TickestPristine.Application.Todos.Archive;
 
 public sealed record ArchiveTodoCommand(Guid TodoItemId) : ICommand;
 ```
@@ -17,10 +17,10 @@ public sealed record ArchiveTodoCommand(Guid TodoItemId) : ICommand;
 Class with init-style setters when there are many parameters (matches `CreateTodoCommand`):
 
 ```csharp
-using Application.Abstractions.Messaging;
-using Domain.Todos;
+using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Domain.Todos;
 
-namespace Application.Todos.Create;
+namespace TickestPristine.Application.Todos.Create;
 
 public sealed class CreateTodoCommand : ICommand<Guid>
 {
@@ -42,7 +42,7 @@ Public class, same folder. Auto-registered and executed by `ValidationDecorator`
 ```csharp
 using FluentValidation;
 
-namespace Application.Todos.Create;
+namespace TickestPristine.Application.Todos.Create;
 
 public class CreateTodoCommandValidator : AbstractValidator<CreateTodoCommand>
 {
@@ -61,14 +61,14 @@ public class CreateTodoCommandValidator : AbstractValidator<CreateTodoCommand>
 `internal sealed`, primary constructor, `IApplicationDbContext` for data access. Guard clauses return `Result.Failure` with Domain errors; the happy path mutates, raises a domain event, saves, and returns.
 
 ```csharp
-using Application.Abstractions.Authentication;
-using Application.Abstractions.Data;
-using Application.Abstractions.Messaging;
-using Domain.Todos;
+using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Domain.Todos;
 using Microsoft.EntityFrameworkCore;
-using SharedKernel;
+using TickestPristine.SharedKernel;
 
-namespace Application.Todos.Archive;
+namespace TickestPristine.Application.Todos.Archive;
 
 internal sealed class ArchiveTodoCommandHandler(
     IApplicationDbContext context,
@@ -113,7 +113,7 @@ Notes:
 
 ## Domain additions (if needed)
 
-Error factory on the existing `{Entity}Errors` class in `src/Domain/{Feature}/`:
+Error factory on the existing `{Entity}Errors` class in `src/TickestPristine.Domain/{Feature}/`:
 
 ```csharp
 public static Error AlreadyArchived(Guid todoItemId) => Error.Problem(
@@ -123,12 +123,12 @@ public static Error AlreadyArchived(Guid todoItemId) => Error.Problem(
 
 Error type → HTTP status (via `CustomResults.Problem`): `NotFound` → 404, `Conflict` → 409, `Problem`/`Validation` → 400, `Failure` → 500.
 
-Domain event, one file each in `src/Domain/{Feature}/`:
+Domain event, one file each in `src/TickestPristine.Domain/{Feature}/`:
 
 ```csharp
-using SharedKernel;
+using TickestPristine.SharedKernel;
 
-namespace Domain.Todos;
+namespace TickestPristine.Domain.Todos;
 
 public sealed record TodoItemArchivedDomainEvent(Guid TodoItemId) : IDomainEvent;
 ```
@@ -136,10 +136,10 @@ public sealed record TodoItemArchivedDomainEvent(Guid TodoItemId) : IDomainEvent
 Optional event handler (Application layer, in the use-case folder):
 
 ```csharp
-using Domain.Todos;
-using SharedKernel;
+using TickestPristine.Domain.Todos;
+using TickestPristine.SharedKernel;
 
-namespace Application.Todos.Archive;
+namespace TickestPristine.Application.Todos.Archive;
 
 internal sealed class TodoItemArchivedDomainEventHandler : IDomainEventHandler<TodoItemArchivedDomainEvent>
 {

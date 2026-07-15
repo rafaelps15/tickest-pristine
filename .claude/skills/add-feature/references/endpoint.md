@@ -1,18 +1,18 @@
-# Endpoint Templates
+﻿# Endpoint Templates
 
-One file per use case in `src/Web.Api/Endpoints/{Feature}/{UseCase}.cs`. Endpoints implement `IEndpoint` and are auto-discovered by `AddEndpoints`/`MapEndpoints` — no registration needed.
+One file per use case in `src/TickestPristine.Web.Api/Endpoints/{Feature}/{UseCase}.cs`. Endpoints implement `IEndpoint` and are auto-discovered by `AddEndpoints`/`MapEndpoints` — no registration needed.
 
 ## Command with response body (POST → 200 + value)
 
 ```csharp
-using Application.Abstractions.Messaging;
-using Application.Todos.Create;
-using Domain.Todos;
-using SharedKernel;
-using Web.Api.Extensions;
-using Web.Api.Infrastructure;
+using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Todos.Create;
+using TickestPristine.Domain.Todos;
+using TickestPristine.SharedKernel;
+using TickestPristine.Web.Api.Extensions;
+using TickestPristine.Web.Api.Infrastructure;
 
-namespace Web.Api.Endpoints.Todos;
+namespace TickestPristine.Web.Api.Endpoints.Todos;
 
 internal sealed class Create : IEndpoint
 {
@@ -54,13 +54,13 @@ internal sealed class Create : IEndpoint
 ## Void command from route parameter (PUT/DELETE → 204)
 
 ```csharp
-using Application.Abstractions.Messaging;
-using Application.Todos.Archive;
-using SharedKernel;
-using Web.Api.Extensions;
-using Web.Api.Infrastructure;
+using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Todos.Archive;
+using TickestPristine.SharedKernel;
+using TickestPristine.Web.Api.Extensions;
+using TickestPristine.Web.Api.Infrastructure;
 
-namespace Web.Api.Endpoints.Todos;
+namespace TickestPristine.Web.Api.Endpoints.Todos;
 
 internal sealed class Archive : IEndpoint
 {
@@ -86,13 +86,13 @@ internal sealed class Archive : IEndpoint
 ## Query (GET → 200)
 
 ```csharp
-using Application.Abstractions.Messaging;
-using Application.Todos.GetOverdue;
-using SharedKernel;
-using Web.Api.Extensions;
-using Web.Api.Infrastructure;
+using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Todos.GetOverdue;
+using TickestPristine.SharedKernel;
+using TickestPristine.Web.Api.Extensions;
+using TickestPristine.Web.Api.Infrastructure;
 
-namespace Web.Api.Endpoints.Todos;
+namespace TickestPristine.Web.Api.Endpoints.Todos;
 
 internal sealed class GetOverdue : IEndpoint
 {
