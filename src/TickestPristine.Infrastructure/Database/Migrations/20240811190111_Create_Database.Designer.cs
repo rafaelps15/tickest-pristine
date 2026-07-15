@@ -27,7 +27,7 @@ namespace TickestPristine.Infrastructure.Database.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Domain.Todos.TodoItem", b =>
+            modelBuilder.Entity("TickestPristine.Domain.Todos.TodoItem", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -77,7 +77,7 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.ToTable("todo_items", "public");
                 });
 
-            modelBuilder.Entity("Domain.Users.User", b =>
+            modelBuilder.Entity("TickestPristine.Domain.Users.User", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -114,9 +114,9 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.ToTable("users", "public");
                 });
 
-            modelBuilder.Entity("Domain.Todos.TodoItem", b =>
+            modelBuilder.Entity("TickestPristine.Domain.Todos.TodoItem", b =>
                 {
-                    b.HasOne("Domain.Users.User", null)
+                    b.HasOne("TickestPristine.Domain.Users.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)

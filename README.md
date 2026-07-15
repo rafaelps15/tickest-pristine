@@ -8,7 +8,7 @@ A pragmatic Clean Architecture starter for **.NET 10**. Batteries included, opin
 - **Domain** layer with sample entities and domain events.
 - **Application** layer with abstractions for:
   - CQRS (lightweight, MediatR-free command/query handlers)
-  - Example use cases (Todos and Users)
+  - Tickets, Users, Departments and Sectors use cases
   - Cross-cutting concerns (logging, validation) implemented as decorators
 - **Infrastructure** layer with:
   - JWT authentication with **refresh tokens** (with token rotation)

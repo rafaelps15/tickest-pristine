@@ -1,12 +1,34 @@
-﻿namespace TickestPristine.Infrastructure.Authorization;
+using TickestPristine.Application.Abstractions.Authorization;
+using TickestPristine.Application.Abstractions.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
 
-internal sealed class PermissionProvider
+namespace TickestPristine.Infrastructure.Authorization;
+
+internal sealed class PermissionProvider(IApplicationDbContext context, HybridCache cache) : IPermissionService
 {
-    public Task<HashSet<string>> GetForUserIdAsync(Guid userId)
+    public async Task<HashSet<string>> GetPermissionsAsync(Guid userId, CancellationToken cancellationToken = default)
     {
-        // TODO: Here you'll implement your logic to fetch permissions.
-        HashSet<string> permissionsSet = [];
+        List<string> permissions = await cache.GetOrCreateAsync(
+            PermissionCacheKeys.ForUser(userId),
+            async cancellation => await context.UserPermissions
+                .Where(p => p.UserId == userId)
+                .Select(p => p.PermissionCode)
+                .ToListAsync(cancellation),
+            cancellationToken: cancellationToken);
 
-        return Task.FromResult(permissionsSet);
+        return [.. permissions];
+    }
+
+    public async Task<bool> HasPermissionAsync(Guid userId, string permission, CancellationToken cancellationToken = default)
+    {
+        HashSet<string> permissions = await GetPermissionsAsync(userId, cancellationToken);
+
+        return permissions.Contains(permission);
+    }
+
+    public async Task InvalidateAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        await cache.RemoveAsync(PermissionCacheKeys.ForUser(userId), cancellationToken);
     }
 }

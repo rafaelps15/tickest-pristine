@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A pragmatic Clean Architecture starter for .NET 10 (Todos + Users sample domain), targeting PostgreSQL, with JWT auth, permission-based authorization, caching, structured logging, and OpenTelemetry wired in. It is a *template* — the Todos/Users code is sample content meant to be extended or replaced.
+A ticketing/helpdesk backend for .NET 10 built on a pragmatic Clean Architecture foundation (Tickets, Users, Departments, Sectors), targeting PostgreSQL, with JWT auth, direct per-user permission-based authorization, caching, structured logging, and OpenTelemetry wired in.
 
 ## Commands
 
@@ -29,7 +29,7 @@ dotnet test tests/TickestPristine.IntegrationTests
 dotnet test tests/TickestPristine.ArchitectureTests
 
 # Run a single test by name (any project)
-dotnet test --filter "FullyQualifiedName~CreateTodoCommandHandlerTests"
+dotnet test --filter "FullyQualifiedName~CreateTicketCommandHandlerTests"
 ```
 
 Seq (structured log viewer) is available at http://localhost:8081 once `docker compose up -d` is running.
@@ -48,17 +48,17 @@ TickestPristine.SharedKernel  <-- TickestPristine.Domain <-- TickestPristine.App
 ```
 
 - **TickestPristine.SharedKernel** — cross-cutting DDD primitives with no dependencies on anything else in the solution: `Entity` (base class holding raised domain events), `Result`/`Result<T>` (the error-handling convention — see below), `Error`/`ErrorType`, `IDomainEvent`, `IDateTimeProvider`.
-- **TickestPristine.Domain** — entities, domain events, and per-aggregate static `*Errors` classes (e.g. `TodoItemErrors`, `UserErrors`). No framework dependencies. Grouped by aggregate folder (`Todos/`, `Users/`), not by technical type.
-- **TickestPristine.Application** — use cases, one per vertical slice folder (e.g. `Todos/Create/`, `Todos/Complete/`), plus `Abstractions/` for cross-cutting interfaces (`Messaging`, `Behaviors`, `Data`, `Authentication`). No MediatR — commands/queries are handled by custom `ICommandHandler`/`IQueryHandler` interfaces resolved via DI + `Scrutor` assembly scanning.
+- **TickestPristine.Domain** — entities, domain events, and per-aggregate static `*Errors` classes (e.g. `TicketErrors`, `UserErrors`). No framework dependencies. Grouped by aggregate folder (`Tickets/`, `Users/`, `Departments/`, `Sectors/`), not by technical type.
+- **TickestPristine.Application** — use cases, one per vertical slice folder (e.g. `Tickets/Create/`, `Tickets/Update/`), plus `Abstractions/` for cross-cutting interfaces (`Messaging`, `Behaviors`, `Data`, `Authentication`, `Authorization`). No MediatR — commands/queries are handled by custom `ICommandHandler`/`IQueryHandler` interfaces resolved via DI + `Scrutor` assembly scanning.
 - **TickestPristine.Infrastructure** — EF Core (`ApplicationDbContext`, PostgreSQL, snake_case naming convention, migrations), JWT auth + refresh token rotation, permission-based authorization, `HybridCache`, Serilog, domain event dispatch.
 - **TickestPristine.Web.Api** — minimal API endpoints (one class per endpoint implementing `IEndpoint`, auto-registered via assembly scan in `EndpointExtensions`), rate limiting, OpenTelemetry, global exception handling → `ProblemDetails`, Swagger/OpenAPI with JWT.
 
 ### Vertical slice layout
 
-Each use case lives under `TickestPristine.Application/{Aggregate}/{UseCase}/` as a self-contained slice, e.g. `TickestPristine.Application/Todos/Create/`:
-- `CreateTodoCommand.cs` — the `ICommand<TResponse>` (or `IQuery<TResponse>`) DTO.
-- `CreateTodoCommandHandler.cs` — `internal sealed class ... : ICommandHandler<TCommand, TResponse>`. Injected dependencies via primary constructor (`IApplicationDbContext`, `IUserContext`, `IDateTimeProvider`, etc). Returns `Result<T>`, never throws for expected failures.
-- `CreateTodoCommandValidator.cs` — FluentValidation `AbstractValidator<TCommand>`, picked up automatically by `AddValidatorsFromAssembly`.
+Each use case lives under `TickestPristine.Application/{Aggregate}/{UseCase}/` as a self-contained slice, e.g. `TickestPristine.Application/Tickets/Create/`:
+- `CreateTicketCommand.cs` — the `ICommand<TResponse>` (or `IQuery<TResponse>`) DTO.
+- `CreateTicketCommandHandler.cs` — `internal sealed class ... : ICommandHandler<TCommand, TResponse>`. Injected dependencies via primary constructor (`IApplicationDbContext`, `IUserContext`, `IDateTimeProvider`, `IPermissionService`, etc). Returns `Result<T>`, never throws for expected failures.
+- `CreateTicketCommandValidator.cs` — FluentValidation `AbstractValidator<TCommand>`, picked up automatically by `AddValidatorsFromAssembly`.
 
 The matching endpoint lives in `TickestPristine.Web.Api/Endpoints/{Aggregate}/{Verb}.cs` as an `internal sealed class : IEndpoint` with a nested `Request` DTO, mapping the request to the command/query, calling the handler, and translating `Result` to HTTP via `result.Match(Results.Ok, CustomResults.Problem)`.
 
@@ -70,7 +70,7 @@ Tests mirror this: `tests/TickestPristine.Application.UnitTests/{Aggregate}/{Use
 
 ### Result pattern (no exceptions for expected failures)
 
-`Result` / `Result<T>` in `TickestPristine.SharedKernel` is the error-handling convention throughout Domain/Application/Web.Api. Handlers return `Result.Failure<T>(SomeErrors.Reason(...))` instead of throwing. Each aggregate defines its own static errors class (`TodoItemErrors`, `UserErrors`) with named factory methods. Endpoints convert the `Result` to an HTTP response via `CustomResults.Problem` (maps `ErrorType` to the appropriate `ProblemDetails` status code). Exceptions are reserved for truly unexpected failures and are caught by `GlobalExceptionHandler`.
+`Result` / `Result<T>` in `TickestPristine.SharedKernel` is the error-handling convention throughout Domain/Application/Web.Api. Handlers return `Result.Failure<T>(SomeErrors.Reason(...))` instead of throwing. Each aggregate defines its own static errors class (`TicketErrors`, `UserErrors`) with named factory methods. Endpoints convert the `Result` to an HTTP response via `CustomResults.Problem` (maps `ErrorType` to the appropriate `ProblemDetails` status code). Exceptions are reserved for truly unexpected failures and are caught by `GlobalExceptionHandler`.
 
 ### Domain events
 

@@ -27,7 +27,7 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         });
         await context.SaveChangesAsync();
 
-        var handler = new RegisterUserCommandHandler(context, Substitute.For<IPasswordHasher>());
+        var handler = new RegisterUserCommandHandler(context, Substitute.For<IPasswordHasher>(), Substitute.For<IDateTimeProvider>());
 
         // Act
         Result<Guid> result = await handler.Handle(Command, CancellationToken.None);
@@ -46,7 +46,7 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
         passwordHasher.Hash(Command.Password).Returns("hashed-password");
 
-        var handler = new RegisterUserCommandHandler(context, passwordHasher);
+        var handler = new RegisterUserCommandHandler(context, passwordHasher, Substitute.For<IDateTimeProvider>());
 
         // Act
         Result<Guid> result = await handler.Handle(Command, CancellationToken.None);

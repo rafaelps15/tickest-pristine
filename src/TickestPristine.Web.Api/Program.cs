@@ -35,6 +35,8 @@ if (app.Environment.IsDevelopment())
     app.ApplyMigrations();
 }
 
+await app.SeedAdminUserAsync();
+
 app.MapHealthChecks("health", new HealthCheckOptions
 {
     ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse

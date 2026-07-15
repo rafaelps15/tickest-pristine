@@ -1,5 +1,7 @@
 ﻿using TickestPristine.Application.Abstractions.Data;
-using TickestPristine.Domain.Todos;
+using TickestPristine.Domain.Departments;
+using TickestPristine.Domain.Sectors;
+using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,7 +16,13 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
 {
     public DbSet<User> Users { get; set; }
 
+    public DbSet<UserPermission> UserPermissions { get; set; }
+
     public DbSet<RefreshToken> RefreshTokens { get; set; }
 
-    public DbSet<TodoItem> TodoItems { get; set; }
+    public DbSet<Department> Departments { get; set; }
+
+    public DbSet<Sector> Sectors { get; set; }
+
+    public DbSet<Ticket> Tickets { get; set; }
 }

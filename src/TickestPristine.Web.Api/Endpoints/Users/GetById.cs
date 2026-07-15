@@ -1,4 +1,5 @@
 ﻿using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Users.GetById;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
@@ -21,7 +22,7 @@ internal sealed class GetById : IEndpoint
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })
-        .HasPermission(Permissions.UsersAccess)
+        .HasPermission(PermissionCodes.Users.Access)
         .WithTags(Tags.Users);
     }
 }

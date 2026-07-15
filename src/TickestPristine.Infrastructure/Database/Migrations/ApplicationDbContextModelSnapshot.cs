@@ -24,57 +24,151 @@ namespace TickestPristine.Infrastructure.Database.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Domain.Todos.TodoItem", b =>
+            modelBuilder.Entity("TickestPristine.Domain.Departments.Department", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("completed_at");
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
 
-                    b.Property<DateTime>("CreatedAt")
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid?>("ResponsibleUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("responsible_user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_departments");
+
+                    b.HasIndex("ResponsibleUserId")
+                        .HasDatabaseName("ix_departments_responsible_user_id");
+
+                    b.ToTable("departments", "public");
+                });
+
+            modelBuilder.Entity("TickestPristine.Domain.Sectors.Sector", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("department_id");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sectors");
+
+                    b.HasIndex("DepartmentId")
+                        .HasDatabaseName("ix_sectors_department_id");
+
+                    b.ToTable("sectors", "public");
+                });
+
+            modelBuilder.Entity("TickestPristine.Domain.Tickets.Ticket", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AssignedToUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("assigned_to_user_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at_utc");
+
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("department_id");
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
                         .HasColumnName("description");
 
-                    b.Property<DateTime?>("DueDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("due_date");
-
-                    b.Property<bool>("IsCompleted")
+                    b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
-                        .HasColumnName("is_completed");
+                        .HasColumnName("is_deleted");
 
-                    b.PrimitiveCollection<List<string>>("Labels")
-                        .IsRequired()
-                        .HasColumnType("text[]")
-                        .HasColumnName("labels");
+                    b.Property<Guid>("OpenedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("opened_by_user_id");
 
                     b.Property<int>("Priority")
                         .HasColumnType("integer")
                         .HasColumnName("priority");
 
-                    b.Property<Guid>("UserId")
+                    b.Property<Guid>("SectorId")
                         .HasColumnType("uuid")
-                        .HasColumnName("user_id");
+                        .HasColumnName("sector_id");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
 
                     b.HasKey("Id")
-                        .HasName("pk_todo_items");
+                        .HasName("pk_tickets");
 
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("ix_todo_items_user_id");
+                    b.HasIndex("AssignedToUserId")
+                        .HasDatabaseName("ix_tickets_assigned_to_user_id");
 
-                    b.ToTable("todo_items", "public");
+                    b.HasIndex("DepartmentId")
+                        .HasDatabaseName("ix_tickets_department_id");
+
+                    b.HasIndex("OpenedByUserId")
+                        .HasDatabaseName("ix_tickets_opened_by_user_id");
+
+                    b.HasIndex("SectorId")
+                        .HasDatabaseName("ix_tickets_sector_id");
+
+                    b.ToTable("tickets", "public");
                 });
 
-            modelBuilder.Entity("Domain.Users.RefreshToken", b =>
+            modelBuilder.Entity("TickestPristine.Domain.Users.RefreshToken", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -108,12 +202,20 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.ToTable("refresh_tokens", "public");
                 });
 
-            modelBuilder.Entity("Domain.Users.User", b =>
+            modelBuilder.Entity("TickestPristine.Domain.Users.User", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at_utc");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -124,6 +226,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("first_name");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
 
                     b.Property<string>("LastName")
                         .IsRequired()
@@ -145,19 +251,85 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.ToTable("users", "public");
                 });
 
-            modelBuilder.Entity("Domain.Todos.TodoItem", b =>
+            modelBuilder.Entity("TickestPristine.Domain.Users.UserPermission", b =>
                 {
-                    b.HasOne("Domain.Users.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("PermissionCode")
                         .IsRequired()
-                        .HasConstraintName("fk_todo_items_users_user_id");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("permission_code");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_user_permissions");
+
+                    b.HasIndex("UserId", "PermissionCode")
+                        .IsUnique()
+                        .HasDatabaseName("ix_user_permissions_user_id_permission_code");
+
+                    b.ToTable("user_permissions", "public");
                 });
 
-            modelBuilder.Entity("Domain.Users.RefreshToken", b =>
+            modelBuilder.Entity("TickestPristine.Domain.Departments.Department", b =>
                 {
-                    b.HasOne("Domain.Users.User", "User")
+                    b.HasOne("TickestPristine.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("ResponsibleUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_departments_users_responsible_user_id");
+                });
+
+            modelBuilder.Entity("TickestPristine.Domain.Sectors.Sector", b =>
+                {
+                    b.HasOne("TickestPristine.Domain.Departments.Department", null)
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sectors_departments_department_id");
+                });
+
+            modelBuilder.Entity("TickestPristine.Domain.Tickets.Ticket", b =>
+                {
+                    b.HasOne("TickestPristine.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("AssignedToUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_tickets_users_assigned_to_user_id");
+
+                    b.HasOne("TickestPristine.Domain.Departments.Department", null)
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_tickets_departments_department_id");
+
+                    b.HasOne("TickestPristine.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("OpenedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_tickets_users_opened_by_user_id");
+
+                    b.HasOne("TickestPristine.Domain.Sectors.Sector", null)
+                        .WithMany()
+                        .HasForeignKey("SectorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_tickets_sectors_sector_id");
+                });
+
+            modelBuilder.Entity("TickestPristine.Domain.Users.RefreshToken", b =>
+                {
+                    b.HasOne("TickestPristine.Domain.Users.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -165,6 +337,16 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasConstraintName("fk_refresh_tokens_users_user_id");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("TickestPristine.Domain.Users.UserPermission", b =>
+                {
+                    b.HasOne("TickestPristine.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_permissions_users_user_id");
                 });
 #pragma warning restore 612, 618
         }

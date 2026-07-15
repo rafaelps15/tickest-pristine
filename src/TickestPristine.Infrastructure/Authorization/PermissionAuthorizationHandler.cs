@@ -1,4 +1,5 @@
-﻿using TickestPristine.Infrastructure.Authentication;
+using TickestPristine.Application.Abstractions.Authorization;
+using TickestPristine.Infrastructure.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -11,24 +12,20 @@ internal sealed class PermissionAuthorizationHandler(IServiceScopeFactory servic
         AuthorizationHandlerContext context,
         PermissionRequirement requirement)
     {
-        // TODO: You definitely want to reject unauthenticated users here.
-        if (context.User is { Identity.IsAuthenticated: true })
+        if (context.User is not { Identity.IsAuthenticated: true })
         {
-            // TODO: Remove this call when you implement the PermissionProvider.GetForUserIdAsync
-            context.Succeed(requirement);
-
             return;
         }
 
         using IServiceScope scope = serviceScopeFactory.CreateScope();
 
-        PermissionProvider permissionProvider = scope.ServiceProvider.GetRequiredService<PermissionProvider>();
+        IPermissionService permissionService = scope.ServiceProvider.GetRequiredService<IPermissionService>();
 
         Guid userId = context.User.GetUserId();
 
-        HashSet<string> permissions = await permissionProvider.GetForUserIdAsync(userId);
+        bool hasPermission = await permissionService.HasPermissionAsync(userId, requirement.Permission);
 
-        if (permissions.Contains(requirement.Permission))
+        if (hasPermission)
         {
             context.Succeed(requirement);
         }

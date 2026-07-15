@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Infrastructure.Authentication;
 using TickestPristine.Infrastructure.Authorization;
@@ -95,7 +96,7 @@ public static class DependencyInjection
     {
         services.AddAuthorization();
 
-        services.AddScoped<PermissionProvider>();
+        services.AddScoped<IPermissionService, PermissionProvider>();
 
         services.AddTransient<IAuthorizationHandler, PermissionAuthorizationHandler>();
 

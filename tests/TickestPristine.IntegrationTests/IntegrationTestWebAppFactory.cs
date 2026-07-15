@@ -29,6 +29,12 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         // Relax rate limiting so the test suite is not throttled.
         builder.UseSetting("RateLimiting:Global:PermitLimit", "100000");
         builder.UseSetting("RateLimiting:Authentication:PermitLimit", "100000");
+
+        // Deterministic admin bootstrap credentials for the seeded AdminMaster user.
+        builder.UseSetting("Admin:Email", "admin@tickestpristine.dev");
+        builder.UseSetting("Admin:FirstName", "Admin");
+        builder.UseSetting("Admin:LastName", "Master");
+        builder.UseSetting("Admin:Password", "ChangeMe123!");
     }
 
     public async Task InitializeAsync()
