@@ -2,7 +2,17 @@ namespace TickestPristine.Domain.Users;
 
 public sealed class UserPermission
 {
-    public Guid Id { get; set; }
-    public Guid UserId { get; set; }
-    public string PermissionCode { get; set; }
+    private UserPermission(Guid id, Guid userId, string permissionCode)
+    {
+        Id = id;
+        UserId = userId;
+        PermissionCode = permissionCode;
+    }
+
+    public Guid Id { get; private set; }
+    public Guid UserId { get; private set; }
+    public string PermissionCode { get; private set; }
+
+    public static UserPermission Create(Guid userId, string permissionCode) =>
+        new(Guid.NewGuid(), userId, permissionCode);
 }

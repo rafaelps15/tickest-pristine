@@ -17,7 +17,6 @@ internal sealed class Create : IEndpoint
         public TicketPriority Priority { get; set; }
         public Guid? RequesterId { get; set; }
         public Guid? ResponsibleId { get; set; }
-        public Guid DepartmentId { get; set; }
         public Guid SectorId { get; set; }
     }
 
@@ -35,7 +34,6 @@ internal sealed class Create : IEndpoint
                 Priority = request.Priority,
                 RequesterId = request.RequesterId,
                 ResponsibleId = request.ResponsibleId,
-                DepartmentId = request.DepartmentId,
                 SectorId = request.SectorId
             };
 

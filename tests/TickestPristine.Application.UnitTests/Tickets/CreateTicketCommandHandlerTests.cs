@@ -18,7 +18,6 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
         Title = "Printer is broken",
         Description = "The printer on the 3rd floor is not working",
         Priority = TicketPriority.Medium,
-        DepartmentId = Guid.NewGuid(),
         SectorId = Guid.NewGuid()
     };
 
@@ -29,11 +28,11 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(UserId);
-        IPermissionService permissionService = Substitute.For<IPermissionService>();
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
 
-        var handler = new CreateTicketCommandHandler(context, userContext, permissionService, dateTimeProvider);
+        var handler = new CreateTicketCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
 
         // Act
         Result<Guid> result = await handler.Handle(Command, CancellationToken.None);
@@ -42,7 +41,7 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
         result.IsSuccess.ShouldBeTrue();
 
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == result.Value);
-        ticket.OpenedByUserId.ShouldBe(UserId);
+        ticket.CreatedByUserId.ShouldBe(UserId);
         ticket.Status.ShouldBe(TicketStatus.Open);
         ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketCreatedDomainEvent);
     }
@@ -54,12 +53,12 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(UserId);
-        IPermissionService permissionService = Substitute.For<IPermissionService>();
-        permissionService.HasPermissionAsync(UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(false);
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
 
-        var handler = new CreateTicketCommandHandler(context, userContext, permissionService, dateTimeProvider);
+        var handler = new CreateTicketCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
         CreateTicketCommand command = Command;
         command.RequesterId = Guid.NewGuid();
 
@@ -80,13 +79,13 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
 
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(UserId);
-        IPermissionService permissionService = Substitute.For<IPermissionService>();
-        permissionService.HasPermissionAsync(UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(true);
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
 
-        var handler = new CreateTicketCommandHandler(context, userContext, permissionService, dateTimeProvider);
+        var handler = new CreateTicketCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
         CreateTicketCommand command = Command;
         command.RequesterId = requesterId;
 
@@ -97,6 +96,6 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
         result.IsSuccess.ShouldBeTrue();
 
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == result.Value);
-        ticket.OpenedByUserId.ShouldBe(requesterId);
+        ticket.CreatedByUserId.ShouldBe(requesterId);
     }
 }

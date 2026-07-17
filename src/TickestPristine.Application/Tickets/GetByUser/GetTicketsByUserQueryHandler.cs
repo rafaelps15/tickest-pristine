@@ -13,14 +13,14 @@ namespace TickestPristine.Application.Tickets.GetByUser;
 internal sealed class GetTicketsByUserQueryHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IPermissionService permissionService)
+    IPermissionProvider permissionProvider)
     : IQueryHandler<GetTicketsByUserQuery, List<TicketResponse>>
 {
     public async Task<Result<List<TicketResponse>>> Handle(GetTicketsByUserQuery query, CancellationToken cancellationToken)
     {
         if (query.UserId != userContext.UserId)
         {
-            bool canManageTickets = await permissionService.HasPermissionAsync(
+            bool canManageTickets = await permissionProvider.HasPermissionAsync(
                 userContext.UserId,
                 PermissionCodes.Tickets.Manage,
                 cancellationToken);
@@ -32,7 +32,7 @@ internal sealed class GetTicketsByUserQueryHandler(
         }
 
         List<TicketResponse> tickets = await context.Tickets
-            .Where(t => t.OpenedByUserId == query.UserId
+            .Where(t => t.CreatedByUserId == query.UserId
                 && (t.Status == TicketStatus.Open || t.Status == TicketStatus.InProgress))
             .Select(t => new TicketResponse
             {
@@ -41,7 +41,7 @@ internal sealed class GetTicketsByUserQueryHandler(
                 Description = t.Description,
                 Priority = t.Priority,
                 Status = t.Status,
-                OpenedByUserId = t.OpenedByUserId,
+                OpenedByUserId = t.CreatedByUserId,
                 AssignedToUserId = t.AssignedToUserId
             })
             .ToListAsync(cancellationToken);

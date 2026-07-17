@@ -29,28 +29,14 @@ internal sealed class RegisterUserCommandHandler(
             return Result.Failure<Guid>(UserErrors.EmailNotUnique);
         }
 
-        var user = new User
-        {
-            Id = Guid.NewGuid(),
-            Email = command.Email,
-            FirstName = command.FirstName,
-            LastName = command.LastName,
-            PasswordHash = passwordHasher.Hash(command.Password),
-            CreatedAtUtc = dateTimeProvider.UtcNow
-        };
-
-        user.Raise(new UserRegisteredDomainEvent(user.Id));
+        var user = User.Create(command.Email, command.FirstName, command.LastName, dateTimeProvider.UtcNow);
 
         context.Users.Add(user);
+        context.UserCredentials.Add(UserCredential.Create(user.Id, passwordHasher.Hash(command.Password)));
 
         foreach (string permissionCode in DefaultPermissions)
         {
-            context.UserPermissions.Add(new UserPermission
-            {
-                Id = Guid.NewGuid(),
-                UserId = user.Id,
-                PermissionCode = permissionCode
-            });
+            context.UserPermissions.Add(UserPermission.Create(user.Id, permissionCode));
         }
 
         await context.SaveChangesAsync(cancellationToken);

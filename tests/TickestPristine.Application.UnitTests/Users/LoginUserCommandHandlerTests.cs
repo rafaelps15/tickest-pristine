@@ -96,14 +96,10 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
 
     private static async Task SeedUserAsync(TestDbContext context)
     {
-        context.Users.Add(new User
-        {
-            Id = Guid.NewGuid(),
-            Email = Email,
-            FirstName = "Test",
-            LastName = "User",
-            PasswordHash = "hash"
-        });
+        var user = User.Create(Email, "Test", "User", DateTime.UtcNow);
+
+        context.Users.Add(user);
+        context.UserCredentials.Add(UserCredential.Create(user.Id, "hash"));
 
         await context.SaveChangesAsync();
     }

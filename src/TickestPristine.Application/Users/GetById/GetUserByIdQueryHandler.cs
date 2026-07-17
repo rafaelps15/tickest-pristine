@@ -12,14 +12,14 @@ namespace TickestPristine.Application.Users.GetById;
 internal sealed class GetUserByIdQueryHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IPermissionService permissionService)
+    IPermissionProvider permissionProvider)
     : IQueryHandler<GetUserByIdQuery, UserResponse>
 {
     public async Task<Result<UserResponse>> Handle(GetUserByIdQuery query, CancellationToken cancellationToken)
     {
         if (query.UserId != userContext.UserId)
         {
-            bool canManageUsers = await permissionService.HasPermissionAsync(
+            bool canManageUsers = await permissionProvider.HasPermissionAsync(
                 userContext.UserId,
                 PermissionCodes.Users.Manage,
                 cancellationToken);

@@ -5,9 +5,9 @@ using Microsoft.Extensions.Caching.Hybrid;
 
 namespace TickestPristine.Infrastructure.Authorization;
 
-internal sealed class PermissionProvider(IApplicationDbContext context, HybridCache cache) : IPermissionService
+internal sealed class PermissionProvider(IApplicationDbContext context, HybridCache cache) : IPermissionProvider
 {
-    public async Task<HashSet<string>> GetPermissionsAsync(Guid userId, CancellationToken cancellationToken = default)
+    public async Task<HashSet<string>> GetForUserIdAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         List<string> permissions = await cache.GetOrCreateAsync(
             PermissionCacheKeys.ForUser(userId),
@@ -22,7 +22,7 @@ internal sealed class PermissionProvider(IApplicationDbContext context, HybridCa
 
     public async Task<bool> HasPermissionAsync(Guid userId, string permission, CancellationToken cancellationToken = default)
     {
-        HashSet<string> permissions = await GetPermissionsAsync(userId, cancellationToken);
+        HashSet<string> permissions = await GetForUserIdAsync(userId, cancellationToken);
 
         return permissions.Contains(permission);
     }

@@ -10,6 +10,5 @@ public sealed class CreateTicketCommand : ICommand<Guid>
     public TicketPriority Priority { get; set; }
     public Guid? RequesterId { get; set; }
     public Guid? ResponsibleId { get; set; }
-    public Guid DepartmentId { get; set; }
     public Guid SectorId { get; set; }
 }

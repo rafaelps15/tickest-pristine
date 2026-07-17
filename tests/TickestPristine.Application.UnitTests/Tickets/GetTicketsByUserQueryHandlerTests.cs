@@ -19,11 +19,11 @@ public sealed class GetTicketsByUserQueryHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(Guid.NewGuid());
-        IPermissionService permissionService = Substitute.For<IPermissionService>();
-        permissionService.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var handler = new GetTicketsByUserQueryHandler(context, userContext, permissionService);
+        var handler = new GetTicketsByUserQueryHandler(context, userContext, permissionProvider);
         var query = new GetTicketsByUserQuery(OwnerId);
 
         // Act
@@ -46,9 +46,9 @@ public sealed class GetTicketsByUserQueryHandlerTests : BaseHandlerTest
 
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(OwnerId);
-        IPermissionService permissionService = Substitute.For<IPermissionService>();
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
 
-        var handler = new GetTicketsByUserQueryHandler(context, userContext, permissionService);
+        var handler = new GetTicketsByUserQueryHandler(context, userContext, permissionProvider);
         var query = new GetTicketsByUserQuery(OwnerId);
 
         // Act
@@ -62,18 +62,19 @@ public sealed class GetTicketsByUserQueryHandlerTests : BaseHandlerTest
 
     private static async Task SeedTicketAsync(TestDbContext context, Guid openedByUserId, TicketStatus status)
     {
-        var ticket = new Ticket
+        var ticket = Ticket.Create(
+            "Printer is broken",
+            "Original description",
+            TicketPriority.Medium,
+            openedByUserId,
+            null,
+            Guid.NewGuid(),
+            DateTime.UtcNow);
+
+        if (status != TicketStatus.Open)
         {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Medium,
-            Status = status,
-            OpenedByUserId = openedByUserId,
-            DepartmentId = Guid.NewGuid(),
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow
-        };
+            ticket.Update(ticket.Description, status);
+        }
 
         context.Tickets.Add(ticket);
         await context.SaveChangesAsync();

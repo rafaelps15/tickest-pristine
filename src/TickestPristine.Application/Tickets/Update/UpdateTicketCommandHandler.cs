@@ -12,7 +12,7 @@ namespace TickestPristine.Application.Tickets.Update;
 internal sealed class UpdateTicketCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IPermissionService permissionService)
+    IPermissionProvider permissionProvider)
     : ICommandHandler<UpdateTicketCommand>
 {
     public async Task<Result> Handle(UpdateTicketCommand command, CancellationToken cancellationToken)
@@ -29,10 +29,10 @@ internal sealed class UpdateTicketCommandHandler(
             return Result.Failure(TicketErrors.NotActive(ticket.Id));
         }
 
-        bool isOwner = ticket.OpenedByUserId == userContext.UserId;
+        bool isOwner = ticket.CreatedByUserId == userContext.UserId;
         string requiredPermission = isOwner ? PermissionCodes.Tickets.UpdateOwn : PermissionCodes.Tickets.Manage;
 
-        bool hasPermission = await permissionService.HasPermissionAsync(userContext.UserId, requiredPermission, cancellationToken);
+        bool hasPermission = await permissionProvider.HasPermissionAsync(userContext.UserId, requiredPermission, cancellationToken);
 
         if (!hasPermission)
         {
@@ -44,8 +44,7 @@ internal sealed class UpdateTicketCommandHandler(
             return Result.Failure(TicketErrors.InvalidStatusTransition(ticket.Status, command.Status));
         }
 
-        ticket.Description = command.Description;
-        ticket.Status = command.Status;
+        ticket.Update(command.Description, command.Status);
 
         await context.SaveChangesAsync(cancellationToken);
 

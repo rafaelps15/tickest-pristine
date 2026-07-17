@@ -19,11 +19,11 @@ internal sealed class PermissionAuthorizationHandler(IServiceScopeFactory servic
 
         using IServiceScope scope = serviceScopeFactory.CreateScope();
 
-        IPermissionService permissionService = scope.ServiceProvider.GetRequiredService<IPermissionService>();
+        IPermissionProvider permissionProvider = scope.ServiceProvider.GetRequiredService<IPermissionProvider>();
 
         Guid userId = context.User.GetUserId();
 
-        bool hasPermission = await permissionService.HasPermissionAsync(userId, requirement.Permission);
+        bool hasPermission = await permissionProvider.HasPermissionAsync(userId, requirement.Permission);
 
         if (hasPermission)
         {

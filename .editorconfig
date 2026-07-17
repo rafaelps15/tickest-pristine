@@ -417,3 +417,8 @@ dotnet_diagnostic.S6605.severity = none
 
 # S6781: JWT secret keys should not be disclosed
 dotnet_diagnostic.S6781.severity = none
+
+# EF Core migrations are scaffolded, not hand-authored — don't hold them to the same
+# style/quality bar as the rest of the codebase (file-scoped namespaces, CA perf rules, etc.).
+[src/TickestPristine.Infrastructure/Database/Migrations/**.cs]
+generated_code = true

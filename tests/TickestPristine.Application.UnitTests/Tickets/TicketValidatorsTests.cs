@@ -18,7 +18,6 @@ public sealed class TicketValidatorsTests
             Title = string.Empty,
             Description = "Some description",
             Priority = TicketPriority.Low,
-            DepartmentId = Guid.NewGuid(),
             SectorId = Guid.NewGuid()
         };
 
@@ -35,7 +34,6 @@ public sealed class TicketValidatorsTests
             Title = "Printer is broken",
             Description = "The printer on the 3rd floor is not working",
             Priority = TicketPriority.Medium,
-            DepartmentId = Guid.NewGuid(),
             SectorId = Guid.NewGuid()
         };
 

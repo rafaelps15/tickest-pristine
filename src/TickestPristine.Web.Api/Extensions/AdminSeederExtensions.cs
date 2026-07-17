@@ -38,27 +38,15 @@ public static class AdminSeederExtensions
 
         if (adminUser is null)
         {
-            adminUser = new User
-            {
-                Id = Guid.NewGuid(),
-                Email = email,
-                FirstName = firstName,
-                LastName = lastName,
-                PasswordHash = passwordHasher.Hash(password),
-                CreatedAtUtc = dateTimeProvider.UtcNow
-            };
+            adminUser = User.Create(email, firstName, lastName, dateTimeProvider.UtcNow);
 
             context.Users.Add(adminUser);
+            context.UserCredentials.Add(UserCredential.Create(adminUser.Id, passwordHasher.Hash(password)));
         }
 
         foreach (string permissionCode in PermissionCodes.All)
         {
-            context.UserPermissions.Add(new UserPermission
-            {
-                Id = Guid.NewGuid(),
-                UserId = adminUser.Id,
-                PermissionCode = permissionCode
-            });
+            context.UserPermissions.Add(UserPermission.Create(adminUser.Id, permissionCode));
         }
 
         await context.SaveChangesAsync();

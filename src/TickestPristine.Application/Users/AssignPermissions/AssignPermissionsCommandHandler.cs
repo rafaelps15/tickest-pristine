@@ -9,7 +9,7 @@ namespace TickestPristine.Application.Users.AssignPermissions;
 
 internal sealed class AssignPermissionsCommandHandler(
     IApplicationDbContext context,
-    IPermissionService permissionService)
+    IPermissionProvider permissionProvider)
     : ICommandHandler<AssignPermissionsCommand>
 {
     public async Task<Result> Handle(AssignPermissionsCommand command, CancellationToken cancellationToken)
@@ -29,17 +29,12 @@ internal sealed class AssignPermissionsCommandHandler(
 
         foreach (string permissionCode in command.PermissionCodes.Distinct())
         {
-            context.UserPermissions.Add(new UserPermission
-            {
-                Id = Guid.NewGuid(),
-                UserId = command.UserId,
-                PermissionCode = permissionCode
-            });
+            context.UserPermissions.Add(UserPermission.Create(command.UserId, permissionCode));
         }
 
         await context.SaveChangesAsync(cancellationToken);
 
-        await permissionService.InvalidateAsync(command.UserId, cancellationToken);
+        await permissionProvider.InvalidateAsync(command.UserId, cancellationToken);
 
         return Result.Success();
     }

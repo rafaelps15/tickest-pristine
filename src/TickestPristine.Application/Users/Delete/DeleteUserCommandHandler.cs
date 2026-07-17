@@ -18,10 +18,7 @@ internal sealed class DeleteUserCommandHandler(IApplicationDbContext context, ID
             return Result.Failure(UserErrors.NotFound(command.UserId));
         }
 
-        user.IsDeleted = true;
-        user.DeletedAtUtc = dateTimeProvider.UtcNow;
-
-        user.Raise(new UserDeletedDomainEvent(user.Id));
+        user.Delete(dateTimeProvider.UtcNow);
 
         await context.SaveChangesAsync(cancellationToken);
 

@@ -28,7 +28,7 @@ internal sealed class ReopenTicketCommandHandler(IApplicationDbContext context)
             return Result.Failure(TicketErrors.InvalidStatusTransition(ticket.Status, TicketStatus.Open));
         }
 
-        ticket.Status = TicketStatus.Open;
+        ticket.Reopen();
 
         await context.SaveChangesAsync(cancellationToken);
 

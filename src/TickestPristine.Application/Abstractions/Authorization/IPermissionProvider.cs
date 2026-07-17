@@ -1,8 +1,8 @@
 namespace TickestPristine.Application.Abstractions.Authorization;
 
-public interface IPermissionService
+public interface IPermissionProvider
 {
-    Task<HashSet<string>> GetPermissionsAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<HashSet<string>> GetForUserIdAsync(Guid userId, CancellationToken cancellationToken = default);
 
     Task<bool> HasPermissionAsync(Guid userId, string permission, CancellationToken cancellationToken = default);
 

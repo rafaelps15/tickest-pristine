@@ -24,9 +24,11 @@ internal sealed class LoginUserCommandHandler(
             return Result.Failure<AccessTokensResponse>(UserErrors.NotFoundByEmail);
         }
 
-        bool verified = passwordHasher.Verify(command.Password, user.PasswordHash);
+        UserCredential? credential = await context.UserCredentials
+            .AsNoTracking()
+            .SingleOrDefaultAsync(c => c.UserId == user.Id, cancellationToken);
 
-        if (!verified)
+        if (credential is null || !passwordHasher.Verify(command.Password, credential.PasswordHash))
         {
             return Result.Failure<AccessTokensResponse>(UserErrors.NotFoundByEmail);
         }
@@ -34,15 +36,7 @@ internal sealed class LoginUserCommandHandler(
         string accessToken = tokenProvider.Create(user);
         string refreshToken = tokenProvider.GenerateRefreshToken();
 
-        var refreshTokenEntity = new RefreshToken
-        {
-            Id = Guid.NewGuid(),
-            Token = refreshToken,
-            UserId = user.Id,
-            ExpiresOnUtc = dateTimeProvider.UtcNow.AddDays(RefreshTokenExpirationInDays)
-        };
-
-        context.RefreshTokens.Add(refreshTokenEntity);
+        context.RefreshTokens.Add(RefreshToken.Create(refreshToken, user.Id, dateTimeProvider.UtcNow.AddDays(RefreshTokenExpirationInDays)));
 
         await context.SaveChangesAsync(cancellationToken);
 

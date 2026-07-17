@@ -16,6 +16,8 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
 {
     public DbSet<User> Users { get; set; }
 
+    public DbSet<UserCredential> UserCredentials { get; set; }
+
     public DbSet<UserPermission> UserPermissions { get; set; }
 
     public DbSet<RefreshToken> RefreshTokens { get; set; }

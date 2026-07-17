@@ -9,6 +9,7 @@ namespace TickestPristine.Application.Abstractions.Data;
 public interface IApplicationDbContext
 {
     DbSet<User> Users { get; }
+    DbSet<UserCredential> UserCredentials { get; }
     DbSet<UserPermission> UserPermissions { get; }
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<Department> Departments { get; }

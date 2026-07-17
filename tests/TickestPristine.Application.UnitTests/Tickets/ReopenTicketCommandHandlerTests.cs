@@ -67,18 +67,19 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
 
     private static async Task<Guid> SeedTicketAsync(TestDbContext context, TicketStatus status)
     {
-        var ticket = new Ticket
+        var ticket = Ticket.Create(
+            "Printer is broken",
+            "Original description",
+            TicketPriority.Medium,
+            Guid.NewGuid(),
+            null,
+            Guid.NewGuid(),
+            DateTime.UtcNow);
+
+        if (status != TicketStatus.Open)
         {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Medium,
-            Status = status,
-            OpenedByUserId = Guid.NewGuid(),
-            DepartmentId = Guid.NewGuid(),
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow
-        };
+            ticket.Update(ticket.Description, status);
+        }
 
         context.Tickets.Add(ticket);
         await context.SaveChangesAsync();

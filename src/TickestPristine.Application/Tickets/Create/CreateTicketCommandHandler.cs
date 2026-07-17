@@ -12,7 +12,7 @@ namespace TickestPristine.Application.Tickets.Create;
 internal sealed class CreateTicketCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IPermissionService permissionService,
+    IPermissionProvider permissionProvider,
     IDateTimeProvider dateTimeProvider)
     : ICommandHandler<CreateTicketCommand, Guid>
 {
@@ -22,7 +22,7 @@ internal sealed class CreateTicketCommandHandler(
 
         if (command.RequesterId is { } requesterId && requesterId != userContext.UserId)
         {
-            bool canManageTickets = await permissionService.HasPermissionAsync(
+            bool canManageTickets = await permissionProvider.HasPermissionAsync(
                 userContext.UserId,
                 PermissionCodes.Tickets.Manage,
                 cancellationToken);
@@ -35,21 +35,14 @@ internal sealed class CreateTicketCommandHandler(
             openedByUserId = requesterId;
         }
 
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = command.Title,
-            Description = command.Description,
-            Priority = command.Priority,
-            Status = TicketStatus.Open,
-            OpenedByUserId = openedByUserId,
-            AssignedToUserId = command.ResponsibleId,
-            DepartmentId = command.DepartmentId,
-            SectorId = command.SectorId,
-            CreatedAtUtc = dateTimeProvider.UtcNow
-        };
-
-        ticket.Raise(new TicketCreatedDomainEvent(ticket.Id));
+        var ticket = Ticket.Create(
+            command.Title,
+            command.Description,
+            command.Priority,
+            openedByUserId,
+            command.ResponsibleId,
+            command.SectorId,
+            dateTimeProvider.UtcNow);
 
         context.Tickets.Add(ticket);
 

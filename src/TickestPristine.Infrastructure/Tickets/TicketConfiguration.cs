@@ -1,4 +1,3 @@
-using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
@@ -17,22 +16,17 @@ internal sealed class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 
         builder.Property(t => t.Description).HasMaxLength(500);
 
-        builder.HasQueryFilter(t => !t.IsDeleted);
+        builder.HasQueryFilter(t => t.DeletedAtUtc == null);
 
         builder.HasOne<User>()
             .WithMany()
-            .HasForeignKey(t => t.OpenedByUserId)
+            .HasForeignKey(t => t.CreatedByUserId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne<User>()
             .WithMany()
             .HasForeignKey(t => t.AssignedToUserId)
             .OnDelete(DeleteBehavior.SetNull);
-
-        builder.HasOne<Department>()
-            .WithMany()
-            .HasForeignKey(t => t.DepartmentId)
-            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne<Sector>()
             .WithMany()

@@ -20,9 +20,9 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(OwnerId);
-        IPermissionService permissionService = Substitute.For<IPermissionService>();
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
 
-        var handler = new UpdateTicketCommandHandler(context, userContext, permissionService);
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider);
         var command = new UpdateTicketCommand { TicketId = Guid.NewGuid(), Description = "Updated description", Status = TicketStatus.Open };
 
         // Act
@@ -42,11 +42,11 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
 
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(Guid.NewGuid());
-        IPermissionService permissionService = Substitute.For<IPermissionService>();
-        permissionService.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var handler = new UpdateTicketCommandHandler(context, userContext, permissionService);
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider);
         var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.Open };
 
         // Act
@@ -66,11 +66,11 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
 
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(OwnerId);
-        IPermissionService permissionService = Substitute.For<IPermissionService>();
-        permissionService.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new UpdateTicketCommandHandler(context, userContext, permissionService);
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider);
         var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.Closed };
 
         // Act
@@ -90,11 +90,11 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
 
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(OwnerId);
-        IPermissionService permissionService = Substitute.For<IPermissionService>();
-        permissionService.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new UpdateTicketCommandHandler(context, userContext, permissionService);
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider);
         var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.InProgress };
 
         // Act
@@ -110,18 +110,19 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
 
     private static async Task<Guid> SeedTicketAsync(TestDbContext context, Guid openedByUserId, TicketStatus status)
     {
-        var ticket = new Ticket
+        var ticket = Ticket.Create(
+            "Printer is broken",
+            "Original description",
+            TicketPriority.Medium,
+            openedByUserId,
+            null,
+            Guid.NewGuid(),
+            DateTime.UtcNow);
+
+        if (status != TicketStatus.Open)
         {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Medium,
-            Status = status,
-            OpenedByUserId = openedByUserId,
-            DepartmentId = Guid.NewGuid(),
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow
-        };
+            ticket.Update(ticket.Description, status);
+        }
 
         context.Tickets.Add(ticket);
         await context.SaveChangesAsync();

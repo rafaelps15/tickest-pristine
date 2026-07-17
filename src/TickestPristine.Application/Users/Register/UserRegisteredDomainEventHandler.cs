@@ -7,16 +7,7 @@ internal sealed class UserRegisteredDomainEventHandler : IDomainEventHandler<Use
 {
     public Task Handle(UserRegisteredDomainEvent domainEvent, CancellationToken cancellationToken)
     {
-        // TODO: Send an email verification link, etc.
-        return Task.CompletedTask;
-    }
-}
-
-internal sealed class UserRegisteredDomainEventHandler1 : IDomainEventHandler<UserRegisteredDomainEvent>
-{
-    public Task Handle(UserRegisteredDomainEvent domainEvent, CancellationToken cancellationToken)
-    {
-        // TODO: Send an email verification link, etc.
+        // Aqui pode ser utilizado para enviar um link de confirmação de e-mail para o usuário registrado e etc...
         return Task.CompletedTask;
     }
 }

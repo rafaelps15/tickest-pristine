@@ -23,10 +23,7 @@ internal sealed class DeleteTicketCommandHandler(IApplicationDbContext context, 
             return Result.Failure(TicketErrors.NotActive(ticket.Id));
         }
 
-        ticket.IsDeleted = true;
-        ticket.DeletedAtUtc = dateTimeProvider.UtcNow;
-
-        ticket.Raise(new TicketDeletedDomainEvent(ticket.Id));
+        ticket.Delete(dateTimeProvider.UtcNow);
 
         await context.SaveChangesAsync(cancellationToken);
 

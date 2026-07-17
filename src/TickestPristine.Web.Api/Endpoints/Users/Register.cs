@@ -1,4 +1,4 @@
-﻿using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Users.Register;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
@@ -27,6 +27,7 @@ internal sealed class Register : IEndpoint
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })
+        .AllowAnonymous()
         .WithTags(Tags.Users)
         .RequireRateLimiting(RateLimitingPolicies.Authentication);
     }
