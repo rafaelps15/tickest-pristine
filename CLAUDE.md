@@ -57,7 +57,7 @@ TickestPristine.SharedKernel  <-- TickestPristine.Domain <-- TickestPristine.App
 
 Each use case lives under `TickestPristine.Application/{Aggregate}/{UseCase}/` as a self-contained slice, e.g. `TickestPristine.Application/Tickets/Create/`:
 - `CreateTicketCommand.cs` — the `ICommand<TResponse>` (or `IQuery<TResponse>`) DTO.
-- `CreateTicketCommandHandler.cs` — `internal sealed class ... : ICommandHandler<TCommand, TResponse>`. Injected dependencies via primary constructor (`IApplicationDbContext`, `IUserContext`, `IDateTimeProvider`, `IPermissionService`, etc). Returns `Result<T>`, never throws for expected failures.
+- `CreateTicketCommandHandler.cs` — `internal sealed class ... : ICommandHandler<TCommand, TResponse>`. Injected dependencies via primary constructor (`IApplicationDbContext`, `IUserContext`, `IDateTimeProvider`, `IPermissionProvider`, etc). Returns `Result<T>`, never throws for expected failures.
 - `CreateTicketCommandValidator.cs` — FluentValidation `AbstractValidator<TCommand>`, picked up automatically by `AddValidatorsFromAssembly`.
 
 The matching endpoint lives in `TickestPristine.Web.Api/Endpoints/{Aggregate}/{Verb}.cs` as an `internal sealed class : IEndpoint` with a nested `Request` DTO, mapping the request to the command/query, calling the handler, and translating `Result` to HTTP via `result.Match(Results.Ok, CustomResults.Problem)`.

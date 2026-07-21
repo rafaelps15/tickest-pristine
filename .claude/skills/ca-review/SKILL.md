@@ -31,6 +31,7 @@ Review the given scope (default: `git diff` + untracked files) against this temp
 - Every command has a FluentValidation `{Command}Validator`; handlers don't re-check input shape (but do enforce business rules).
 - Handlers acting on user-owned data enforce ownership: filter by `IUserContext.UserId` or return `UserErrors.Unauthorized()`.
 - New endpoints call `.RequireAuthorization()` (or `.HasPermission(...)`) and `.WithTags(Tags.X)`.
+- Permissions follow Users → Roles → Permissions (RBAC): a permission code is attached to a `Role` via `Roles/AssignPermissions`, never directly to a `User`. Granting a user access means assigning them a role (`Users/AssignRoles`), not a raw permission — there is no per-user permission override.
 - No `DateTime.UtcNow`/`DateTime.Now` in Application — use `IDateTimeProvider`.
 
 ### State changes & caching

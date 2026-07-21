@@ -1,4 +1,5 @@
 ﻿using TickestPristine.Domain.Departments;
+using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
@@ -10,11 +11,13 @@ public interface IApplicationDbContext
 {
     DbSet<User> Users { get; }
     DbSet<UserCredential> UserCredentials { get; }
-    DbSet<UserPermission> UserPermissions { get; }
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<Department> Departments { get; }
     DbSet<Sector> Sectors { get; }
     DbSet<Ticket> Tickets { get; }
+    DbSet<Role> Roles { get; }
+    DbSet<RolePermission> RolePermissions { get; }
+    DbSet<UserRole> UserRoles { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

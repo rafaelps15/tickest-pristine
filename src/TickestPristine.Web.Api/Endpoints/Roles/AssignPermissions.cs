@@ -1,11 +1,11 @@
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Authorization;
-using TickestPristine.Application.Users.AssignPermissions;
+using TickestPristine.Application.Roles.AssignPermissions;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
 using TickestPristine.Web.Api.Infrastructure;
 
-namespace TickestPristine.Web.Api.Endpoints.Users;
+namespace TickestPristine.Web.Api.Endpoints.Roles;
 
 internal sealed class AssignPermissions : IEndpoint
 {
@@ -13,15 +13,15 @@ internal sealed class AssignPermissions : IEndpoint
 
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapPut("users/{userId}/permissions", async (
-            Guid userId,
+        app.MapPut("roles/{roleId}/permissions", async (
+            Guid roleId,
             Request request,
-            ICommandHandler<AssignPermissionsCommand> handler,
+            ICommandHandler<AssignRolePermissionsCommand> handler,
             CancellationToken cancellationToken) =>
         {
-            var command = new AssignPermissionsCommand
+            var command = new AssignRolePermissionsCommand
             {
-                UserId = userId,
+                RoleId = roleId,
                 PermissionCodes = request.PermissionCodes
             };
 
@@ -29,7 +29,7 @@ internal sealed class AssignPermissions : IEndpoint
 
             return result.Match(Results.NoContent, CustomResults.Problem);
         })
-        .HasPermission(PermissionCodes.Users.ManagePermissions)
-        .WithTags(Tags.Users);
+        .HasPermission(PermissionCodes.Roles.Manage)
+        .WithTags(Tags.Roles);
     }
 }

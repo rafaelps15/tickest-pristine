@@ -11,9 +11,12 @@ internal sealed class PermissionProvider(IApplicationDbContext context, HybridCa
     {
         List<string> permissions = await cache.GetOrCreateAsync(
             PermissionCacheKeys.ForUser(userId),
-            async cancellation => await context.UserPermissions
-                .Where(p => p.UserId == userId)
-                .Select(p => p.PermissionCode)
+            async cancellation => await (
+                from userRole in context.UserRoles
+                where userRole.UserId == userId
+                join rolePermission in context.RolePermissions on userRole.RoleId equals rolePermission.RoleId
+                select rolePermission.PermissionCode)
+                .Distinct()
                 .ToListAsync(cancellation),
             cancellationToken: cancellationToken);
 

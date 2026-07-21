@@ -1,13 +1,13 @@
 using FluentValidation;
 using TickestPristine.Application.Authorization;
 
-namespace TickestPristine.Application.Users.AssignPermissions;
+namespace TickestPristine.Application.Roles.AssignPermissions;
 
-internal sealed class AssignPermissionsCommandValidator : AbstractValidator<AssignPermissionsCommand>
+internal sealed class AssignRolePermissionsCommandValidator : AbstractValidator<AssignRolePermissionsCommand>
 {
-    public AssignPermissionsCommandValidator()
+    public AssignRolePermissionsCommandValidator()
     {
-        RuleFor(c => c.UserId).NotEmpty();
+        RuleFor(c => c.RoleId).NotEmpty();
 
         RuleFor(c => c.PermissionCodes).NotNull();
 

@@ -17,7 +17,12 @@ public static class PermissionCodes
         public const string Access = "users:access";
         public const string Manage = "users:manage";
         public const string Delete = "users:delete";
-        public const string ManagePermissions = "users:manage-permissions";
+        public const string ManageRoles = "users:manage-roles";
+    }
+
+    public static class Roles
+    {
+        public const string Manage = "roles:manage";
     }
 
     public static IReadOnlyList<string> All { get; } =
@@ -31,6 +36,7 @@ public static class PermissionCodes
         Users.Access,
         Users.Manage,
         Users.Delete,
-        Users.ManagePermissions
+        Users.ManageRoles,
+        Roles.Manage
     ];
 }

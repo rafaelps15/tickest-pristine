@@ -1,5 +1,6 @@
 ﻿using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Domain.Departments;
+using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
@@ -18,8 +19,6 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
 
     public DbSet<UserCredential> UserCredentials { get; set; }
 
-    public DbSet<UserPermission> UserPermissions { get; set; }
-
     public DbSet<RefreshToken> RefreshTokens { get; set; }
 
     public DbSet<Department> Departments { get; set; }
@@ -27,4 +26,10 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
     public DbSet<Sector> Sectors { get; set; }
 
     public DbSet<Ticket> Tickets { get; set; }
+
+    public DbSet<Role> Roles { get; set; }
+
+    public DbSet<RolePermission> RolePermissions { get; set; }
+
+    public DbSet<UserRole> UserRoles { get; set; }
 }

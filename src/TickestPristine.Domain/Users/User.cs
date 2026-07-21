@@ -4,35 +4,39 @@ namespace TickestPristine.Domain.Users;
 
 public sealed class User : Entity
 {
-    private User(Guid id, string email, string firstName, string lastName, DateTime createdAtUtc)
+    private User()
     {
-        Id = id;
-        Email = email;
-        FirstName = firstName;
-        LastName = lastName;
-        CreatedAtUtc = createdAtUtc;
     }
 
     public Guid Id { get; private set; }
     public string Email { get; private set; }
     public string FirstName { get; private set; }
     public string LastName { get; private set; }
-    public DateTime CreatedAtUtc { get; private set; }
-    public DateTime? DeletedAtUtc { get; private set; }
 
-    public static User Create(string email, string firstName, string lastName, DateTime createdAtUtc)
+    public static User Create(string email, string firstName, string lastName)
     {
-        var user = new User(Guid.NewGuid(), email, firstName, lastName, createdAtUtc);
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = email,
+            FirstName = firstName,
+            LastName = lastName,
+        };
 
         user.Raise(new UserRegisteredDomainEvent(user.Id));
 
         return user;
     }
-
-    public void Delete(DateTime deletedAtUtc)
+    public void Update(string firstName, string lastName)
     {
-        DeletedAtUtc = deletedAtUtc;
+        if (FirstName == firstName && LastName == lastName)
+        {
+            return;
+        }
 
-        Raise(new UserDeletedDomainEvent(Id));
+        FirstName = firstName;
+        LastName = lastName;
+
+        Raise(new UserProfileUpdatedDomainEvent(Id, FirstName, LastName));
     }
 }

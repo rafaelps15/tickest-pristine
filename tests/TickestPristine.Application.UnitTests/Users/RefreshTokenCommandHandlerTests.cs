@@ -90,7 +90,7 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
 
     private static async Task SeedRefreshTokenAsync(TestDbContext context, string token, DateTime expiresOnUtc)
     {
-        var user = User.Create("test@example.com", "Test", "User", DateTime.UtcNow);
+        var user = User.Create("test@example.com", "Test", "User");
 
         context.Users.Add(user);
         context.RefreshTokens.Add(RefreshToken.Create(token, user.Id, expiresOnUtc));

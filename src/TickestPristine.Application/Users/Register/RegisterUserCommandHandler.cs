@@ -10,18 +10,9 @@ namespace TickestPristine.Application.Users.Register;
 
 internal sealed class RegisterUserCommandHandler(
     IApplicationDbContext context,
-    IPasswordHasher passwordHasher,
-    IDateTimeProvider dateTimeProvider)
+    IPasswordHasher passwordHasher)
     : ICommandHandler<RegisterUserCommand, Guid>
 {
-    private static readonly string[] DefaultPermissions =
-    [
-        PermissionCodes.Tickets.Create,
-        PermissionCodes.Tickets.ViewOwn,
-        PermissionCodes.Tickets.UpdateOwn,
-        PermissionCodes.Users.Access
-    ];
-
     public async Task<Result<Guid>> Handle(RegisterUserCommand command, CancellationToken cancellationToken)
     {
         if (await context.Users.AnyAsync(u => u.Email == command.Email, cancellationToken))
@@ -29,15 +20,16 @@ internal sealed class RegisterUserCommandHandler(
             return Result.Failure<Guid>(UserErrors.EmailNotUnique);
         }
 
-        var user = User.Create(command.Email, command.FirstName, command.LastName, dateTimeProvider.UtcNow);
+        Guid memberRoleId = await context.Roles
+            .Where(r => r.Name == RoleNames.Member)
+            .Select(r => r.Id)
+            .SingleAsync(cancellationToken);
+
+        var user = User.Create(command.Email, command.FirstName, command.LastName);
 
         context.Users.Add(user);
         context.UserCredentials.Add(UserCredential.Create(user.Id, passwordHasher.Hash(command.Password)));
-
-        foreach (string permissionCode in DefaultPermissions)
-        {
-            context.UserPermissions.Add(UserPermission.Create(user.Id, permissionCode));
-        }
+        context.UserRoles.Add(UserRole.Create(user.Id, memberRoleId));
 
         await context.SaveChangesAsync(cancellationToken);
 

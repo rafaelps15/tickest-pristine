@@ -33,9 +33,11 @@ public abstract class BaseIntegrationTest
         return await response.Content.ReadFromJsonAsync<Guid>();
     }
 
-    protected async Task<AccessTokens> LoginAsync(string email)
+    protected Task<AccessTokens> LoginAsync(string email) => LoginAsync(email, "Password123");
+
+    protected async Task<AccessTokens> LoginAsync(string email, string password)
     {
-        var request = new { email, password = "Password123" };
+        var request = new { email, password };
 
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users/login", request);
         response.EnsureSuccessStatusCode();

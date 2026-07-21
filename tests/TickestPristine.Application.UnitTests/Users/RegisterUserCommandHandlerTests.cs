@@ -1,6 +1,8 @@
 ﻿using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Users.Register;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -17,10 +19,10 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        context.Users.Add(User.Create(Command.Email, "Existing", "User", DateTime.UtcNow));
+        context.Users.Add(User.Create(Command.Email, "Existing", "User"));
         await context.SaveChangesAsync();
 
-        var handler = new RegisterUserCommandHandler(context, Substitute.For<IPasswordHasher>(), Substitute.For<IDateTimeProvider>());
+        var handler = new RegisterUserCommandHandler(context, Substitute.For<IPasswordHasher>());
 
         // Act
         Result<Guid> result = await handler.Handle(Command, CancellationToken.None);
@@ -36,10 +38,14 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
 
+        var memberRole = Role.Create(RoleNames.Member);
+        context.Roles.Add(memberRole);
+        await context.SaveChangesAsync();
+
         IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
         passwordHasher.Hash(Command.Password).Returns("hashed-password");
 
-        var handler = new RegisterUserCommandHandler(context, passwordHasher, Substitute.For<IDateTimeProvider>());
+        var handler = new RegisterUserCommandHandler(context, passwordHasher);
 
         // Act
         Result<Guid> result = await handler.Handle(Command, CancellationToken.None);
@@ -53,5 +59,8 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
 
         UserCredential credential = await context.UserCredentials.SingleAsync(c => c.UserId == user.Id);
         credential.PasswordHash.ShouldBe("hashed-password");
+
+        UserRole userRole = await context.UserRoles.SingleAsync(ur => ur.UserId == user.Id);
+        userRole.RoleId.ShouldBe(memberRole.Id);
     }
 }
