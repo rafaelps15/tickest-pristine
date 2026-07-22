@@ -22,6 +22,8 @@ builder.Services.AddObservability(builder.Configuration, builder.Environment.App
 
 builder.Services.AddRateLimitingInternal(builder.Configuration);
 
+builder.Services.AddCorsInternal(builder.Configuration);
+
 builder.Services.AddEndpoints(Assembly.GetExecutingAssembly());
 
 WebApplication app = builder.Build();
@@ -47,6 +49,8 @@ app.UseRequestContextLogging();
 app.UseSerilogRequestLogging();
 
 app.UseExceptionHandler();
+
+app.UseCors(CorsExtensions.DefaultPolicyName);
 
 app.UseAuthentication();
 
