@@ -4,4 +4,8 @@
     <ProjectReference Include="..\TickestPristine.SharedKernel\TickestPristine.SharedKernel.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Ulid" />
+  </ItemGroup>
+
 </Project>

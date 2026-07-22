@@ -12,6 +12,7 @@ public sealed class User : Entity
     public string Email { get; private set; }
     public string FirstName { get; private set; }
     public string LastName { get; private set; }
+    public string Code { get; private set; }
 
     public static User Create(string email, string firstName, string lastName)
     {
@@ -21,6 +22,7 @@ public sealed class User : Entity
             Email = email,
             FirstName = firstName,
             LastName = lastName,
+            Code = $"usr_{Ulid.NewUlid()}",
         };
 
         user.Raise(new UserRegisteredDomainEvent(user.Id));

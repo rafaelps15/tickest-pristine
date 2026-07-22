@@ -1,3 +1,5 @@
+name: tickestpristine
+
 services:
   web-api:
     image: ${DOCKER_REGISTRY-}webapi

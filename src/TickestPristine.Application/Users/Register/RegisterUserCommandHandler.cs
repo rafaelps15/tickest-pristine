@@ -20,8 +20,8 @@ internal sealed class RegisterUserCommandHandler(
             return Result.Failure<Guid>(UserErrors.EmailNotUnique);
         }
 
-        Guid memberRoleId = await context.Roles
-            .Where(r => r.Name == RoleNames.Member)
+        Guid requesterRoleId = await context.Roles
+            .Where(r => r.Name == RoleNames.Requester)
             .Select(r => r.Id)
             .SingleAsync(cancellationToken);
 
@@ -29,7 +29,7 @@ internal sealed class RegisterUserCommandHandler(
 
         context.Users.Add(user);
         context.UserCredentials.Add(UserCredential.Create(user.Id, passwordHasher.Hash(command.Password)));
-        context.UserRoles.Add(UserRole.Create(user.Id, memberRoleId));
+        context.UserRoles.Add(UserRole.Create(user.Id, requesterRoleId));
 
         await context.SaveChangesAsync(cancellationToken);
 

@@ -9,13 +9,15 @@ namespace TickestPristine.Web.Api.Extensions;
 
 public static class AdminSeederExtensions
 {
-    private static readonly string[] MemberPermissions =
+    private static readonly string[] RequesterPermissions =
     [
         PermissionCodes.Tickets.Create,
         PermissionCodes.Tickets.ViewOwn,
         PermissionCodes.Tickets.UpdateOwn,
         PermissionCodes.Users.Access
     ];
+
+    private static readonly string[] AgentPermissions = [];
 
     public static async Task SeedAdminUserAsync(this IApplicationBuilder app)
     {
@@ -41,12 +43,20 @@ public static class AdminSeederExtensions
             context.RolePermissions.Add(RolePermission.Create(adminRole.Id, permissionCode));
         }
 
-        var memberRole = Role.Create(RoleNames.Member);
-        context.Roles.Add(memberRole);
+        var agentRole = Role.Create(RoleNames.Agent);
+        context.Roles.Add(agentRole);
 
-        foreach (string permissionCode in MemberPermissions)
+        foreach (string permissionCode in AgentPermissions)
         {
-            context.RolePermissions.Add(RolePermission.Create(memberRole.Id, permissionCode));
+            context.RolePermissions.Add(RolePermission.Create(agentRole.Id, permissionCode));
+        }
+
+        var requesterRole = Role.Create(RoleNames.Requester);
+        context.Roles.Add(requesterRole);
+
+        foreach (string permissionCode in RequesterPermissions)
+        {
+            context.RolePermissions.Add(RolePermission.Create(requesterRole.Id, permissionCode));
         }
 
         string email = configuration["Admin:Email"]

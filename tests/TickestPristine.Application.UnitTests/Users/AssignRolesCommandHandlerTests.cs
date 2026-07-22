@@ -58,7 +58,7 @@ public sealed class AssignRolesCommandHandlerTests : BaseHandlerTest
         var user = User.Create("user@example.com", "Test", "User");
         context.Users.Add(user);
 
-        var oldRole = Role.Create("Member");
+        var oldRole = Role.Create("Requester");
         var newRole = Role.Create("Manager");
         context.Roles.Add(oldRole);
         context.Roles.Add(newRole);

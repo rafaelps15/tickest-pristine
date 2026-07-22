@@ -38,8 +38,8 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
 
-        var memberRole = Role.Create(RoleNames.Member);
-        context.Roles.Add(memberRole);
+        var requesterRole = Role.Create(RoleNames.Requester);
+        context.Roles.Add(requesterRole);
         await context.SaveChangesAsync();
 
         IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
@@ -61,6 +61,6 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         credential.PasswordHash.ShouldBe("hashed-password");
 
         UserRole userRole = await context.UserRoles.SingleAsync(ur => ur.UserId == user.Id);
-        userRole.RoleId.ShouldBe(memberRole.Id);
+        userRole.RoleId.ShouldBe(requesterRole.Id);
     }
 }
