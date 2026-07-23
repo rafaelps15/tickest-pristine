@@ -1,23 +1,20 @@
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Sectors.GetById;
+using TickestPristine.Application.Sectors.GetAll;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
 using TickestPristine.Web.Api.Infrastructure;
 
 namespace TickestPristine.Web.Api.Endpoints.Sectors;
 
-internal sealed class GetById : IEndpoint
+internal sealed class GetAll : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapGet("sectors/{sectorId:guid}", async (
-            Guid sectorId,
-            IQueryHandler<GetSectorByIdQuery, SectorResponse> handler,
+        app.MapGet("sectors", async (
+            IQueryHandler<GetSectorsQuery, List<SectorResponse>> handler,
             CancellationToken cancellationToken) =>
         {
-            var query = new GetSectorByIdQuery(sectorId);
-
-            Result<SectorResponse> result = await handler.Handle(query, cancellationToken);
+            Result<List<SectorResponse>> result = await handler.Handle(new GetSectorsQuery(), cancellationToken);
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })

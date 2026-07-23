@@ -19,4 +19,16 @@ public sealed class Department
 
     public static Department Create(string name, string description, Guid? responsibleUserId = null) =>
         new(Guid.NewGuid(), name, description, responsibleUserId);
+
+    public void Update(string name, string description, Guid? responsibleUserId)
+    {
+        Name = name;
+        Description = description;
+        ResponsibleUserId = responsibleUserId;
+    }
+
+    public void Deactivate()
+    {
+        IsActive = false;
+    }
 }

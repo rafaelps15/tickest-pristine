@@ -77,4 +77,37 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnUsers_WhenCallerIsAdmin()
+    {
+        // Arrange
+        AccessTokens adminTokens = await LoginAsync("admin@tickestpristine.dev", "ChangeMe123!");
+        Authenticate(adminTokens.AccessToken);
+        Guid userId = await RegisterUserAsync(UniqueEmail());
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("users");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        List<UserSummaryDto>? users = await response.Content.ReadFromJsonAsync<List<UserSummaryDto>>();
+        users!.ShouldContain(u => u.Id == userId);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnForbidden_WhenCallerLacksUsersManagePermission()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("users");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    private sealed record UserSummaryDto(Guid Id, string Email, string FirstName, string LastName);
 }

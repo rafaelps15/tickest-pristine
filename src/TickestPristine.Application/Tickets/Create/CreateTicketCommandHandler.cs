@@ -3,8 +3,10 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Authorization;
+using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
+using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Tickets.Create;
@@ -33,6 +35,13 @@ internal sealed class CreateTicketCommandHandler(
             }
 
             openedByUserId = requesterId;
+        }
+
+        bool sectorExists = await context.Sectors.AnyAsync(s => s.Id == command.SectorId, cancellationToken);
+
+        if (!sectorExists)
+        {
+            return Result.Failure<Guid>(SectorErrors.NotFound(command.SectorId));
         }
 
         var ticket = Ticket.Create(

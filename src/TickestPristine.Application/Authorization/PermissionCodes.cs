@@ -25,6 +25,16 @@ public static class PermissionCodes
         public const string Manage = "roles:manage";
     }
 
+    public static class Departments
+    {
+        public const string Manage = "departments:manage";
+    }
+
+    public static class Sectors
+    {
+        public const string Manage = "sectors:manage";
+    }
+
     public static IReadOnlyList<string> All { get; } =
     [
         Tickets.Create,
@@ -37,6 +47,8 @@ public static class PermissionCodes
         Users.Manage,
         Users.Delete,
         Users.ManageRoles,
-        Roles.Manage
+        Roles.Manage,
+        Departments.Manage,
+        Sectors.Manage
     ];
 }

@@ -19,4 +19,15 @@ public sealed class Sector
 
     public static Sector Create(string name, Guid departmentId, string? description = null) =>
         new(Guid.NewGuid(), name, description, departmentId);
+
+    public void Update(string name, string? description)
+    {
+        Name = name;
+        Description = description;
+    }
+
+    public void Deactivate()
+    {
+        IsActive = false;
+    }
 }

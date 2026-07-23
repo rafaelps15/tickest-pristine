@@ -39,6 +39,11 @@ if (app.Environment.IsDevelopment())
 
 await app.SeedAdminUserAsync();
 
+if (app.Environment.IsDevelopment())
+{
+    await app.SeedSampleDataAsync();
+}
+
 app.MapHealthChecks("health", new HealthCheckOptions
 {
     ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
