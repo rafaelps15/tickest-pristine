@@ -7,6 +7,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace TickestPristine.Web.Api.Extensions;
 
+/// <summary>
+/// Production-safe bootstrap seeder: idempotently provisions the Admin/Agent/Requester roles and the
+/// initial admin user from <c>Admin:Email</c>/<c>Admin:Password</c> configuration. Unlike
+/// <see cref="SampleDataSeederExtensions"/>, this is intended to run in every environment, including
+/// production, so a deployment always has a working admin login.
+/// </summary>
 public static class AdminSeederExtensions
 {
     private static readonly string[] RequesterPermissions =
@@ -14,10 +20,24 @@ public static class AdminSeederExtensions
         PermissionCodes.Tickets.Create,
         PermissionCodes.Tickets.ViewOwn,
         PermissionCodes.Tickets.UpdateOwn,
+        PermissionCodes.Tickets.DeleteOwn,
+        PermissionCodes.Tickets.ReopenOwn,
         PermissionCodes.Users.Access
     ];
 
-    private static readonly string[] AgentPermissions = [];
+    // Agents handle tickets across the board (not just their own), so they get the "Manage"-level
+    // ticket permission plus the same baseline access a Requester has - but nothing Admin-only
+    // (Users/Roles/Departments/Sectors management stays Admin-only).
+    private static readonly string[] AgentPermissions =
+    [
+        PermissionCodes.Tickets.Create,
+        PermissionCodes.Tickets.ViewOwn,
+        PermissionCodes.Tickets.UpdateOwn,
+        PermissionCodes.Tickets.DeleteOwn,
+        PermissionCodes.Tickets.ReopenOwn,
+        PermissionCodes.Tickets.Manage,
+        PermissionCodes.Users.Access
+    ];
 
     public static async Task SeedAdminUserAsync(this IApplicationBuilder app)
     {

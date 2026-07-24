@@ -1,6 +1,8 @@
+using TickestPristine.SharedKernel;
+
 namespace TickestPristine.Domain.Sectors;
 
-public sealed class Sector
+public sealed class Sector : Entity
 {
     private Sector(Guid id, string name, string? description, Guid departmentId)
     {

@@ -1,4 +1,5 @@
 ﻿using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Domain.Users;
@@ -11,7 +12,8 @@ internal sealed class LoginUserCommandHandler(
     IApplicationDbContext context,
     IPasswordHasher passwordHasher,
     ITokenProvider tokenProvider,
-    IDateTimeProvider dateTimeProvider) : ICommandHandler<LoginUserCommand, AccessTokensResponse>
+    IDateTimeProvider dateTimeProvider,
+    IPermissionProvider permissionProvider) : ICommandHandler<LoginUserCommand, AccessTokensResponse>
 {
     public async Task<Result<AccessTokensResponse>> Handle(LoginUserCommand command, CancellationToken cancellationToken)
     {
@@ -33,7 +35,8 @@ internal sealed class LoginUserCommandHandler(
             return Result.Failure<AccessTokensResponse>(UserErrors.NotFoundByEmail);
         }
 
-        string accessToken = tokenProvider.Create(user);
+        HashSet<string> permissions = await permissionProvider.GetForUserIdAsync(user.Id, cancellationToken);
+        string accessToken = tokenProvider.Create(user, permissions);
         string refreshToken = tokenProvider.GenerateRefreshToken();
 
         context.RefreshTokens.Add(RefreshToken.Create(refreshToken, user.Id, dateTimeProvider.UtcNow.AddDays(RefreshTokenExpirationInDays)));

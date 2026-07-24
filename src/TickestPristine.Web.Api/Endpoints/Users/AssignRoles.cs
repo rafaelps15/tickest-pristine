@@ -13,7 +13,7 @@ internal sealed class AssignRoles : IEndpoint
 
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapPut("users/{userId}/roles", async (
+        app.MapPut("users/{userId:guid}/roles", async (
             Guid userId,
             Request request,
             ICommandHandler<AssignRolesCommand> handler,

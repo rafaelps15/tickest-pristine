@@ -2,10 +2,12 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Application.Abstractions.Storage;
 using TickestPristine.Infrastructure.Authentication;
 using TickestPristine.Infrastructure.Authorization;
 using TickestPristine.Infrastructure.Database;
 using TickestPristine.Infrastructure.DomainEvents;
+using TickestPristine.Infrastructure.Storage;
 using TickestPristine.Infrastructure.Time;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -22,13 +24,18 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
-        IConfiguration configuration) =>
-        services
+        IConfiguration configuration)
+    {
+        string connectionString = configuration.GetConnectionString("Database")
+            ?? throw new InvalidOperationException("The 'Database' connection string is required.");
+
+        return services
             .AddServices()
-            .AddDatabase(configuration)
-            .AddHealthChecks(configuration)
+            .AddDatabase(connectionString)
+            .AddHealthChecks(connectionString)
             .AddAuthenticationInternal(configuration)
             .AddAuthorizationInternal();
+    }
 
     private static IServiceCollection AddServices(this IServiceCollection services)
     {
@@ -38,13 +45,13 @@ public static class DependencyInjection
 
         services.AddHybridCache();
 
+        services.AddSingleton<IFileStorage, LocalFileStorage>();
+
         return services;
     }
 
-    private static IServiceCollection AddDatabase(this IServiceCollection services, IConfiguration configuration)
+    private static IServiceCollection AddDatabase(this IServiceCollection services, string connectionString)
     {
-        string? connectionString = configuration.GetConnectionString("Database");
-
         services.AddDbContext<ApplicationDbContext>(
             options => options
                 .UseNpgsql(connectionString, npgsqlOptions =>
@@ -56,11 +63,11 @@ public static class DependencyInjection
         return services;
     }
 
-    private static IServiceCollection AddHealthChecks(this IServiceCollection services, IConfiguration configuration)
+    private static IServiceCollection AddHealthChecks(this IServiceCollection services, string connectionString)
     {
         services
             .AddHealthChecks()
-            .AddNpgSql(configuration.GetConnectionString("Database")!);
+            .AddNpgSql(connectionString);
 
         return services;
     }

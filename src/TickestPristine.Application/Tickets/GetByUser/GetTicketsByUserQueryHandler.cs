@@ -32,8 +32,7 @@ internal sealed class GetTicketsByUserQueryHandler(
         }
 
         List<TicketResponse> tickets = await context.Tickets
-            .Where(t => t.CreatedByUserId == query.UserId
-                && (t.Status == TicketStatus.Open || t.Status == TicketStatus.InProgress))
+            .Where(t => t.CreatedByUserId == query.UserId)
             .Select(t => new TicketResponse
             {
                 Id = t.Id,

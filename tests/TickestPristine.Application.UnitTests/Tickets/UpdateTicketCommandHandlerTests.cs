@@ -106,6 +106,33 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == ticketId);
         ticket.Description.ShouldBe("Updated description");
         ticket.Status.ShouldBe(TicketStatus.InProgress);
+        ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketStatusChangedDomainEvent);
+    }
+
+    [Fact]
+    public async Task Handle_Should_NotRaiseStatusChangedEvent_WhenStatusIsUnchanged()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(OwnerId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider);
+        var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.Open };
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == ticketId);
+        ticket.DomainEvents.ShouldNotContain(domainEvent => domainEvent is TicketStatusChangedDomainEvent);
     }
 
     private static async Task<Guid> SeedTicketAsync(TestDbContext context, Guid openedByUserId, TicketStatus status)

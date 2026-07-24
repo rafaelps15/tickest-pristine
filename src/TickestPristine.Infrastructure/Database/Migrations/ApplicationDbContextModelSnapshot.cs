@@ -206,6 +206,159 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.ToTable("tickets", "public");
                 });
 
+            modelBuilder.Entity("TickestPristine.Domain.Tickets.TicketAttachment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at_utc");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)")
+                        .HasColumnName("file_name");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("file_size_bytes");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("storage_key");
+
+                    b.Property<Guid>("TicketId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ticket_id");
+
+                    b.Property<DateTime>("UploadedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("uploaded_at_utc");
+
+                    b.Property<Guid>("UploadedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("uploaded_by_user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ticket_attachments");
+
+                    b.HasIndex("TicketId")
+                        .HasDatabaseName("ix_ticket_attachments_ticket_id");
+
+                    b.HasIndex("UploadedByUserId")
+                        .HasDatabaseName("ix_ticket_attachments_uploaded_by_user_id");
+
+                    b.ToTable("ticket_attachments", "public");
+                });
+
+            modelBuilder.Entity("TickestPristine.Domain.Tickets.TicketHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Action")
+                        .HasColumnType("integer")
+                        .HasColumnName("action");
+
+                    b.Property<Guid?>("ChangedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by_user_id");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("NewValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("new_value");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at_utc");
+
+                    b.Property<string>("OldValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("old_value");
+
+                    b.Property<Guid>("TicketId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ticket_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ticket_histories");
+
+                    b.HasIndex("ChangedByUserId")
+                        .HasDatabaseName("ix_ticket_histories_changed_by_user_id");
+
+                    b.HasIndex("TicketId")
+                        .HasDatabaseName("ix_ticket_histories_ticket_id");
+
+                    b.ToTable("ticket_histories", "public");
+                });
+
+            modelBuilder.Entity("TickestPristine.Domain.Tickets.TicketMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AuthorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("author_user_id");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("content");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at_utc");
+
+                    b.Property<DateTime?>("EditedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("edited_at_utc");
+
+                    b.Property<Guid>("TicketId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ticket_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ticket_messages");
+
+                    b.HasIndex("AuthorUserId")
+                        .HasDatabaseName("ix_ticket_messages_author_user_id");
+
+                    b.HasIndex("TicketId")
+                        .HasDatabaseName("ix_ticket_messages_ticket_id");
+
+                    b.ToTable("ticket_messages", "public");
+                });
+
             modelBuilder.Entity("TickestPristine.Domain.Users.RefreshToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -387,6 +540,56 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_tickets_sectors_sector_id");
+                });
+
+            modelBuilder.Entity("TickestPristine.Domain.Tickets.TicketAttachment", b =>
+                {
+                    b.HasOne("TickestPristine.Domain.Tickets.Ticket", null)
+                        .WithMany()
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_ticket_attachments_tickets_ticket_id");
+
+                    b.HasOne("TickestPristine.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UploadedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ticket_attachments_users_uploaded_by_user_id");
+                });
+
+            modelBuilder.Entity("TickestPristine.Domain.Tickets.TicketHistory", b =>
+                {
+                    b.HasOne("TickestPristine.Domain.Tickets.Ticket", null)
+                        .WithMany()
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_ticket_histories_tickets_ticket_id");
+
+                    b.HasOne("TickestPristine.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("ChangedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_ticket_histories_users_changed_by_user_id");
+                });
+
+            modelBuilder.Entity("TickestPristine.Domain.Tickets.TicketMessage", b =>
+                {
+                    b.HasOne("TickestPristine.Domain.Tickets.Ticket", null)
+                        .WithMany()
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_ticket_messages_tickets_ticket_id");
+
+                    b.HasOne("TickestPristine.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("AuthorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ticket_messages_users_author_user_id");
                 });
 
             modelBuilder.Entity("TickestPristine.Domain.Users.RefreshToken", b =>

@@ -1,6 +1,8 @@
+using TickestPristine.SharedKernel;
+
 namespace TickestPristine.Domain.Users;
 
-public sealed class UserRole
+public sealed class UserRole : Entity
 {
     private UserRole(Guid id, Guid userId, Guid roleId)
     {

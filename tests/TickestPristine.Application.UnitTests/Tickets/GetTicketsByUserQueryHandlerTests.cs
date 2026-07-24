@@ -35,7 +35,7 @@ public sealed class GetTicketsByUserQueryHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnOnlyActiveTicketsForTheOwner()
+    public async Task Handle_Should_ReturnAllTicketsForTheOwner_RegardlessOfStatus()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -56,7 +56,7 @@ public sealed class GetTicketsByUserQueryHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
-        result.Value.Count.ShouldBe(2);
+        result.Value.Count.ShouldBe(3);
         result.Value.ShouldAllBe(t => t.OpenedByUserId == OwnerId);
     }
 

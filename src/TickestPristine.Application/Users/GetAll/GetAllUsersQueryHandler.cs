@@ -21,6 +21,23 @@ internal sealed class GetAllUsersQueryHandler(IApplicationDbContext context)
             })
             .ToListAsync(cancellationToken);
 
+        // No collection navigation exists from User/Role to UserRole (see UserRoleConfiguration),
+        // so roles are fetched separately and grouped in memory instead of via .Include(...).
+        var userRoles = await (
+            from userRole in context.UserRoles
+            join role in context.Roles on userRole.RoleId equals role.Id
+            select new { userRole.UserId, RoleId = role.Id, RoleName = role.Name })
+            .ToListAsync(cancellationToken);
+
+        ILookup<Guid, RoleSummaryResponse> rolesByUserId = userRoles.ToLookup(
+            ur => ur.UserId,
+            ur => new RoleSummaryResponse { Id = ur.RoleId, Name = ur.RoleName });
+
+        foreach (UserSummaryResponse user in users)
+        {
+            user.Roles = rolesByUserId[user.Id].ToList();
+        }
+
         return users;
     }
 }

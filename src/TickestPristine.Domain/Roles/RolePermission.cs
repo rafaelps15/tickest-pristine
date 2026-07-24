@@ -1,6 +1,8 @@
+using TickestPristine.SharedKernel;
+
 namespace TickestPristine.Domain.Roles;
 
-public sealed class RolePermission
+public sealed class RolePermission : Entity
 {
     private RolePermission(Guid id, Guid roleId, string permissionCode)
     {

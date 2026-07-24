@@ -1,6 +1,8 @@
+using TickestPristine.SharedKernel;
+
 namespace TickestPristine.Domain.Users;
 
-public sealed class RefreshToken
+public sealed class RefreshToken : Entity
 {
     private RefreshToken(Guid id, string token, Guid userId, DateTime expiresOnUtc)
     {

@@ -1,4 +1,5 @@
 ﻿using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Domain.Users;
@@ -10,7 +11,8 @@ namespace TickestPristine.Application.Users.Refresh;
 internal sealed class RefreshTokenCommandHandler(
     IApplicationDbContext context,
     ITokenProvider tokenProvider,
-    IDateTimeProvider dateTimeProvider) : ICommandHandler<RefreshTokenCommand, AccessTokensResponse>
+    IDateTimeProvider dateTimeProvider,
+    IPermissionProvider permissionProvider) : ICommandHandler<RefreshTokenCommand, AccessTokensResponse>
 {
     public async Task<Result<AccessTokensResponse>> Handle(RefreshTokenCommand command, CancellationToken cancellationToken)
     {
@@ -23,7 +25,8 @@ internal sealed class RefreshTokenCommandHandler(
             return Result.Failure<AccessTokensResponse>(UserErrors.InvalidRefreshToken);
         }
 
-        string accessToken = tokenProvider.Create(refreshToken.User);
+        HashSet<string> permissions = await permissionProvider.GetForUserIdAsync(refreshToken.UserId, cancellationToken);
+        string accessToken = tokenProvider.Create(refreshToken.User, permissions);
         string newRefreshToken = tokenProvider.GenerateRefreshToken();
 
         // Rotate the refresh token so a stolen token can only be used once.

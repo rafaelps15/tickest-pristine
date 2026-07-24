@@ -17,7 +17,8 @@ internal sealed class GetSectorByIdQueryHandler(IApplicationDbContext context)
             {
                 Id = s.Id,
                 Name = s.Name,
-                Description = s.Description
+                Description = s.Description,
+                DepartmentId = s.DepartmentId
             })
             .SingleOrDefaultAsync(cancellationToken);
 

@@ -1,12 +1,18 @@
+using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Authorization;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Tickets.Reopen;
 
-internal sealed class ReopenTicketCommandHandler(IApplicationDbContext context)
+internal sealed class ReopenTicketCommandHandler(
+    IApplicationDbContext context,
+    IUserContext userContext,
+    IPermissionProvider permissionProvider)
     : ICommandHandler<ReopenTicketCommand>
 {
     public async Task<Result> Handle(ReopenTicketCommand command, CancellationToken cancellationToken)
@@ -28,7 +34,17 @@ internal sealed class ReopenTicketCommandHandler(IApplicationDbContext context)
             return Result.Failure(TicketErrors.InvalidStatusTransition(ticket.Status, TicketStatus.Open));
         }
 
-        ticket.Reopen();
+        bool isOwner = ticket.CreatedByUserId == userContext.UserId;
+        string requiredPermission = isOwner ? PermissionCodes.Tickets.ReopenOwn : PermissionCodes.Tickets.Manage;
+
+        bool hasPermission = await permissionProvider.HasPermissionAsync(userContext.UserId, requiredPermission, cancellationToken);
+
+        if (!hasPermission)
+        {
+            return Result.Failure(TicketErrors.Unauthorized());
+        }
+
+        ticket.Reopen(userContext.UserId);
 
         await context.SaveChangesAsync(cancellationToken);
 

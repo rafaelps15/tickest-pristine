@@ -6,6 +6,50 @@ namespace TickestPristine.ArchitectureTests.Layers;
 public class LayerTests : BaseTest
 {
     [Fact]
+    public void SharedKernelLayer_ShouldNotHaveDependencyOn_DomainLayer()
+    {
+        TestResult result = Types.InAssembly(SharedKernelAssembly)
+            .Should()
+            .NotHaveDependencyOn(DomainAssembly.GetName().Name)
+            .GetResult();
+
+        result.IsSuccessful.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void SharedKernelLayer_ShouldNotHaveDependencyOn_ApplicationLayer()
+    {
+        TestResult result = Types.InAssembly(SharedKernelAssembly)
+            .Should()
+            .NotHaveDependencyOn(ApplicationAssembly.GetName().Name)
+            .GetResult();
+
+        result.IsSuccessful.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void SharedKernelLayer_ShouldNotHaveDependencyOn_InfrastructureLayer()
+    {
+        TestResult result = Types.InAssembly(SharedKernelAssembly)
+            .Should()
+            .NotHaveDependencyOn(InfrastructureAssembly.GetName().Name)
+            .GetResult();
+
+        result.IsSuccessful.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void SharedKernelLayer_ShouldNotHaveDependencyOn_PresentationLayer()
+    {
+        TestResult result = Types.InAssembly(SharedKernelAssembly)
+            .Should()
+            .NotHaveDependencyOn(PresentationAssembly.GetName().Name)
+            .GetResult();
+
+        result.IsSuccessful.ShouldBeTrue();
+    }
+
+    [Fact]
     public void Domain_Should_NotHaveDependencyOnApplication()
     {
         TestResult result = Types.InAssembly(DomainAssembly)

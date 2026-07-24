@@ -138,7 +138,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
-    public async Task GetByUser_Should_ReturnActiveTickets_WhenCallerRequestsOwnTickets()
+    public async Task GetByUser_Should_ReturnOpenTicket_WhenCallerRequestsOwnTickets()
     {
         // Arrange
         Guid sectorId = await CreateSectorAsAdminAsync();
@@ -153,6 +153,38 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         response.EnsureSuccessStatusCode();
         List<TicketDto>? tickets = await response.Content.ReadFromJsonAsync<List<TicketDto>>();
         tickets!.ShouldContain(t => t.Id == ticketId);
+    }
+
+    [Fact]
+    public async Task GetByUser_Should_ReturnResolvedTicket_WhenCallerRequestsOwnTickets()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        HttpResponseMessage inProgressResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = "Looking into the printer",
+            status = 2 // InProgress
+        });
+        inProgressResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        HttpResponseMessage resolveResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = "Fixed the printer",
+            status = 3 // Resolved
+        });
+        resolveResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/users/{userId}");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        List<TicketDto>? tickets = await response.Content.ReadFromJsonAsync<List<TicketDto>>();
+        tickets!.ShouldContain(t => t.Id == ticketId && t.Status == 3);
     }
 
     [Fact]

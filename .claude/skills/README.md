@@ -10,6 +10,7 @@ A skill pack that teaches Claude Code the conventions of the Clean Architecture 
 | **add-entity** | `/add-entity Project with a name and owner` | Adds a domain entity end to end: entity, error catalog, domain events, EF configuration, DbContext wiring, migration. |
 | **add-tests** | `/add-tests CopyTodoCommand` | Backfills handler, validator, and integration tests for existing use cases. |
 | **ca-review** | `/ca-review` | Reviews pending changes against the template's conventions: layer boundaries, error handling, security, caching, and test coverage. |
+| **code-cleanup** | `/code-cleanup` | Audits the *entire* codebase (not just the diff) and fixes what it finds — mechanical issues applied directly, breaking/design changes confirmed with you first. |
 
 You don't have to invoke them explicitly — once installed, Claude Code picks the right skill automatically when you say things like "add an endpoint to snooze a todo."
 
@@ -26,7 +27,8 @@ your-project/
         ├── add-feature/
         ├── add-entity/
         ├── add-tests/
-        └── ca-review/
+        ├── ca-review/
+        └── code-cleanup/
 ```
 
 Works with both the standard and the Aspire variants of the template.

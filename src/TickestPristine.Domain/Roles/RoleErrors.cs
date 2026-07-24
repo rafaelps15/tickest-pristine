@@ -6,9 +6,13 @@ public static class RoleErrors
 {
     public static Error NotFound(Guid roleId) => Error.NotFound(
         "Roles.NotFound",
-        $"The role with the Id = '{roleId}' was not found");
+        $"A role com o Id = '{roleId}' não foi encontrada");
 
     public static readonly Error NameNotUnique = Error.Conflict(
         "Roles.NameNotUnique",
-        "The provided role name is not unique");
+        "O nome de role informado já está em uso");
+
+    public static readonly Error RequesterRoleNotConfigured = Error.Failure(
+        "Roles.RequesterRoleNotConfigured",
+        "A role padrão de solicitante não está configurada no sistema");
 }

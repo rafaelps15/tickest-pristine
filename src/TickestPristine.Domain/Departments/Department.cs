@@ -1,6 +1,8 @@
+using TickestPristine.SharedKernel;
+
 namespace TickestPristine.Domain.Departments;
 
-public sealed class Department
+public sealed class Department : Entity
 {
     private Department(Guid id, string name, string description, Guid? responsibleUserId)
     {

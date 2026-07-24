@@ -52,15 +52,24 @@ public sealed class Ticket : Entity
         return ticket;
     }
 
-    public void Update(string description, TicketStatus status)
+    public void Update(string description, TicketStatus status, Guid? changedByUserId = null)
     {
+        TicketStatus previousStatus = Status;
+
         Description = description;
         Status = status;
+
+        if (previousStatus != status)
+        {
+            Raise(new TicketStatusChangedDomainEvent(Id, previousStatus, status, changedByUserId));
+        }
     }
 
-    public void Reopen()
+    public void Reopen(Guid? reopenedByUserId = null)
     {
         Status = TicketStatus.Open;
+
+        Raise(new TicketReopenedDomainEvent(Id, reopenedByUserId));
     }
 
     public void Delete(DateTime deletedAtUtc)

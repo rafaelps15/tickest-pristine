@@ -5,7 +5,7 @@ public record Error
     public static readonly Error None = new(string.Empty, string.Empty, ErrorType.Failure);
     public static readonly Error NullValue = new(
         "General.Null",
-        "Null value was provided",
+        "Um valor nulo foi informado",
         ErrorType.Failure);
 
     public Error(string code, string description, ErrorType type)
@@ -32,4 +32,7 @@ public record Error
 
     public static Error Conflict(string code, string description) =>
         new(code, description, ErrorType.Conflict);
+
+    public static Error Forbidden(string code, string description) =>
+        new(code, description, ErrorType.Forbidden);
 }

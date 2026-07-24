@@ -6,21 +6,21 @@ public static class UserErrors
 {
     public static Error NotFound(Guid userId) => Error.NotFound(
         "Users.NotFound",
-        $"The user with the Id = '{userId}' was not found");
+        $"O usuário com o Id = '{userId}' não foi encontrado");
 
-    public static Error Unauthorized() => Error.Failure(
+    public static Error Unauthorized() => Error.Forbidden(
         "Users.Unauthorized",
-        "You are not authorized to perform this action.");
+        "Você não tem permissão para executar esta ação.");
 
     public static readonly Error NotFoundByEmail = Error.NotFound(
         "Users.NotFoundByEmail",
-        "The user with the specified email was not found");
+        "Usuário com o e-mail informado não foi encontrado");
 
     public static readonly Error EmailNotUnique = Error.Conflict(
         "Users.EmailNotUnique",
-        "The provided email is not unique");
+        "O e-mail informado já está em uso");
 
     public static readonly Error InvalidRefreshToken = Error.Problem(
         "Users.InvalidRefreshToken",
-        "The provided refresh token is invalid or has expired");
+        "O refresh token informado é inválido ou expirou");
 }

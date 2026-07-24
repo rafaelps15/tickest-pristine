@@ -2,6 +2,7 @@
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Authorization;
+using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -20,16 +21,21 @@ internal sealed class RegisterUserCommandHandler(
             return Result.Failure<Guid>(UserErrors.EmailNotUnique);
         }
 
-        Guid requesterRoleId = await context.Roles
+        Guid? requesterRoleId = await context.Roles
             .Where(r => r.Name == RoleNames.Requester)
-            .Select(r => r.Id)
-            .SingleAsync(cancellationToken);
+            .Select(r => (Guid?)r.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (requesterRoleId is null)
+        {
+            return Result.Failure<Guid>(RoleErrors.RequesterRoleNotConfigured);
+        }
 
         var user = User.Create(command.Email, command.FirstName, command.LastName);
 
         context.Users.Add(user);
         context.UserCredentials.Add(UserCredential.Create(user.Id, passwordHasher.Hash(command.Password)));
-        context.UserRoles.Add(UserRole.Create(user.Id, requesterRoleId));
+        context.UserRoles.Add(UserRole.Create(user.Id, requesterRoleId.Value));
 
         await context.SaveChangesAsync(cancellationToken);
 

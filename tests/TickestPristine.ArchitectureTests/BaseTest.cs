@@ -2,12 +2,14 @@
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Domain.Users;
 using TickestPristine.Infrastructure.Database;
+using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api;
 
 namespace TickestPristine.ArchitectureTests;
 
 public abstract class BaseTest
 {
+    protected static readonly Assembly SharedKernelAssembly = typeof(Entity).Assembly;
     protected static readonly Assembly DomainAssembly = typeof(User).Assembly;
     protected static readonly Assembly ApplicationAssembly = typeof(ICommand).Assembly;
     protected static readonly Assembly InfrastructureAssembly = typeof(ApplicationDbContext).Assembly;

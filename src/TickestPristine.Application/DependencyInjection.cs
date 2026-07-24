@@ -1,4 +1,5 @@
-﻿using TickestPristine.Application.Abstractions.Behaviors;
+﻿using System.Globalization;
+using TickestPristine.Application.Abstractions.Behaviors;
 using TickestPristine.Application.Abstractions.Messaging;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,6 +11,8 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
+        ValidatorOptions.Global.LanguageManager.Culture = new CultureInfo("pt-BR");
+
         services.Scan(scan => scan.FromAssembliesOf(typeof(DependencyInjection))
             .AddClasses(classes => classes.AssignableTo(typeof(IQueryHandler<,>)), publicOnly: false)
                 .AsImplementedInterfaces()

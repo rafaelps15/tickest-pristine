@@ -13,6 +13,6 @@ internal sealed class AssignRolePermissionsCommandValidator : AbstractValidator<
 
         RuleForEach(c => c.PermissionCodes)
             .Must(code => PermissionCodes.All.Contains(code))
-            .WithMessage("'{PropertyValue}' is not a known permission code.");
+            .WithMessage("'{PropertyValue}' não é um código de permissão conhecido.");
     }
 }

@@ -16,9 +16,14 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         .WithPassword("postgres")
         .Build();
 
+    private readonly string _fileStorageRootPath = Path.Combine(Path.GetTempPath(), $"tickestpristine-tests-{Guid.NewGuid():N}");
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:Database", _dbContainer.GetConnectionString());
+
+        // Isolate uploaded attachment files from the developer's real App_Data folder.
+        builder.UseSetting("FileStorage:RootPath", _fileStorageRootPath);
 
         // Provide deterministic JWT settings so tokens can be issued and validated in tests.
         builder.UseSetting("Jwt:Secret", "super-duper-secret-value-that-should-be-in-user-secrets");
@@ -50,5 +55,10 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
     {
         await _dbContainer.DisposeAsync();
         await base.DisposeAsync();
+
+        if (Directory.Exists(_fileStorageRootPath))
+        {
+            Directory.Delete(_fileStorageRootPath, recursive: true);
+        }
     }
 }

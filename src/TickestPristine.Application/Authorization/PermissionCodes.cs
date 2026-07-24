@@ -8,8 +8,8 @@ public static class PermissionCodes
         public const string ViewOwn = "tickets:view-own";
         public const string UpdateOwn = "tickets:update-own";
         public const string Manage = "tickets:manage";
-        public const string Delete = "tickets:delete";
-        public const string Reopen = "tickets:reopen";
+        public const string DeleteOwn = "tickets:delete-own";
+        public const string ReopenOwn = "tickets:reopen-own";
     }
 
     public static class Users
@@ -41,8 +41,8 @@ public static class PermissionCodes
         Tickets.ViewOwn,
         Tickets.UpdateOwn,
         Tickets.Manage,
-        Tickets.Delete,
-        Tickets.Reopen,
+        Tickets.DeleteOwn,
+        Tickets.ReopenOwn,
         Users.Access,
         Users.Manage,
         Users.Delete,

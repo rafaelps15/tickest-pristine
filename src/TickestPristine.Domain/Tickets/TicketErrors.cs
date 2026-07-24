@@ -6,21 +6,21 @@ public static class TicketErrors
 {
     public static Error NotFound(Guid ticketId) => Error.NotFound(
         "Tickets.NotFound",
-        $"The ticket with the Id = '{ticketId}' was not found");
+        $"O ticket com o Id = '{ticketId}' não foi encontrado");
 
     public static Error NotActive(Guid ticketId) => Error.Problem(
         "Tickets.NotActive",
-        $"The ticket with the Id = '{ticketId}' is not active");
+        $"O ticket com o Id = '{ticketId}' não está ativo");
 
     public static Error AlreadyActive(Guid ticketId) => Error.Problem(
         "Tickets.AlreadyActive",
-        $"The ticket with the Id = '{ticketId}' is already active");
+        $"O ticket com o Id = '{ticketId}' já está ativo");
 
     public static Error InvalidStatusTransition(TicketStatus from, TicketStatus to) => Error.Problem(
         "Tickets.InvalidStatusTransition",
-        $"Cannot transition a ticket from '{from}' to '{to}'");
+        $"Não é possível transicionar um ticket de '{from}' para '{to}'");
 
-    public static Error Unauthorized() => Error.Failure(
+    public static Error Unauthorized() => Error.Forbidden(
         "Tickets.Unauthorized",
-        "You are not authorized to perform this action.");
+        "Você não tem permissão para executar esta ação.");
 }

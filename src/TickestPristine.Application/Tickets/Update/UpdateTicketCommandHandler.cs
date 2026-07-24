@@ -44,7 +44,7 @@ internal sealed class UpdateTicketCommandHandler(
             return Result.Failure(TicketErrors.InvalidStatusTransition(ticket.Status, command.Status));
         }
 
-        ticket.Update(command.Description, command.Status);
+        ticket.Update(command.Description, command.Status, userContext.UserId);
 
         await context.SaveChangesAsync(cancellationToken);
 

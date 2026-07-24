@@ -27,9 +27,27 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
 
     public DbSet<Ticket> Tickets { get; set; }
 
+    public DbSet<TicketAttachment> TicketAttachments { get; set; }
+
+    public DbSet<TicketMessage> TicketMessages { get; set; }
+
+    public DbSet<TicketHistory> TicketHistories { get; set; }
+
     public DbSet<Role> Roles { get; set; }
 
     public DbSet<RolePermission> RolePermissions { get; set; }
 
     public DbSet<UserRole> UserRoles { get; set; }
+
+    // Mirrors the soft-delete query filters defined in the real ApplicationDbContext's
+    // IEntityTypeConfiguration classes (Infrastructure), which this lightweight double doesn't apply
+    // otherwise, so handler tests see the same "deleted rows are invisible" behavior as production.
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<Ticket>().HasQueryFilter(t => t.DeletedAtUtc == null);
+        modelBuilder.Entity<TicketMessage>().HasQueryFilter(m => m.DeletedAtUtc == null);
+        modelBuilder.Entity<TicketAttachment>().HasQueryFilter(a => a.DeletedAtUtc == null);
+    }
 }

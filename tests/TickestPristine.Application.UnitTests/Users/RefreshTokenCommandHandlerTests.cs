@@ -1,4 +1,5 @@
 ﻿using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Users;
 using TickestPristine.Application.Users.Refresh;
 using TickestPristine.Application.UnitTests.Abstractions;
@@ -18,7 +19,8 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         var handler = new RefreshTokenCommandHandler(
             context,
             Substitute.For<ITokenProvider>(),
-            Substitute.For<IDateTimeProvider>());
+            Substitute.For<IDateTimeProvider>(),
+            Substitute.For<IPermissionProvider>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -44,7 +46,8 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         var handler = new RefreshTokenCommandHandler(
             context,
             Substitute.For<ITokenProvider>(),
-            dateTimeProvider);
+            dateTimeProvider,
+            Substitute.For<IPermissionProvider>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -62,16 +65,24 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
         DateTime now = DateTime.UtcNow;
-        await SeedRefreshTokenAsync(context, "old-token", expiresOnUtc: now.AddDays(1));
+        User user = await SeedRefreshTokenAsync(context, "old-token", expiresOnUtc: now.AddDays(1));
+
+        HashSet<string> permissions = ["tickets:manage", "users:manage"];
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.GetForUserIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(permissions);
 
         ITokenProvider tokenProvider = Substitute.For<ITokenProvider>();
-        tokenProvider.Create(Arg.Any<User>()).Returns("new-access-token");
+        tokenProvider.Create(Arg.Any<User>(), Arg.Any<IReadOnlySet<string>>()).Returns("new-access-token");
         tokenProvider.GenerateRefreshToken().Returns("new-refresh-token");
 
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(now);
 
-        var handler = new RefreshTokenCommandHandler(context, tokenProvider, dateTimeProvider);
+        var handler = new RefreshTokenCommandHandler(
+            context,
+            tokenProvider,
+            dateTimeProvider,
+            permissionProvider);
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -83,12 +94,15 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         result.Value.AccessToken.ShouldBe("new-access-token");
         result.Value.RefreshToken.ShouldBe("new-refresh-token");
 
+        await permissionProvider.Received(1).GetForUserIdAsync(user.Id, Arg.Any<CancellationToken>());
+        tokenProvider.Received(1).Create(Arg.Is<User>(u => u.Id == user.Id), permissions);
+
         RefreshToken stored = await context.RefreshTokens.SingleAsync();
         stored.Token.ShouldBe("new-refresh-token");
         stored.ExpiresOnUtc.ShouldBeGreaterThan(now);
     }
 
-    private static async Task SeedRefreshTokenAsync(TestDbContext context, string token, DateTime expiresOnUtc)
+    private static async Task<User> SeedRefreshTokenAsync(TestDbContext context, string token, DateTime expiresOnUtc)
     {
         var user = User.Create("test@example.com", "Test", "User");
 
@@ -96,5 +110,7 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         context.RefreshTokens.Add(RefreshToken.Create(token, user.Id, expiresOnUtc));
 
         await context.SaveChangesAsync();
+
+        return user;
     }
 }

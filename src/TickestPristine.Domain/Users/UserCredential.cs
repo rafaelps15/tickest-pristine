@@ -1,6 +1,8 @@
+using TickestPristine.SharedKernel;
+
 namespace TickestPristine.Domain.Users;
 
-public sealed class UserCredential
+public sealed class UserCredential : Entity
 {
     private UserCredential(Guid id, Guid userId, string passwordHash)
     {

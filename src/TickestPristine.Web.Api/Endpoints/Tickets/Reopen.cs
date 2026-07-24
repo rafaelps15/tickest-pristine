@@ -1,5 +1,4 @@
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Tickets.Reopen;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
@@ -22,7 +21,7 @@ internal sealed class Reopen : IEndpoint
 
             return result.Match(Results.NoContent, CustomResults.Problem);
         })
-        .HasPermission(PermissionCodes.Tickets.Reopen)
+        .RequireAuthorization()
         .WithTags(Tags.Tickets);
     }
 }
