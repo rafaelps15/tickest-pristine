@@ -4,6 +4,7 @@ using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Tickets.Delete;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -78,7 +79,7 @@ public sealed class DeleteTicketCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(TicketErrors.Unauthorized());
+        result.Error.ShouldBe(UserErrors.Unauthorized());
     }
 
     [Fact]
@@ -103,7 +104,7 @@ public sealed class DeleteTicketCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(TicketErrors.Unauthorized());
+        result.Error.ShouldBe(UserErrors.Unauthorized());
     }
 
     [Fact]

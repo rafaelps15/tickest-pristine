@@ -41,7 +41,7 @@ await app.SeedAccessControlAsync();
 
 if (app.Environment.IsDevelopment())
 {
-    await app.SeedSampleDataAsync();
+    app.SeedData();
 }
 
 app.MapHealthChecks("health", new HealthCheckOptions
@@ -62,9 +62,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.UseRateLimiter();
-
-// Mapeia os controllers MVC.
-app.MapControllers();
 
 await app.RunAsync();
 

@@ -1,10 +1,11 @@
 using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Permissions.GetAll;
+using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.Permissions;
 
-public sealed class GetPermissionsQueryHandlerTests
+public sealed class GetPermissionsQueryHandlerTests : BaseHandlerTest
 {
     [Fact]
     public async Task Handle_Should_ReturnEveryCatalogPermissionWithDisplayData_WhenQueried()

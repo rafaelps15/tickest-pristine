@@ -15,8 +15,4 @@ public static class TicketAttachmentErrors
     public static Error UnsupportedContentType(string contentType) => Error.Problem(
         "TicketAttachments.UnsupportedContentType",
         $"O tipo de arquivo '{contentType}' não é suportado");
-
-    public static Error Unauthorized() => Error.Forbidden(
-        "TicketAttachments.Unauthorized",
-        "Você não tem permissão para executar esta ação neste anexo.");
 }

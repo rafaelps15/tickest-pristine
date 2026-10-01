@@ -121,7 +121,7 @@ public sealed class SectorsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
-    public async Task Update_Then_GetById_Should_ReflectChanges()
+    public async Task Update_Should_ReflectChangesInGetById()
     {
         // Arrange
         await AuthenticateAsAdminAsync();
@@ -146,7 +146,7 @@ public sealed class SectorsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
-    public async Task Deactivate_Then_GetAll_Should_NotIncludeSector()
+    public async Task Deactivate_Should_RemoveSectorFromGetAll()
     {
         // Arrange
         await AuthenticateAsAdminAsync();

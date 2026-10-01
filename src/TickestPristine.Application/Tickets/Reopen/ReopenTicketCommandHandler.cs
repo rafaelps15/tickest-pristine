@@ -4,6 +4,7 @@ using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Authorization;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -41,7 +42,7 @@ internal sealed class ReopenTicketCommandHandler(
 
         if (!hasPermission)
         {
-            return Result.Failure(TicketErrors.Unauthorized());
+            return Result.Failure(UserErrors.Unauthorized());
         }
 
         ticket.Status = TicketStatus.Open;

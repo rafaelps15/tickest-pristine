@@ -5,6 +5,7 @@ using TickestPristine.Application.Authorization;
 using TickestPristine.Application.TicketAttachments.Download;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.TicketAttachments;
@@ -57,7 +58,7 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests : BaseHandlerTes
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(TicketErrors.Unauthorized());
+        result.Error.ShouldBe(UserErrors.Unauthorized());
     }
 
     [Fact]

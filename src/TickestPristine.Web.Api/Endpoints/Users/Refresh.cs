@@ -7,7 +7,7 @@ using TickestPristine.Web.Api.Infrastructure;
 
 namespace TickestPristine.Web.Api.Endpoints.Users;
 
-internal sealed class RefreshToken : IEndpoint
+internal sealed class Refresh : IEndpoint
 {
     public sealed record Request(string RefreshToken);
 

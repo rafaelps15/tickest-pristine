@@ -19,7 +19,7 @@ public sealed class AccessControlSeederTests(IntegrationTestWebAppFactory factor
     private const string UnknownPermissionCode = "legacy:removed-permission";
 
     [Fact]
-    public async Task SeedAccessControl_Should_RestoreMissingAdministratorPermissions_AndRemoveUnknownCodes()
+    public async Task SeedAccessControl_Should_RestoreMissingAdministratorPermissionsAndRemoveUnknownCodes()
     {
         // Arrange: Admin sem uma permissão do catálogo e com um código inexistente
         using (IServiceScope scope = Services.CreateScope())

@@ -4,6 +4,7 @@ using TickestPristine.Application.Authorization;
 using TickestPristine.Application.TicketMessages.Post;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -58,7 +59,7 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(TicketErrors.Unauthorized());
+        result.Error.ShouldBe(UserErrors.Unauthorized());
     }
 
     [Fact]

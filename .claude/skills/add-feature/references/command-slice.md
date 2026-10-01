@@ -37,7 +37,10 @@ public sealed class CreateTodoCommand : ICommand<Guid>
 
 ## Validator
 
-Public class, same folder. Auto-registered and executed by `ValidationDecorator` before the handler runs.
+Same folder as the command. Auto-registered and executed by `ValidationDecorator` before the handler runs. Its visibility follows the command's shape:
+
+- Class command (`sealed class` with `{ get; set; }`) → `public class {Command}Validator` (example below).
+- Positional record command → `internal sealed class {Command}Validator`, e.g. `internal sealed class ArchiveTodoCommandValidator : AbstractValidator<ArchiveTodoCommand>`.
 
 ```csharp
 using FluentValidation;

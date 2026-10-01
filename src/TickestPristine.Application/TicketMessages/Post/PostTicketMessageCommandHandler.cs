@@ -4,6 +4,7 @@ using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Authorization;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -36,7 +37,7 @@ internal sealed class PostTicketMessageCommandHandler(
 
             if (!canManageTickets)
             {
-                return Result.Failure<Guid>(TicketErrors.Unauthorized());
+                return Result.Failure<Guid>(UserErrors.Unauthorized());
             }
         }
 

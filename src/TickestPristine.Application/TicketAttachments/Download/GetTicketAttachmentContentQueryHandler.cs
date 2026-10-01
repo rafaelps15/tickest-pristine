@@ -5,6 +5,7 @@ using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Storage;
 using TickestPristine.Application.Authorization;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -47,7 +48,7 @@ internal sealed class GetTicketAttachmentContentQueryHandler(
 
             if (!canManageTickets)
             {
-                return Result.Failure<TicketAttachmentDownloadResponse>(TicketErrors.Unauthorized());
+                return Result.Failure<TicketAttachmentDownloadResponse>(UserErrors.Unauthorized());
             }
         }
 

@@ -4,6 +4,7 @@ using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Authorization;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -37,7 +38,7 @@ internal sealed class DeleteTicketMessageCommandHandler(
 
             if (!canManageTickets)
             {
-                return Result.Failure(TicketMessageErrors.Unauthorized());
+                return Result.Failure(UserErrors.Unauthorized());
             }
         }
 

@@ -15,7 +15,6 @@ internal sealed class RefreshTokenCommandHandler(
     public async Task<Result<AccessTokensResponse>> Handle(RefreshTokenCommand command, CancellationToken cancellationToken)
     {
         RefreshToken? refreshToken = await context.RefreshTokens
-            .Include(rt => rt.User)
             .SingleOrDefaultAsync(rt => rt.Token == command.RefreshToken, cancellationToken);
 
         if (refreshToken is null || refreshToken.ExpiresOnUtc < dateTimeProvider.UtcNow)
@@ -23,7 +22,11 @@ internal sealed class RefreshTokenCommandHandler(
             return Result.Failure<AccessTokensResponse>(UserErrors.InvalidRefreshToken);
         }
 
-        string accessToken = await tokenProvider.CreateAsync(refreshToken.User, cancellationToken);
+        User user = await context.Users
+            .AsNoTracking()
+            .SingleAsync(u => u.Id == refreshToken.UserId, cancellationToken);
+
+        string accessToken = await tokenProvider.CreateAsync(user, cancellationToken);
         string newRefreshToken = tokenProvider.GenerateRefreshToken();
 
         // Troca o refresh token para que o anterior não possa ser reutilizado.

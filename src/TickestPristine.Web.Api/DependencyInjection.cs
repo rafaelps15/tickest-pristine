@@ -8,9 +8,6 @@ public static class DependencyInjection
     {
         services.AddEndpointsApiExplorer();
 
-        // Registra os serviços de controllers MVC.
-        services.AddControllers();
-
         services.AddExceptionHandler<GlobalExceptionHandler>();
         services.AddProblemDetails();
 

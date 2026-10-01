@@ -85,7 +85,7 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
     }
 
     [Fact]
-    public async Task Update_Then_GetById_Should_ReflectChanges()
+    public async Task Update_Should_ReflectChangesInGetById()
     {
         // Arrange
         await AuthenticateAsAdminAsync();
@@ -109,7 +109,7 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
     }
 
     [Fact]
-    public async Task Deactivate_Then_GetAll_Should_NotIncludeDepartment()
+    public async Task Deactivate_Should_RemoveDepartmentFromGetAll()
     {
         // Arrange
         await AuthenticateAsAdminAsync();

@@ -126,7 +126,7 @@ public sealed class TicketAttachmentsTests(IntegrationTestWebAppFactory factory)
     }
 
     [Fact]
-    public async Task Upload_Then_GetAll_Should_ReturnUploadedAttachment_WhenCallerIsTicketCreator()
+    public async Task Upload_Should_ReturnUploadedAttachmentInGetAll_WhenCallerIsTicketCreator()
     {
         // Arrange
         Guid sectorId = await CreateSectorAsAdminAsync();

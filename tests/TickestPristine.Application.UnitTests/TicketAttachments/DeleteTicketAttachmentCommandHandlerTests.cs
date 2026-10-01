@@ -4,6 +4,7 @@ using TickestPristine.Application.Authorization;
 using TickestPristine.Application.TicketAttachments.Delete;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -57,7 +58,7 @@ public sealed class DeleteTicketAttachmentCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(TicketAttachmentErrors.Unauthorized());
+        result.Error.ShouldBe(UserErrors.Unauthorized());
     }
 
     [Fact]

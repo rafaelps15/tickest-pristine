@@ -4,6 +4,7 @@ using TickestPristine.Application.Authorization;
 using TickestPristine.Application.TicketHistories.GetAll;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.TicketHistories;
@@ -54,7 +55,7 @@ public sealed class GetTicketHistoryQueryHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(TicketErrors.Unauthorized());
+        result.Error.ShouldBe(UserErrors.Unauthorized());
     }
 
     [Fact]

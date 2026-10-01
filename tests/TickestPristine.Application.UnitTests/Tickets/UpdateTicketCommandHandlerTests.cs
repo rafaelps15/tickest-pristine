@@ -4,6 +4,7 @@ using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Tickets.Update;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -54,7 +55,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(TicketErrors.Unauthorized());
+        result.Error.ShouldBe(UserErrors.Unauthorized());
     }
 
     [Fact]
@@ -107,6 +108,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == ticketId);
         ticket.Description.ShouldBe("Updated description");
         ticket.Status.ShouldBe(TicketStatus.InProgress);
+        ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketUpdatedDomainEvent);
         ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketStatusChangedDomainEvent);
     }
 
@@ -133,6 +135,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         result.IsSuccess.ShouldBeTrue();
 
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == ticketId);
+        ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketUpdatedDomainEvent);
         ticket.DomainEvents.ShouldNotContain(domainEvent => domainEvent is TicketStatusChangedDomainEvent);
     }
 

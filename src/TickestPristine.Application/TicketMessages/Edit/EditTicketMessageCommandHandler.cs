@@ -2,6 +2,7 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -25,7 +26,7 @@ internal sealed class EditTicketMessageCommandHandler(
 
         if (message.AuthorUserId != userContext.UserId)
         {
-            return Result.Failure(TicketMessageErrors.Unauthorized());
+            return Result.Failure(UserErrors.Unauthorized());
         }
 
         message.Content = command.Content;

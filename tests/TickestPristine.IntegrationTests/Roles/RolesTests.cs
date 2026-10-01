@@ -62,7 +62,7 @@ public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
-    public async Task AssignPermissions_Then_GetAll_Should_ReflectAssignedPermissions()
+    public async Task AssignPermissions_Should_ReflectAssignedPermissionsInGetAll()
     {
         // Arrange
         await AuthenticateAsAdminAsync();

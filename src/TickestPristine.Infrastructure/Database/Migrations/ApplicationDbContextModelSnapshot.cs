@@ -617,14 +617,12 @@ namespace TickestPristine.Infrastructure.Database.Migrations
 
             modelBuilder.Entity("TickestPristine.Domain.Users.RefreshToken", b =>
                 {
-                    b.HasOne("TickestPristine.Domain.Users.User", "User")
+                    b.HasOne("TickestPristine.Domain.Users.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_refresh_tokens_users_user_id");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("TickestPristine.Domain.Users.UserCredential", b =>

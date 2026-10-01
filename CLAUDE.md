@@ -74,7 +74,7 @@ Tests mirror this: `tests/Application.UnitTests/{Aggregate}/{UseCase}HandlerTest
 
 ### Domain events
 
-Entities inherit from `Entity`; handlers call `entity.Raise(new SomeDomainEvent(...))` after changing state and before `SaveChangesAsync` (entities have no methods — see the shape rules below). `DomainEventsDispatcher` (Infrastructure) dispatches raised events after `SaveChangesAsync`; handlers implement `IDomainEventHandler<T>` and are auto-registered by assembly scan.
+Entities inherit from `Entity` and call `Raise(new SomeDomainEvent(...))` inside their own state-changing methods or from handlers at creation time. `DomainEventsDispatcher` (Infrastructure) dispatches raised events after `SaveChangesAsync`; handlers implement `IDomainEventHandler<T>` and are auto-registered by assembly scan.
 
 ## Conventions to preserve when extending
 
@@ -83,28 +83,3 @@ Entities inherit from `Entity`; handlers call `entity.Raise(new SomeDomainEvent(
 - EF Core configurations (`IEntityTypeConfiguration<T>`) live in `Infrastructure/{Aggregate}/{Entity}Configuration.cs` and must be added to `ApplicationDbContext`.
 - Endpoints are one class per route in `Web.Api/Endpoints/{Aggregate}/`, tagged via `Web.Api/Endpoints/Tags.cs`, and registered automatically — no manual route table to update.
 - This repo has `.claude/skills/` (`add-entity`, `add-feature`, `add-tests`, `ca-review`) that encode these conventions as executable scaffolding — prefer them over freehand implementations so new code matches the existing slices exactly.
-
-## Shape rules
-
-These are not enforced by the build, so follow them explicitly when adding or changing code.
-
-- **Entities have no behavior.** Only public `{ get; set; }` properties — no constructors, factories or methods. Handlers create them with `new X { Id = Guid.NewGuid(), ... }`, set properties, call `Raise(...)` and save. Pure domain rules that don't belong to an entity go in static Domain helpers (e.g. `TicketStatusTransitions`, `TicketStatusNames`).
-- **Decide the command's shape first; the validator and the endpoint `Request` follow it.**
-  - Few parameters → positional `sealed record` command → `internal sealed class` validator → positional `public sealed record Request(...)`.
-  - Many parameters → `sealed class` command with `{ get; set; }` → `public class` validator → `public sealed class Request` with `{ get; set; }`.
-- **Responses:** in the Users module they are `public sealed record` with `{ get; init; }` (fill extra data with `response with { ... }`); `AccessTokensResponse` is a positional record at `Application/Users/`, shared by Login and Refresh. In every other feature, responses are `public sealed class` with `{ get; set; }`, one per slice.
-- **Refresh endpoint:** the slice folder is `Users/Refresh`, but the endpoint file is `Endpoints/Users/RefreshToken.cs` (route `users/refresh-token`).
-
-## Errors
-
-- `ErrorType.Forbidden` / `Error.Forbidden(...)` maps to **403** in `CustomResults.Problem`. Use it when the user is authenticated but not allowed to act on that data (`{Feature}.Unauthorized`, `Roles.PrivilegeEscalation`). Never use `Failure` for that — it becomes a 500.
-- Other types: `NotFound` → 404, `Conflict` → 409, `Problem`/`Validation` → 400, `Failure` → 500.
-
-## Authentication and authorization
-
-- Infrastructure keeps them apart: `Infrastructure/Authentication/` holds token, password hashing, current user and claims (`TokenProvider`, `IClaimsProvider`/`ClaimsProvider`, `TokenClaimTypes`, `UserContext`); `Infrastructure/Authorization/` holds permissions (`PermissionAuthorizationHandler`, `PermissionAuthorizationPolicyProvider`, `PermissionProvider`, `PermissionRequirement`, `PermissionCacheKeys`).
-- Model: Users → Roles → Permissions. Permission codes are strings (`"users:read"`) declared in `Application/Authorization/PermissionCodes.cs`, whose `Definitions` also hold the pt-BR name, description and group shown in the UI.
-- **Permissions are checked on the server on every request** through `IPermissionProvider` (backed by `HybridCache`), never from JWT claims. The token carries permissions only for the front-end. Any command that changes a user's roles or a role's permissions must call `IPermissionProvider.InvalidateAsync` for every affected user, so revocation takes effect immediately.
-- Protect endpoints with `.HasPermission(PermissionCodes.X.Y)`. It fails at startup if the code is not in the catalog — don't use an `[Authorize]`-style attribute, which skips that check.
-- No wildcard / "access everything" permission: the Admin role receives the whole catalog (the seeder keeps it complete), and the front-end checks permissions one by one.
-- Administrative permissions can only be granted or removed by someone who already holds them (`PrivilegeEscalationGuard`).
