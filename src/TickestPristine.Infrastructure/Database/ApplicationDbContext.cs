@@ -1,0 +1,81 @@
+﻿using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Domain.Departments;
+using TickestPristine.Domain.Roles;
+using TickestPristine.Domain.Sectors;
+using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
+using TickestPristine.Infrastructure.DomainEvents;
+using Microsoft.EntityFrameworkCore;
+using TickestPristine.SharedKernel;
+
+namespace TickestPristine.Infrastructure.Database;
+
+public sealed class ApplicationDbContext(
+    DbContextOptions<ApplicationDbContext> options,
+    IDomainEventsDispatcher domainEventsDispatcher)
+    : DbContext(options), IApplicationDbContext
+{
+    public DbSet<User> Users { get; set; }
+
+    public DbSet<UserCredential> UserCredentials { get; set; }
+
+    public DbSet<RefreshToken> RefreshTokens { get; set; }
+
+    public DbSet<Department> Departments { get; set; }
+
+    public DbSet<Sector> Sectors { get; set; }
+
+    public DbSet<Ticket> Tickets { get; set; }
+
+    public DbSet<TicketAttachment> TicketAttachments { get; set; }
+
+    public DbSet<TicketMessage> TicketMessages { get; set; }
+
+    public DbSet<TicketHistory> TicketHistories { get; set; }
+
+    public DbSet<Role> Roles { get; set; }
+
+    public DbSet<RolePermission> RolePermissions { get; set; }
+
+    public DbSet<UserRole> UserRoles { get; set; }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
+
+        modelBuilder.HasDefaultSchema(Schemas.Default);
+    }
+
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        // Salva primeiro e depois publica os eventos de domínio; os handlers dos eventos rodam fora desta transação.
+        List<IDomainEvent> domainEvents = ExtractDomainEvents();
+        int result = await base.SaveChangesAsync(cancellationToken);
+
+        await PublishDomainEventsAsync(domainEvents);
+
+        return result;
+    }
+
+    private async Task PublishDomainEventsAsync(IEnumerable<IDomainEvent> domainEvents)
+    {
+        await domainEventsDispatcher.DispatchAsync(domainEvents);
+    }
+
+    private List<IDomainEvent> ExtractDomainEvents()
+    {
+        var domainEvents = ChangeTracker
+            .Entries<Entity>()
+            .Select(entry => entry.Entity)
+            .SelectMany(entity =>
+            {
+                List<IDomainEvent> domainEvents = entity.DomainEvents;
+
+                entity.ClearDomainEvents();
+
+                return domainEvents;
+            })
+            .ToList();
+        return domainEvents;
+    }
+}
