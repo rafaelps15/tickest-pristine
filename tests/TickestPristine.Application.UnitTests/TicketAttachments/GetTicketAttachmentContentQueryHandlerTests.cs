@@ -5,7 +5,6 @@ using TickestPristine.Application.Authorization;
 using TickestPristine.Application.TicketAttachments.Download;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
-using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.TicketAttachments;
@@ -28,7 +27,7 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests : BaseHandlerTes
         var query = new GetTicketAttachmentContentQuery(Guid.NewGuid());
 
         // Act
-        Result<TicketAttachmentDownloadResponse> result = await handler.Handle(query, CancellationToken.None);
+        Result<TicketAttachmentResponse> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsFailure.ShouldBeTrue();
@@ -36,7 +35,7 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests : BaseHandlerTes
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnUnauthorized_WhenCallerIsNotParticipantAndLacksManagePermission()
+    public async Task Handle_Should_ReturnNotFound_WhenCallerIsNotParticipantAndLacksManagePermission()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -54,15 +53,16 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests : BaseHandlerTes
         var query = new GetTicketAttachmentContentQuery(attachmentId);
 
         // Act
-        Result<TicketAttachmentDownloadResponse> result = await handler.Handle(query, CancellationToken.None);
+        Result<TicketAttachmentResponse> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(UserErrors.Unauthorized());
+        result.Error.ShouldBe(TicketAttachmentErrors.NotFound(query.AttachmentId));
+        await fileStorage.DidNotReceive().OpenReadAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnFileContent_WhenCallerIsParticipant()
+    public async Task Handle_Should_ReturnAttachment_WhenCallerIsParticipant()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -72,20 +72,21 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests : BaseHandlerTes
         userContext.UserId.Returns(CreatorId);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
-        Stream expectedStream = new MemoryStream([1, 2, 3]);
-        fileStorage.OpenReadAsync("storage-key.pdf", Arg.Any<CancellationToken>()).Returns(expectedStream);
+        Stream expectedContent = new MemoryStream([1, 2, 3]);
+        fileStorage.OpenReadAsync("storage-key.pdf", Arg.Any<CancellationToken>()).Returns(expectedContent);
 
         var handler = new GetTicketAttachmentContentQueryHandler(context, userContext, permissionProvider, fileStorage);
         var query = new GetTicketAttachmentContentQuery(attachmentId);
 
         // Act
-        Result<TicketAttachmentDownloadResponse> result = await handler.Handle(query, CancellationToken.None);
+        Result<TicketAttachmentResponse> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
         result.Value.FileName.ShouldBe("report.pdf");
         result.Value.ContentType.ShouldBe("application/pdf");
-        result.Value.Content.ShouldBeSameAs(expectedStream);
+        result.Value.StorageKey.ShouldBe("storage-key.pdf");
+        result.Value.Content.ShouldBeSameAs(expectedContent);
     }
 
     private static async Task<Guid> SeedAttachmentAsync(TestDbContext context)

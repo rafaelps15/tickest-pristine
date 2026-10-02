@@ -1,40 +1,47 @@
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using Microsoft.EntityFrameworkCore;
+using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Users.GetAll;
 
 internal sealed class GetUsersQueryHandler(IApplicationDbContext context)
-    : IQueryHandler<GetUsersQuery, List<UserSummaryResponse>>
+    : IQueryHandler<GetUsersQuery, PagedResponse<UserSummaryResponse>>
 {
-    public async Task<Result<List<UserSummaryResponse>>> Handle(GetUsersQuery query, CancellationToken cancellationToken)
+    public async Task<Result<PagedResponse<UserSummaryResponse>>> Handle(GetUsersQuery query, CancellationToken cancellationToken)
     {
-        List<UserSummaryResponse> users = await context.Users
+        string? search = string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim();
+        var createdFromUtc = query.CreatedFrom?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var createdUntilUtc = query.CreatedTo?.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+
+        PagedResponse<UserSummaryResponse> users = await context.Users
+            .Where(u =>
+                (query.Status == UserStatusFilter.All || u.IsActive == (query.Status == UserStatusFilter.Active)) &&
+                (search == null ||
+                 u.FirstName.Contains(search) ||
+                 u.LastName.Contains(search) ||
+                 u.Email.Contains(search)) &&
+                (createdFromUtc == null || u.CreatedAtUtc >= createdFromUtc) &&
+                (createdUntilUtc == null || u.CreatedAtUtc < createdUntilUtc))
             .OrderBy(u => u.FirstName)
+            .ThenBy(u => u.LastName)
+            .ThenBy(u => u.Id)
             .Select(u => new UserSummaryResponse
             {
                 Id = u.Id,
                 Email = u.Email,
                 FirstName = u.FirstName,
                 LastName = u.LastName,
-                IsActive = u.IsActive
+                IsActive = u.IsActive,
+                CreatedAtUtc = u.CreatedAtUtc,
+                DeactivatedAtUtc = u.DeactivatedAtUtc,
+                Roles = context.Roles
+                    .Where(r => context.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleId == r.Id))
+                    .Select(r => new RoleSummaryResponse { Id = r.Id, Name = r.Name })
+                    .ToList()
             })
-            .ToListAsync(cancellationToken);
+            .ToPagedResponseAsync(query.Page, query.PageSize, cancellationToken);
 
-        // Busca as roles separadamente e as agrupa por usuário em memória.
-        var userRoles = await (
-            from userRole in context.UserRoles
-            join role in context.Roles on userRole.RoleId equals role.Id
-            select new { userRole.UserId, RoleId = role.Id, RoleName = role.Name })
-            .ToListAsync(cancellationToken);
-
-        ILookup<Guid, RoleSummaryResponse> rolesByUserId = userRoles.ToLookup(
-            ur => ur.UserId,
-            ur => new RoleSummaryResponse { Id = ur.RoleId, Name = ur.RoleName });
-
-        return users
-            .Select(user => user with { Roles = rolesByUserId[user.Id].ToList() })
-            .ToList();
+        return users;
     }
 }

@@ -151,20 +151,57 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
+    public async Task GetAll_Should_FindUser_WhenSearchDiffersOnlyInCase()
+    {
+        // Arrange
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+
+        // Act
+        PagedDto<UserSummaryDto>? users = await HttpClient.GetFromJsonAsync<PagedDto<UserSummaryDto>>(
+            $"users?search={email.ToUpperInvariant()}");
+
+        // Assert
+        users!.Items.ShouldHaveSingleItem().Id.ShouldBe(userId);
+    }
+
+    [Fact]
+    public async Task Register_Should_ReturnConflict_WhenEmailDiffersOnlyInCase()
+    {
+        // Arrange
+        string email = UniqueEmail();
+        await RegisterUserAsync(email);
+        var request = new { email = email.ToUpperInvariant(), firstName = "Test", lastName = "User", password = "Password123!" };
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users/register", request);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
     public async Task GetAll_Should_ReturnUsers_WhenCallerIsAdmin()
     {
         // Arrange
         AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
         Authenticate(adminTokens.AccessToken);
-        Guid userId = await RegisterUserAsync(UniqueEmail());
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
 
         // Act
-        HttpResponseMessage response = await HttpClient.GetAsync("users");
+        HttpResponseMessage response = await HttpClient.GetAsync($"users?search={email}");
 
         // Assert
         response.EnsureSuccessStatusCode();
-        List<UserSummaryDto>? users = await response.Content.ReadFromJsonAsync<List<UserSummaryDto>>();
-        users!.ShouldContain(u => u.Id == userId);
+        PagedDto<UserSummaryDto>? users = await response.Content.ReadFromJsonAsync<PagedDto<UserSummaryDto>>();
+        UserSummaryDto user = users!.Items.ShouldHaveSingleItem();
+        user.Id.ShouldBe(userId);
+        user.IsActive.ShouldBeTrue();
+        user.CreatedAtUtc.ShouldBeGreaterThan(DateTime.UtcNow.AddMinutes(-5));
+        user.DeactivatedAtUtc.ShouldBeNull();
     }
 
     [Fact]
@@ -192,19 +229,20 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         createRoleResponse.EnsureSuccessStatusCode();
         Guid roleId = await createRoleResponse.Content.ReadFromJsonAsync<Guid>();
 
-        Guid userId = await RegisterUserAsync(UniqueEmail());
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
         HttpResponseMessage assignResponse = await HttpClient.PutAsJsonAsync(
             $"users/{userId}/roles",
             new { roleIds = new[] { roleId } });
         assignResponse.EnsureSuccessStatusCode();
 
         // Act
-        HttpResponseMessage response = await HttpClient.GetAsync("users");
+        HttpResponseMessage response = await HttpClient.GetAsync($"users?search={email}");
 
         // Assert
         response.EnsureSuccessStatusCode();
-        List<UserSummaryDto>? users = await response.Content.ReadFromJsonAsync<List<UserSummaryDto>>();
-        UserSummaryDto user = users!.Single(u => u.Id == userId);
+        PagedDto<UserSummaryDto>? users = await response.Content.ReadFromJsonAsync<PagedDto<UserSummaryDto>>();
+        UserSummaryDto user = users!.Items.Single(u => u.Id == userId);
         user.Roles.ShouldContain(r => r.Id == roleId);
     }
 
@@ -624,19 +662,81 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
-    public async Task GetAll_Should_ReturnUserAsInactive_WhenUserWasDeactivated()
+    public async Task GetAll_Should_ReturnUserAsInactiveWithDeactivationDate_WhenUserWasDeactivated()
     {
         // Arrange
-        Guid userId = await RegisterUserAsync(UniqueEmail());
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
         AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
         Authenticate(adminTokens.AccessToken);
         (await HttpClient.PutAsync($"users/{userId}/deactivate", null)).EnsureSuccessStatusCode();
 
         // Act
-        List<UserSummaryDto>? users = await HttpClient.GetFromJsonAsync<List<UserSummaryDto>>("users");
+        PagedDto<UserSummaryDto>? users = await HttpClient.GetFromJsonAsync<PagedDto<UserSummaryDto>>(
+            $"users?status=Inactive&search={email}");
 
         // Assert
-        users!.Single(u => u.Id == userId).IsActive.ShouldBeFalse();
+        UserSummaryDto user = users!.Items.ShouldHaveSingleItem();
+        user.Id.ShouldBe(userId);
+        user.IsActive.ShouldBeFalse();
+        user.DeactivatedAtUtc.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task GetAll_Should_NotReturnDeactivatedUser_WhenStatusIsActive()
+    {
+        // Arrange
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+        (await HttpClient.PutAsync($"users/{userId}/deactivate", null)).EnsureSuccessStatusCode();
+
+        // Act
+        PagedDto<UserSummaryDto>? users = await HttpClient.GetFromJsonAsync<PagedDto<UserSummaryDto>>(
+            $"users?status=Active&search={email}");
+
+        // Assert
+        users!.Items.ShouldBeEmpty();
+        users.TotalCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnRequestedPage_WhenPageSizeIsGiven()
+    {
+        // Arrange
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+        await RegisterUserAsync(UniqueEmail());
+        await RegisterUserAsync(UniqueEmail());
+
+        // Act
+        PagedDto<UserSummaryDto>? users = await HttpClient.GetFromJsonAsync<PagedDto<UserSummaryDto>>(
+            "users?page=1&pageSize=1");
+
+        // Assert
+        users!.Items.Count.ShouldBe(1);
+        users.Page.ShouldBe(1);
+        users.PageSize.ShouldBe(1);
+        users.TotalCount.ShouldBeGreaterThan(1);
+        users.TotalPages.ShouldBe(users.TotalCount);
+        users.HasNextPage.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnEmptyPage_WhenCreatedFromIsAfterCreatedTo()
+    {
+        // Arrange
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+
+        // Act
+        PagedDto<UserSummaryDto>? users = await HttpClient.GetFromJsonAsync<PagedDto<UserSummaryDto>>(
+            "users?createdFrom=2026-10-02&createdTo=2026-10-01");
+
+        // Assert
+        users!.Items.ShouldBeEmpty();
+        users.TotalCount.ShouldBe(0);
     }
 
     [Fact]
@@ -734,7 +834,17 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         return roleId;
     }
 
-    private sealed record UserSummaryDto(Guid Id, string Email, string FirstName, string LastName, bool IsActive, List<RoleSummaryDto> Roles);
+    private sealed record PagedDto<T>(List<T> Items, int Page, int PageSize, int TotalCount, int TotalPages, bool HasPreviousPage, bool HasNextPage);
+
+    private sealed record UserSummaryDto(
+        Guid Id,
+        string Email,
+        string FirstName,
+        string LastName,
+        bool IsActive,
+        DateTime CreatedAtUtc,
+        DateTime? DeactivatedAtUtc,
+        List<RoleSummaryDto> Roles);
 
     private sealed record RoleSummaryDto(Guid Id, string Name);
 

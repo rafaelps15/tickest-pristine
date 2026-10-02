@@ -7,6 +7,8 @@ public sealed record UserSummaryResponse
     public string FirstName { get; init; }
     public string LastName { get; init; }
     public bool IsActive { get; init; }
+    public DateTime CreatedAtUtc { get; init; }
+    public DateTime? DeactivatedAtUtc { get; init; }
     public List<RoleSummaryResponse> Roles { get; init; } = [];
 }
 

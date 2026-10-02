@@ -4,11 +4,11 @@ using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Permissions.GetAll;
 
-internal sealed class GetPermissionsQueryHandler : IQueryHandler<GetPermissionsQuery, IReadOnlyList<PermissionResponse>>
+internal sealed class GetPermissionsQueryHandler : IQueryHandler<GetPermissionsQuery, List<PermissionResponse>>
 {
-    public Task<Result<IReadOnlyList<PermissionResponse>>> Handle(GetPermissionsQuery query, CancellationToken cancellationToken)
+    public Task<Result<List<PermissionResponse>>> Handle(GetPermissionsQuery query, CancellationToken cancellationToken)
     {
-        IReadOnlyList<PermissionResponse> permissions = PermissionCodes.Definitions
+        var permissions = PermissionCodes.Definitions
             .Select(d => new PermissionResponse
             {
                 Code = d.Code,
@@ -19,6 +19,6 @@ internal sealed class GetPermissionsQueryHandler : IQueryHandler<GetPermissionsQ
             })
             .ToList();
 
-        return Task.FromResult(Result.Success(permissions));
+        return Task.FromResult<Result<List<PermissionResponse>>>(permissions);
     }
 }

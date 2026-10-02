@@ -21,10 +21,7 @@ internal sealed class UploadTicketAttachmentCommandHandler(
 {
     public async Task<Result<Guid>> Handle(UploadTicketAttachmentCommand command, CancellationToken cancellationToken)
     {
-        var ticket = await context.Tickets
-            .Where(t => t.Id == command.TicketId)
-            .Select(t => new { t.CreatedByUserId, t.AssignedToUserId })
-            .SingleOrDefaultAsync(cancellationToken);
+        Ticket? ticket = await context.Tickets.SingleOrDefaultAsync(t => t.Id == command.TicketId, cancellationToken);
 
         if (ticket is null)
         {
@@ -51,7 +48,7 @@ internal sealed class UploadTicketAttachmentCommandHandler(
         var attachment = new TicketAttachment
         {
             Id = Guid.NewGuid(),
-            TicketId = command.TicketId,
+            TicketId = ticket.Id,
             UploadedByUserId = userContext.UserId,
             FileName = command.FileName,
             ContentType = command.ContentType,
@@ -64,32 +61,8 @@ internal sealed class UploadTicketAttachmentCommandHandler(
 
         context.TicketAttachments.Add(attachment);
 
-        try
-        {
-            await context.SaveChangesAsync(cancellationToken);
-        }
-        catch
-        {
-            await DeleteFileIfNotPersistedAsync(attachment.Id, storageKey);
-            throw;
-        }
+        await context.SaveChangesAsync(cancellationToken);
 
         return attachment.Id;
-    }
-
-    /// <summary>
-    /// Apaga o arquivo gravado quando o anexo não chegou ao banco. A falha pode vir depois da gravação
-    /// (nos eventos de domínio); nesse caso o anexo existe e o arquivo é mantido.
-    /// </summary>
-    private async Task DeleteFileIfNotPersistedAsync(Guid attachmentId, string storageKey)
-    {
-        bool persisted = await context.TicketAttachments
-            .AsNoTracking()
-            .AnyAsync(a => a.Id == attachmentId, CancellationToken.None);
-
-        if (!persisted)
-        {
-            await fileStorage.DeleteAsync(storageKey, CancellationToken.None);
-        }
     }
 }

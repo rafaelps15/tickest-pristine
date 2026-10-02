@@ -1,4 +1,5 @@
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Users.GetAll;
 using TickestPristine.SharedKernel;
@@ -12,10 +13,24 @@ internal sealed class GetAll : IEndpoint
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         app.MapGet("users", async (
-            IQueryHandler<GetUsersQuery, List<UserSummaryResponse>> handler,
+            UserStatusFilter? status,
+            string? search,
+            DateOnly? createdFrom,
+            DateOnly? createdTo,
+            int? page,
+            int? pageSize,
+            IQueryHandler<GetUsersQuery, PagedResponse<UserSummaryResponse>> handler,
             CancellationToken cancellationToken) =>
         {
-            Result<List<UserSummaryResponse>> result = await handler.Handle(new GetUsersQuery(), cancellationToken);
+            var query = new GetUsersQuery(
+                status ?? UserStatusFilter.All,
+                search,
+                createdFrom,
+                createdTo,
+                page,
+                pageSize);
+
+            Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(query, cancellationToken);
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })

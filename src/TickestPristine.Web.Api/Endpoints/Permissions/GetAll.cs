@@ -11,10 +11,10 @@ internal sealed class GetAll : IEndpoint
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         app.MapGet("permissions", async (
-            IQueryHandler<GetPermissionsQuery, IReadOnlyList<PermissionResponse>> handler,
+            IQueryHandler<GetPermissionsQuery, List<PermissionResponse>> handler,
             CancellationToken cancellationToken) =>
         {
-            Result<IReadOnlyList<PermissionResponse>> result = await handler.Handle(new GetPermissionsQuery(), cancellationToken);
+            Result<List<PermissionResponse>> result = await handler.Handle(new GetPermissionsQuery(), cancellationToken);
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })

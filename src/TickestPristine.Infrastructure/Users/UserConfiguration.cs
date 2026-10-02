@@ -10,6 +10,11 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
     {
         builder.HasKey(u => u.Id);
 
+        // citext: busca, login e e-mail único não diferenciam maiúsculas de minúsculas.
+        builder.Property(u => u.Email).HasColumnType("citext");
+        builder.Property(u => u.FirstName).HasColumnType("citext");
+        builder.Property(u => u.LastName).HasColumnType("citext");
+
         builder.HasIndex(u => u.Email).IsUnique();
 
         builder.Property(u => u.Code).HasMaxLength(30);

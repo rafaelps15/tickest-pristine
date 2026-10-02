@@ -97,7 +97,15 @@ Regra contra escalada: permissões administrativas (tudo que não é de ticket) 
 
 ---
 
-## 6. Ordem sugerida
+## 6. Arquivos de anexo órfãos
+
+- **Onde:** `UploadTicketAttachmentCommandHandler` grava o arquivo (`IFileStorage.SaveAsync`) antes do `SaveChangesAsync`.
+- **Problema:** se o banco falhar ao salvar o anexo, o arquivo fica na pasta sem registro no banco.
+- **Correção sugerida:** tratar na Infrastructure, sem `try/catch` no handler — por exemplo, uma limpeza periódica que apaga os arquivos cuja `StorageKey` não existe em `ticket_attachments`.
+
+---
+
+## 7. Ordem sugerida
 
 1. **Definir o modelo de usuário:** se pertence a departamento ou setor (ou agentes a setores e requesters a departamentos), e adicionar `IsActive`.
 2. **Completar Users:** `/me`, editar perfil, desativar, trocar senha, logout e proteção do último Admin.

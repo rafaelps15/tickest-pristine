@@ -19,10 +19,7 @@ internal sealed class PostTicketMessageCommandHandler(
 {
     public async Task<Result<Guid>> Handle(PostTicketMessageCommand command, CancellationToken cancellationToken)
     {
-        var ticket = await context.Tickets
-            .Where(t => t.Id == command.TicketId)
-            .Select(t => new { t.CreatedByUserId, t.AssignedToUserId })
-            .SingleOrDefaultAsync(cancellationToken);
+        Ticket? ticket = await context.Tickets.SingleOrDefaultAsync(t => t.Id == command.TicketId, cancellationToken);
 
         if (ticket is null)
         {
@@ -47,7 +44,7 @@ internal sealed class PostTicketMessageCommandHandler(
         var message = new TicketMessage
         {
             Id = Guid.NewGuid(),
-            TicketId = command.TicketId,
+            TicketId = ticket.Id,
             AuthorUserId = userContext.UserId,
             Content = command.Content,
             CreatedAtUtc = dateTimeProvider.UtcNow

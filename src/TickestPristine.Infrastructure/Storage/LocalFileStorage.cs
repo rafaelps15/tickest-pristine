@@ -44,13 +44,6 @@ internal sealed class LocalFileStorage(IOptions<FileStorageOptions> options) : I
         return Task.FromResult(fileStream);
     }
 
-    public Task DeleteAsync(string storageKey, CancellationToken cancellationToken)
-    {
-        File.Delete(ResolveContainedPath(storageKey));
-
-        return Task.CompletedTask;
-    }
-
     /// <summary>
     /// Monta o caminho do arquivo e recusa chaves que apontem para fora da pasta de anexos (ex.: "..\").
     /// </summary>

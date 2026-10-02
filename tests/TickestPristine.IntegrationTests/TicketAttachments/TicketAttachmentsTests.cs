@@ -166,7 +166,7 @@ public sealed class TicketAttachmentsTests(IntegrationTestWebAppFactory factory)
     }
 
     [Fact]
-    public async Task Download_Should_ReturnForbidden_WhenCallerIsNotParticipantAndLacksManagePermission()
+    public async Task Download_Should_ReturnNotFound_WhenCallerIsNotParticipantAndLacksManagePermission()
     {
         // Arrange
         Guid sectorId = await CreateSectorAsAdminAsync();
@@ -182,7 +182,7 @@ public sealed class TicketAttachmentsTests(IntegrationTestWebAppFactory factory)
         HttpResponseMessage response = await HttpClient.GetAsync($"ticket-attachments/{attachmentId}/download");
 
         // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact]

@@ -14,7 +14,7 @@ public sealed class GetPermissionsQueryHandlerTests : BaseHandlerTest
         var handler = new GetPermissionsQueryHandler();
 
         // Act
-        Result<IReadOnlyList<PermissionResponse>> result = await handler.Handle(new GetPermissionsQuery(), CancellationToken.None);
+        Result<List<PermissionResponse>> result = await handler.Handle(new GetPermissionsQuery(), CancellationToken.None);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();

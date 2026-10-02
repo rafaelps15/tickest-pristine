@@ -41,6 +41,9 @@ public sealed class ApplicationDbContext(
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // Texto que compara sem diferenciar maiúsculas de minúsculas (usado em nome e e-mail do usuário).
+        modelBuilder.HasPostgresExtension("citext");
+
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
 
         modelBuilder.HasDefaultSchema(Schemas.Default);
