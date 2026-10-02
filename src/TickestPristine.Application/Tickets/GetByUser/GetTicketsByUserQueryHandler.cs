@@ -18,21 +18,20 @@ internal sealed class GetTicketsByUserQueryHandler(
 {
     public async Task<Result<List<TicketResponse>>> Handle(GetTicketsByUserQuery query, CancellationToken cancellationToken)
     {
-        if (query.UserId != userContext.UserId)
-        {
-            bool canManageTickets = await permissionProvider.HasPermissionAsync(
-                userContext.UserId,
-                PermissionCodes.Tickets.Manage,
-                cancellationToken);
+        bool isSelf = query.UserId == userContext.UserId;
+        string requiredPermission = isSelf ? PermissionCodes.Tickets.ViewOwn : PermissionCodes.Tickets.Manage;
 
-            if (!canManageTickets)
-            {
-                return Result.Failure<List<TicketResponse>>(UserErrors.Unauthorized());
-            }
+        bool hasPermission = await permissionProvider.HasPermissionAsync(userContext.UserId, requiredPermission, cancellationToken);
+
+        if (!hasPermission)
+        {
+            return Result.Failure<List<TicketResponse>>(UserErrors.Unauthorized());
         }
 
         List<TicketResponse> tickets = await context.Tickets
             .Where(t => t.CreatedByUserId == query.UserId)
+            .OrderByDescending(t => t.CreatedAtUtc)
+            .ThenBy(t => t.Id)
             .Select(t => new TicketResponse
             {
                 Id = t.Id,

@@ -2,7 +2,7 @@ using FluentValidation;
 
 namespace TickestPristine.Application.TicketAttachments.Upload;
 
-public class UploadTicketAttachmentCommandValidator : AbstractValidator<UploadTicketAttachmentCommand>
+internal sealed class UploadTicketAttachmentCommandValidator : AbstractValidator<UploadTicketAttachmentCommand>
 {
     public UploadTicketAttachmentCommandValidator()
     {

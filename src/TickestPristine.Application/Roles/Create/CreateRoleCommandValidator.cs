@@ -2,10 +2,10 @@ using FluentValidation;
 
 namespace TickestPristine.Application.Roles.Create;
 
-public class CreateRoleCommandValidator : AbstractValidator<CreateRoleCommand>
+internal sealed class CreateRoleCommandValidator : AbstractValidator<CreateRoleCommand>
 {
     public CreateRoleCommandValidator()
     {
-        RuleFor(c => c.Name).NotEmpty();
+        RuleFor(c => c.Name).NotEmpty().MaximumLength(100);
     }
 }

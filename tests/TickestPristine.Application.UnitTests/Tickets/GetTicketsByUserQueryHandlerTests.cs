@@ -48,6 +48,8 @@ public sealed class GetTicketsByUserQueryHandlerTests : BaseHandlerTest
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(OwnerId);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.ViewOwn, Arg.Any<CancellationToken>())
+            .Returns(true);
 
         var handler = new GetTicketsByUserQueryHandler(context, userContext, permissionProvider);
         var query = new GetTicketsByUserQuery(OwnerId);
@@ -59,6 +61,30 @@ public sealed class GetTicketsByUserQueryHandlerTests : BaseHandlerTest
         result.IsSuccess.ShouldBeTrue();
         result.Value.Count.ShouldBe(3);
         result.Value.ShouldAllBe(t => t.OpenedByUserId == OwnerId);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnUnauthorized_WhenQueryingOwnTicketsWithoutViewOwnPermission()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        await SeedTicketAsync(context, OwnerId, TicketStatus.Open);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(OwnerId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.ViewOwn, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var handler = new GetTicketsByUserQueryHandler(context, userContext, permissionProvider);
+        var query = new GetTicketsByUserQuery(OwnerId);
+
+        // Act
+        Result<List<TicketResponse>> result = await handler.Handle(query, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.Unauthorized());
     }
 
     private static async Task SeedTicketAsync(TestDbContext context, Guid openedByUserId, TicketStatus status)

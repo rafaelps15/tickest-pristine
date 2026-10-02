@@ -2,7 +2,7 @@ using FluentValidation;
 
 namespace TickestPristine.Application.TicketMessages.Post;
 
-public class PostTicketMessageCommandValidator : AbstractValidator<PostTicketMessageCommand>
+internal sealed class PostTicketMessageCommandValidator : AbstractValidator<PostTicketMessageCommand>
 {
     public PostTicketMessageCommandValidator()
     {

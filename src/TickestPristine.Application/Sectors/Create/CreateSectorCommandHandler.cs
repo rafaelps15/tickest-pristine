@@ -12,7 +12,7 @@ internal sealed class CreateSectorCommandHandler(IApplicationDbContext context)
 {
     public async Task<Result<Guid>> Handle(CreateSectorCommand command, CancellationToken cancellationToken)
     {
-        bool departmentExists = await context.Departments.AnyAsync(d => d.Id == command.DepartmentId, cancellationToken);
+        bool departmentExists = await context.Departments.AnyAsync(d => d.Id == command.DepartmentId && d.IsActive, cancellationToken);
 
         if (!departmentExists)
         {

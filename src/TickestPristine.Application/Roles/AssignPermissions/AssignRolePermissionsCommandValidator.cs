@@ -3,7 +3,7 @@ using TickestPristine.Application.Authorization;
 
 namespace TickestPristine.Application.Roles.AssignPermissions;
 
-public class AssignRolePermissionsCommandValidator : AbstractValidator<AssignRolePermissionsCommand>
+internal sealed class AssignRolePermissionsCommandValidator : AbstractValidator<AssignRolePermissionsCommand>
 {
     public AssignRolePermissionsCommandValidator()
     {

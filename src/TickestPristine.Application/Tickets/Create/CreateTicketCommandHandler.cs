@@ -57,7 +57,7 @@ internal sealed class CreateTicketCommandHandler(
             }
         }
 
-        bool sectorExists = await context.Sectors.AnyAsync(s => s.Id == command.SectorId, cancellationToken);
+        bool sectorExists = await context.Sectors.AnyAsync(s => s.Id == command.SectorId && s.IsActive, cancellationToken);
 
         if (!sectorExists)
         {

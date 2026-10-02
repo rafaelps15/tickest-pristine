@@ -2,7 +2,7 @@ using FluentValidation;
 
 namespace TickestPristine.Application.Tickets.Update;
 
-public class UpdateTicketCommandValidator : AbstractValidator<UpdateTicketCommand>
+internal sealed class UpdateTicketCommandValidator : AbstractValidator<UpdateTicketCommand>
 {
     public UpdateTicketCommandValidator()
     {

@@ -54,6 +54,32 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
+    public async Task Handle_Should_ReturnNotFound_WhenSectorIsInactive()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        var sector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = Guid.NewGuid(), IsActive = false };
+        context.Sectors.Add(sector);
+        await context.SaveChangesAsync();
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(UserId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+
+        var handler = new CreateTicketCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        CreateTicketCommand command = Command;
+        command.SectorId = sector.Id;
+
+        // Act
+        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(SectorErrors.NotFound(sector.Id));
+    }
+
+    [Fact]
     public async Task Handle_Should_OpenTicketForCurrentUser_WhenRequesterIdIsNotProvided()
     {
         // Arrange

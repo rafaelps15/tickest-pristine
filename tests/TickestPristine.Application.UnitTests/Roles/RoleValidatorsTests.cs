@@ -24,6 +24,19 @@ public sealed class RoleValidatorsTests
     }
 
     [Fact]
+    public void CreateValidator_Should_HaveError_WhenNameExceedsMaxLength()
+    {
+        // Arrange
+        var command = new CreateRoleCommand { Name = new string('a', 101) };
+
+        // Act
+        TestValidationResult<CreateRoleCommand> result = _createValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.Name);
+    }
+
+    [Fact]
     public void CreateValidator_Should_NotHaveErrors_WhenCommandIsValid()
     {
         // Arrange

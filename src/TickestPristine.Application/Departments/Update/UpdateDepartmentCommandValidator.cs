@@ -2,7 +2,7 @@ using FluentValidation;
 
 namespace TickestPristine.Application.Departments.Update;
 
-public class UpdateDepartmentCommandValidator : AbstractValidator<UpdateDepartmentCommand>
+internal sealed class UpdateDepartmentCommandValidator : AbstractValidator<UpdateDepartmentCommand>
 {
     public UpdateDepartmentCommandValidator()
     {

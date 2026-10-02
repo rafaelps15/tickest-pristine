@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
@@ -48,7 +49,8 @@ internal static class RateLimitingExtensions
 
     private static string GetPartitionKey(HttpContext httpContext)
     {
-        return httpContext.User.Identity?.Name
+        // Particiona pelo Id do usuário: Identity.Name seria o nome exibido, que pode se repetir entre usuários.
+        return httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? httpContext.Connection.RemoteIpAddress?.ToString()
             ?? "anonymous";
     }

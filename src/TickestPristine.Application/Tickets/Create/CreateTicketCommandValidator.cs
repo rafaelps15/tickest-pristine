@@ -2,7 +2,7 @@ using FluentValidation;
 
 namespace TickestPristine.Application.Tickets.Create;
 
-public class CreateTicketCommandValidator : AbstractValidator<CreateTicketCommand>
+internal sealed class CreateTicketCommandValidator : AbstractValidator<CreateTicketCommand>
 {
     public CreateTicketCommandValidator()
     {

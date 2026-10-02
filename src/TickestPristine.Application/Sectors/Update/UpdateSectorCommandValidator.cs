@@ -2,7 +2,7 @@ using FluentValidation;
 
 namespace TickestPristine.Application.Sectors.Update;
 
-public class UpdateSectorCommandValidator : AbstractValidator<UpdateSectorCommand>
+internal sealed class UpdateSectorCommandValidator : AbstractValidator<UpdateSectorCommand>
 {
     public UpdateSectorCommandValidator()
     {

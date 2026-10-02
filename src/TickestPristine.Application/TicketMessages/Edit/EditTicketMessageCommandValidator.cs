@@ -2,7 +2,7 @@ using FluentValidation;
 
 namespace TickestPristine.Application.TicketMessages.Edit;
 
-public class EditTicketMessageCommandValidator : AbstractValidator<EditTicketMessageCommand>
+internal sealed class EditTicketMessageCommandValidator : AbstractValidator<EditTicketMessageCommand>
 {
     public EditTicketMessageCommandValidator()
     {

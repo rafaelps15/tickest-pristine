@@ -7,11 +7,12 @@ public class RequestContextLoggingMiddleware(RequestDelegate next)
 {
     private const string CorrelationIdHeaderName = "Correlation-Id";
 
-    public Task Invoke(HttpContext context)
+    public async Task Invoke(HttpContext context)
     {
+        // O await mantém a propriedade no contexto de log até o fim da requisição, e não só até o primeiro await.
         using (LogContext.PushProperty("CorrelationId", GetCorrelationId(context)))
         {
-            return next.Invoke(context);
+            await next.Invoke(context);
         }
     }
 

@@ -21,6 +21,9 @@ internal sealed class LoginUserCommandHandler(
 
         if (user is null)
         {
+            // Gasta o mesmo tempo de uma conferência de senha, para o tempo de resposta não revelar quais e-mails existem.
+            _ = passwordHasher.Hash(command.Password);
+
             return Result.Failure<AccessTokensResponse>(UserErrors.InvalidCredentials);
         }
 

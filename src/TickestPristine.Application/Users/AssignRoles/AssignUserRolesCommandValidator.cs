@@ -2,7 +2,7 @@ using FluentValidation;
 
 namespace TickestPristine.Application.Users.AssignRoles;
 
-public class AssignUserRolesCommandValidator : AbstractValidator<AssignUserRolesCommand>
+internal sealed class AssignUserRolesCommandValidator : AbstractValidator<AssignUserRolesCommand>
 {
     public AssignUserRolesCommandValidator()
     {

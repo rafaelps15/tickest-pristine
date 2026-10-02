@@ -2,7 +2,7 @@ using FluentValidation;
 
 namespace TickestPristine.Application.Sectors.Create;
 
-public class CreateSectorCommandValidator : AbstractValidator<CreateSectorCommand>
+internal sealed class CreateSectorCommandValidator : AbstractValidator<CreateSectorCommand>
 {
     public CreateSectorCommandValidator()
     {

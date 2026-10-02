@@ -26,6 +26,26 @@ public sealed class CreateSectorCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
+    public async Task Handle_Should_ReturnNotFound_WhenDepartmentIsInactive()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        var department = new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Customer support department", IsActive = false };
+        context.Departments.Add(department);
+        await context.SaveChangesAsync();
+
+        var handler = new CreateSectorCommandHandler(context);
+        var command = new CreateSectorCommand { Name = "Helpdesk", DepartmentId = department.Id };
+
+        // Act
+        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(DepartmentErrors.NotFound(command.DepartmentId));
+    }
+
+    [Fact]
     public async Task Handle_Should_CreateSector_WhenDepartmentExists()
     {
         // Arrange
