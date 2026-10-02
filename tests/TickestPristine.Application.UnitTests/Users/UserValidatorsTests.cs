@@ -1,3 +1,4 @@
+using TickestPristine.Application.Users.Activate;
 using TickestPristine.Application.Users.AssignRoles;
 using TickestPristine.Application.Users.ChangePassword;
 using TickestPristine.Application.Users.Deactivate;
@@ -21,6 +22,7 @@ public sealed class UserValidatorsTests
     private readonly ChangeUserPasswordCommandValidator _changePasswordValidator = new();
     private readonly AssignUserRolesCommandValidator _assignUserRolesValidator = new();
     private readonly DeactivateUserCommandValidator _deactivateValidator = new();
+    private readonly ActivateUserCommandValidator _activateValidator = new();
 
     [Fact]
     public void RegisterValidator_Should_HaveError_WhenEmailIsInvalid()
@@ -473,6 +475,32 @@ public sealed class UserValidatorsTests
 
         // Act
         TestValidationResult<DeactivateUserCommand> result = _deactivateValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void ActivateValidator_Should_HaveError_WhenUserIdIsEmpty()
+    {
+        // Arrange
+        var command = new ActivateUserCommand(Guid.Empty);
+
+        // Act
+        TestValidationResult<ActivateUserCommand> result = _activateValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.UserId);
+    }
+
+    [Fact]
+    public void ActivateValidator_Should_NotHaveErrors_WhenCommandIsValid()
+    {
+        // Arrange
+        var command = new ActivateUserCommand(Guid.NewGuid());
+
+        // Act
+        TestValidationResult<ActivateUserCommand> result = _activateValidator.TestValidate(command);
 
         // Assert
         result.ShouldNotHaveAnyValidationErrors();

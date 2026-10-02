@@ -606,6 +606,105 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 
+    [Fact]
+    public async Task GetAll_Should_ReturnUserAsInactive_WhenUserWasDeactivated()
+    {
+        // Arrange
+        Guid userId = await RegisterUserAsync(UniqueEmail());
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+        (await HttpClient.PutAsync($"users/{userId}/deactivate", null)).EnsureSuccessStatusCode();
+
+        // Act
+        List<UserSummaryDto>? users = await HttpClient.GetFromJsonAsync<List<UserSummaryDto>>("users");
+
+        // Assert
+        users!.Single(u => u.Id == userId).IsActive.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Activate_Should_RestoreLoginAndPermissions_WhenUserWasDeactivated()
+    {
+        // Arrange
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
+        AccessTokens userTokens = await LoginAsync(email);
+
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+        (await HttpClient.PutAsync($"users/{userId}/deactivate", null)).EnsureSuccessStatusCode();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsync($"users/{userId}/activate", null);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        HttpResponseMessage loginResponse = await HttpClient.PostAsJsonAsync("users/login", new { email, password = "Password123!" });
+        loginResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        // Com as permissões de volta, o token antigo passa pela permissão e só falha na validação (400)
+        Authenticate(userTokens.AccessToken);
+        (await HttpClient.PostAsJsonAsync("tickets", new { })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Activate_Should_ReturnConflict_WhenUserIsAlreadyActive()
+    {
+        // Arrange
+        Guid userId = await RegisterUserAsync(UniqueEmail());
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsync($"users/{userId}/activate", null);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task Activate_Should_ReturnNotFound_WhenUserDoesNotExist()
+    {
+        // Arrange
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsync($"users/{Guid.NewGuid()}/activate", null);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Activate_Should_ReturnForbidden_WhenCallerLacksDeactivatePermission()
+    {
+        // Arrange
+        Guid targetUserId = await RegisterUserAsync(UniqueEmail());
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsync($"users/{targetUserId}/activate", null);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Activate_Should_ReturnUnauthorized_WhenNotAuthenticated()
+    {
+        // Arrange
+        Guid userId = await RegisterUserAsync(UniqueEmail());
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsync($"users/{userId}/activate", null);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
     private async Task<Guid> CreateRoleWithPermissionsAsync(params string[] permissionCodes)
     {
         HttpResponseMessage createRoleResponse = await HttpClient.PostAsJsonAsync("roles", new { name = $"Role-{Guid.NewGuid():N}" });
@@ -618,7 +717,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         return roleId;
     }
 
-    private sealed record UserSummaryDto(Guid Id, string Email, string FirstName, string LastName, List<RoleSummaryDto> Roles);
+    private sealed record UserSummaryDto(Guid Id, string Email, string FirstName, string LastName, bool IsActive, List<RoleSummaryDto> Roles);
 
     private sealed record RoleSummaryDto(Guid Id, string Name);
 

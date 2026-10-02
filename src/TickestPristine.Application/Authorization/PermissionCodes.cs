@@ -57,7 +57,7 @@ public static class PermissionCodes
         new(Users.Read, "Ver usuários", "Listar e consultar os colaboradores cadastrados.", UsersGroup),
         new(Users.Create, "Cadastrar colaboradores", "Incluir novos colaboradores no sistema.", UsersGroup),
         new(Users.Update, "Editar dados de colaboradores", "Alterar nome e sobrenome de outros colaboradores.", UsersGroup),
-        new(Users.Deactivate, "Desativar colaboradores", "Bloquear o acesso de colaboradores ao sistema.", UsersGroup),
+        new(Users.Deactivate, "Desativar e reativar colaboradores", "Bloquear ou devolver o acesso de colaboradores ao sistema.", UsersGroup),
         new(Users.AssignRoles, "Alterar funções de colaboradores", "Definir quais funções cada colaborador tem.", UsersGroup),
 
         new(Roles.Read, "Ver funções", "Consultar as funções existentes e as permissões de cada uma.", RolesGroup),

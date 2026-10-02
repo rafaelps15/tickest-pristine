@@ -36,6 +36,10 @@ public static class UserErrors
         "Users.AlreadyDeactivated",
         "O usuário já está desativado.");
 
+    public static readonly Error AlreadyActive = Error.Conflict(
+        "Users.AlreadyActive",
+        "O usuário já está ativo.");
+
     public static readonly Error Deactivated = Error.Problem(
         "Users.Deactivated",
         "O usuário está desativado.");

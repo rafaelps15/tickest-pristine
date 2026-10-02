@@ -17,7 +17,8 @@ internal sealed class GetUsersQueryHandler(IApplicationDbContext context)
                 Id = u.Id,
                 Email = u.Email,
                 FirstName = u.FirstName,
-                LastName = u.LastName
+                LastName = u.LastName,
+                IsActive = u.IsActive
             })
             .ToListAsync(cancellationToken);
 

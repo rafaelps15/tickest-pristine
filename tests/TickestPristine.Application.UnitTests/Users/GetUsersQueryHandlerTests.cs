@@ -19,7 +19,8 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
             Email = "user@tickestpristine.dev",
             FirstName = "Test",
             LastName = "User",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = $"usr_{Ulid.NewUlid()}",
+            IsActive = true
         };
         context.Users.Add(user);
         await context.SaveChangesAsync();
@@ -31,7 +32,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
-        result.Value.ShouldContain(u => u.Id == user.Id && u.Email == "user@tickestpristine.dev");
+        result.Value.ShouldContain(u => u.Id == user.Id && u.Email == "user@tickestpristine.dev" && u.IsActive);
     }
 
     [Fact]

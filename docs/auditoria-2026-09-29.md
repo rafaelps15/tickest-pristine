@@ -84,7 +84,20 @@ Regra contra escalada: permissões administrativas (tudo que não é de ticket) 
 
 ---
 
-## 5. Ordem sugerida
+## 5. Remover os dados de exemplo
+
+- **Onde:** `src/TickestPristine.Infrastructure/Database/Seeding/SampleDataSeeder.cs`, chamado pelo `DatabaseSeeder` quando `"Seeding": { "SampleData": true }` está no `appsettings.Development.json`.
+- **O que faz hoje:** num banco sem departamentos, cria 5 departamentos, 10 setores e 50 chamados fictícios (Bogus), todos abertos pelo admin.
+- **Para remover:**
+  - apagar o `SampleDataSeeder.cs`;
+  - tirar a chamada dele no `DatabaseSeeder` e a leitura de `Seeding:SampleData`;
+  - tirar o bloco `Seeding` do `appsettings.Development.json` e a linha `Seeding:SampleData` do `IntegrationTestWebAppFactory`;
+  - remover o pacote `Bogus` do `TickestPristine.Infrastructure.csproj` e do `Directory.Packages.props`.
+- **Banco de desenvolvimento:** os registros já criados continuam lá. Recriar o banco, ou apagar chamados, setores e departamentos.
+
+---
+
+## 6. Ordem sugerida
 
 1. **Definir o modelo de usuário:** se pertence a departamento ou setor (ou agentes a setores e requesters a departamentos), e adicionar `IsActive`.
 2. **Completar Users:** `/me`, editar perfil, desativar, trocar senha, logout e proteção do último Admin.
