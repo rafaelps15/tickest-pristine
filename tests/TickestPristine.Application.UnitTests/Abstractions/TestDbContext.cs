@@ -1,0 +1,54 @@
+﻿using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Domain.Departments;
+using TickestPristine.Domain.Roles;
+using TickestPristine.Domain.Sectors;
+using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
+using Microsoft.EntityFrameworkCore;
+
+namespace TickestPristine.Application.UnitTests.Abstractions;
+
+/// <summary>
+/// DbContext em memória que implementa IApplicationDbContext para os testes de handlers.
+/// </summary>
+public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
+    : DbContext(options), IApplicationDbContext
+{
+    public DbSet<User> Users { get; set; }
+
+    public DbSet<UserCredential> UserCredentials { get; set; }
+
+    public DbSet<RefreshToken> RefreshTokens { get; set; }
+
+    public DbSet<Department> Departments { get; set; }
+
+    public DbSet<Sector> Sectors { get; set; }
+
+    public DbSet<Ticket> Tickets { get; set; }
+
+    public DbSet<TicketAttachment> TicketAttachments { get; set; }
+
+    public DbSet<TicketMessage> TicketMessages { get; set; }
+
+    public DbSet<TicketHistory> TicketHistories { get; set; }
+
+    public DbSet<Role> Roles { get; set; }
+
+    public DbSet<RolePermission> RolePermissions { get; set; }
+
+    public DbSet<UserRole> UserRoles { get; set; }
+
+    /// <summary>
+    /// Aplica a chave composta e os filtros de exclusão lógica do banco real.
+    /// </summary>
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<RolePermission>().HasKey(p => new { p.RoleId, p.PermissionCode });
+
+        modelBuilder.Entity<Ticket>().HasQueryFilter(t => t.DeletedAtUtc == null);
+        modelBuilder.Entity<TicketMessage>().HasQueryFilter(m => m.DeletedAtUtc == null);
+        modelBuilder.Entity<TicketAttachment>().HasQueryFilter(a => a.DeletedAtUtc == null);
+    }
+}

@@ -1,0 +1,39 @@
+using TickestPristine.Application.Abstractions.Authorization;
+using TickestPristine.Application.Abstractions.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
+
+namespace TickestPristine.Infrastructure.Authorization;
+
+internal sealed class PermissionProvider(IApplicationDbContext context, HybridCache cache) : IPermissionProvider
+{
+    public async Task<HashSet<string>> GetForUserIdAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        List<string> permissions = await cache.GetOrCreateAsync(
+            PermissionCacheKeys.ForUser(userId),
+            async cancellation => await (
+                from userRole in context.UserRoles
+                where userRole.UserId == userId
+                join user in context.Users on userRole.UserId equals user.Id
+                where user.IsActive
+                join rolePermission in context.RolePermissions on userRole.RoleId equals rolePermission.RoleId
+                select rolePermission.PermissionCode)
+                .Distinct()
+                .ToListAsync(cancellation),
+            cancellationToken: cancellationToken);
+
+        return [.. permissions];
+    }
+
+    public async Task<bool> HasPermissionAsync(Guid userId, string permission, CancellationToken cancellationToken = default)
+    {
+        HashSet<string> permissions = await GetForUserIdAsync(userId, cancellationToken);
+
+        return permissions.Contains(permission);
+    }
+
+    public async Task InvalidateAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        await cache.RemoveAsync(PermissionCacheKeys.ForUser(userId), cancellationToken);
+    }
+}

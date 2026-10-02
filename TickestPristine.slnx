@@ -1,0 +1,22 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/TickestPristine.Application/TickestPristine.Application.csproj" />
+    <Project Path="src/TickestPristine.Domain/TickestPristine.Domain.csproj" />
+    <Project Path="src/TickestPristine.Infrastructure/TickestPristine.Infrastructure.csproj" />
+    <Project Path="src/TickestPristine.SharedKernel/TickestPristine.SharedKernel.csproj" />
+    <Project Path="src/TickestPristine.Web.Api/TickestPristine.Web.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TickestPristine.Application.UnitTests/TickestPristine.Application.UnitTests.csproj" />
+    <Project Path="tests/TickestPristine.ArchitectureTests/TickestPristine.ArchitectureTests.csproj" />
+    <Project Path="tests/TickestPristine.IntegrationTests/TickestPristine.IntegrationTests.csproj" />
+  </Folder>
+  <Project Path="docker-compose.dcproj">
+    <Build />
+  </Project>
+</Solution>
