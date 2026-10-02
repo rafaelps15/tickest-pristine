@@ -37,17 +37,16 @@ public sealed class CreateTodoCommand : ICommand<Guid>
 
 ## Validator
 
-Same folder as the command. Auto-registered and executed by `ValidationDecorator` before the handler runs. Its visibility follows the command's shape:
+Same folder as the command. Auto-registered and executed by `ValidationDecorator` before the handler runs. Always `internal sealed class {Command}Validator`, whatever the command's shape (`AddValidatorsFromAssembly` is called with `includeInternalTypes: true`, and the unit test project sees internals via `InternalsVisibleTo`).
 
-- Class command (`sealed class` with `{ get; set; }`) → `public class {Command}Validator` (example below).
-- Positional record command → `internal sealed class {Command}Validator`, e.g. `internal sealed class ArchiveTodoCommandValidator : AbstractValidator<ArchiveTodoCommand>`.
+Limits used by more than one validator of the same aggregate (max lengths, password policy) live in a `{Feature}ValidationRules` static class next to the aggregate's slices (e.g. `src/Application/Todos/TodoValidationRules.cs`) instead of being repeated as literals.
 
 ```csharp
 using FluentValidation;
 
 namespace Application.Todos.Create;
 
-public class CreateTodoCommandValidator : AbstractValidator<CreateTodoCommand>
+internal sealed class CreateTodoCommandValidator : AbstractValidator<CreateTodoCommand>
 {
     public CreateTodoCommandValidator()
     {
@@ -121,10 +120,12 @@ Error factory on the existing `{Entity}Errors` class in `src/Domain/{Feature}/`:
 ```csharp
 public static Error AlreadyArchived(Guid todoItemId) => Error.Problem(
     "TodoItems.AlreadyArchived",
-    $"The todo item with Id = '{todoItemId}' is already archived.");
+    $"A tarefa com o Id = '{todoItemId}' já está arquivada.");
 ```
 
-Error type → HTTP status (via `CustomResults.Problem`): `NotFound` → 404, `Conflict` → 409, `Problem`/`Validation` → 400, `Failure` → 500.
+The code (`"TodoItems.AlreadyArchived"`) is a stable identifier in English; the description is user-facing text and is written in Brazilian Portuguese.
+
+Error type → HTTP status (via `CustomResults.Problem`): `NotFound` → 404, `Conflict` → 409, `Forbidden` → 403, `Problem`/`Validation` → 400, `Failure` → 500.
 
 Domain event, one file each in `src/Domain/{Feature}/`:
 

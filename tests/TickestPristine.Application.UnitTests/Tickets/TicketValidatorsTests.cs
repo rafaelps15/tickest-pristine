@@ -169,6 +169,25 @@ public sealed class TicketValidatorsTests
     }
 
     [Fact]
+    public void CreateValidator_Should_HaveError_WhenDescriptionIsTooShort()
+    {
+        // Arrange
+        var command = new CreateTicketCommand
+        {
+            Title = "Printer is broken",
+            Description = "short",
+            Priority = TicketPriority.Low,
+            SectorId = Guid.NewGuid()
+        };
+
+        // Act
+        TestValidationResult<CreateTicketCommand> result = _createValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.Description);
+    }
+
+    [Fact]
     public void CreateValidator_Should_HaveError_WhenDescriptionExceedsMaxLength()
     {
         // Arrange

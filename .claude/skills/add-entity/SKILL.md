@@ -39,11 +39,11 @@ public static class ProjectErrors
 {
     public static Error NotFound(Guid projectId) => Error.NotFound(
         "Projects.NotFound",
-        $"The project with the Id = '{projectId}' was not found");
+        $"O projeto com o Id = '{projectId}' não foi encontrado");
 }
 ```
 
-Codes are `"{FeaturePlural}.{Reason}"`. Pick the factory by semantics: `Error.NotFound` (404), `Error.Conflict` (409), `Error.Problem` (400), `Error.Failure` (500).
+Codes are `"{FeaturePlural}.{Reason}"` (English, stable); descriptions are user-facing and written in Brazilian Portuguese. Pick the factory by semantics: `Error.NotFound` (404), `Error.Conflict` (409), `Error.Forbidden` (403), `Error.Problem` (400), `Error.Failure` (500).
 
 3. **Domain events** — one record per file, `src/Domain/{Feature}/{Entity}{PastTenseVerb}DomainEvent.cs`
 

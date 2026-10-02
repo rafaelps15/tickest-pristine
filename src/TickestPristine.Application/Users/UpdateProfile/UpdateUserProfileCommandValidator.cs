@@ -7,7 +7,7 @@ internal sealed class UpdateUserProfileCommandValidator : AbstractValidator<Upda
     public UpdateUserProfileCommandValidator()
     {
         RuleFor(c => c.UserId).NotEmpty();
-        RuleFor(c => c.FirstName).NotEmpty();
-        RuleFor(c => c.LastName).NotEmpty();
+        RuleFor(c => c.FirstName).NotEmpty().MaximumLength(UserValidationRules.NameMaxLength);
+        RuleFor(c => c.LastName).NotEmpty().MaximumLength(UserValidationRules.NameMaxLength);
     }
 }

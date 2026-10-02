@@ -28,13 +28,15 @@ Review the given scope (default: `git diff` + untracked files) against this temp
 - Endpoints translate failures only via `result.Match(Results.Ok|NoContent, CustomResults.Problem)`.
 
 ### Validation & security
-- Every command has a FluentValidation `{Command}Validator`; handlers don't re-check input shape (but do enforce business rules).
-- Handlers acting on user-owned data enforce ownership: filter by `IUserContext.UserId` or return `UserErrors.Unauthorized()`.
+- Every command has an `internal sealed` FluentValidation `{Command}Validator`; handlers don't re-check input shape (but do enforce business rules). Limits shared by several validators come from the feature's `{Feature}ValidationRules` class, not repeated literals.
+- User-facing text (error descriptions, validation messages) is in Brazilian Portuguese; error codes stay in English.
+- Handlers acting on user-owned data enforce ownership: filter by `IUserContext.UserId` or return `UserErrors.Unauthorized()`. Rules that depend on a permission *and* on the data (own vs. anyone's) are checked in the handler through `IPermissionProvider`.
 - New endpoints call `.RequireAuthorization()` (or `.HasPermission(...)`) and `.WithTags(Tags.X)`.
 - No `DateTime.UtcNow`/`DateTime.Now` in Application — use `IDateTimeProvider`.
 
 ### State changes & caching
 - Commands that mutate state raise a domain event via `entity.Raise(new XDomainEvent(id))` before `SaveChangesAsync`.
+- Commands that change a user's effective permissions (roles, role permissions, activation) call `permissionProvider.InvalidateAsync(userId)` after saving.
 - Any `HybridCache`-cached read has matching invalidation (`cache.RemoveAsync`) in every command that mutates that data; keys come from the `{Feature}CacheKeys` class.
 
 ### Tests

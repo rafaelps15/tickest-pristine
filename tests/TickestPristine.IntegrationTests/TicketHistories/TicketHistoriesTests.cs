@@ -1,5 +1,11 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using TickestPristine.Domain.Tickets;
+using TickestPristine.Infrastructure.Database;
 
 namespace TickestPristine.IntegrationTests.TicketHistories;
 
@@ -170,6 +176,150 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
         response.EnsureSuccessStatusCode();
         List<TicketHistoryDto>? history = await response.Content.ReadFromJsonAsync<List<TicketHistoryDto>>();
         history!.ShouldContain(h => h.TicketId == ticketId && h.Action == 4 /* Reopened */);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ContainMessageEditedEntry_WhenMessageWasEdited()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        Guid messageId = await PostMessageAsync(ticketId);
+
+        HttpResponseMessage editResponse = await HttpClient.PutAsJsonAsync(
+            $"ticket-messages/{messageId}",
+            new { content = "Any update on this? (edited)" });
+        editResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        List<TicketHistoryDto> history = await GetHistoryAsync(ticketId);
+
+        // Assert
+        history.ShouldContain(h => h.Action == (int)TicketHistoryAction.MessageEdited);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ContainMessageRemovedEntry_WhenMessageWasDeleted()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        Guid messageId = await PostMessageAsync(ticketId);
+
+        HttpResponseMessage deleteResponse = await HttpClient.DeleteAsync($"ticket-messages/{messageId}");
+        deleteResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        List<TicketHistoryDto> history = await GetHistoryAsync(ticketId);
+
+        // Assert
+        history.ShouldContain(h => h.Action == (int)TicketHistoryAction.MessageRemoved);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ContainAttachmentAddedEntry_WhenAttachmentWasUploaded()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        await UploadAttachmentAsync(ticketId);
+
+        // Act
+        List<TicketHistoryDto> history = await GetHistoryAsync(ticketId);
+
+        // Assert
+        history.ShouldContain(h => h.Action == (int)TicketHistoryAction.AttachmentAdded);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ContainAttachmentRemovedEntry_WhenAttachmentWasDeleted()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        Guid attachmentId = await UploadAttachmentAsync(ticketId);
+
+        HttpResponseMessage deleteResponse = await HttpClient.DeleteAsync($"ticket-attachments/{attachmentId}");
+        deleteResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        List<TicketHistoryDto> history = await GetHistoryAsync(ticketId);
+
+        // Assert
+        history.ShouldContain(h => h.Action == (int)TicketHistoryAction.AttachmentRemoved);
+    }
+
+    [Fact]
+    public async Task Delete_Should_RecordDeletedEntry_WhenTicketWasDeleted()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        // Act
+        HttpResponseMessage deleteResponse = await HttpClient.DeleteAsync($"tickets/{ticketId}");
+
+        // Assert: o chamado excluído some da API, então o histórico é conferido direto no banco.
+        deleteResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        bool deletedEntryExists = await context.TicketHistories.AnyAsync(h =>
+            h.TicketId == ticketId &&
+            h.Action == TicketHistoryAction.Deleted &&
+            h.ChangedByUserId == userId);
+        deletedEntryExists.ShouldBeTrue();
+    }
+
+    private async Task<Guid> PostMessageAsync(Guid ticketId)
+    {
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
+            $"tickets/{ticketId}/messages",
+            new { content = "Any update on this?" });
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<Guid>();
+    }
+
+    // O conteúdo retornado fica responsável por liberar o arquivo.
+#pragma warning disable CA2000
+    private static MultipartFormDataContent BuildPdfContent()
+    {
+        var fileContent = new ByteArrayContent(Encoding.UTF8.GetBytes("test file content"));
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+
+        return new MultipartFormDataContent { { fileContent, "file", "report.pdf" } };
+    }
+#pragma warning restore CA2000
+
+    private async Task<Guid> UploadAttachmentAsync(Guid ticketId)
+    {
+        using MultipartFormDataContent content = BuildPdfContent();
+
+        HttpResponseMessage response = await HttpClient.PostAsync($"tickets/{ticketId}/attachments", content);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<Guid>();
+    }
+
+    private async Task<List<TicketHistoryDto>> GetHistoryAsync(Guid ticketId)
+    {
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/{ticketId}/history");
+        response.EnsureSuccessStatusCode();
+
+        List<TicketHistoryDto>? history = await response.Content.ReadFromJsonAsync<List<TicketHistoryDto>>();
+
+        return history!;
     }
 
     private sealed record TicketHistoryDto(Guid Id, Guid TicketId, Guid? ChangedByUserId, int Action, string Description);

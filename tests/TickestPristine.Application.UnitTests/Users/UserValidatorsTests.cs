@@ -226,6 +226,21 @@ public sealed class UserValidatorsTests
     }
 
     [Fact]
+    public void UpdateProfileValidator_Should_HaveError_WhenNamesExceedMaxLength()
+    {
+        // Arrange
+        string longName = new('a', 101);
+        var command = new UpdateUserProfileCommand(Guid.NewGuid(), longName, longName);
+
+        // Act
+        TestValidationResult<UpdateUserProfileCommand> result = _updateProfileValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.FirstName);
+        result.ShouldHaveValidationErrorFor(c => c.LastName);
+    }
+
+    [Fact]
     public void UpdateProfileValidator_Should_HaveError_WhenFirstNameIsEmpty()
     {
         // Arrange
@@ -384,6 +399,35 @@ public sealed class UserValidatorsTests
 
         // Assert
         result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void RegisterValidator_Should_HaveError_WhenNamesExceedMaxLength()
+    {
+        // Arrange
+        string longName = new('a', 101);
+        var command = new RegisterUserCommand("test@example.com", longName, longName, "Password123!");
+
+        // Act
+        TestValidationResult<RegisterUserCommand> result = _registerValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.FirstName);
+        result.ShouldHaveValidationErrorFor(c => c.LastName);
+    }
+
+    [Fact]
+    public void RegisterValidator_Should_HaveError_WhenEmailExceedsMaxLength()
+    {
+        // Arrange
+        string longEmail = $"{new string('a', 245)}@example.com";
+        var command = new RegisterUserCommand(longEmail, "First", "Last", "Password123!");
+
+        // Act
+        TestValidationResult<RegisterUserCommand> result = _registerValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.Email);
     }
 
     [Fact]

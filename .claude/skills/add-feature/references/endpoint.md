@@ -119,5 +119,5 @@ internal sealed class GetOverdue : IEndpoint
 - Routes are lowercase, plural, no leading slash: `todos`, `todos/{id:guid}`, `users/{userId:guid}/todos`. Route constraints (`:guid`) on all typed parameters.
 - The nested `Request` class exists only when there's a JSON body; it maps 1:1 to the command inside the lambda (enum values arrive as `int` and are cast).
 - Resolve the handler interface (`ICommandHandler<...>` / `IQueryHandler<...>`) directly as a lambda parameter — the decorated instance is injected.
-- Always end with `.WithTags(Tags.{Feature})` and `.RequireAuthorization()` (or `.HasPermission(Permissions.X)` where a permission constant exists). Add the feature constant to `Tags.cs` if new.
+- Always end with `.WithTags(Tags.{Feature})` and `.RequireAuthorization()` (or `.HasPermission(PermissionCodes.{Feature}.{Action})` when access depends only on a permission; `HasPermission` fails at startup if the code is not in the `PermissionCodes` catalog). Add the feature constant to `Tags.cs` if new.
 - Failures never get hand-rolled responses — `CustomResults.Problem` translates the `Error` to RFC 7807 ProblemDetails with the right status code.
