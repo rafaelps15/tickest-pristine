@@ -69,16 +69,16 @@ internal sealed class AssignUserRolesCommandHandler(
             currentRoleIds.Contains(administratorRole.Id) &&
             !distinctRoleIds.Contains(administratorRole.Id))
         {
-            bool anotherAdministratorExists = await context.UserRoles
-                .AnyAsync(ur => ur.RoleId == administratorRole.Id && ur.UserId != command.UserId, cancellationToken);
+            Result administratorCheck = await AdministratorGuard.EnsureAnotherActiveAdministratorAsync(
+                context,
+                administratorRole,
+                command.UserId,
+                cancellationToken);
 
-            if (!anotherAdministratorExists)
+            if (administratorCheck.IsFailure)
             {
-                return Result.Failure(RoleErrors.LastAdministrator);
+                return administratorCheck;
             }
-
-            // Incrementa a versão para que duas remoções simultâneas não deixem o sistema sem administrador.
-            administratorRole.Version++;
         }
 
         context.UserRoles.RemoveRange(existingUserRoles);

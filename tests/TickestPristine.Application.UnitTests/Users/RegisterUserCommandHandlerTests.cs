@@ -28,7 +28,7 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         });
         await context.SaveChangesAsync();
 
-        var handler = new RegisterUserCommandHandler(context, Substitute.For<IPasswordHasher>());
+        var handler = new RegisterUserCommandHandler(context, Substitute.For<IPasswordHasher>(), Substitute.For<IDateTimeProvider>());
 
         // Act
         Result<Guid> result = await handler.Handle(Command, CancellationToken.None);
@@ -51,7 +51,11 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
         passwordHasher.Hash(Command.Password).Returns("hashed-password");
 
-        var handler = new RegisterUserCommandHandler(context, passwordHasher);
+        var registeredAtUtc = new DateTime(2026, 10, 2, 12, 0, 0, DateTimeKind.Utc);
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(registeredAtUtc);
+
+        var handler = new RegisterUserCommandHandler(context, passwordHasher, dateTimeProvider);
 
         // Act
         Result<Guid> result = await handler.Handle(Command, CancellationToken.None);
@@ -62,6 +66,7 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         User user = await context.Users.SingleAsync(u => u.Id == result.Value);
         user.Email.ShouldBe(Command.Email);
         user.IsActive.ShouldBeTrue();
+        user.CreatedAtUtc.ShouldBe(registeredAtUtc);
         user.DomainEvents.ShouldContain(domainEvent => domainEvent is UserRegisteredDomainEvent);
 
         UserCredential credential = await context.UserCredentials.SingleAsync(c => c.UserId == user.Id);
@@ -79,7 +84,7 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         context.Roles.Add(new Role { Id = Guid.NewGuid(), Name = "Colaborador" });
         await context.SaveChangesAsync();
 
-        var handler = new RegisterUserCommandHandler(context, Substitute.For<IPasswordHasher>());
+        var handler = new RegisterUserCommandHandler(context, Substitute.For<IPasswordHasher>(), Substitute.For<IDateTimeProvider>());
 
         // Act
         Result<Guid> result = await handler.Handle(Command, CancellationToken.None);

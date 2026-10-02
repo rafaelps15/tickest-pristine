@@ -1,4 +1,5 @@
 ﻿using System.Net.Http.Headers;
+using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Json;
 
 namespace TickestPristine.IntegrationTests;
@@ -63,4 +64,10 @@ public abstract class BaseIntegrationTest
     {
         HttpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
     }
+
+    /// <summary>
+    /// Id do usuário dono do token (claim "sub").
+    /// </summary>
+    protected static Guid GetUserId(AccessTokens tokens) =>
+        Guid.Parse(new JwtSecurityTokenHandler().ReadJwtToken(tokens.AccessToken).Subject);
 }

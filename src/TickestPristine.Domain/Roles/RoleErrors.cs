@@ -22,7 +22,7 @@ public static class RoleErrors
 
     public static readonly Error LastAdministrator = Error.Conflict(
         "Roles.LastAdministrator",
-        "Não é possível remover a função de administrador do último administrador do sistema");
+        "O sistema precisa manter pelo menos um administrador ativo");
 
     public static readonly Error DefaultRoleNotConfigured = Error.Failure(
         "Roles.DefaultRoleNotConfigured",

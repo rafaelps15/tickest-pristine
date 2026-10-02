@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using TickestPristine.Domain.Users;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -25,4 +26,18 @@ public abstract class BaseHandlerTest
 
         return services.BuildServiceProvider().GetRequiredService<HybridCache>();
     }
+
+    /// <summary>
+    /// Usuário válido para os testes, com e-mail único; os demais campos podem ser ajustados depois de criado.
+    /// </summary>
+    protected static User CreateUser(bool isActive = true) => new()
+    {
+        Id = Guid.NewGuid(),
+        Email = $"{Guid.NewGuid():N}@example.com",
+        FirstName = "Test",
+        LastName = "User",
+        Code = $"usr_{Ulid.NewUlid()}",
+        IsActive = isActive,
+        CreatedAtUtc = new DateTime(2026, 10, 1, 9, 0, 0, DateTimeKind.Utc)
+    };
 }

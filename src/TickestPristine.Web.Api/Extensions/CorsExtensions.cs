@@ -1,27 +1,36 @@
+using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.Extensions.Options;
+using TickestPristine.Web.Api.Infrastructure;
+
 namespace TickestPristine.Web.Api.Extensions;
 
 internal static class CorsExtensions
 {
     internal const string DefaultPolicyName = "Default";
 
-    internal static IServiceCollection AddCorsInternal(
-        this IServiceCollection services,
-        IConfiguration configuration)
+    internal static IServiceCollection AddCorsInternal(this IServiceCollection services)
     {
-        string[] allowedOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+        services.AddOptions<CorsPolicyOptions>()
+            .BindConfiguration(CorsPolicyOptions.SectionName);
 
-        services.AddCors(options =>
-        {
-            options.AddPolicy(DefaultPolicyName, policy =>
+        services.AddCors();
+
+        // Sem origens configuradas, a política fica vazia e o navegador bloqueia as chamadas de outros domínios.
+        services.AddOptions<CorsOptions>()
+            .Configure<IOptions<CorsPolicyOptions>>((cors, corsPolicyOptions) =>
             {
-                if (allowedOrigins.Length > 0)
+                string[] allowedOrigins = corsPolicyOptions.Value.AllowedOrigins;
+
+                cors.AddPolicy(DefaultPolicyName, policy =>
                 {
-                    policy.WithOrigins(allowedOrigins)
-                        .AllowAnyHeader()
-                        .AllowAnyMethod();
-                }
+                    if (allowedOrigins.Length > 0)
+                    {
+                        policy.WithOrigins(allowedOrigins)
+                            .AllowAnyHeader()
+                            .AllowAnyMethod();
+                    }
+                });
             });
-        });
 
         return services;
     }

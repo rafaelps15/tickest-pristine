@@ -62,6 +62,7 @@ public sealed class ActivateUserCommandHandlerTests : BaseHandlerTest
 
         User user = await context.Users.SingleAsync(u => u.Id == userId);
         user.IsActive.ShouldBeTrue();
+        user.DeactivatedAtUtc.ShouldBeNull();
         user.DomainEvents.ShouldContain(domainEvent => domainEvent is UserActivatedDomainEvent);
 
         await permissionProvider.Received(1).InvalidateAsync(userId, Arg.Any<CancellationToken>());
@@ -69,15 +70,8 @@ public sealed class ActivateUserCommandHandlerTests : BaseHandlerTest
 
     private static async Task<Guid> SeedUserAsync(TestDbContext context, bool isActive)
     {
-        var user = new User
-        {
-            Id = Guid.NewGuid(),
-            Email = "someone@example.com",
-            FirstName = "Some",
-            LastName = "One",
-            Code = $"usr_{Ulid.NewUlid()}",
-            IsActive = isActive
-        };
+        User user = CreateUser(isActive);
+        user.DeactivatedAtUtc = isActive ? null : new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
 
         context.Users.Add(user);
         await context.SaveChangesAsync();

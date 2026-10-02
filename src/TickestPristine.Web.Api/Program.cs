@@ -20,9 +20,9 @@ builder.Services
 
 builder.Services.AddObservability(builder.Configuration, builder.Environment.ApplicationName);
 
-builder.Services.AddRateLimitingInternal(builder.Configuration);
+builder.Services.AddRateLimitingInternal();
 
-builder.Services.AddCorsInternal(builder.Configuration);
+builder.Services.AddCorsInternal();
 
 builder.Services.AddEndpoints(Assembly.GetExecutingAssembly());
 

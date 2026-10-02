@@ -2,18 +2,22 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
+using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Infrastructure.Database.Seeding;
 
 /// <summary>
-/// Garante o usuário administrador da seção "Admin" da configuração, com a role Administrador.
+/// Garante o usuário administrador de <see cref="AdminUserOptions"/>, com a role Administrador.
 /// </summary>
-internal sealed class AdminUserSeeder(IConfiguration configuration, IPasswordHasher passwordHasher)
+internal sealed class AdminUserSeeder(
+    IOptions<AdminUserOptions> adminUserOptions,
+    IPasswordHasher passwordHasher,
+    IDateTimeProvider dateTimeProvider)
 {
     public void Seed(DbContext context)
     {
-        AdminSettings settings = ReadSettings();
+        AdminUserOptions settings = adminUserOptions.Value;
 
         Guid administratorRoleId = Role.Administrator.Id;
 
@@ -29,7 +33,7 @@ internal sealed class AdminUserSeeder(IConfiguration configuration, IPasswordHas
 
     public async Task SeedAsync(DbContext context, CancellationToken cancellationToken)
     {
-        AdminSettings settings = ReadSettings();
+        AdminUserOptions settings = adminUserOptions.Value;
 
         Guid administratorRoleId = Role.Administrator.Id;
 
@@ -46,7 +50,7 @@ internal sealed class AdminUserSeeder(IConfiguration configuration, IPasswordHas
     /// <summary>
     /// Inclui no contexto o que faltar (usuário, credencial, vínculo com a role); retorna se algo foi incluído.
     /// </summary>
-    private bool AddMissing(DbContext context, AdminSettings settings, User? admin, bool hasAdminRole)
+    private bool AddMissing(DbContext context, AdminUserOptions settings, User? admin, bool hasAdminRole)
     {
         if (admin is not null && hasAdminRole)
         {
@@ -62,7 +66,8 @@ internal sealed class AdminUserSeeder(IConfiguration configuration, IPasswordHas
                 FirstName = settings.FirstName,
                 LastName = settings.LastName,
                 Code = $"usr_{Ulid.NewUlid()}",
-                IsActive = true
+                IsActive = true,
+                CreatedAtUtc = dateTimeProvider.UtcNow
             };
 
             context.Add(admin);
@@ -73,22 +78,4 @@ internal sealed class AdminUserSeeder(IConfiguration configuration, IPasswordHas
 
         return true;
     }
-
-    private AdminSettings ReadSettings()
-    {
-        string email = configuration["Admin:Email"] is { Length: > 0 } configuredEmail
-            ? configuredEmail
-            : throw new InvalidOperationException("Admin:Email configuration is required to seed the admin user.");
-        string password = configuration["Admin:Password"] is { Length: > 0 } configuredPassword
-            ? configuredPassword
-            : throw new InvalidOperationException("Admin:Password configuration is required to seed the admin user.");
-
-        return new AdminSettings(
-            email,
-            configuration["Admin:FirstName"] is { Length: > 0 } firstName ? firstName : "Admin",
-            configuration["Admin:LastName"] is { Length: > 0 } lastName ? lastName : "Master",
-            password);
-    }
-
-    private sealed record AdminSettings(string Email, string FirstName, string LastName, string Password);
 }

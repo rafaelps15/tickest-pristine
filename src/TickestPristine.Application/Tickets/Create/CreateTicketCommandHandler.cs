@@ -20,9 +20,9 @@ internal sealed class CreateTicketCommandHandler(
 {
     public async Task<Result<Guid>> Handle(CreateTicketCommand command, CancellationToken cancellationToken)
     {
-        Guid openedByUserId = userContext.UserId;
+        Guid openedByUserId = command.RequesterId ?? userContext.UserId;
 
-        if (command.RequesterId is { } requesterId && requesterId != userContext.UserId)
+        if (openedByUserId != userContext.UserId)
         {
             bool canManageTickets = await permissionProvider.HasPermissionAsync(
                 userContext.UserId,
@@ -33,8 +33,28 @@ internal sealed class CreateTicketCommandHandler(
             {
                 return Result.Failure<Guid>(UserErrors.Unauthorized());
             }
+        }
 
-            openedByUserId = requesterId;
+        // Solicitante e responsável informados são conferidos numa única consulta; o usuário logado já é válido.
+        Guid[] referencedUserIds = new[] { command.RequesterId, command.AssignedToUserId }
+            .OfType<Guid>()
+            .Where(id => id != userContext.UserId)
+            .Distinct()
+            .ToArray();
+
+        if (referencedUserIds.Length > 0)
+        {
+            List<Guid> existingUserIds = await context.Users
+                .Where(u => referencedUserIds.Contains(u.Id))
+                .Select(u => u.Id)
+                .ToListAsync(cancellationToken);
+
+            Guid? missingUserId = referencedUserIds.Except(existingUserIds).Cast<Guid?>().FirstOrDefault();
+
+            if (missingUserId is { } userId)
+            {
+                return Result.Failure<Guid>(UserErrors.NotFound(userId));
+            }
         }
 
         bool sectorExists = await context.Sectors.AnyAsync(s => s.Id == command.SectorId, cancellationToken);

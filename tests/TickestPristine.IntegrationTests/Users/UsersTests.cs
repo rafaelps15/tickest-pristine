@@ -485,7 +485,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
         Authenticate(adminTokens.AccessToken);
 
-        var adminUserId = Guid.Parse(new JwtSecurityTokenHandler().ReadJwtToken(adminTokens.AccessToken).Subject);
+        Guid adminUserId = GetUserId(adminTokens);
 
         // Act
         HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
@@ -546,6 +546,23 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Deactivate_Should_ReturnBadRequest_WhenCallerDeactivatesOwnAccount()
+    {
+        // Arrange
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+        Guid adminUserId = GetUserId(adminTokens);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsync($"users/{adminUserId}/deactivate", null);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.CannotDeactivateSelf");
     }
 
     [Fact]

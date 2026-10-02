@@ -1,3 +1,4 @@
+using TickestPristine.Application.TicketAttachments;
 using TickestPristine.Application.TicketAttachments.Delete;
 using TickestPristine.Application.TicketAttachments.Upload;
 using FluentValidation.TestHelper;
@@ -153,5 +154,49 @@ public sealed class TicketAttachmentValidatorsTests
 
         // Assert
         result.ShouldHaveValidationErrorFor(c => c.ContentType);
+    }
+
+    [Fact]
+    public void UploadValidator_Should_HaveError_WhenFileExceedsMaxSize()
+    {
+        // Arrange
+        UploadTicketAttachmentCommand command = ValidUploadCommand;
+        command.FileSizeBytes = TicketAttachmentLimits.MaxFileSizeBytes + 1;
+
+        // Act
+        TestValidationResult<UploadTicketAttachmentCommand> result = _uploadValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.FileSizeBytes)
+            .WithErrorMessage("O arquivo excede o tamanho máximo permitido de 10 MB.");
+    }
+
+    [Fact]
+    public void UploadValidator_Should_NotHaveErrors_WhenFileHasExactlyMaxSize()
+    {
+        // Arrange
+        UploadTicketAttachmentCommand command = ValidUploadCommand;
+        command.FileSizeBytes = TicketAttachmentLimits.MaxFileSizeBytes;
+
+        // Act
+        TestValidationResult<UploadTicketAttachmentCommand> result = _uploadValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void UploadValidator_Should_HaveError_WhenContentTypeIsNotAllowed()
+    {
+        // Arrange
+        UploadTicketAttachmentCommand command = ValidUploadCommand;
+        command.ContentType = "application/x-msdownload";
+
+        // Act
+        TestValidationResult<UploadTicketAttachmentCommand> result = _uploadValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.ContentType)
+            .WithErrorMessage("O tipo de arquivo 'application/x-msdownload' não é suportado.");
     }
 }

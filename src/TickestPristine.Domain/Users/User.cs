@@ -10,4 +10,6 @@ public sealed class User : Entity
     public string LastName { get; set; }
     public string Code { get; set; }
     public bool IsActive { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime? DeactivatedAtUtc { get; set; }
 }

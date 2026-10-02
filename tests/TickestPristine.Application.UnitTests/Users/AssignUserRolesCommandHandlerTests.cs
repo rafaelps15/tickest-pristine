@@ -339,7 +339,8 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             Email = "other@example.com",
             FirstName = "Other",
             LastName = "Administrador",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = $"usr_{Ulid.NewUlid()}",
+            IsActive = true
         };
         context.Users.AddRange(admin, otherAdmin);
 
@@ -367,5 +368,37 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
 
         Role administratorRole = await context.Roles.SingleAsync(r => r.Id == adminRole.Id);
         administratorRole.Version.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnLastAdministrator_WhenOtherAdministratorIsDeactivated()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        User admin = CreateUser(isActive: true);
+        User deactivatedAdmin = CreateUser(isActive: false);
+        context.Users.AddRange(admin, deactivatedAdmin);
+
+        var adminRole = new Role { Id = Guid.NewGuid(), Name = "Administrador", IsAdministrator = true };
+        context.Roles.Add(adminRole);
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleId = adminRole.Id });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = deactivatedAdmin.Id, RoleId = adminRole.Id });
+        await context.SaveChangesAsync();
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(admin.Id);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.GetForUserIdAsync(admin.Id, Arg.Any<CancellationToken>())
+            .Returns([.. PermissionCodes.All]);
+
+        var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
+        var command = new AssignUserRolesCommand { UserId = admin.Id, RoleIds = [] };
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(RoleErrors.LastAdministrator);
     }
 }

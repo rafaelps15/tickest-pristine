@@ -1,5 +1,4 @@
-﻿using System.Text;
-using TickestPristine.Application.Abstractions.Authentication;
+﻿using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Storage;
@@ -16,7 +15,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.IdentityModel.Tokens;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Infrastructure;
@@ -34,7 +32,7 @@ public static class DependencyInjection
             .AddServices()
             .AddDatabase(connectionString)
             .AddHealthChecks(connectionString)
-            .AddAuthenticationInternal(configuration)
+            .AddAuthenticationInternal()
             .AddAuthorizationInternal();
     }
 
@@ -46,6 +44,11 @@ public static class DependencyInjection
 
         services.AddHybridCache();
 
+        services.AddOptions<FileStorageOptions>()
+            .BindConfiguration(FileStorageOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
         services.AddSingleton<IFileStorage, LocalFileStorage>();
 
         return services;
@@ -53,6 +56,14 @@ public static class DependencyInjection
 
     private static IServiceCollection AddDatabase(this IServiceCollection services, string connectionString)
     {
+        // Admin só é validado quando o seed lê os valores: a API não precisa da senha do admin para subir.
+        services.AddOptions<AdminUserOptions>()
+            .BindConfiguration(AdminUserOptions.SectionName)
+            .ValidateDataAnnotations();
+
+        services.AddOptions<SeedingOptions>()
+            .BindConfiguration(SeedingOptions.SectionName);
+
         services.AddSingleton<AdminUserSeeder>();
         services.AddSingleton<DatabaseSeeder>();
 
@@ -81,22 +92,15 @@ public static class DependencyInjection
         return services;
     }
 
-    private static IServiceCollection AddAuthenticationInternal(
-        this IServiceCollection services,
-        IConfiguration configuration)
+    private static IServiceCollection AddAuthenticationInternal(this IServiceCollection services)
     {
-        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddJwtBearer(o =>
-            {
-                o.RequireHttpsMetadata = false;
-                o.TokenValidationParameters = new TokenValidationParameters
-                {
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["Jwt:Secret"]!)),
-                    ValidIssuer = configuration["Jwt:Issuer"],
-                    ValidAudience = configuration["Jwt:Audience"],
-                    ClockSkew = TimeSpan.Zero
-                };
-            });
+        services.AddOptions<JwtOptions>()
+            .BindConfiguration(JwtOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
+        services.ConfigureOptions<ConfigureJwtBearerOptions>();
 
         services.AddHttpContextAccessor();
         services.AddScoped<IUserContext, UserContext>();

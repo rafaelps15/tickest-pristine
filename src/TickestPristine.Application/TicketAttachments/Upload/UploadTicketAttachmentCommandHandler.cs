@@ -21,7 +21,10 @@ internal sealed class UploadTicketAttachmentCommandHandler(
 {
     public async Task<Result<Guid>> Handle(UploadTicketAttachmentCommand command, CancellationToken cancellationToken)
     {
-        Ticket? ticket = await context.Tickets.SingleOrDefaultAsync(t => t.Id == command.TicketId, cancellationToken);
+        var ticket = await context.Tickets
+            .Where(t => t.Id == command.TicketId)
+            .Select(t => new { t.CreatedByUserId, t.AssignedToUserId })
+            .SingleOrDefaultAsync(cancellationToken);
 
         if (ticket is null)
         {
@@ -43,22 +46,12 @@ internal sealed class UploadTicketAttachmentCommandHandler(
             }
         }
 
-        if (command.FileSizeBytes > TicketAttachmentLimits.MaxFileSizeBytes)
-        {
-            return Result.Failure<Guid>(TicketAttachmentErrors.FileTooLarge(TicketAttachmentLimits.MaxFileSizeBytes));
-        }
-
-        if (!TicketAttachmentLimits.AllowedContentTypes.Contains(command.ContentType))
-        {
-            return Result.Failure<Guid>(TicketAttachmentErrors.UnsupportedContentType(command.ContentType));
-        }
-
         string storageKey = await fileStorage.SaveAsync(command.Content, command.FileName, cancellationToken);
 
         var attachment = new TicketAttachment
         {
             Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
+            TicketId = command.TicketId,
             UploadedByUserId = userContext.UserId,
             FileName = command.FileName,
             ContentType = command.ContentType,
@@ -71,8 +64,32 @@ internal sealed class UploadTicketAttachmentCommandHandler(
 
         context.TicketAttachments.Add(attachment);
 
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            await DeleteFileIfNotPersistedAsync(attachment.Id, storageKey);
+            throw;
+        }
 
         return attachment.Id;
+    }
+
+    /// <summary>
+    /// Apaga o arquivo gravado quando o anexo não chegou ao banco. A falha pode vir depois da gravação
+    /// (nos eventos de domínio); nesse caso o anexo existe e o arquivo é mantido.
+    /// </summary>
+    private async Task DeleteFileIfNotPersistedAsync(Guid attachmentId, string storageKey)
+    {
+        bool persisted = await context.TicketAttachments
+            .AsNoTracking()
+            .AnyAsync(a => a.Id == attachmentId, CancellationToken.None);
+
+        if (!persisted)
+        {
+            await fileStorage.DeleteAsync(storageKey, CancellationToken.None);
+        }
     }
 }

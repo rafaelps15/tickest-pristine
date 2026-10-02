@@ -66,56 +66,6 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnFileTooLarge_WhenFileExceedsMaxSize()
-    {
-        // Arrange
-        await using TestDbContext context = CreateDbContext();
-        Guid ticketId = await SeedTicketAsync(context);
-
-        IUserContext userContext = Substitute.For<IUserContext>();
-        userContext.UserId.Returns(CreatorId);
-        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
-        IFileStorage fileStorage = Substitute.For<IFileStorage>();
-
-        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage);
-        UploadTicketAttachmentCommand command = ValidCommand(ticketId);
-        command.FileSizeBytes = 11 * 1024 * 1024;
-
-        // Act
-        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
-
-        // Assert
-        result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(TicketAttachmentErrors.FileTooLarge(TicketAttachmentLimits.MaxFileSizeBytes));
-    }
-
-    [Fact]
-    public async Task Handle_Should_ReturnUnsupportedContentType_WhenContentTypeIsNotAllowed()
-    {
-        // Arrange
-        await using TestDbContext context = CreateDbContext();
-        Guid ticketId = await SeedTicketAsync(context);
-
-        IUserContext userContext = Substitute.For<IUserContext>();
-        userContext.UserId.Returns(CreatorId);
-        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
-        IFileStorage fileStorage = Substitute.For<IFileStorage>();
-
-        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage);
-        UploadTicketAttachmentCommand command = ValidCommand(ticketId);
-        command.ContentType = "application/x-msdownload";
-
-        // Act
-        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
-
-        // Assert
-        result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(TicketAttachmentErrors.UnsupportedContentType(command.ContentType));
-    }
-
-    [Fact]
     public async Task Handle_Should_UploadAttachmentAndRaiseDomainEvent_WhenValid()
     {
         // Arrange
@@ -145,6 +95,42 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         attachment.UploadedByUserId.ShouldBe(CreatorId);
         attachment.StorageKey.ShouldBe("generated-storage-key.pdf");
         attachment.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketAttachmentUploadedDomainEvent);
+        await fileStorage.DidNotReceive().DeleteAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Should_DeleteStoredFile_WhenAttachmentIsNotSaved()
+    {
+        // Arrange: o cancelamento chega depois de gravar o arquivo, então o SaveChanges falha
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context);
+        using var cancellation = new CancellationTokenSource();
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(CreatorId);
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
+        IFileStorage fileStorage = Substitute.For<IFileStorage>();
+        fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                await cancellation.CancelAsync();
+                return "orphan-storage-key.pdf";
+            });
+
+        var handler = new UploadTicketAttachmentCommandHandler(
+            context,
+            userContext,
+            Substitute.For<IPermissionProvider>(),
+            dateTimeProvider,
+            fileStorage);
+
+        // Act
+        Exception? exception = await Record.ExceptionAsync(() => handler.Handle(ValidCommand(ticketId), cancellation.Token));
+
+        // Assert
+        exception.ShouldBeAssignableTo<OperationCanceledException>();
+        await fileStorage.Received(1).DeleteAsync("orphan-storage-key.pdf", Arg.Any<CancellationToken>());
     }
 
     private static UploadTicketAttachmentCommand ValidCommand(Guid ticketId) => new()

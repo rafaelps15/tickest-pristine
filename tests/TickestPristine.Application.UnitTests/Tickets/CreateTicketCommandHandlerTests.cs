@@ -113,7 +113,7 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
         Guid sectorId = await SeedSectorAsync(context);
-        var requesterId = Guid.NewGuid();
+        Guid requesterId = await SeedUserAsync(context);
 
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(UserId);
@@ -136,5 +136,93 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
 
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == result.Value);
         ticket.CreatedByUserId.ShouldBe(requesterId);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnNotFound_WhenRequesterDoesNotExist()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid sectorId = await SeedSectorAsync(context);
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(UserId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var handler = new CreateTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
+        CreateTicketCommand command = Command;
+        command.SectorId = sectorId;
+        command.RequesterId = Guid.NewGuid();
+
+        // Act
+        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.NotFound(command.RequesterId.Value));
+        (await context.Tickets.AnyAsync()).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnNotFound_WhenAssignedUserDoesNotExist()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid sectorId = await SeedSectorAsync(context);
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(UserId);
+
+        var handler = new CreateTicketCommandHandler(
+            context,
+            userContext,
+            Substitute.For<IPermissionProvider>(),
+            Substitute.For<IDateTimeProvider>());
+        CreateTicketCommand command = Command;
+        command.SectorId = sectorId;
+        command.AssignedToUserId = Guid.NewGuid();
+
+        // Act
+        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.NotFound(command.AssignedToUserId.Value));
+        (await context.Tickets.AnyAsync()).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_Should_AssignTicket_WhenAssignedUserExists()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid sectorId = await SeedSectorAsync(context);
+        Guid assigneeId = await SeedUserAsync(context);
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(UserId);
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
+
+        var handler = new CreateTicketCommandHandler(context, userContext, Substitute.For<IPermissionProvider>(), dateTimeProvider);
+        CreateTicketCommand command = Command;
+        command.SectorId = sectorId;
+        command.AssignedToUserId = assigneeId;
+
+        // Act
+        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == result.Value);
+        ticket.AssignedToUserId.ShouldBe(assigneeId);
+    }
+
+    private static async Task<Guid> SeedUserAsync(TestDbContext context)
+    {
+        User user = CreateUser();
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+
+        return user.Id;
     }
 }

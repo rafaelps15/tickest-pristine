@@ -10,7 +10,8 @@ namespace TickestPristine.Application.Users.Register;
 
 internal sealed class RegisterUserCommandHandler(
     IApplicationDbContext context,
-    IPasswordHasher passwordHasher)
+    IPasswordHasher passwordHasher,
+    IDateTimeProvider dateTimeProvider)
     : ICommandHandler<RegisterUserCommand, Guid>
 {
     public async Task<Result<Guid>> Handle(RegisterUserCommand command, CancellationToken cancellationToken)
@@ -37,7 +38,8 @@ internal sealed class RegisterUserCommandHandler(
             FirstName = command.FirstName,
             LastName = command.LastName,
             Code = $"usr_{Ulid.NewUlid()}",
-            IsActive = true
+            IsActive = true,
+            CreatedAtUtc = dateTimeProvider.UtcNow
         };
 
         user.Raise(new UserRegisteredDomainEvent(user.Id));

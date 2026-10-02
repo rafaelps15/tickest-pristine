@@ -36,6 +36,10 @@ public static class UserErrors
         "Users.AlreadyDeactivated",
         "O usuário já está desativado.");
 
+    public static readonly Error CannotDeactivateSelf = Error.Problem(
+        "Users.CannotDeactivateSelf",
+        "Você não pode desativar a sua própria conta.");
+
     public static readonly Error AlreadyActive = Error.Conflict(
         "Users.AlreadyActive",
         "O usuário já está ativo.");

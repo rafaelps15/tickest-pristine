@@ -1,32 +1,34 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using System.Security.Cryptography;
-using System.Text;
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Domain.Users;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Infrastructure.Authentication;
 
-internal sealed class TokenProvider(IConfiguration configuration, IClaimsProvider claimsProvider) : ITokenProvider
+internal sealed class TokenProvider(
+    IOptions<JwtOptions> jwtOptions,
+    IClaimsProvider claimsProvider,
+    IDateTimeProvider dateTimeProvider) : ITokenProvider
 {
     public async Task<string> CreateAsync(User user, CancellationToken cancellationToken = default)
     {
-        string secretKey = configuration["Jwt:Secret"]!;
-        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+        JwtOptions jwt = jwtOptions.Value;
 
-        var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+        var credentials = new SigningCredentials(jwt.CreateSigningKey(), SecurityAlgorithms.HmacSha256);
 
         Claim[] claims = await claimsProvider.GetClaimsAsync(user, cancellationToken);
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),
-            Expires = DateTime.UtcNow.AddMinutes(configuration.GetValue<int>("Jwt:ExpirationInMinutes")),
+            Expires = dateTimeProvider.UtcNow.AddMinutes(jwt.ExpirationInMinutes),
             SigningCredentials = credentials,
-            Issuer = configuration["Jwt:Issuer"],
-            Audience = configuration["Jwt:Audience"]
+            Issuer = jwt.Issuer,
+            Audience = jwt.Audience
         };
 
         var handler = new JsonWebTokenHandler();

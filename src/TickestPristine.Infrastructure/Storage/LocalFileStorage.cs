@@ -1,29 +1,31 @@
 using TickestPristine.Application.Abstractions.Storage;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace TickestPristine.Infrastructure.Storage;
 
-internal sealed class LocalFileStorage : IFileStorage
+/// <summary>
+/// Guarda os arquivos dos anexos numa pasta do servidor. A chave de cada arquivo é um Guid com a extensão original.
+/// </summary>
+internal sealed class LocalFileStorage(IOptions<FileStorageOptions> options) : IFileStorage
 {
-    private readonly string _rootPath;
+    private const int BufferSize = 81920;
 
-    public LocalFileStorage(IConfiguration configuration)
-    {
-        string? configuredPath = configuration["FileStorage:RootPath"];
-
-        _rootPath = string.IsNullOrWhiteSpace(configuredPath)
-            ? Path.Combine(AppContext.BaseDirectory, "App_Data", "attachments")
-            : configuredPath;
-
-        Directory.CreateDirectory(_rootPath);
-    }
+    private readonly string _rootPath = Path.GetFullPath(options.Value.RootPath);
 
     public async Task<string> SaveAsync(Stream content, string fileName, CancellationToken cancellationToken)
     {
-        string storageKey = $"{Guid.NewGuid():N}{SanitizeExtension(Path.GetExtension(fileName))}";
-        string fullPath = Path.Combine(_rootPath, storageKey);
+        Directory.CreateDirectory(_rootPath);
 
-        await using FileStream fileStream = File.Create(fullPath);
+        string storageKey = $"{Guid.NewGuid():N}{SanitizeExtension(Path.GetExtension(fileName))}";
+
+        await using var fileStream = new FileStream(
+            ResolveContainedPath(storageKey),
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            BufferSize,
+            FileOptions.Asynchronous);
+
         await content.CopyToAsync(fileStream, cancellationToken);
 
         return storageKey;
@@ -31,17 +33,32 @@ internal sealed class LocalFileStorage : IFileStorage
 
     public Task<Stream> OpenReadAsync(string storageKey, CancellationToken cancellationToken)
     {
-        string fullPath = ResolveContainedPath(storageKey);
+        Stream fileStream = new FileStream(
+            ResolveContainedPath(storageKey),
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            BufferSize,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
 
-        return Task.FromResult<Stream>(File.OpenRead(fullPath));
+        return Task.FromResult(fileStream);
     }
 
+    public Task DeleteAsync(string storageKey, CancellationToken cancellationToken)
+    {
+        File.Delete(ResolveContainedPath(storageKey));
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Monta o caminho do arquivo e recusa chaves que apontem para fora da pasta de anexos (ex.: "..\").
+    /// </summary>
     private string ResolveContainedPath(string storageKey)
     {
-        string rootFullPath = Path.GetFullPath(_rootPath);
-        string fullPath = Path.GetFullPath(Path.Combine(rootFullPath, storageKey));
+        string fullPath = Path.GetFullPath(Path.Combine(_rootPath, storageKey));
 
-        if (!fullPath.StartsWith(rootFullPath, StringComparison.Ordinal))
+        if (!fullPath.StartsWith(_rootPath + Path.DirectorySeparatorChar, StringComparison.Ordinal))
         {
             throw new UnauthorizedAccessException("O caminho resolvido está fora do diretório de armazenamento.");
         }

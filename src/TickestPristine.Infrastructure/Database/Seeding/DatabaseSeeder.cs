@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace TickestPristine.Infrastructure.Database.Seeding;
 
@@ -8,7 +8,7 @@ namespace TickestPristine.Infrastructure.Database.Seeding;
 /// com "Seeding:SampleData" ligado, os dados de exemplo. Roda a cada Migrate, por isso não duplica nada.
 /// As roles padrão e suas permissões não passam por aqui: vêm das migrations (HasData).
 /// </summary>
-internal sealed class DatabaseSeeder(AdminUserSeeder adminUserSeeder, IConfiguration configuration)
+internal sealed class DatabaseSeeder(AdminUserSeeder adminUserSeeder, IOptions<SeedingOptions> seedingOptions)
 {
     public void Seed(DbContext context)
     {
@@ -30,6 +30,5 @@ internal sealed class DatabaseSeeder(AdminUserSeeder adminUserSeeder, IConfigura
         }
     }
 
-    private bool SampleDataEnabled =>
-        bool.TryParse(configuration["Seeding:SampleData"], out bool enabled) && enabled;
+    private bool SampleDataEnabled => seedingOptions.Value.SampleData;
 }

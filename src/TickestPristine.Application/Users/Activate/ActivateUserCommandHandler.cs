@@ -27,6 +27,7 @@ internal sealed class ActivateUserCommandHandler(
         }
 
         user.IsActive = true;
+        user.DeactivatedAtUtc = null;
 
         user.Raise(new UserActivatedDomainEvent(user.Id));
 
