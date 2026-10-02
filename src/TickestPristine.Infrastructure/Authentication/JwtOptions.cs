@@ -28,6 +28,12 @@ public sealed class JwtOptions
     public int ExpirationInMinutes { get; init; }
 
     /// <summary>
+    /// Validade do refresh token, em dias. Cada login ou renovação gera um token com essa validade.
+    /// </summary>
+    [Range(1, 365)]
+    public int RefreshTokenExpirationInDays { get; init; } = 7;
+
+    /// <summary>
     /// Chave usada tanto para assinar quanto para validar o token.
     /// </summary>
     public SymmetricSecurityKey CreateSigningKey() => new(Encoding.UTF8.GetBytes(Secret));

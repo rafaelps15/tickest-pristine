@@ -10,8 +10,7 @@ namespace TickestPristine.Application.Users.Login;
 internal sealed class LoginUserCommandHandler(
     IApplicationDbContext context,
     IPasswordHasher passwordHasher,
-    ITokenProvider tokenProvider,
-    IDateTimeProvider dateTimeProvider) : ICommandHandler<LoginUserCommand, AccessTokensResponse>
+    ITokenProvider tokenProvider) : ICommandHandler<LoginUserCommand, AccessTokensResponse>
 {
     public async Task<Result<AccessTokensResponse>> Handle(LoginUserCommand command, CancellationToken cancellationToken)
     {
@@ -43,24 +42,22 @@ internal sealed class LoginUserCommandHandler(
         }
 
         string accessToken = await tokenProvider.CreateAsync(user, cancellationToken);
-        string refreshToken = tokenProvider.GenerateRefreshToken();
+        GeneratedRefreshToken generatedRefreshToken = tokenProvider.GenerateRefreshToken();
 
-        var newRefreshToken = new RefreshToken
+        var refreshToken = new RefreshToken
         {
             Id = Guid.NewGuid(),
-            Token = refreshToken,
+            TokenHash = RefreshTokenHasher.Hash(generatedRefreshToken.Token),
             UserId = user.Id,
-            ExpiresOnUtc = dateTimeProvider.UtcNow.AddDays(RefreshTokenExpirationInDays)
+            ExpiresOnUtc = generatedRefreshToken.ExpiresOnUtc
         };
 
-        newRefreshToken.Raise(new RefreshTokenCreatedDomainEvent(newRefreshToken.Id, newRefreshToken.UserId));
+        refreshToken.Raise(new RefreshTokenCreatedDomainEvent(refreshToken.Id, refreshToken.UserId));
 
-        context.RefreshTokens.Add(newRefreshToken);
+        context.RefreshTokens.Add(refreshToken);
 
         await context.SaveChangesAsync(cancellationToken);
 
-        return new AccessTokensResponse(accessToken, refreshToken);
+        return new AccessTokensResponse(accessToken, generatedRefreshToken.Token);
     }
-
-    private const int RefreshTokenExpirationInDays = 7;
 }

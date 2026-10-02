@@ -21,8 +21,7 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         var handler = new LoginUserCommandHandler(
             context,
             Substitute.For<IPasswordHasher>(),
-            Substitute.For<ITokenProvider>(),
-            Substitute.For<IDateTimeProvider>());
+            Substitute.For<ITokenProvider>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -47,8 +46,7 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         var handler = new LoginUserCommandHandler(
             context,
             passwordHasher,
-            Substitute.For<ITokenProvider>(),
-            Substitute.For<IDateTimeProvider>());
+            Substitute.For<ITokenProvider>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -73,16 +71,13 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
 
         ITokenProvider tokenProvider = Substitute.For<ITokenProvider>();
         tokenProvider.CreateAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns("access-token");
-        tokenProvider.GenerateRefreshToken().Returns("refresh-token");
-
-        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
-        dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
+        DateTime expiresOnUtc = DateTime.UtcNow.AddDays(7);
+        tokenProvider.GenerateRefreshToken().Returns(new GeneratedRefreshToken("refresh-token", expiresOnUtc));
 
         var handler = new LoginUserCommandHandler(
             context,
             passwordHasher,
-            tokenProvider,
-            dateTimeProvider);
+            tokenProvider);
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -97,8 +92,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         await tokenProvider.Received(1).CreateAsync(Arg.Is<User>(u => u.Id == user.Id), Arg.Any<CancellationToken>());
 
         RefreshToken refreshToken = await context.RefreshTokens.SingleAsync();
-        refreshToken.Token.ShouldBe("refresh-token");
-        refreshToken.ExpiresOnUtc.ShouldBeGreaterThan(dateTimeProvider.UtcNow);
+        refreshToken.TokenHash.ShouldBe(RefreshTokenHasher.Hash("refresh-token"));
+        refreshToken.ExpiresOnUtc.ShouldBe(expiresOnUtc);
         refreshToken.DomainEvents.ShouldContain(domainEvent => domainEvent is RefreshTokenCreatedDomainEvent);
     }
 
@@ -116,8 +111,7 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         var handler = new LoginUserCommandHandler(
             context,
             passwordHasher,
-            tokenProvider,
-            Substitute.For<IDateTimeProvider>());
+            tokenProvider);
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(

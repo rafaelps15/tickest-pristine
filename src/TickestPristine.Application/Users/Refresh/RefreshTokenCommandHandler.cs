@@ -14,8 +14,10 @@ internal sealed class RefreshTokenCommandHandler(
 {
     public async Task<Result<AccessTokensResponse>> Handle(RefreshTokenCommand command, CancellationToken cancellationToken)
     {
+        string tokenHash = RefreshTokenHasher.Hash(command.RefreshToken);
+
         RefreshToken? refreshToken = await context.RefreshTokens
-            .SingleOrDefaultAsync(rt => rt.Token == command.RefreshToken, cancellationToken);
+            .SingleOrDefaultAsync(rt => rt.TokenHash == tokenHash, cancellationToken);
 
         if (refreshToken is null || refreshToken.ExpiresOnUtc < dateTimeProvider.UtcNow)
         {
@@ -32,18 +34,16 @@ internal sealed class RefreshTokenCommandHandler(
         }
 
         string accessToken = await tokenProvider.CreateAsync(user, cancellationToken);
-        string newRefreshToken = tokenProvider.GenerateRefreshToken();
+        GeneratedRefreshToken generatedRefreshToken = tokenProvider.GenerateRefreshToken();
 
         // Troca o refresh token para que o anterior não possa ser reutilizado.
-        refreshToken.Token = newRefreshToken;
-        refreshToken.ExpiresOnUtc = dateTimeProvider.UtcNow.AddDays(RefreshTokenExpirationInDays);
+        refreshToken.TokenHash = RefreshTokenHasher.Hash(generatedRefreshToken.Token);
+        refreshToken.ExpiresOnUtc = generatedRefreshToken.ExpiresOnUtc;
 
         refreshToken.Raise(new RefreshTokenRotatedDomainEvent(refreshToken.Id, refreshToken.UserId));
 
         await context.SaveChangesAsync(cancellationToken);
 
-        return new AccessTokensResponse(accessToken, newRefreshToken);
+        return new AccessTokensResponse(accessToken, generatedRefreshToken.Token);
     }
-
-    private const int RefreshTokenExpirationInDays = 7;
 }

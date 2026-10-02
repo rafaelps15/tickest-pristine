@@ -3,6 +3,7 @@ using TickestPristine.Application.Users.AssignRoles;
 using TickestPristine.Application.Users.ChangePassword;
 using TickestPristine.Application.Users.Deactivate;
 using TickestPristine.Application.Users.Login;
+using TickestPristine.Application.Users.Logout;
 using TickestPristine.Application.Users.Refresh;
 using TickestPristine.Application.Users.Register;
 using TickestPristine.Application.Users.UpdateProfile;
@@ -23,6 +24,7 @@ public sealed class UserValidatorsTests
     private readonly AssignUserRolesCommandValidator _assignUserRolesValidator = new();
     private readonly DeactivateUserCommandValidator _deactivateValidator = new();
     private readonly ActivateUserCommandValidator _activateValidator = new();
+    private readonly LogoutUserCommandValidator _logoutValidator = new();
 
     [Fact]
     public void RegisterValidator_Should_HaveError_WhenEmailIsInvalid()
@@ -114,6 +116,32 @@ public sealed class UserValidatorsTests
 
         // Act
         TestValidationResult<RegisterUserCommand> result = _registerValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void LogoutValidator_Should_HaveError_WhenRefreshTokenIsEmpty()
+    {
+        // Arrange
+        var command = new LogoutUserCommand(string.Empty);
+
+        // Act
+        TestValidationResult<LogoutUserCommand> result = _logoutValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.RefreshToken);
+    }
+
+    [Fact]
+    public void LogoutValidator_Should_NotHaveErrors_WhenRefreshTokenIsProvided()
+    {
+        // Arrange
+        var command = new LogoutUserCommand("refresh-token");
+
+        // Act
+        TestValidationResult<LogoutUserCommand> result = _logoutValidator.TestValidate(command);
 
         // Assert
         result.ShouldNotHaveAnyValidationErrors();

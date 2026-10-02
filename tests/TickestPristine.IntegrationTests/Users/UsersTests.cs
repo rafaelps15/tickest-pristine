@@ -138,6 +138,24 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
+    public async Task RefreshToken_Should_AcceptTokenOnlyOnce_WhenUsedConcurrently()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        var request = new { refreshToken = tokens.RefreshToken };
+
+        // Act
+        HttpResponseMessage[] responses = await Task.WhenAll(
+            HttpClient.PostAsJsonAsync("users/refresh-token", request),
+            HttpClient.PostAsJsonAsync("users/refresh-token", request));
+
+        // Assert: a segunda chamada perde a corrida (409) ou chega depois da troca (400), nunca as duas passam.
+        responses.Count(r => r.StatusCode == HttpStatusCode.OK).ShouldBe(1);
+        responses.Single(r => r.StatusCode != HttpStatusCode.OK).StatusCode
+            .ShouldBeOneOf(HttpStatusCode.Conflict, HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task RefreshToken_Should_ReturnProblem_WhenTokenIsInvalid()
     {
         // Arrange
@@ -420,6 +438,130 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         // Act
         HttpResponseMessage response = await HttpClient.PutAsJsonAsync("users/me/password", request);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetCurrent_Should_ReturnLoggedUserWithDefaultRoleAndPermissions()
+    {
+        // Arrange
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
+        AccessTokens tokens = await LoginAsync(email);
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("users/me");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        CurrentUserDto? me = await response.Content.ReadFromJsonAsync<CurrentUserDto>();
+        me!.Id.ShouldBe(userId);
+        me.Email.ShouldBe(email);
+        me.Roles.ShouldHaveSingleItem().Name.ShouldBe("Colaborador");
+        me.Permissions.ShouldContain(PermissionCodes.Tickets.Create);
+        me.Permissions.ShouldNotContain(PermissionCodes.Tickets.Manage);
+    }
+
+    [Fact]
+    public async Task GetCurrent_Should_ReturnEveryPermission_WhenUserIsSeededAdmin()
+    {
+        // Arrange
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("users/me");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        CurrentUserDto? me = await response.Content.ReadFromJsonAsync<CurrentUserDto>();
+        me!.Permissions.ShouldBe(PermissionCodes.All, ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task GetCurrent_Should_ReturnBadRequest_WhenUserWasDeactivatedAfterLogin()
+    {
+        // Arrange
+        (Guid userId, AccessTokens userTokens) = await RegisterAndLoginAsync();
+
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+        (await HttpClient.PutAsync($"users/{userId}/deactivate", null)).EnsureSuccessStatusCode();
+
+        Authenticate(userTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("users/me");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.Deactivated");
+    }
+
+    [Fact]
+    public async Task GetCurrent_Should_ReturnUnauthorized_WhenNotAuthenticated()
+    {
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("users/me");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Logout_Should_RevokeRefreshToken()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
+            "users/logout",
+            new { refreshToken = tokens.RefreshToken });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        HttpResponseMessage refresh = await HttpClient.PostAsJsonAsync(
+            "users/refresh-token",
+            new { refreshToken = tokens.RefreshToken });
+        refresh.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Logout_Should_KeepRefreshToken_WhenTokenBelongsToAnotherUser()
+    {
+        // Arrange
+        (_, AccessTokens otherTokens) = await RegisterAndLoginAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
+            "users/logout",
+            new { refreshToken = otherTokens.RefreshToken });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        HttpResponseMessage refresh = await HttpClient.PostAsJsonAsync(
+            "users/refresh-token",
+            new { refreshToken = otherTokens.RefreshToken });
+        refresh.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Logout_Should_ReturnUnauthorized_WhenNotAuthenticated()
+    {
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
+            "users/logout",
+            new { refreshToken = "any-token" });
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
@@ -851,4 +993,12 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     private sealed record UserByEmailDto(Guid Id, string Email, string FirstName, string LastName);
 
     private sealed record ProblemDto(int Status, string Title, string Detail);
+
+    private sealed record CurrentUserDto(
+        Guid Id,
+        string Email,
+        string FirstName,
+        string LastName,
+        List<RoleSummaryDto> Roles,
+        List<string> Permissions);
 }

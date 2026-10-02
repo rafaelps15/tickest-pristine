@@ -94,9 +94,9 @@ public sealed class ChangeUserPasswordCommandHandlerTests : BaseHandlerTest
         var userId = Guid.NewGuid();
         var otherUserId = Guid.NewGuid();
         context.UserCredentials.Add(new UserCredential { Id = Guid.NewGuid(), UserId = userId, PasswordHash = "old-hash" });
-        context.RefreshTokens.Add(new RefreshToken { Id = Guid.NewGuid(), Token = "token-1", UserId = userId, ExpiresOnUtc = DateTime.UtcNow.AddDays(7) });
-        context.RefreshTokens.Add(new RefreshToken { Id = Guid.NewGuid(), Token = "token-2", UserId = userId, ExpiresOnUtc = DateTime.UtcNow.AddDays(7) });
-        context.RefreshTokens.Add(new RefreshToken { Id = Guid.NewGuid(), Token = "other-token", UserId = otherUserId, ExpiresOnUtc = DateTime.UtcNow.AddDays(7) });
+        context.RefreshTokens.Add(new RefreshToken { Id = Guid.NewGuid(), TokenHash = "hash-1", UserId = userId, ExpiresOnUtc = DateTime.UtcNow.AddDays(7) });
+        context.RefreshTokens.Add(new RefreshToken { Id = Guid.NewGuid(), TokenHash = "hash-2", UserId = userId, ExpiresOnUtc = DateTime.UtcNow.AddDays(7) });
+        context.RefreshTokens.Add(new RefreshToken { Id = Guid.NewGuid(), TokenHash = "other-hash", UserId = otherUserId, ExpiresOnUtc = DateTime.UtcNow.AddDays(7) });
         await context.SaveChangesAsync();
 
         IUserContext userContext = Substitute.For<IUserContext>();

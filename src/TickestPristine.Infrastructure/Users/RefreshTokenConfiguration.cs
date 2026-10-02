@@ -10,9 +10,13 @@ internal sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refre
     {
         builder.HasKey(refreshToken => refreshToken.Id);
 
-        builder.Property(refreshToken => refreshToken.Token).HasMaxLength(200);
+        // SHA-256 em hexadecimal: 64 caracteres.
+        builder.Property(refreshToken => refreshToken.TokenHash).HasMaxLength(64);
 
-        builder.HasIndex(refreshToken => refreshToken.Token).IsUnique();
+        builder.HasIndex(refreshToken => refreshToken.TokenHash).IsUnique();
+
+        // Duas renovações simultâneas com o mesmo token: só a primeira grava, a outra recebe conflito.
+        builder.Property(refreshToken => refreshToken.TokenHash).IsConcurrencyToken();
 
         builder.HasOne<User>()
             .WithMany()

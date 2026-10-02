@@ -38,10 +38,12 @@ internal sealed class TokenProvider(
         return token;
     }
 
-    public string GenerateRefreshToken()
+    public GeneratedRefreshToken GenerateRefreshToken()
     {
         byte[] randomBytes = RandomNumberGenerator.GetBytes(32);
 
-        return Convert.ToBase64String(randomBytes);
+        return new GeneratedRefreshToken(
+            Convert.ToBase64String(randomBytes),
+            dateTimeProvider.UtcNow.AddDays(jwtOptions.Value.RefreshTokenExpirationInDays));
     }
 }

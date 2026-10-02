@@ -67,7 +67,8 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
 
         ITokenProvider tokenProvider = Substitute.For<ITokenProvider>();
         tokenProvider.CreateAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns("new-access-token");
-        tokenProvider.GenerateRefreshToken().Returns("new-refresh-token");
+        DateTime expiresOnUtc = now.AddDays(7);
+        tokenProvider.GenerateRefreshToken().Returns(new GeneratedRefreshToken("new-refresh-token", expiresOnUtc));
 
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(now);
@@ -90,8 +91,8 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         await tokenProvider.Received(1).CreateAsync(Arg.Is<User>(u => u.Id == user.Id), Arg.Any<CancellationToken>());
 
         RefreshToken stored = await context.RefreshTokens.SingleAsync();
-        stored.Token.ShouldBe("new-refresh-token");
-        stored.ExpiresOnUtc.ShouldBeGreaterThan(now);
+        stored.TokenHash.ShouldBe(RefreshTokenHasher.Hash("new-refresh-token"));
+        stored.ExpiresOnUtc.ShouldBe(expiresOnUtc);
         stored.DomainEvents.ShouldContain(domainEvent => domainEvent is RefreshTokenRotatedDomainEvent);
     }
 
@@ -134,7 +135,7 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         };
 
         context.Users.Add(user);
-        context.RefreshTokens.Add(new RefreshToken { Id = Guid.NewGuid(), Token = token, UserId = user.Id, ExpiresOnUtc = expiresOnUtc });
+        context.RefreshTokens.Add(new RefreshToken { Id = Guid.NewGuid(), TokenHash = RefreshTokenHasher.Hash(token), UserId = user.Id, ExpiresOnUtc = expiresOnUtc });
 
         await context.SaveChangesAsync();
 
