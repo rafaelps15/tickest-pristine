@@ -1,10 +1,10 @@
-# Command Slice Templates
+# Templates de slice de command
 
-Files go in `src/Application/{Feature}/{UseCase}/`. Replace `{Feature}` (plural, e.g. `Todos`), `{Entity}` (e.g. `TodoItem`), and use-case names throughout.
+Os arquivos ficam em `src/Application/{Feature}/{UseCase}/`. Substitua `{Feature}` (no plural, ex.: `Todos`), `{Entity}` (ex.: `TodoItem`) e os nomes do caso de uso em todos os trechos.
 
 ## Command
 
-Positional record for few parameters:
+Record posicional quando há poucos parâmetros:
 
 ```csharp
 using Application.Abstractions.Messaging;
@@ -14,7 +14,7 @@ namespace Application.Todos.Archive;
 public sealed record ArchiveTodoCommand(Guid TodoItemId) : ICommand;
 ```
 
-Class with init-style setters when there are many parameters (matches `CreateTodoCommand`):
+Classe com setters quando há muitos parâmetros (como o `CreateTodoCommand`):
 
 ```csharp
 using Application.Abstractions.Messaging;
@@ -32,14 +32,14 @@ public sealed class CreateTodoCommand : ICommand<Guid>
 }
 ```
 
-- `ICommand` → handler returns `Result` (endpoint responds `204 NoContent`).
-- `ICommand<TResponse>` → handler returns `Result<TResponse>` (endpoint responds `200 Ok`).
+- `ICommand` → o handler retorna `Result` (o endpoint responde `204 NoContent`).
+- `ICommand<TResponse>` → o handler retorna `Result<TResponse>` (o endpoint responde `200 Ok`).
 
 ## Validator
 
-Same folder as the command. Auto-registered and executed by `ValidationDecorator` before the handler runs. Always `internal sealed class {Command}Validator`, whatever the command's shape (`AddValidatorsFromAssembly` is called with `includeInternalTypes: true`, and the unit test project sees internals via `InternalsVisibleTo`).
+Fica na mesma pasta do command. É registrado automaticamente e executado pelo `ValidationDecorator` antes do handler. É sempre `internal sealed class {Command}Validator`, qualquer que seja o formato do command (o `AddValidatorsFromAssembly` é chamado com `includeInternalTypes: true`, e o projeto de testes unitários enxerga os tipos internos via `InternalsVisibleTo`).
 
-Limits used by more than one validator of the same aggregate (max lengths, password policy) live in a `{Feature}ValidationRules` static class next to the aggregate's slices (e.g. `src/Application/Todos/TodoValidationRules.cs`) instead of being repeated as literals.
+Limites usados por mais de um validator do mesmo agregado (tamanhos máximos, política de senha) ficam numa classe estática `{Feature}ValidationRules` ao lado dos slices do agregado (ex.: `src/Application/Todos/TodoValidationRules.cs`), em vez de repetidos como números soltos.
 
 ```csharp
 using FluentValidation;
@@ -60,7 +60,7 @@ internal sealed class CreateTodoCommandValidator : AbstractValidator<CreateTodoC
 
 ## Handler
 
-`internal sealed`, primary constructor, `IApplicationDbContext` for data access. Guard clauses return `Result.Failure` with Domain errors; the happy path mutates, raises a domain event, saves, and returns.
+`internal sealed`, construtor primário e `IApplicationDbContext` para acesso a dados. As cláusulas de guarda retornam `Result.Failure` com erros do Domain; o caminho feliz altera a entidade, dispara um evento de domínio, salva e retorna.
 
 ```csharp
 using Application.Abstractions.Authentication;
@@ -107,15 +107,15 @@ internal sealed class ArchiveTodoCommandHandler(
 }
 ```
 
-Notes:
-- Ownership: either filter by `userContext.UserId` in the query (preferred) or compare explicitly and return `Result.Failure(UserErrors.Unauthorized())`.
-- `IDateTimeProvider` (from `SharedKernel`) for timestamps — never `DateTime.UtcNow` directly.
-- If the command invalidates cached query data, inject `HybridCache` and call `cache.RemoveAsync({Feature}CacheKeys.X(...), cancellationToken)` after saving.
-- For a returning command (`ICommand<Guid>`), return the value directly — `Result<T>` has an implicit conversion: `return todoItem.Id;`.
+Observações:
+- Dono do dado: filtre por `userContext.UserId` na consulta (preferível) ou compare explicitamente e retorne `Result.Failure(UserErrors.Unauthorized())`.
+- Use `IDateTimeProvider` (do `SharedKernel`) para datas e horas — nunca `DateTime.UtcNow` direto.
+- Se o command deixa desatualizado algum dado em cache, injete `HybridCache` e chame `cache.RemoveAsync({Feature}CacheKeys.X(...), cancellationToken)` depois de salvar.
+- Num command que devolve valor (`ICommand<Guid>`), retorne o valor direto — `Result<T>` tem conversão implícita: `return todoItem.Id;`.
 
-## Domain additions (if needed)
+## O que adicionar no Domain (se necessário)
 
-Error factory on the existing `{Entity}Errors` class in `src/Domain/{Feature}/`:
+Método de erro na classe `{Entity}Errors` existente em `src/Domain/{Feature}/`:
 
 ```csharp
 public static Error AlreadyArchived(Guid todoItemId) => Error.Problem(
@@ -123,11 +123,11 @@ public static Error AlreadyArchived(Guid todoItemId) => Error.Problem(
     $"A tarefa com o Id = '{todoItemId}' já está arquivada.");
 ```
 
-The code (`"TodoItems.AlreadyArchived"`) is a stable identifier in English; the description is user-facing text and is written in Brazilian Portuguese.
+O código (`"TodoItems.AlreadyArchived"`) é um identificador estável, em inglês; a descrição é texto mostrado ao usuário e fica em português do Brasil.
 
-Error type → HTTP status (via `CustomResults.Problem`): `NotFound` → 404, `Conflict` → 409, `Forbidden` → 403, `Problem`/`Validation` → 400, `Failure` → 500.
+Tipo de erro → status HTTP (via `CustomResults.Problem`): `NotFound` → 404, `Conflict` → 409, `Forbidden` → 403, `Problem`/`Validation` → 400, `Failure` → 500.
 
-Domain event, one file each in `src/Domain/{Feature}/`:
+Evento de domínio, um arquivo para cada, em `src/Domain/{Feature}/`:
 
 ```csharp
 using SharedKernel;
@@ -137,7 +137,7 @@ namespace Domain.Todos;
 public sealed record TodoItemArchivedDomainEvent(Guid TodoItemId) : IDomainEvent;
 ```
 
-Optional event handler (Application layer, in the use-case folder):
+Handler do evento, opcional (camada Application, na pasta do caso de uso):
 
 ```csharp
 using Domain.Todos;

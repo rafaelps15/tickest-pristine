@@ -1,6 +1,6 @@
-# Query Slice Templates
+# Templates de slice de query
 
-Files go in `src/Application/{Feature}/{UseCase}/`. Queries are reads: no validator, no domain events, no `SaveChangesAsync`.
+Os arquivos ficam em `src/Application/{Feature}/{UseCase}/`. Queries são leituras: sem validator, sem eventos de domínio, sem `SaveChangesAsync`.
 
 ## Query
 
@@ -12,11 +12,11 @@ namespace Application.Todos.GetOverdue;
 public sealed record GetOverdueTodosQuery : IQuery<List<TodoResponse>>;
 ```
 
-With parameters: `public sealed record GetTodoByIdQuery(Guid TodoItemId) : IQuery<TodoResponse>;`
+Com parâmetros: `public sealed record GetTodoByIdQuery(Guid TodoItemId) : IQuery<TodoResponse>;`
 
-## Response DTO
+## DTO de resposta
 
-Lives next to the query. Flat, serialization-friendly, never a domain entity.
+Fica ao lado da query. É plano, fácil de serializar e nunca é uma entidade de domínio.
 
 ```csharp
 namespace Application.Todos.GetOverdue;
@@ -34,11 +34,11 @@ public sealed class TodoResponse
 }
 ```
 
-Each use-case folder owns its own `TodoResponse` — do not share DTOs across slices even if they look identical today.
+Cada pasta de caso de uso tem o seu próprio `TodoResponse` — não compartilhe DTOs entre slices, mesmo que hoje pareçam iguais.
 
 ## Handler
 
-Scope to the current user, project with `.Select` straight into the DTO:
+Restrinja ao usuário atual e projete com `.Select` direto no DTO:
 
 ```csharp
 using Application.Abstractions.Authentication;
@@ -81,11 +81,11 @@ internal sealed class GetOverdueTodosQueryHandler(
 }
 ```
 
-For single-item queries, return `Result.Failure<TodoResponse>(TodoItemErrors.NotFound(id))` when nothing matches.
+Em queries de um único item, retorne `Result.Failure<TodoResponse>(TodoItemErrors.NotFound(id))` quando nada for encontrado.
 
-## Caching (optional, hot reads only)
+## Cache (opcional, só para leituras frequentes)
 
-Wrap the database query in `HybridCache.GetOrCreateAsync` with a key from the feature's cache-keys class (see `GetTodoByIdQueryHandler` for the live example):
+Envolva a consulta ao banco em `HybridCache.GetOrCreateAsync`, com uma chave vinda da classe de chaves de cache da feature (o `GetTodoByIdQueryHandler` é o exemplo real):
 
 ```csharp
 namespace Application.Todos;
@@ -106,4 +106,4 @@ TodoResponse? todo = await cache.GetOrCreateAsync(
     cancellationToken: cancellationToken);
 ```
 
-Every command that mutates the cached data must invalidate the same key with `cache.RemoveAsync(...)`. If you can't enumerate the affected keys, don't cache.
+Todo command que altera o dado em cache precisa invalidar a mesma chave com `cache.RemoveAsync(...)`. Se não for possível listar as chaves afetadas, não use cache.

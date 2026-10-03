@@ -1,29 +1,29 @@
 ---
 name: add-tests
-description: Backfill missing tests for existing use cases in the Clean Architecture template — handler unit tests, FluentValidation validator tests, and HTTP integration tests. Use when the user asks to add, improve, or backfill test coverage.
-argument-hint: <use case or feature to cover, e.g. "CopyTodoCommand" or "the Users feature">
+description: Completa os testes que faltam em casos de uso existentes do template de Clean Architecture — testes unitários de handler, testes de validator do FluentValidation e testes de integração por HTTP. Use quando o usuário pedir para adicionar, melhorar ou completar a cobertura de testes.
+argument-hint: <caso de uso ou feature a cobrir, por exemplo "CopyTodoCommand" ou "a feature de Users">
 ---
 
-# Add Tests for an Existing Use Case
+# Adicionar testes a um caso de uso existente
 
-Backfill the three test types this template expects for every slice. Read the target handler/validator/endpoint first, then mirror the structure of the closest existing test class.
+Complete os três tipos de teste que este template espera para cada slice. Leia primeiro o handler, o validator e o endpoint alvo, e depois siga a estrutura da classe de teste existente mais parecida.
 
-## Workflow
+## Fluxo de trabalho
 
-1. **Locate the slice.** Find the command/query, handler, validator, and endpoint for the target use case. List every distinct outcome: each guard clause (`return Result.Failure(...)`) and the happy path.
-2. **Check what already exists** in `tests/Application.UnitTests/{Feature}/` and `tests/IntegrationTests/{Feature}/` — extend existing classes, don't duplicate.
-3. **Write handler unit tests** — one test per failure path plus one happy path asserting persisted state and raised domain events.
-4. **Write validator tests** (commands only) — one failing test per rule plus one fully-valid command.
-5. **Write integration tests** — happy path over real HTTP with state asserted via a follow-up GET; error translation (404/409/400) where the handler has failure paths; 401 without a token if the route family is new.
-6. **Run** `dotnet test` (Docker must be running for the integration tests) and fix failures before finishing.
+1. **Localize o slice.** Encontre o command/query, o handler, o validator e o endpoint do caso de uso. Liste cada resultado possível: cada cláusula de guarda (`return Result.Failure(...)`) e o caminho feliz.
+2. **Veja o que já existe** em `tests/Application.UnitTests/{Feature}/` e `tests/IntegrationTests/{Feature}/` — amplie as classes existentes, não duplique.
+3. **Escreva os testes unitários do handler** — um teste por caminho de falha e um do caminho feliz conferindo o estado gravado e os eventos de domínio disparados.
+4. **Escreva os testes do validator** (só commands) — um teste de falha por regra e um command totalmente válido.
+5. **Escreva os testes de integração** — caminho feliz por HTTP real, com o estado conferido por um GET em seguida; tradução de erro (404/409/400) quando o handler tem caminhos de falha; 401 sem token se a família de rotas for nova.
+6. **Rode** `dotnet test` (o Docker precisa estar rodando para os testes de integração) e corrija as falhas antes de terminar.
 
-## Conventions
+## Convenções
 
-- **Frameworks:** xUnit + Shouldly + NSubstitute; `FluentValidation.TestHelper` for validators. Global usings already cover `Xunit`, `NSubstitute`, `Shouldly`, `SharedKernel`.
-- **Unit test base:** inherit `BaseHandlerTest`; use `CreateDbContext()` for a fresh in-memory `TestDbContext` and `CreateCache()` for a real `HybridCache`. Substitute only interfaces (`IUserContext`, `IDateTimeProvider`, `IPasswordHasher`, `ITokenProvider`) — never mock the DbContext.
-- **Integration test base:** inherit `BaseIntegrationTest(factory)` with the `IntegrationTestWebAppFactory` collection fixture; use `RegisterAndLoginAsync()` + `Authenticate(token)` for authenticated calls. Define private response DTO records inside the test class (see `TodosTests.TodoDto`).
-- **Naming:** classes `{Handler}Tests` / `{Feature}ValidatorsTests` / `{Feature}Tests`; methods `Handle_Should_{Outcome}_When{Condition}` (unit) or `{Action}_Should_{Outcome}[_When{Condition}]` (integration).
-- **Structure:** `// Arrange` / `// Act` / `// Assert` comments in every test.
-- **Assertions:** compare exact domain errors (`result.Error.ShouldBe(TodoItemErrors.NotFound(id))`); assert persisted state by re-reading from the context (unit) or via a GET request (integration); assert domain events with `entity.DomainEvents.ShouldContain(e => e is XDomainEvent)`.
+- **Ferramentas:** xUnit + Shouldly + NSubstitute; `FluentValidation.TestHelper` para validators. Os global usings já cobrem `Xunit`, `NSubstitute`, `Shouldly` e `SharedKernel`.
+- **Base dos testes unitários:** herde de `BaseHandlerTest`; use `CreateDbContext()` para um `TestDbContext` novo em memória e `CreateCache()` para um `HybridCache` real. Substitua só interfaces (`IUserContext`, `IDateTimeProvider`, `IPasswordHasher`, `ITokenProvider`, `IPermissionProvider`) — nunca faça mock do DbContext.
+- **Base dos testes de integração:** herde de `BaseIntegrationTest(factory)` com a collection fixture `IntegrationTestWebAppFactory`; use `RegisterAndLoginAsync()` + `Authenticate(token)` para chamadas autenticadas. Declare os records de DTO de resposta como privados dentro da classe de teste (ex.: `TodosTests.TodoDto`).
+- **Nomes:** classes `{Handler}Tests` / `{Feature}ValidatorsTests` / `{Feature}Tests`; métodos `Handle_Should_{Outcome}_When{Condition}` (unitários) ou `{Action}_Should_{Outcome}[_When{Condition}]` (integração).
+- **Estrutura:** comentários `// Arrange` / `// Act` / `// Assert` em todos os testes.
+- **Verificações:** compare o erro de domínio exato (`result.Error.ShouldBe(TodoItemErrors.NotFound(id))`); confira o estado gravado relendo do contexto (unitários) ou por uma requisição GET (integração); confira eventos de domínio com `entity.DomainEvents.ShouldContain(e => e is XDomainEvent)`.
 
-Full annotated templates: [../add-feature/references/tests.md](../add-feature/references/tests.md) (if the `add-feature` skill is installed) or mirror `CreateTodoCommandHandlerTests`, `TodoValidatorsTests`, and `TodosTests` in this repo.
+Templates completos e comentados: [../add-feature/references/tests.md](../add-feature/references/tests.md) (se a skill `add-feature` estiver instalada), ou siga `CreateTodoCommandHandlerTests`, `TodoValidatorsTests` e `TodosTests` do repositório.

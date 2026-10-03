@@ -1,23 +1,23 @@
-# Clean Architecture Agent Skills for Claude Code
+# Skills de Clean Architecture para o Claude Code
 
-A skill pack that teaches Claude Code the conventions of the Clean Architecture template — so every feature it builds looks like you wrote it: vertical-slice use cases, custom command/query handlers (no MediatR), Result-based error handling, minimal API endpoints, and full test coverage.
+Um pacote de skills que ensina ao Claude Code as convenções do template de Clean Architecture — para que cada feature criada pareça escrita por você: casos de uso em slices verticais, handlers próprios de command/query (sem MediatR), tratamento de erro com `Result`, endpoints de minimal API e cobertura de testes completa.
 
-## What's inside
+## O que tem aqui
 
-| Skill | Invoke with | What it does |
+| Skill | Como chamar | O que faz |
 |---|---|---|
-| **add-feature** | `/add-feature archive a todo item` | Scaffolds a complete vertical slice: command/query, handler, validator, endpoint, and unit + validator + integration tests. |
-| **add-entity** | `/add-entity Project with a name and owner` | Adds a domain entity end to end: entity, error catalog, domain events, EF configuration, DbContext wiring, migration. |
-| **add-tests** | `/add-tests CopyTodoCommand` | Backfills handler, validator, and integration tests for existing use cases. |
-| **ca-review** | `/ca-review` | Reviews pending changes against the template's conventions: layer boundaries, error handling, security, caching, and test coverage. |
+| **add-feature** | `/add-feature arquivar uma tarefa` | Cria um slice vertical completo: command/query, handler, validator, endpoint e testes unitários, de validator e de integração. |
+| **add-entity** | `/add-entity Project com nome e dono` | Adiciona uma entidade de domínio de ponta a ponta: entidade, catálogo de erros, eventos de domínio, configuração do EF, ligação no DbContext e migration. |
+| **add-tests** | `/add-tests CopyTodoCommand` | Completa os testes de handler, de validator e de integração de casos de uso existentes. |
+| **ca-review** | `/ca-review` | Revisa as mudanças pendentes contra as convenções do template: limites entre camadas, tratamento de erro, segurança, cache e cobertura de testes. |
 
-You don't have to invoke them explicitly — once installed, Claude Code picks the right skill automatically when you say things like "add an endpoint to snooze a todo."
+Não é preciso chamar as skills explicitamente — depois de instaladas, o Claude Code escolhe a skill certa sozinho quando você diz algo como "adicione um endpoint para adiar uma tarefa".
 
-## Installation
+## Instalação
 
-The skills live in `.claude/skills/`. If you cloned the template, they're already active — just open the repo in Claude Code.
+As skills ficam em `.claude/skills/`. Se você clonou o template, elas já estão ativas — basta abrir o repositório no Claude Code.
 
-To use them in another project based on this template, copy the folder:
+Para usar em outro projeto baseado neste template, copie a pasta:
 
 ```
 your-project/
@@ -29,20 +29,18 @@ your-project/
         └── ca-review/
 ```
 
-Works with both the standard and the Aspire variants of the template.
+Os exemplos das skills usam nomes fictícios (`TodoItem`, `src/Application`, `CleanArchitecture.slnx`). Num projeto real, troque pelos nomes de verdade (por exemplo, projetos com prefixo como `src/MyApp.Application`). Copie também o `CLAUDE.md` da raiz, que descreve as mesmas convenções.
 
-## Try it
+## Experimente
 
 ```
-/add-feature snooze a todo until a given date
+/add-feature adiar uma tarefa até uma data informada
 ```
 
-Claude will create the command, validator, handler (with ownership check, domain event, and cache invalidation), the endpoint, and the three test types — then build and run the tests.
+O Claude vai criar o command, o validator, o handler (com checagem do dono do dado, evento de domínio e invalidação de cache), o endpoint e os três tipos de teste — e depois compilar e rodar os testes.
 
-## Customizing
+## Personalização
 
-Each skill is a plain Markdown file (`SKILL.md`, plus templates under `references/`). Renamed your layers, prefer records everywhere, use a different test stack? Edit the templates once and every future feature follows suit. The skills are the executable version of your team's conventions doc.
+Cada skill é um arquivo Markdown simples (`SKILL.md`, mais os templates em `references/`). Renomeou as camadas, prefere records em tudo, usa outras ferramentas de teste? Ajuste os templates uma vez e toda feature nova passa a seguir o ajuste. As skills são a versão executável do documento de convenções do time.
 
----
-
-Built for the [Clean Architecture template](https://www.milanjovanovic.tech) by Milan Jovanović.
+Os textos explicativos estão em português; os exemplos de código ficam em inglês, como o próprio código.

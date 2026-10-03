@@ -1,104 +1,104 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Este arquivo orienta o Claude Code (claude.ai/code) ao trabalhar com o código deste repositório.
 
-## What this is
+## O que é
 
-A pragmatic Clean Architecture starter for .NET 10 (Todos + Users sample domain), targeting PostgreSQL, with JWT auth + refresh tokens, role-based permissions, caching, structured logging, and OpenTelemetry wired in. It is a *template* — the Todos/Users code is sample content meant to be extended or replaced.
+Um template pragmático de Clean Architecture para .NET 10 (domínio de exemplo com Todos + Users), usando PostgreSQL, com autenticação JWT + refresh tokens, permissões por função, cache, logs estruturados e OpenTelemetry já configurados. É um *template* — o código de Todos/Users é conteúdo de exemplo, feito para ser ampliado ou substituído.
 
-Names in this file and in `.claude/skills/` are the template's placeholders (`CleanArchitecture.slnx`, `src/Application`, `TodoItem`). A real solution usually prefixes its projects (e.g. `src/MyApp.Application`, `tests/MyApp.IntegrationTests`); map the placeholders to the actual names in the repository.
+Os nomes usados neste arquivo e em `.claude/skills/` são os nomes fictícios do template (`CleanArchitecture.slnx`, `src/Application`, `TodoItem`). Uma solução real costuma ter prefixo nos projetos (ex.: `src/MyApp.Application`, `tests/MyApp.IntegrationTests`); troque os nomes fictícios pelos nomes reais do repositório.
 
-## Commands
+## Comandos
 
 ```bash
-# Start infra dependencies only (PostgreSQL + Seq; ports in docker-compose.yml).
-# Plain `docker compose up -d` also starts the API container.
+# Sobe só a infraestrutura (PostgreSQL + Seq; portas no docker-compose.yml).
+# Um `docker compose up -d` simples também sobe o container da API.
 docker compose up -d postgres seq
 
-# Run the API (Development applies migrations and runs the seeders on startup)
+# Roda a API (em Development, aplica as migrations e roda os seeders ao iniciar)
 dotnet run --project src/Web.Api
 
 # Build / restore
 dotnet restore CleanArchitecture.slnx
 dotnet build CleanArchitecture.slnx
 
-# Run the full test suite (integration tests spin up a throwaway PostgreSQL container via
-# Testcontainers, so Docker must be running)
+# Roda todos os testes (os de integração sobem um PostgreSQL descartável via
+# Testcontainers, então o Docker precisa estar rodando)
 dotnet test CleanArchitecture.slnx
 
-# Run a single test project
+# Roda um projeto de teste
 dotnet test tests/Application.UnitTests
 dotnet test tests/IntegrationTests
 dotnet test tests/ArchitectureTests
 
-# Run a single test by name (any project)
+# Roda um teste pelo nome (qualquer projeto)
 dotnet test --filter "FullyQualifiedName~CreateTodoCommandHandlerTests"
 
-# Add a migration (names are PascalCase_With_Underscores)
+# Cria uma migration (nomes no formato PascalCase_With_Underscores)
 dotnet ef migrations add Add_Todos --project src/Infrastructure --startup-project src/Web.Api --output-dir Database/Migrations
 ```
 
-Seq (structured log viewer) runs with the infra containers; its port is mapped in `docker-compose.yml`.
+O Seq (visualizador de logs estruturados) sobe junto com a infraestrutura; a porta está no `docker-compose.yml`.
 
-To target .NET 8 or .NET 9 instead of .NET 10, see the notes in `Directory.Build.props` (also requires updating the Dockerfile in `src/Web.Api`).
+Para usar .NET 8 ou .NET 9 em vez de .NET 10, veja as notas no `Directory.Build.props` (também é preciso atualizar o Dockerfile em `src/Web.Api`).
 
-Warnings are treated as errors (`TreatWarningsAsErrors`, `AnalysisMode=All`, SonarAnalyzer), so `dotnet build` is a meaningful correctness gate, not just a compile check.
+Avisos são tratados como erros (`TreatWarningsAsErrors`, `AnalysisMode=All`, SonarAnalyzer), então o `dotnet build` é uma verificação de qualidade de verdade, e não só uma compilação.
 
-## Architecture
+## Arquitetura
 
-Five projects, dependencies flow strictly inward. This is enforced by `tests/ArchitectureTests/Layers/LayerTests.cs` (via NetArchTest) — Domain and Application must never reference Infrastructure or Web.Api.
+Cinco projetos, com dependências sempre apontando para dentro. Isso é garantido por `tests/ArchitectureTests/Layers/LayerTests.cs` (via NetArchTest) — Domain e Application nunca podem referenciar Infrastructure ou Web.Api.
 
 ```
 SharedKernel  <-- Domain <-- Application <-- Infrastructure
                                   ^--------------- Web.Api
 ```
 
-- **SharedKernel** — DDD primitives with no dependencies on anything else in the solution: `Entity` (base class holding raised domain events), `Result`/`Result<T>`, `Error`/`ErrorType`/`ValidationError`, `IDomainEvent`, `IDomainEventHandler<T>`, `IDateTimeProvider`.
-- **Domain** — entities, domain events, and per-aggregate static `*Errors` classes (e.g. `TodoItemErrors`, `UserErrors`), grouped by aggregate folder (`Todos/`, `Users/`), not by technical type. Entities are plain classes with settable properties and foreign-key ids (no navigation properties); business rules live in the Application handlers.
-- **Application** — use cases, one per vertical slice folder (e.g. `Todos/Create/`, `Todos/Complete/`), plus `Abstractions/` for cross-cutting interfaces (`Messaging`, `Behaviors`, `Data`, `Authentication`, `Authorization`, `Pagination`) and `Authorization/` for the permission catalog and guards. No MediatR — commands/queries are handled by custom `ICommandHandler`/`IQueryHandler` interfaces resolved via DI + `Scrutor` assembly scanning.
-- **Infrastructure** — EF Core (`ApplicationDbContext`, PostgreSQL, snake_case naming, migrations under `Database/Migrations`, seeders under `Database/Seeding`), JWT + refresh tokens, permission provider and authorization policies, `HybridCache`, domain event dispatch.
-- **Web.Api** — minimal API endpoints (one class per endpoint implementing `IEndpoint`, auto-registered via assembly scan in `EndpointExtensions`), rate limiting, CORS, OpenTelemetry, Serilog request logging, global exception handling → `ProblemDetails`, Swagger with JWT.
+- **SharedKernel** — peças básicas de DDD, sem dependência de nenhum outro projeto da solução: `Entity` (classe base que guarda os eventos disparados), `Result`/`Result<T>`, `Error`/`ErrorType`/`ValidationError`, `IDomainEvent`, `IDomainEventHandler<T>`, `IDateTimeProvider`.
+- **Domain** — entidades, eventos de domínio e uma classe estática `*Errors` por agregado (ex.: `TodoItemErrors`, `UserErrors`), organizados por pasta de agregado (`Todos/`, `Users/`), e não por tipo técnico. As entidades são classes simples, com propriedades com setter e ids das chaves estrangeiras (sem propriedades de navegação); as regras de negócio ficam nos handlers da Application.
+- **Application** — casos de uso, um por pasta de slice vertical (ex.: `Todos/Create/`, `Todos/Complete/`), mais `Abstractions/` com as interfaces transversais (`Messaging`, `Behaviors`, `Data`, `Authentication`, `Authorization`, `Pagination`) e `Authorization/` com o catálogo de permissões e os guards. Sem MediatR — commands e queries são tratados por interfaces próprias `ICommandHandler`/`IQueryHandler`, resolvidas pela DI com varredura de assembly do `Scrutor`.
+- **Infrastructure** — EF Core (`ApplicationDbContext`, PostgreSQL, nomes em snake_case, migrations em `Database/Migrations`, seeders em `Database/Seeding`), JWT + refresh tokens, provedor de permissões e policies de autorização, `HybridCache` e despacho dos eventos de domínio.
+- **Web.Api** — endpoints de minimal API (uma classe por endpoint implementando `IEndpoint`, registrada automaticamente pela varredura em `EndpointExtensions`), rate limiting, CORS, OpenTelemetry, log de requisições com Serilog, tratamento global de exceções → `ProblemDetails` e Swagger com JWT.
 
-### Vertical slice layout
+### Organização dos slices verticais
 
-Each use case lives under `Application/{Aggregate}/{UseCase}/` as a self-contained slice, e.g. `Application/Todos/Create/`:
-- `CreateTodoCommand.cs` — the `ICommand<TResponse>` (or `IQuery<TResponse>`) DTO.
-- `CreateTodoCommandHandler.cs` — `internal sealed class ... : ICommandHandler<TCommand, TResponse>`. Dependencies via primary constructor (`IApplicationDbContext`, `IUserContext`, `IPermissionProvider`, `IDateTimeProvider`, etc). Returns `Result<T>`, never throws for expected failures.
-- `CreateTodoCommandValidator.cs` — `internal sealed` FluentValidation `AbstractValidator<TCommand>`, picked up automatically by `AddValidatorsFromAssembly`. Every command has one; queries don't.
-- Queries project straight into a per-slice `{X}Response` DTO with `.Select(...)` and never return entities. Paged lists use `ToPagedResponseAsync` (`Abstractions/Pagination`).
+Cada caso de uso fica em `Application/{Aggregate}/{UseCase}/` como um slice independente, ex.: `Application/Todos/Create/`:
+- `CreateTodoCommand.cs` — o DTO `ICommand<TResponse>` (ou `IQuery<TResponse>`).
+- `CreateTodoCommandHandler.cs` — `internal sealed class ... : ICommandHandler<TCommand, TResponse>`. Dependências pelo construtor primário (`IApplicationDbContext`, `IUserContext`, `IPermissionProvider`, `IDateTimeProvider` etc.). Retorna `Result<T>` e nunca lança exceção para falhas esperadas.
+- `CreateTodoCommandValidator.cs` — `AbstractValidator<TCommand>` do FluentValidation, `internal sealed`, carregado automaticamente pelo `AddValidatorsFromAssembly`. Todo command tem um; queries não têm.
+- Queries projetam direto num DTO `{X}Response` do próprio slice, com `.Select(...)`, e nunca retornam entidades. Listas paginadas usam `ToPagedResponseAsync` (`Abstractions/Pagination`).
 
-Limits shared by more than one validator of the same aggregate (max lengths, password policy) live in a `{Feature}ValidationRules` static class next to the slices (e.g. `Application/Todos/TodoValidationRules.cs`) instead of being repeated as literals.
+Limites usados por mais de um validator do mesmo agregado (tamanhos máximos, política de senha) ficam numa classe estática `{Feature}ValidationRules` ao lado dos slices (ex.: `Application/Todos/TodoValidationRules.cs`), em vez de repetidos como números soltos.
 
-The matching endpoint lives in `Web.Api/Endpoints/{Aggregate}/{UseCase}.cs` as an `internal sealed class : IEndpoint` with a nested `Request` DTO, mapping the request to the command/query, calling the handler, and translating `Result` to HTTP via `result.Match(Results.Ok | Results.NoContent, CustomResults.Problem)`.
+O endpoint correspondente fica em `Web.Api/Endpoints/{Aggregate}/{UseCase}.cs`, como uma `internal sealed class : IEndpoint` com um DTO `Request` aninhado. Ele mapeia a requisição para o command/query, chama o handler e converte o `Result` em HTTP com `result.Match(Results.Ok | Results.NoContent, CustomResults.Problem)`.
 
-Tests mirror this: `tests/Application.UnitTests/{Aggregate}/{UseCase}{Command|Query}HandlerTests.cs` for handler unit tests, `{Aggregate}ValidatorsTests.cs` for validators, and `tests/IntegrationTests/{Aggregate}/{Aggregate}Tests.cs` for end-to-end HTTP tests against a Testcontainers PostgreSQL instance.
+Os testes seguem a mesma estrutura: `tests/Application.UnitTests/{Aggregate}/{UseCase}{Command|Query}HandlerTests.cs` para os handlers, `{Aggregate}ValidatorsTests.cs` para os validators, e `tests/IntegrationTests/{Aggregate}/{Aggregate}Tests.cs` para os testes de ponta a ponta por HTTP contra um PostgreSQL do Testcontainers.
 
-### Cross-cutting behavior via decorators
+### Comportamentos transversais com decorators
 
-`Application/DependencyInjection.cs` wraps handlers with decorators via `Scrutor`'s `.Decorate`. At runtime a request flows **Logging → Validation → handler** (logging is the outermost decorator, so validation failures are logged too). Validation only wraps commands; it short-circuits with a `ValidationError` before the handler runs, so handlers don't re-check input shape — they enforce business rules only.
+O `Application/DependencyInjection.cs` envolve os handlers com decorators usando o `.Decorate` do `Scrutor`. Em execução, a requisição passa por **Logging → Validation → handler** (o logging é o decorator mais externo, então falhas de validação também são registradas). A validação só envolve commands; ela interrompe com um `ValidationError` antes de o handler rodar, então os handlers não reconferem o formato da entrada — só aplicam as regras de negócio.
 
-### Result pattern (no exceptions for expected failures)
+### Padrão Result (sem exceções para falhas esperadas)
 
-`Result` / `Result<T>` in `SharedKernel` is the error-handling convention throughout Domain/Application/Web.Api. Handlers return `Result.Failure<T>(SomeErrors.Reason(...))` instead of throwing. Each aggregate defines its own static errors class (`TodoItemErrors`, `UserErrors`) with codes like `"TodoItems.NotFound"`. `CustomResults.Problem` maps `ErrorType` to status codes: `Validation`/`Problem` → 400, `NotFound` → 404, `Conflict` → 409, `Forbidden` → 403, `Failure` → 500. `GlobalExceptionHandler` handles truly unexpected failures, plus concurrency conflicts and unique-index violations (409) and unreadable requests (400).
+`Result` / `Result<T>` do `SharedKernel` é a convenção de tratamento de erro em Domain, Application e Web.Api. Os handlers retornam `Result.Failure<T>(SomeErrors.Reason(...))` em vez de lançar exceção. Cada agregado tem a sua classe estática de erros (`TodoItemErrors`, `UserErrors`) com códigos como `"TodoItems.NotFound"`. O `CustomResults.Problem` converte `ErrorType` em status HTTP: `Validation`/`Problem` → 400, `NotFound` → 404, `Conflict` → 409, `Forbidden` → 403, `Failure` → 500. O `GlobalExceptionHandler` trata as falhas realmente inesperadas, além de conflitos de concorrência e violações de índice único (409) e requisições ilegíveis (400).
 
-### Domain events
+### Eventos de domínio
 
-Handlers call `entity.Raise(new SomeDomainEvent(...))` before `SaveChangesAsync`. `ApplicationDbContext.SaveChangesAsync` saves first and then `DomainEventsDispatcher` publishes the events, each in its own DI scope and **outside the original transaction**. Handlers implement `IDomainEventHandler<T>` and are auto-registered by assembly scan.
+Os handlers chamam `entity.Raise(new SomeDomainEvent(...))` antes do `SaveChangesAsync`. O `ApplicationDbContext.SaveChangesAsync` salva primeiro e depois o `DomainEventsDispatcher` publica os eventos, cada um no seu próprio escopo de DI e **fora da transação original**. Os handlers de evento implementam `IDomainEventHandler<T>` e são registrados automaticamente pela varredura de assembly.
 
-## Authentication and authorization
+## Autenticação e autorização
 
-- **Model:** Users → Roles → Permissions. Permission codes (e.g. `"todos:manage"`) are catalogued in `Application/Authorization/PermissionCodes.cs` with display name, description, group, and an `IsAdministrative` flag. Default roles and their permissions are seeded via `HasData` in the Infrastructure configurations; new users get the default role on registration.
-- **Endpoint level:** use `.HasPermission(PermissionCodes.X.Y)`, which fails at startup if the code is not in the catalog. Use plain `.RequireAuthorization()` when the rule depends on the data (ownership).
-- **Handler level:** rules that depend on a permission *and* on the data are checked in the handler through `IPermissionProvider` — e.g. "own item needs `todos:update-own`, anyone's needs `todos:manage`", or `IsSelfOrHasPermissionAsync`. Failures return `UserErrors.Unauthorized()` (403).
-- **Source of truth:** permissions are always resolved server-side by `IPermissionProvider` (database + `HybridCache` per user). Deactivated users resolve to no permissions. Any command that changes a user's effective permissions (roles, role permissions, activation) must call `permissionProvider.InvalidateAsync(userId)` after saving. Clients read the live list from `GET /users/me`; the API never authorizes from JWT claims.
-- **Guards:** `PrivilegeEscalationGuard` blocks granting/removing administrative permissions the caller doesn't have; `AdministratorGuard` keeps at least one active administrator.
-- **Tokens:** access tokens expire after `Jwt:ExpirationInMinutes`; refresh tokens after `Jwt:RefreshTokenExpirationInDays`. Refresh tokens are stored only as a SHA-256 hash (also a concurrency token), rotated on every refresh, and revoked by logout or password change.
+- **Modelo:** Usuários → Funções → Permissões. Os códigos de permissão (ex.: `"todos:manage"`) ficam catalogados em `Application/Authorization/PermissionCodes.cs`, com nome de exibição, descrição, grupo e a marcação `IsAdministrative`. As funções padrão e suas permissões são criadas via `HasData` nas configurações da Infrastructure; usuários novos recebem a função padrão no cadastro.
+- **No endpoint:** use `.HasPermission(PermissionCodes.X.Y)`, que impede a API de iniciar se o código não estiver no catálogo. Use `.RequireAuthorization()` simples quando a regra depende do dado (dono do item).
+- **No handler:** regras que dependem de uma permissão *e* do dado são conferidas no handler via `IPermissionProvider` — ex.: "o próprio item exige `todos:update-own`, o de qualquer pessoa exige `todos:manage`", ou `IsSelfOrHasPermissionAsync`. Falhas retornam `UserErrors.Unauthorized()` (403).
+- **Fonte da verdade:** as permissões são sempre resolvidas no servidor pelo `IPermissionProvider` (banco + `HybridCache` por usuário). Usuários desativados ficam sem nenhuma permissão. Todo command que muda as permissões efetivas de um usuário (funções, permissões de uma função, ativação) precisa chamar `permissionProvider.InvalidateAsync(userId)` depois de salvar. Os clientes leem a lista atualizada em `GET /users/me`; a API nunca autoriza com base nas claims do JWT.
+- **Guards:** o `PrivilegeEscalationGuard` impede conceder ou remover permissões administrativas que quem chama não tem; o `AdministratorGuard` garante que sempre reste pelo menos um administrador ativo.
+- **Tokens:** o access token expira após `Jwt:ExpirationInMinutes`; o refresh token, após `Jwt:RefreshTokenExpirationInDays`. O refresh token é guardado só como hash SHA-256 (que também é token de concorrência), trocado a cada renovação e revogado no logout ou na troca de senha.
 
-## Conventions to preserve when extending
+## Convenções a manter ao ampliar
 
-- All user-facing text (error descriptions, validation messages) is in Brazilian Portuguese; code, identifiers, error codes, and log templates stay in English.
-- New use cases go in `Application/{Aggregate}/{UseCase}/` following the Command/Handler/Validator triad above — don't introduce MediatR.
-- New entities get their own `{Entity}Errors` static class in Domain rather than throwing raw exceptions or reusing another aggregate's errors.
-- EF Core configurations (`IEntityTypeConfiguration<T>`) live in `Infrastructure/{Aggregate}/{Entity}Configuration.cs` and are picked up by `ApplyConfigurationsFromAssembly`; new `DbSet`s go in `IApplicationDbContext`, `ApplicationDbContext`, and the unit tests' `TestDbContext`.
-- Endpoints are one class per route in `Web.Api/Endpoints/{Aggregate}/`, tagged via `Web.Api/Endpoints/Tags.cs`, and registered automatically — no manual route table to update.
-- This repo has `.claude/skills/` (`add-entity`, `add-feature`, `add-tests`, `ca-review`) that encode these conventions as executable scaffolding — prefer them over freehand implementations so new code matches the existing slices exactly.
+- Todo texto mostrado ao usuário (descrições de erro, mensagens de validação) fica em português do Brasil; código, identificadores, códigos de erro e templates de log ficam em inglês.
+- Casos de uso novos vão em `Application/{Aggregate}/{UseCase}/`, seguindo o trio Command/Handler/Validator acima — não introduza MediatR.
+- Entidades novas ganham a sua própria classe estática `{Entity}Errors` no Domain, em vez de lançar exceções ou reaproveitar os erros de outro agregado.
+- As configurações do EF Core (`IEntityTypeConfiguration<T>`) ficam em `Infrastructure/{Aggregate}/{Entity}Configuration.cs` e são carregadas pelo `ApplyConfigurationsFromAssembly`; `DbSet`s novos vão em `IApplicationDbContext`, `ApplicationDbContext` e no `TestDbContext` dos testes unitários.
+- Endpoints são uma classe por rota em `Web.Api/Endpoints/{Aggregate}/`, com tag via `Web.Api/Endpoints/Tags.cs`, e registrados automaticamente — não há tabela de rotas para atualizar.
+- Este repositório tem `.claude/skills/` (`add-entity`, `add-feature`, `add-tests`, `ca-review`) com essas convenções em forma de roteiro executável — prefira usá-las a escrever à mão, para que o código novo fique igual aos slices existentes.

@@ -1,12 +1,12 @@
-# Test Templates
+# Templates de teste
 
-Stack: xUnit + Shouldly + NSubstitute (unit), FluentValidation.TestHelper (validators), WebApplicationFactory + Testcontainers (integration). Every new use case gets all three.
+Ferramentas: xUnit + Shouldly + NSubstitute (unitários), FluentValidation.TestHelper (validators), WebApplicationFactory + Testcontainers (integração). Todo caso de uso novo ganha os três tipos.
 
-## Handler unit tests
+## Testes unitários de handler
 
-`tests/Application.UnitTests/{Feature}/{UseCase}{Command|Query}HandlerTests.cs`. Inherit `BaseHandlerTest` — it provides `CreateDbContext()` (in-memory `TestDbContext` implementing `IApplicationDbContext`) and `CreateCache()` (real `HybridCache`). Mock only interfaces (`IUserContext`, `IDateTimeProvider`) with NSubstitute.
+`tests/Application.UnitTests/{Feature}/{UseCase}{Command|Query}HandlerTests.cs`. Herde de `BaseHandlerTest` — ele fornece `CreateDbContext()` (um `TestDbContext` em memória que implementa `IApplicationDbContext`) e `CreateCache()` (um `HybridCache` real). Use NSubstitute só para interfaces (`IUserContext`, `IDateTimeProvider`).
 
-Cover: each failure path (one test per guard clause) and the happy path including persisted state and raised domain events.
+Cubra: cada caminho de falha (um teste por cláusula de guarda) e o caminho feliz, incluindo o estado gravado e os eventos de domínio disparados.
 
 ```csharp
 using Application.Abstractions.Authentication;
@@ -78,16 +78,16 @@ public sealed class ArchiveTodoCommandHandlerTests : BaseHandlerTest
 }
 ```
 
-Conventions:
-- Test names: `Handle_Should_{Outcome}_When{Condition}`.
-- `// Arrange` / `// Act` / `// Assert` comments in every test.
-- Assert failures by comparing the exact error: `result.Error.ShouldBe(TodoItemErrors.NotFound(id))`.
-- `GlobalUsings.cs` already imports `Xunit`, `NSubstitute`, `Shouldly`, and `SharedKernel` — don't re-add those usings.
-- If the entity gains new properties, `TestDbContext` picks them up automatically; only touch it when adding a whole new `DbSet`.
+Convenções:
+- Nome dos testes: `Handle_Should_{Outcome}_When{Condition}`.
+- Comentários `// Arrange` / `// Act` / `// Assert` em todos os testes.
+- Confira falhas comparando o erro exato: `result.Error.ShouldBe(TodoItemErrors.NotFound(id))`.
+- O `GlobalUsings.cs` já importa `Xunit`, `NSubstitute`, `Shouldly` e `SharedKernel` — não repita esses usings.
+- Se a entidade ganhar propriedades novas, o `TestDbContext` as reconhece sozinho; só mexa nele ao adicionar um `DbSet` novo.
 
-## Validator tests
+## Testes de validator
 
-`tests/Application.UnitTests/{Feature}/{Feature}ValidatorsTests.cs` (extend the existing file if present). One class covers all validators of a feature.
+`tests/Application.UnitTests/{Feature}/{Feature}ValidatorsTests.cs` (se o arquivo já existir, amplie-o). Uma classe cobre todos os validators de uma feature.
 
 ```csharp
 [Fact]
@@ -106,11 +106,11 @@ public void CreateValidator_Should_HaveError_WhenDescriptionIsEmpty()
 }
 ```
 
-Cover each rule's failure plus one fully-valid command (`ShouldNotHaveAnyValidationErrors`).
+Cubra a falha de cada regra e um command totalmente válido (`ShouldNotHaveAnyValidationErrors`).
 
-## Integration tests
+## Testes de integração
 
-`tests/IntegrationTests/{Feature}/{Feature}Tests.cs` (extend the existing file if present). Inherit `BaseIntegrationTest(factory)` — it runs the real API against a Testcontainers Postgres and provides `HttpClient`, `RegisterAndLoginAsync()`, and `Authenticate(token)`. Tests go through real HTTP, never call handlers directly.
+`tests/IntegrationTests/{Feature}/{Feature}Tests.cs` (se o arquivo já existir, amplie-o). Herde de `BaseIntegrationTest(factory)` — ele sobe a API real contra um Postgres do Testcontainers e fornece `HttpClient`, `RegisterAndLoginAsync()` e `Authenticate(token)`. Os testes passam por HTTP de verdade e nunca chamam handlers direto.
 
 ```csharp
 [Fact]
@@ -139,12 +139,12 @@ public async Task ArchiveTodo_Should_MarkTodoAsArchived()
 }
 ```
 
-Minimum coverage per endpoint: one unauthorized test (no token → 401) if it's a new route family, one happy-path test asserting observable state via a follow-up GET, and one failure translation test (e.g. unknown id → 404) when the handler has failure paths.
+Cobertura mínima por endpoint: um teste sem autenticação (sem token → 401) se for uma família de rotas nova, um teste do caminho feliz conferindo o estado por um GET em seguida, e um teste de tradução de falha (ex.: id inexistente → 404) quando o handler tem caminhos de falha.
 
-## Run
+## Rodar
 
 ```
 dotnet test
 ```
 
-Integration tests need Docker running (Testcontainers). Architecture tests will fail the build if a layer dependency rule is violated — fix the dependency, never the test.
+Os testes de integração precisam do Docker rodando (Testcontainers). Os testes de arquitetura falham se alguma regra de dependência entre camadas for violada — corrija a dependência, nunca o teste.
