@@ -19,13 +19,19 @@ internal static class CorsExtensions
         services.AddOptions<CorsOptions>()
             .Configure<IOptions<CorsPolicyOptions>>((cors, corsPolicyOptions) =>
             {
-                string[] allowedOrigins = corsPolicyOptions.Value.AllowedOrigins;
+                CorsPolicyOptions options = corsPolicyOptions.Value;
 
                 cors.AddPolicy(DefaultPolicyName, policy =>
                 {
-                    if (allowedOrigins.Length > 0)
+                    if (options.AllowLoopbackOrigins)
                     {
-                        policy.WithOrigins(allowedOrigins)
+                        policy.SetIsOriginAllowed(origin => IsLoopbackOrigin(origin) || options.AllowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase))
+                            .AllowAnyHeader()
+                            .AllowAnyMethod();
+                    }
+                    else if (options.AllowedOrigins.Length > 0)
+                    {
+                        policy.WithOrigins(options.AllowedOrigins)
                             .AllowAnyHeader()
                             .AllowAnyMethod();
                     }
@@ -34,4 +40,7 @@ internal static class CorsExtensions
 
         return services;
     }
+
+    private static bool IsLoopbackOrigin(string origin) =>
+        Uri.TryCreate(origin, UriKind.Absolute, out Uri? uri) && uri.IsLoopback;
 }

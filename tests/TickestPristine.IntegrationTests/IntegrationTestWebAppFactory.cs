@@ -50,6 +50,9 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         builder.UseSetting("Admin:LastName", "Master");
         builder.UseSetting("Admin:Password", AdminInitialPassword);
 
+        // CORS como em desenvolvimento: front local em qualquer porta.
+        builder.UseSetting("Cors:AllowLoopbackOrigins", "true");
+
         // Os testes não usam os dados fictícios de desenvolvimento.
         builder.UseSetting("Seeding:SampleData", "false");
     }
