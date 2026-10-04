@@ -1,5 +1,4 @@
 using Bogus;
-using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
@@ -8,74 +7,56 @@ using Microsoft.EntityFrameworkCore;
 namespace TickestPristine.Infrastructure.Database.Seeding;
 
 /// <summary>
-/// Dados fictícios de departamentos, setores e chamados para desenvolvimento. Só roda num banco sem departamentos.
+/// Chamados fictícios para desenvolvimento, distribuídos pelos setores ativos que já existem.
+/// Só roda num banco sem chamados e com pelo menos um setor ativo.
 /// </summary>
 internal static class SampleDataSeeder
 {
-    private const int DepartmentCount = 5;
-    private const int SectorsPerDepartment = 2;
     private const int TicketCount = 50;
 
     public static void Seed(DbContext context)
     {
-        if (context.Set<Department>().Any())
+        if (context.Set<Ticket>().IgnoreQueryFilters().Any())
         {
             return;
         }
 
+        Guid[] sectorIds = context.Set<Sector>().Where(s => s.IsActive).Select(s => s.Id).ToArray();
         Guid[] userIds = context.Set<User>().Select(u => u.Id).ToArray();
 
-        AddSampleData(context, userIds);
+        if (sectorIds.Length == 0 || userIds.Length == 0)
+        {
+            return;
+        }
+
+        AddSampleTickets(context, sectorIds, userIds);
 
         context.SaveChanges();
     }
 
     public static async Task SeedAsync(DbContext context, CancellationToken cancellationToken)
     {
-        if (await context.Set<Department>().AnyAsync(cancellationToken))
+        if (await context.Set<Ticket>().IgnoreQueryFilters().AnyAsync(cancellationToken))
         {
             return;
         }
 
+        Guid[] sectorIds = await context.Set<Sector>().Where(s => s.IsActive).Select(s => s.Id).ToArrayAsync(cancellationToken);
         Guid[] userIds = await context.Set<User>().Select(u => u.Id).ToArrayAsync(cancellationToken);
 
-        AddSampleData(context, userIds);
+        if (sectorIds.Length == 0 || userIds.Length == 0)
+        {
+            return;
+        }
+
+        AddSampleTickets(context, sectorIds, userIds);
 
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    private static void AddSampleData(DbContext context, Guid[] userIds)
+    private static void AddSampleTickets(DbContext context, Guid[] sectorIds, Guid[] userIds)
     {
         var faker = new Faker("pt_BR");
-        var sectorIds = new List<Guid>();
-
-        for (int i = 0; i < DepartmentCount; i++)
-        {
-            var department = new Department
-            {
-                Id = Guid.NewGuid(),
-                Name = faker.Commerce.Department(),
-                Description = faker.Company.CatchPhrase(),
-                IsActive = true
-            };
-
-            context.Add(department);
-
-            for (int j = 0; j < SectorsPerDepartment; j++)
-            {
-                var sector = new Sector
-                {
-                    Id = Guid.NewGuid(),
-                    Name = faker.Commerce.ProductName(),
-                    Description = faker.Lorem.Sentence(),
-                    IsActive = true,
-                    DepartmentId = department.Id
-                };
-
-                context.Add(sector);
-                sectorIds.Add(sector.Id);
-            }
-        }
 
         for (int i = 0; i < TicketCount; i++)
         {

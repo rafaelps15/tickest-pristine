@@ -5,8 +5,9 @@ using Npgsql;
 namespace TickestPristine.Infrastructure.Database.Seeding;
 
 /// <summary>
-/// Executado pelo EF Core ao aplicar as migrations (UseSeeding/UseAsyncSeeding): cria o administrador inicial e,
-/// com "Seeding:SampleData" ligado, os dados de exemplo. Roda a cada Migrate, por isso não duplica nada.
+/// Executado pelo EF Core ao aplicar as migrations (UseSeeding/UseAsyncSeeding): cria o administrador inicial,
+/// a estrutura inicial de departamentos e setores (com "Seeding:DefaultOrganization", ligado por padrão) e, com
+/// "Seeding:SampleData" ligado, os chamados de exemplo. Roda a cada Migrate, por isso não duplica nada.
 /// As roles padrão e suas permissões não passam por aqui: vêm das migrations (HasData).
 /// </summary>
 internal sealed class DatabaseSeeder(AdminUserSeeder adminUserSeeder, IOptions<SeedingOptions> seedingOptions)
@@ -16,6 +17,11 @@ internal sealed class DatabaseSeeder(AdminUserSeeder adminUserSeeder, IOptions<S
         ReloadDatabaseTypes(context);
 
         adminUserSeeder.Seed(context);
+
+        if (DefaultOrganizationEnabled)
+        {
+            DefaultOrganizationSeeder.Seed(context);
+        }
 
         if (SampleDataEnabled)
         {
@@ -29,11 +35,18 @@ internal sealed class DatabaseSeeder(AdminUserSeeder adminUserSeeder, IOptions<S
 
         await adminUserSeeder.SeedAsync(context, cancellationToken);
 
+        if (DefaultOrganizationEnabled)
+        {
+            await DefaultOrganizationSeeder.SeedAsync(context, cancellationToken);
+        }
+
         if (SampleDataEnabled)
         {
             await SampleDataSeeder.SeedAsync(context, cancellationToken);
         }
     }
+
+    private bool DefaultOrganizationEnabled => seedingOptions.Value.DefaultOrganization;
 
     private bool SampleDataEnabled => seedingOptions.Value.SampleData;
 

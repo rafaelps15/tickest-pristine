@@ -18,7 +18,7 @@ public sealed class GetDepartmentsQueryHandlerTests : BaseHandlerTest
         var inactiveDepartment = new Department { Id = Guid.NewGuid(), Name = "Retired", Description = "No longer used", IsActive = true };
         inactiveDepartment.IsActive = false;
 
-        var activeSector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = activeDepartment.Id, IsActive = true };
+        var activeSector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", Description = "Everyday support", DepartmentId = activeDepartment.Id, IsActive = true };
         var inactiveSector = new Sector { Id = Guid.NewGuid(), Name = "Old Sector", DepartmentId = activeDepartment.Id, IsActive = true };
         inactiveSector.IsActive = false;
 
@@ -37,7 +37,9 @@ public sealed class GetDepartmentsQueryHandlerTests : BaseHandlerTest
         result.Value.ShouldNotContain(d => d.Id == inactiveDepartment.Id);
 
         DepartmentResponse response = result.Value.Single(d => d.Id == activeDepartment.Id);
-        response.Sectors.ShouldContain(s => s.Id == activeSector.Id);
-        response.Sectors.ShouldNotContain(s => s.Id == inactiveSector.Id);
+        DepartmentSectorResponse sector = response.Sectors.ShouldHaveSingleItem();
+        sector.Id.ShouldBe(activeSector.Id);
+        sector.Name.ShouldBe("Helpdesk");
+        sector.Description.ShouldBe("Everyday support");
     }
 }

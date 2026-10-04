@@ -1,6 +1,8 @@
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Domain.Departments;
+using TickestPristine.Domain.Sectors;
+using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -17,6 +19,27 @@ internal sealed class DeactivateDepartmentCommandHandler(IApplicationDbContext c
         if (department is null)
         {
             return Result.Failure(DepartmentErrors.NotFound(command.DepartmentId));
+        }
+
+        bool hasActiveTickets = await context.Tickets.AnyAsync(
+            t => (t.Status == TicketStatus.Open || t.Status == TicketStatus.InProgress) &&
+                 context.Sectors.Any(s => s.Id == t.SectorId && s.DepartmentId == department.Id),
+            cancellationToken);
+
+        if (hasActiveTickets)
+        {
+            return Result.Failure(DepartmentErrors.HasActiveTickets());
+        }
+
+        // Setor não existe sem departamento: os setores ativos são desativados junto.
+        List<Sector> activeSectors = await context.Sectors
+            .Where(s => s.DepartmentId == department.Id && s.IsActive)
+            .ToListAsync(cancellationToken);
+
+        foreach (Sector sector in activeSectors)
+        {
+            sector.IsActive = false;
+            sector.Raise(new SectorDeactivatedDomainEvent(sector.Id));
         }
 
         department.IsActive = false;

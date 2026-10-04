@@ -6,7 +6,7 @@ internal sealed class CreateDepartmentCommandValidator : AbstractValidator<Creat
 {
     public CreateDepartmentCommandValidator()
     {
-        RuleFor(c => c.Name).NotEmpty().MaximumLength(100);
-        RuleFor(c => c.Description).NotEmpty().MaximumLength(500);
+        RuleFor(c => c.Name).NotEmpty().MaximumLength(DepartmentValidationRules.NameMaxLength);
+        RuleFor(c => c.Description).NotEmpty().MaximumLength(DepartmentValidationRules.DescriptionMaxLength);
     }
 }

@@ -69,4 +69,45 @@ public sealed class CreateSectorCommandHandlerTests : BaseHandlerTest
         sector.IsActive.ShouldBeTrue();
         sector.DomainEvents.ShouldContain(domainEvent => domainEvent is SectorCreatedDomainEvent);
     }
+
+    [Fact]
+    public async Task Handle_Should_ReturnConflict_WhenDepartmentHasActiveSectorWithSameName()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        var department = new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Customer support department", IsActive = true };
+        context.Departments.Add(department);
+        context.Sectors.Add(new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = department.Id, IsActive = true });
+        await context.SaveChangesAsync();
+
+        var handler = new CreateSectorCommandHandler(context);
+        var command = new CreateSectorCommand { Name = "Helpdesk", DepartmentId = department.Id };
+
+        // Act
+        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(SectorErrors.NameNotUnique(command.Name));
+    }
+
+    [Fact]
+    public async Task Handle_Should_CreateSector_WhenSameNameExistsInAnotherDepartment()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        var department = new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Customer support department", IsActive = true };
+        context.Departments.Add(department);
+        context.Sectors.Add(new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = Guid.NewGuid(), IsActive = true });
+        await context.SaveChangesAsync();
+
+        var handler = new CreateSectorCommandHandler(context);
+        var command = new CreateSectorCommand { Name = "Helpdesk", DepartmentId = department.Id };
+
+        // Act
+        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+    }
 }

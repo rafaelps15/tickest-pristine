@@ -20,6 +20,15 @@ internal sealed class UpdateDepartmentCommandHandler(IApplicationDbContext conte
             return Result.Failure(DepartmentErrors.NotFound(command.DepartmentId));
         }
 
+        bool nameInUse = await context.Departments.AnyAsync(
+            d => d.Id != department.Id && d.IsActive && d.Name == command.Name,
+            cancellationToken);
+
+        if (nameInUse)
+        {
+            return Result.Failure(DepartmentErrors.NameNotUnique(command.Name));
+        }
+
         if (command.ResponsibleUserId is { } responsibleUserId)
         {
             bool responsibleUserExists = await context.Users.AnyAsync(u => u.Id == responsibleUserId, cancellationToken);

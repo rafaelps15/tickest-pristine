@@ -19,6 +19,15 @@ internal sealed class CreateSectorCommandHandler(IApplicationDbContext context)
             return Result.Failure<Guid>(DepartmentErrors.NotFound(command.DepartmentId));
         }
 
+        bool nameInUse = await context.Sectors.AnyAsync(
+            s => s.DepartmentId == command.DepartmentId && s.IsActive && s.Name == command.Name,
+            cancellationToken);
+
+        if (nameInUse)
+        {
+            return Result.Failure<Guid>(SectorErrors.NameNotUnique(command.Name));
+        }
+
         var sector = new Sector
         {
             Id = Guid.NewGuid(),

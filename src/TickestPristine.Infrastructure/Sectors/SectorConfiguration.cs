@@ -11,7 +11,11 @@ internal sealed class SectorConfiguration : IEntityTypeConfiguration<Sector>
     {
         builder.HasKey(s => s.Id);
 
-        builder.Property(s => s.Name).HasMaxLength(100);
+        // citext: "Suporte" e "suporte" contam como o mesmo nome no índice único.
+        builder.Property(s => s.Name).HasMaxLength(100).HasColumnType("citext");
+
+        // Nome único dentro do departamento, só entre os ativos.
+        builder.HasIndex(s => new { s.DepartmentId, s.Name }).IsUnique().HasFilter("is_active");
 
         builder.Property(s => s.Description).HasMaxLength(500);
 

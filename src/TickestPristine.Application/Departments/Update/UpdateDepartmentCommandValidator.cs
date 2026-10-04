@@ -7,7 +7,7 @@ internal sealed class UpdateDepartmentCommandValidator : AbstractValidator<Updat
     public UpdateDepartmentCommandValidator()
     {
         RuleFor(c => c.DepartmentId).NotEmpty();
-        RuleFor(c => c.Name).NotEmpty().MaximumLength(100);
-        RuleFor(c => c.Description).NotEmpty().MaximumLength(500);
+        RuleFor(c => c.Name).NotEmpty().MaximumLength(DepartmentValidationRules.NameMaxLength);
+        RuleFor(c => c.Description).NotEmpty().MaximumLength(DepartmentValidationRules.DescriptionMaxLength);
     }
 }

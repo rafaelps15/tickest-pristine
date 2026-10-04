@@ -80,4 +80,39 @@ public sealed class CreateDepartmentCommandHandlerTests : BaseHandlerTest
         Department department = await context.Departments.SingleAsync(d => d.Id == result.Value);
         department.ResponsibleUserId.ShouldBe(responsibleUser.Id);
     }
+
+    [Fact]
+    public async Task Handle_Should_ReturnConflict_WhenActiveDepartmentWithSameNameExists()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        context.Departments.Add(new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Existing", IsActive = true });
+        await context.SaveChangesAsync();
+
+        var handler = new CreateDepartmentCommandHandler(context);
+
+        // Act
+        Result<Guid> result = await handler.Handle(Command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(DepartmentErrors.NameNotUnique(Command.Name));
+    }
+
+    [Fact]
+    public async Task Handle_Should_CreateDepartment_WhenSameNameBelongsToInactiveDepartment()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        context.Departments.Add(new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Old", IsActive = false });
+        await context.SaveChangesAsync();
+
+        var handler = new CreateDepartmentCommandHandler(context);
+
+        // Act
+        Result<Guid> result = await handler.Handle(Command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+    }
 }

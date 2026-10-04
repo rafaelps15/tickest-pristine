@@ -84,4 +84,30 @@ public sealed class UpdateDepartmentCommandHandlerTests : BaseHandlerTest
         updated.Description.ShouldBe("Updated description");
         updated.DomainEvents.ShouldContain(domainEvent => domainEvent is DepartmentUpdatedDomainEvent);
     }
+
+    [Fact]
+    public async Task Handle_Should_ReturnConflict_WhenAnotherActiveDepartmentHasTheName()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        var department = new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Customer support department", IsActive = true };
+        context.Departments.Add(department);
+        context.Departments.Add(new Department { Id = Guid.NewGuid(), Name = "Finance", Description = "Finance department", IsActive = true });
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateDepartmentCommandHandler(context);
+        var command = new UpdateDepartmentCommand
+        {
+            DepartmentId = department.Id,
+            Name = "Finance",
+            Description = "Updated description"
+        };
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(DepartmentErrors.NameNotUnique(command.Name));
+    }
 }

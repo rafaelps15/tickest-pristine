@@ -25,7 +25,7 @@ internal sealed class GetDepartmentsQueryHandler(IApplicationDbContext context)
                 Sectors = context.Sectors
                     .Where(s => s.DepartmentId == d.Id && s.IsActive)
                     .OrderBy(s => s.Name)
-                    .Select(s => new DepartmentSectorResponse { Id = s.Id, Name = s.Name })
+                    .Select(s => new DepartmentSectorResponse { Id = s.Id, Name = s.Name, Description = s.Description })
                     .ToList()
             })
             .ToListAsync(cancellationToken);

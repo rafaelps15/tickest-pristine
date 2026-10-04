@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Application.Authorization;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using TickestPristine.Infrastructure.Database;
@@ -9,7 +10,8 @@ using TickestPristine.Infrastructure.Database;
 namespace TickestPristine.IntegrationTests.Seeding;
 
 /// <summary>
-/// Valida os dados que as migrations e o seed criam: roles padrão (HasData) e o administrador inicial.
+/// Valida os dados que as migrations e o seed criam: roles padrão (HasData), o administrador inicial e a
+/// estrutura inicial de departamentos e setores.
 /// </summary>
 public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
@@ -72,6 +74,27 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
         int administratorRoleLinks = await context.UserRoles
             .CountAsync(ur => ur.UserId == administrator.Id && ur.RoleId == administratorRoleId);
         administratorRoleLinks.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Seeding_Should_NotDuplicateDefaultOrganization_WhenMigrationsRunAgain()
+    {
+        // Arrange
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // Act
+        await context.Database.MigrateAsync();
+
+        // Assert
+        Department informationTechnology = await context.Departments.SingleAsync(d => d.Name == "TI");
+        informationTechnology.IsActive.ShouldBeTrue();
+
+        List<string> sectorNames = await context.Sectors
+            .Where(s => s.DepartmentId == informationTechnology.Id)
+            .Select(s => s.Name)
+            .ToListAsync();
+        sectorNames.ShouldBe(["Helpdesk", "Infraestrutura"], ignoreOrder: true);
     }
 
     private sealed record RoleDto(Guid Id, string Name, bool IsDefault, bool IsAdministrator, List<string> PermissionCodes);

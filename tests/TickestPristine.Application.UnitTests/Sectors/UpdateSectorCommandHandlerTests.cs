@@ -54,4 +54,26 @@ public sealed class UpdateSectorCommandHandlerTests : BaseHandlerTest
         updated.Description.ShouldBe("Updated");
         updated.DomainEvents.ShouldContain(domainEvent => domainEvent is SectorUpdatedDomainEvent);
     }
+
+    [Fact]
+    public async Task Handle_Should_ReturnConflict_WhenAnotherActiveSectorOfTheDepartmentHasTheName()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        var departmentId = Guid.NewGuid();
+        var sector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = departmentId, IsActive = true };
+        context.Sectors.Add(sector);
+        context.Sectors.Add(new Sector { Id = Guid.NewGuid(), Name = "Networks", DepartmentId = departmentId, IsActive = true });
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateSectorCommandHandler(context);
+        var command = new UpdateSectorCommand { SectorId = sector.Id, Name = "Networks" };
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(SectorErrors.NameNotUnique(command.Name));
+    }
 }

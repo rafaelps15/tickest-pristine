@@ -12,6 +12,13 @@ internal sealed class CreateDepartmentCommandHandler(IApplicationDbContext conte
 {
     public async Task<Result<Guid>> Handle(CreateDepartmentCommand command, CancellationToken cancellationToken)
     {
+        bool nameInUse = await context.Departments.AnyAsync(d => d.IsActive && d.Name == command.Name, cancellationToken);
+
+        if (nameInUse)
+        {
+            return Result.Failure<Guid>(DepartmentErrors.NameNotUnique(command.Name));
+        }
+
         if (command.ResponsibleUserId is { } responsibleUserId)
         {
             bool responsibleUserExists = await context.Users.AnyAsync(u => u.Id == responsibleUserId, cancellationToken);

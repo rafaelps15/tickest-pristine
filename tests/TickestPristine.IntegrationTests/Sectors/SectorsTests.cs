@@ -165,5 +165,41 @@ public sealed class SectorsTests(IntegrationTestWebAppFactory factory) : BaseInt
         sectors!.ShouldNotContain(s => s.Id == sectorId);
     }
 
+    [Fact]
+    public async Task Create_Should_ReturnConflict_WhenDepartmentHasSectorWithSameNameIgnoringCase()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid departmentId = await CreateDepartmentAsync();
+        string name = $"Sector-{Guid.NewGuid():N}";
+        await CreateSectorAsync(departmentId, name);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("sectors", new
+        {
+            name = name.ToUpperInvariant(),
+            departmentId
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task Create_Should_ReturnSectorId_WhenSameNameExistsInAnotherDepartment()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string name = $"Sector-{Guid.NewGuid():N}";
+        await CreateSectorAsync(await CreateDepartmentAsync(), name);
+        Guid otherDepartmentId = await CreateDepartmentAsync();
+
+        // Act
+        Guid sectorId = await CreateSectorAsync(otherDepartmentId, name);
+
+        // Assert
+        sectorId.ShouldNotBe(Guid.Empty);
+    }
+
     private sealed record SectorDto(Guid Id, string Name, string? Description);
 }

@@ -128,7 +128,82 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
         departments!.ShouldNotContain(d => d.Id == departmentId);
     }
 
+    [Fact]
+    public async Task Create_Should_ReturnConflict_WhenActiveDepartmentHasSameNameIgnoringCase()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string name = $"Department-{Guid.NewGuid():N}";
+        await CreateDepartmentAsync(name);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("departments", new
+        {
+            name = name.ToUpperInvariant(),
+            description = "A department created by tests"
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task Deactivate_Should_DeactivateItsSectors()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid departmentId = await CreateDepartmentAsync();
+        HttpResponseMessage createSectorResponse = await HttpClient.PostAsJsonAsync("sectors", new
+        {
+            name = $"Sector-{Guid.NewGuid():N}",
+            departmentId
+        });
+        createSectorResponse.EnsureSuccessStatusCode();
+        Guid sectorId = await createSectorResponse.Content.ReadFromJsonAsync<Guid>();
+
+        // Act
+        HttpResponseMessage deleteResponse = await HttpClient.DeleteAsync($"departments/{departmentId}");
+
+        // Assert
+        deleteResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        List<SectorSummaryDto>? sectors = await HttpClient.GetFromJsonAsync<List<SectorSummaryDto>>("sectors");
+        sectors!.ShouldNotContain(s => s.Id == sectorId);
+    }
+
+    [Fact]
+    public async Task Deactivate_Should_ReturnConflict_WhenSectorHasOpenTickets()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid departmentId = await CreateDepartmentAsync();
+        HttpResponseMessage createSectorResponse = await HttpClient.PostAsJsonAsync("sectors", new
+        {
+            name = $"Sector-{Guid.NewGuid():N}",
+            departmentId
+        });
+        createSectorResponse.EnsureSuccessStatusCode();
+        Guid sectorId = await createSectorResponse.Content.ReadFromJsonAsync<Guid>();
+
+        HttpResponseMessage createTicketResponse = await HttpClient.PostAsJsonAsync("tickets", new
+        {
+            title = "Printer is broken",
+            description = "The printer on the second floor is not working",
+            priority = 2,
+            sectorId
+        });
+        createTicketResponse.EnsureSuccessStatusCode();
+
+        // Act
+        HttpResponseMessage deleteResponse = await HttpClient.DeleteAsync($"departments/{departmentId}");
+
+        // Assert
+        deleteResponse.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+    }
+
     private sealed record DepartmentDto(Guid Id, string Name, string Description, bool IsActive, Guid? ResponsibleUserId);
 
     private sealed record DepartmentSummaryDto(Guid Id, string Name, string Description);
+
+    private sealed record SectorSummaryDto(Guid Id, string Name);
 }

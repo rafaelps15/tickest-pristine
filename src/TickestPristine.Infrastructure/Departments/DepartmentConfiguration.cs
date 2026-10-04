@@ -11,7 +11,11 @@ internal sealed class DepartmentConfiguration : IEntityTypeConfiguration<Departm
     {
         builder.HasKey(d => d.Id);
 
-        builder.Property(d => d.Name).HasMaxLength(100);
+        // citext: "Suporte" e "suporte" contam como o mesmo nome no índice único.
+        builder.Property(d => d.Name).HasMaxLength(100).HasColumnType("citext");
+
+        // Nome único só entre os ativos: um departamento desativado não impede recriar o mesmo nome.
+        builder.HasIndex(d => d.Name).IsUnique().HasFilter("is_active");
 
         builder.Property(d => d.Description).HasMaxLength(500);
 
