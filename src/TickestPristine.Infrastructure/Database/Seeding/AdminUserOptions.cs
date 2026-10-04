@@ -4,7 +4,7 @@ namespace TickestPristine.Infrastructure.Database.Seeding;
 
 /// <summary>
 /// Configuração da seção "Admin": o usuário administrador criado pelo seed.
-/// Só é lida (e validada) quando o seed roda, junto com as migrations.
+/// Só é lida (e validada) quando o seed precisa criar o primeiro administrador, num banco sem nenhum ativo.
 /// </summary>
 public sealed class AdminUserOptions
 {

@@ -1,15 +1,15 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Application.Authorization;
+using TickestPristine.Infrastructure.Database;
 
 namespace TickestPristine.IntegrationTests.Users;
 
 public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
-    private const string AdminEmail = "admin@tickestpristine.dev";
-    private const string AdminPassword = "ChangeMe123!";
-
     [Fact]
     public async Task Register_Should_ReturnUserId()
     {
@@ -90,6 +90,67 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         var permissions = jwt.Claims.Where(c => c.Type == "permissions").Select(c => c.Value).ToList();
         permissions.ShouldNotBeEmpty();
         permissions.ShouldBe(PermissionCodes.All, ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task Login_Should_ReturnForbidden_WhenPasswordIsProvisional()
+    {
+        // Arrange
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
+        await MarkPasswordAsProvisionalAsync(userId);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users/login", new { email, password = "Password123!" });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.PasswordChangeRequired");
+    }
+
+    [Fact]
+    public async Task ChangeRequiredPassword_Should_ReturnTokensAndReleaseLogin_WhenPasswordIsProvisional()
+    {
+        // Arrange
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
+        await MarkPasswordAsProvisionalAsync(userId);
+        var request = new { email, currentPassword = "Password123!", newPassword = "NewPassword123!" };
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users/login/new-password", request);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        AccessTokens? tokens = await response.Content.ReadFromJsonAsync<AccessTokens>();
+        GetUserId(tokens!).ShouldBe(userId);
+
+        AccessTokens loginTokens = await LoginAsync(email, "NewPassword123!");
+        loginTokens.AccessToken.ShouldNotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task ChangeRequiredPassword_Should_ReturnConflict_WhenPasswordIsNotProvisional()
+    {
+        // Arrange
+        string email = UniqueEmail();
+        await RegisterUserAsync(email);
+        var request = new { email, currentPassword = "Password123!", newPassword = "NewPassword123!" };
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users/login/new-password", request);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.PasswordChangeNotRequired");
+
+        AccessTokens tokens = await LoginAsync(email, "Password123!");
+        tokens.AccessToken.ShouldNotBeNullOrEmpty();
     }
 
     [Fact]
@@ -993,6 +1054,19 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     private sealed record UserByEmailDto(Guid Id, string Email, string FirstName, string LastName);
 
     private sealed record ProblemDto(int Status, string Title, string Detail);
+
+    /// <summary>
+    /// Deixa a senha do usuário provisória, como a do administrador criado pelo seed.
+    /// </summary>
+    private async Task MarkPasswordAsProvisionalAsync(Guid userId)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        await context.UserCredentials
+            .Where(c => c.UserId == userId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(c => c.MustChangePassword, true));
+    }
 
     private sealed record CurrentUserDto(
         Guid Id,

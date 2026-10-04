@@ -41,23 +41,16 @@ internal sealed class LoginUserCommandHandler(
             return Result.Failure<AccessTokensResponse>(UserErrors.Deactivated);
         }
 
-        string accessToken = await tokenProvider.CreateAsync(user, cancellationToken);
-        GeneratedRefreshToken generatedRefreshToken = tokenProvider.GenerateRefreshToken();
-
-        var refreshToken = new RefreshToken
+        // Senha provisória: o cliente troca a senha em POST users/login/new-password, que já devolve os tokens.
+        if (credential.MustChangePassword)
         {
-            Id = Guid.NewGuid(),
-            TokenHash = RefreshTokenHasher.Hash(generatedRefreshToken.Token),
-            UserId = user.Id,
-            ExpiresOnUtc = generatedRefreshToken.ExpiresOnUtc
-        };
+            return Result.Failure<AccessTokensResponse>(UserErrors.PasswordChangeRequired);
+        }
 
-        refreshToken.Raise(new RefreshTokenCreatedDomainEvent(refreshToken.Id, refreshToken.UserId));
-
-        context.RefreshTokens.Add(refreshToken);
+        AccessTokensResponse tokens = await UserSessions.StartAsync(context, tokenProvider, user, cancellationToken);
 
         await context.SaveChangesAsync(cancellationToken);
 
-        return new AccessTokensResponse(accessToken, generatedRefreshToken.Token);
+        return tokens;
     }
 }

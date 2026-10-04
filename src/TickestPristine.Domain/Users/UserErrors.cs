@@ -1,4 +1,4 @@
-﻿using TickestPristine.SharedKernel;
+using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Domain.Users;
 
@@ -47,4 +47,12 @@ public static class UserErrors
     public static readonly Error Deactivated = Error.Problem(
         "Users.Deactivated",
         "O usuário está desativado.");
+
+    public static readonly Error PasswordChangeRequired = Error.Forbidden(
+        "Users.PasswordChangeRequired",
+        "É preciso definir uma nova senha antes de acessar o sistema.");
+
+    public static readonly Error PasswordChangeNotRequired = Error.Conflict(
+        "Users.PasswordChangeNotRequired",
+        "Não há troca de senha pendente para este usuário.");
 }

@@ -1,17 +1,18 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
-using Microsoft.EntityFrameworkCore;
 
 namespace TickestPristine.Infrastructure.Database.Seeding;
 
 /// <summary>
-/// Estrutura inicial de departamentos e setores, para o sistema já nascer com onde abrir chamados.
-/// Só roda num banco sem departamentos: depois disso a estrutura é do administrador, que edita, desativa
-/// ou cadastra o que quiser, e o seed não recria o que ele tirou.
+/// Estrutura inicial de departamentos e setores, para o sistema já nascer com onde abrir chamados. Liga com
+/// "Seeding:DefaultOrganization" (ligado por padrão) e só roda num banco sem departamentos: depois disso a estrutura
+/// é do administrador, e o seed não recria o que ele editou ou desativou.
 /// </summary>
-internal static class DefaultOrganizationSeeder
+internal sealed class DefaultOrganizationSeeder(IOptions<SeedingOptions> seedingOptions)
 {
-    private static readonly DepartmentSeed[] Catalog =
+    private static readonly DepartmentSeed[] Departments =
     [
         new("TI", "Tecnologia da Informação: equipamentos, sistemas, redes e acessos.",
         [
@@ -40,59 +41,33 @@ internal static class DefaultOrganizationSeeder
         ])
     ];
 
-    public static void Seed(DbContext context)
+    public async Task SeedAsync(ApplicationDbContext context, CancellationToken cancellationToken)
     {
-        if (context.Set<Department>().Any())
+        if (!seedingOptions.Value.DefaultOrganization || await context.Departments.AnyAsync(cancellationToken))
         {
             return;
         }
 
-        AddCatalog(context);
-
-        context.SaveChanges();
-    }
-
-    public static async Task SeedAsync(DbContext context, CancellationToken cancellationToken)
-    {
-        if (await context.Set<Department>().AnyAsync(cancellationToken))
+        foreach (DepartmentSeed departmentSeed in Departments)
         {
-            return;
-        }
+            var department = departmentSeed.ToDepartment();
 
-        AddCatalog(context);
+            context.Departments.Add(department);
+            context.Sectors.AddRange(departmentSeed.Sectors.Select(sectorSeed => sectorSeed.ToSector(department.Id)));
+        }
 
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    private static void AddCatalog(DbContext context)
+    private sealed record DepartmentSeed(string Name, string Description, SectorSeed[] Sectors)
     {
-        foreach (DepartmentSeed departmentSeed in Catalog)
-        {
-            var department = new Department
-            {
-                Id = Guid.NewGuid(),
-                Name = departmentSeed.Name,
-                Description = departmentSeed.Description,
-                IsActive = true
-            };
-
-            context.Add(department);
-
-            foreach (SectorSeed sectorSeed in departmentSeed.Sectors)
-            {
-                context.Add(new Sector
-                {
-                    Id = Guid.NewGuid(),
-                    Name = sectorSeed.Name,
-                    Description = sectorSeed.Description,
-                    IsActive = true,
-                    DepartmentId = department.Id
-                });
-            }
-        }
+        public Department ToDepartment() =>
+            new() { Id = Guid.NewGuid(), Name = Name, Description = Description, IsActive = true };
     }
 
-    private sealed record DepartmentSeed(string Name, string Description, SectorSeed[] Sectors);
-
-    private sealed record SectorSeed(string Name, string Description);
+    private sealed record SectorSeed(string Name, string Description)
+    {
+        public Sector ToSector(Guid departmentId) =>
+            new() { Id = Guid.NewGuid(), Name = Name, Description = Description, IsActive = true, DepartmentId = departmentId };
+    }
 }

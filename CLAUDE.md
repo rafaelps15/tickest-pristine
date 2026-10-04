@@ -15,6 +15,12 @@ Os nomes usados neste arquivo e em `.claude/skills/` são os nomes fictícios do
 # Um `docker compose up -d` simples também sobe o container da API.
 docker compose up -d postgres seq
 
+# Segredos locais (uma vez por máquina): ficam fora do repositório, nos user-secrets.
+# A API não sobe sem o Jwt:Secret (mínimo de 32 caracteres); o Admin:Password só é lido
+# quando o seed cria o primeiro administrador.
+dotnet user-secrets set "Jwt:Secret" "<string aleatória longa>" --project src/Web.Api
+dotnet user-secrets set "Admin:Password" "<senha provisória>" --project src/Web.Api
+
 # Roda a API (em Development, aplica as migrations e roda os seeders ao iniciar)
 dotnet run --project src/Web.Api
 
@@ -43,6 +49,18 @@ O Seq (visualizador de logs estruturados) sobe junto com a infraestrutura; a por
 Para usar .NET 8 ou .NET 9 em vez de .NET 10, veja as notas no `Directory.Build.props` (também é preciso atualizar o Dockerfile em `src/Web.Api`).
 
 Avisos são tratados como erros (`TreatWarningsAsErrors`, `AnalysisMode=All`, SonarAnalyzer), então o `dotnet build` é uma verificação de qualidade de verdade, e não só uma compilação.
+
+### Seeds e deploy
+
+O seed (`Infrastructure/Database/Seeding`) roda dentro de `Migrate()` pelo `UseSeeding`/`UseAsyncSeeding` do EF Core. Isso vale para a API em Development, para o `dotnet ef database update` e para os migration bundles (`dotnet ef migrations bundle`), que são o caminho recomendado para produção. O script SQL (`dotnet ef migrations script --idempotent`) **não** roda o seed: quem usar esse caminho precisa chamar `Migrate()` depois, ou o banco fica sem o primeiro administrador.
+
+Cada dado fica no mecanismo de quem é dono dele:
+- **Dados de que o código depende** (roles padrão e permissões, com ids fixos): `HasData` na configuração do EF, ou seja, migration.
+- **Primeiro administrador**: seeder, porque usa segredo e configuração do ambiente (`Admin:*`). Só roda quando não há nenhum administrador ativo e cria a senha como provisória; depois disso os administradores são geridos pela API.
+- **Conteúdo inicial que o usuário edita** (ex.: cadastros de partida): seeder que só roda com a tabela vazia, ligado por uma flag em `Seeding:*`.
+- **Dados fictícios de desenvolvimento**: seeder com Bogus e semente fixa, desligado por padrão (`Seeding:SampleData`). Nunca em migration.
+
+O teste `MigrationsTests` falha quando o modelo (inclusive o `HasData`) muda sem uma migration nova.
 
 ## Arquitetura
 
@@ -92,6 +110,7 @@ Os handlers chamam `entity.Raise(new SomeDomainEvent(...))` antes do `SaveChange
 - **No handler:** regras que dependem de uma permissão *e* do dado são conferidas no handler via `IPermissionProvider` — ex.: "o próprio item exige `todos:update-own`, o de qualquer pessoa exige `todos:manage`", ou `IsSelfOrHasPermissionAsync`. Falhas retornam `UserErrors.Unauthorized()` (403).
 - **Fonte da verdade:** as permissões são sempre resolvidas no servidor pelo `IPermissionProvider` (banco + `HybridCache` por usuário). Usuários desativados ficam sem nenhuma permissão. Todo command que muda as permissões efetivas de um usuário (funções, permissões de uma função, ativação) precisa chamar `permissionProvider.InvalidateAsync(userId)` depois de salvar. Os clientes leem a lista atualizada em `GET /users/me`; a API nunca autoriza com base nas claims do JWT.
 - **Guards:** o `PrivilegeEscalationGuard` impede conceder ou remover permissões administrativas que quem chama não tem; o `AdministratorGuard` garante que sempre reste pelo menos um administrador ativo.
+- **Senha provisória:** credenciais com `MustChangePassword` (como a do primeiro administrador) não recebem token no login, que responde 403 `Users.PasswordChangeRequired`. O cliente troca a senha em `POST users/login/new-password` (anônimo, confere as credenciais de novo), que já devolve os tokens.
 - **Tokens:** o access token expira após `Jwt:ExpirationInMinutes`; o refresh token, após `Jwt:RefreshTokenExpirationInDays`. O refresh token é guardado só como hash SHA-256 (que também é token de concorrência), trocado a cada renovação e revogado no logout ou na troca de senha.
 
 ## Convenções a manter ao ampliar

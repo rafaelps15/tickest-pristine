@@ -87,6 +87,34 @@ public sealed class ChangeUserPasswordCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
+    public async Task Handle_Should_ClearMustChangePassword_WhenPasswordIsChanged()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        var userId = Guid.NewGuid();
+        context.UserCredentials.Add(new UserCredential { Id = Guid.NewGuid(), UserId = userId, PasswordHash = "old-hash", MustChangePassword = true });
+        await context.SaveChangesAsync();
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(userId);
+        IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
+        passwordHasher.Verify("Current123!", "old-hash").Returns(true);
+        passwordHasher.Hash("NewPassword123!").Returns("new-hash");
+
+        var handler = new ChangeUserPasswordCommandHandler(context, userContext, passwordHasher);
+        var command = new ChangeUserPasswordCommand("Current123!", "NewPassword123!");
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        UserCredential updated = await context.UserCredentials.SingleAsync(c => c.UserId == userId);
+        updated.MustChangePassword.ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task Handle_Should_RevokeOnlyCallerRefreshTokens_WhenPasswordIsChanged()
     {
         // Arrange

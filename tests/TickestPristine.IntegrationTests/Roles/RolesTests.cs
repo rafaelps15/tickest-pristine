@@ -6,9 +6,6 @@ namespace TickestPristine.IntegrationTests.Roles;
 
 public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
-    private const string AdminEmail = "admin@tickestpristine.dev";
-    private const string AdminPassword = "ChangeMe123!";
-
     private static readonly string[] AssignedPermissionCodes = ["tickets:create", "tickets:view-own"];
     private static readonly string[] RoleManagerPermissionCodes = ["roles:manage", "roles:read"];
     private static readonly string[] EscalationPermissionCodes = ["users:assign-roles"];

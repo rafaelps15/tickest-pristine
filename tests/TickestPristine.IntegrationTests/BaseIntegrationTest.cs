@@ -1,4 +1,4 @@
-﻿using System.Net.Http.Headers;
+using System.Net.Http.Headers;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Json;
 
@@ -12,6 +12,9 @@ public abstract class BaseIntegrationTest
         HttpClient = factory.CreateClient();
         Services = factory.Services;
     }
+
+    protected const string AdminEmail = IntegrationTestWebAppFactory.AdminEmail;
+    protected const string AdminPassword = IntegrationTestWebAppFactory.AdminPassword;
 
     protected HttpClient HttpClient { get; }
 

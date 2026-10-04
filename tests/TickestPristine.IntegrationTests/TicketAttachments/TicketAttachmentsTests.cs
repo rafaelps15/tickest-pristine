@@ -7,9 +7,6 @@ namespace TickestPristine.IntegrationTests.TicketAttachments;
 
 public sealed class TicketAttachmentsTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
-    private const string AdminEmail = "admin@tickestpristine.dev";
-    private const string AdminPassword = "ChangeMe123!";
-
     private async Task AuthenticateAsAdminAsync()
     {
         AccessTokens tokens = await LoginAsync(AdminEmail, AdminPassword);

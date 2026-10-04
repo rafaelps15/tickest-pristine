@@ -1,4 +1,4 @@
-﻿using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Users;
 using TickestPristine.Application.Users.Login;
 using TickestPristine.Application.UnitTests.Abstractions;
@@ -124,7 +124,35 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         await tokenProvider.DidNotReceive().CreateAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
     }
 
-    private static async Task<User> SeedUserAsync(TestDbContext context, bool isActive = true)
+    [Fact]
+    public async Task Handle_Should_ReturnPasswordChangeRequired_WhenPasswordIsProvisional()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        await SeedUserAsync(context, mustChangePassword: true);
+
+        IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
+        passwordHasher.Verify(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        ITokenProvider tokenProvider = Substitute.For<ITokenProvider>();
+
+        var handler = new LoginUserCommandHandler(
+            context,
+            passwordHasher,
+            tokenProvider);
+
+        // Act
+        Result<AccessTokensResponse> result = await handler.Handle(
+            new LoginUserCommand(Email, Password),
+            CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.PasswordChangeRequired);
+        await tokenProvider.DidNotReceive().CreateAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+        (await context.RefreshTokens.AnyAsync()).ShouldBeFalse();
+    }
+
+    private static async Task<User> SeedUserAsync(TestDbContext context, bool isActive = true, bool mustChangePassword = false)
     {
         var user = new User
         {
@@ -137,7 +165,13 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         };
 
         context.Users.Add(user);
-        context.UserCredentials.Add(new UserCredential { Id = Guid.NewGuid(), UserId = user.Id, PasswordHash = "hash" });
+        context.UserCredentials.Add(new UserCredential
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            PasswordHash = "hash",
+            MustChangePassword = mustChangePassword
+        });
 
         await context.SaveChangesAsync();
 

@@ -1,6 +1,7 @@
 using TickestPristine.Application.Users.Activate;
 using TickestPristine.Application.Users.AssignRoles;
 using TickestPristine.Application.Users.ChangePassword;
+using TickestPristine.Application.Users.ChangeRequiredPassword;
 using TickestPristine.Application.Users.Deactivate;
 using TickestPristine.Application.Users.Login;
 using TickestPristine.Application.Users.Logout;
@@ -21,6 +22,7 @@ public sealed class UserValidatorsTests
     private readonly LoginUserCommandValidator _loginValidator = new();
     private readonly UpdateUserProfileCommandValidator _updateProfileValidator = new();
     private readonly ChangeUserPasswordCommandValidator _changePasswordValidator = new();
+    private readonly ChangeRequiredUserPasswordCommandValidator _changeRequiredPasswordValidator = new();
     private readonly AssignUserRolesCommandValidator _assignUserRolesValidator = new();
     private readonly DeactivateUserCommandValidator _deactivateValidator = new();
     private readonly ActivateUserCommandValidator _activateValidator = new();
@@ -573,6 +575,74 @@ public sealed class UserValidatorsTests
 
         // Act
         TestValidationResult<ActivateUserCommand> result = _activateValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void ChangeRequiredPasswordValidator_Should_HaveError_WhenEmailIsInvalid()
+    {
+        // Arrange
+        var command = new ChangeRequiredUserPasswordCommand("not-an-email", "Current123!", "NewPassword123!");
+
+        // Act
+        TestValidationResult<ChangeRequiredUserPasswordCommand> result = _changeRequiredPasswordValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.Email);
+    }
+
+    [Fact]
+    public void ChangeRequiredPasswordValidator_Should_HaveError_WhenCurrentPasswordIsEmpty()
+    {
+        // Arrange
+        var command = new ChangeRequiredUserPasswordCommand("test@example.com", string.Empty, "NewPassword123!");
+
+        // Act
+        TestValidationResult<ChangeRequiredUserPasswordCommand> result = _changeRequiredPasswordValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.CurrentPassword)
+            .WithErrorMessage("Informe a senha atual.");
+    }
+
+    [Fact]
+    public void ChangeRequiredPasswordValidator_Should_HaveError_WhenNewPasswordIsWeak()
+    {
+        // Arrange
+        var command = new ChangeRequiredUserPasswordCommand("test@example.com", "Current123!", "weakpassword");
+
+        // Act
+        TestValidationResult<ChangeRequiredUserPasswordCommand> result = _changeRequiredPasswordValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.NewPassword)
+            .WithErrorMessage(StrengthRequirementsMessage);
+    }
+
+    [Fact]
+    public void ChangeRequiredPasswordValidator_Should_HaveError_WhenNewPasswordEqualsCurrent()
+    {
+        // Arrange
+        var command = new ChangeRequiredUserPasswordCommand("test@example.com", "Current123!", "Current123!");
+
+        // Act
+        TestValidationResult<ChangeRequiredUserPasswordCommand> result = _changeRequiredPasswordValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.NewPassword)
+            .WithErrorMessage("A nova senha precisa ser diferente da atual.");
+    }
+
+    [Fact]
+    public void ChangeRequiredPasswordValidator_Should_NotHaveErrors_WhenCommandIsValid()
+    {
+        // Arrange
+        var command = new ChangeRequiredUserPasswordCommand("test@example.com", "Current123!", "NewPassword123!");
+
+        // Act
+        TestValidationResult<ChangeRequiredUserPasswordCommand> result = _changeRequiredPasswordValidator.TestValidate(command);
 
         // Assert
         result.ShouldNotHaveAnyValidationErrors();

@@ -29,6 +29,7 @@ internal sealed class ChangeUserPasswordCommandHandler(
         }
 
         credential.PasswordHash = passwordHasher.Hash(command.NewPassword);
+        credential.MustChangePassword = false;
 
         credential.Raise(new UserPasswordChangedDomainEvent(credential.UserId));
 

@@ -56,7 +56,7 @@ public static class DependencyInjection
 
     private static IServiceCollection AddDatabase(this IServiceCollection services, string connectionString)
     {
-        // Admin só é validado quando o seed lê os valores: a API não precisa da senha do admin para subir.
+        // Admin só é validado quando o seed cria o primeiro administrador: a API não precisa da senha dele para subir.
         services.AddOptions<AdminUserOptions>()
             .BindConfiguration(AdminUserOptions.SectionName)
             .ValidateDataAnnotations();
@@ -65,6 +65,8 @@ public static class DependencyInjection
             .BindConfiguration(SeedingOptions.SectionName);
 
         services.AddSingleton<AdminUserSeeder>();
+        services.AddSingleton<DefaultOrganizationSeeder>();
+        services.AddSingleton<SampleDataSeeder>();
         services.AddSingleton<DatabaseSeeder>();
 
         // O seed roda junto com as migrations (Migrate/MigrateAsync e dotnet ef database update).
