@@ -90,7 +90,7 @@ internal sealed class SampleDataSeeder(IOptions<SeedingOptions> seedingOptions, 
             TicketId = ticket.Id,
             ChangedByUserId = ticket.CreatedByUserId,
             Action = TicketHistoryAction.Created,
-            Description = "Chamado criado",
+            Description = TicketHistoryDescriptions.Created,
             NewValue = TicketStatus.Open.ToString(),
             OccurredAtUtc = occurredAtUtc
         };
@@ -107,7 +107,7 @@ internal sealed class SampleDataSeeder(IOptions<SeedingOptions> seedingOptions, 
                 TicketId = ticket.Id,
                 ChangedByUserId = ticket.AssignedToUserId ?? ticket.CreatedByUserId,
                 Action = TicketHistoryAction.StatusChanged,
-                Description = $"Status alterado de {TicketStatusNames.GetDisplayName(oldStatus)} para {TicketStatusNames.GetDisplayName(newStatus)}",
+                Description = TicketHistoryDescriptions.StatusChanged(oldStatus, newStatus),
                 OldValue = oldStatus.ToString(),
                 NewValue = newStatus.ToString(),
                 OccurredAtUtc = occurredAtUtc

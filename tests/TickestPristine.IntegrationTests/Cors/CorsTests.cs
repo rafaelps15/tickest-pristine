@@ -1,8 +1,8 @@
 namespace TickestPristine.IntegrationTests.Cors;
 
 /// <summary>
-/// Valida a política de CORS com "Cors:AllowLoopbackOrigins" ligado: front local em qualquer porta é aceito, origem
-/// externa não.
+/// Valida a política de CORS com "Cors:AllowLoopbackOrigins" ligado: front local em qualquer porta e as origens de
+/// "Cors:AllowedOrigins" são aceitos; qualquer outra origem externa não.
 /// </summary>
 public sealed class CorsTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
@@ -19,6 +19,19 @@ public sealed class CorsTests(IntegrationTestWebAppFactory factory) : BaseIntegr
 
         // Assert
         response.Headers.GetValues("Access-Control-Allow-Origin").ShouldBe([origin]);
+    }
+
+    [Fact]
+    public async Task Preflight_Should_AllowOrigin_WhenOriginIsConfiguredWithTrailingSlash()
+    {
+        // Arrange
+        using HttpRequestMessage request = CreatePreflightRequest("https://app.example.com");
+
+        // Act
+        HttpResponseMessage response = await HttpClient.SendAsync(request);
+
+        // Assert
+        response.Headers.GetValues("Access-Control-Allow-Origin").ShouldBe(["https://app.example.com"]);
     }
 
     [Fact]

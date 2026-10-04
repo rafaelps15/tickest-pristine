@@ -17,7 +17,7 @@ internal sealed class TicketStatusChangedDomainEventHandler(
             TicketId = domainEvent.TicketId,
             ChangedByUserId = domainEvent.ChangedByUserId,
             Action = TicketHistoryAction.StatusChanged,
-            Description = $"Status alterado de {TicketStatusNames.GetDisplayName(domainEvent.OldStatus)} para {TicketStatusNames.GetDisplayName(domainEvent.NewStatus)}",
+            Description = TicketHistoryDescriptions.StatusChanged(domainEvent.OldStatus, domainEvent.NewStatus),
             OldValue = domainEvent.OldStatus.ToString(),
             NewValue = domainEvent.NewStatus.ToString(),
             OccurredAtUtc = dateTimeProvider.UtcNow

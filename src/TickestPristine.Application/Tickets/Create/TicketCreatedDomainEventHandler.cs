@@ -27,7 +27,7 @@ internal sealed class TicketCreatedDomainEventHandler(
             TicketId = ticket.Id,
             ChangedByUserId = ticket.CreatedByUserId,
             Action = TicketHistoryAction.Created,
-            Description = "Chamado criado",
+            Description = TicketHistoryDescriptions.Created,
             OldValue = null,
             NewValue = ticket.Status.ToString(),
             OccurredAtUtc = dateTimeProvider.UtcNow

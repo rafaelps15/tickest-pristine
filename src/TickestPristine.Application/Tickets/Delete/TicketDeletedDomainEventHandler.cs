@@ -20,7 +20,7 @@ internal sealed class TicketDeletedDomainEventHandler(
             TicketId = domainEvent.TicketId,
             ChangedByUserId = userContext.UserId,
             Action = TicketHistoryAction.Deleted,
-            Description = "Chamado excluído",
+            Description = TicketHistoryDescriptions.Deleted,
             OldValue = null,
             NewValue = null,
             OccurredAtUtc = dateTimeProvider.UtcNow

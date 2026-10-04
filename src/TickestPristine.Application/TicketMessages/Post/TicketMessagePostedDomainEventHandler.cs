@@ -27,7 +27,7 @@ internal sealed class TicketMessagePostedDomainEventHandler(
             TicketId = domainEvent.TicketId,
             ChangedByUserId = message.AuthorUserId,
             Action = TicketHistoryAction.MessageAdded,
-            Description = "Nova mensagem adicionada ao chamado",
+            Description = TicketHistoryDescriptions.MessagePosted,
             OldValue = null,
             NewValue = null,
             OccurredAtUtc = dateTimeProvider.UtcNow

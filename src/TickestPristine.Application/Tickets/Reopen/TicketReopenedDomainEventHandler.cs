@@ -17,7 +17,7 @@ internal sealed class TicketReopenedDomainEventHandler(
             TicketId = domainEvent.TicketId,
             ChangedByUserId = domainEvent.ReopenedByUserId,
             Action = TicketHistoryAction.Reopened,
-            Description = "Chamado reaberto",
+            Description = TicketHistoryDescriptions.Reopened,
             OldValue = null,
             NewValue = null,
             OccurredAtUtc = dateTimeProvider.UtcNow

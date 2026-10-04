@@ -27,7 +27,7 @@ internal sealed class TicketMessageEditedDomainEventHandler(
             TicketId = domainEvent.TicketId,
             ChangedByUserId = message.AuthorUserId,
             Action = TicketHistoryAction.MessageEdited,
-            Description = "Mensagem editada",
+            Description = TicketHistoryDescriptions.MessageEdited,
             OldValue = null,
             NewValue = null,
             OccurredAtUtc = dateTimeProvider.UtcNow

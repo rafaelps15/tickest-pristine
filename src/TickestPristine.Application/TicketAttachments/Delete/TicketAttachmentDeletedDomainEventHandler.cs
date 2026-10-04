@@ -20,7 +20,7 @@ internal sealed class TicketAttachmentDeletedDomainEventHandler(
             TicketId = domainEvent.TicketId,
             ChangedByUserId = userContext.UserId,
             Action = TicketHistoryAction.AttachmentRemoved,
-            Description = "Anexo removido",
+            Description = TicketHistoryDescriptions.AttachmentRemoved,
             OldValue = null,
             NewValue = null,
             OccurredAtUtc = dateTimeProvider.UtcNow

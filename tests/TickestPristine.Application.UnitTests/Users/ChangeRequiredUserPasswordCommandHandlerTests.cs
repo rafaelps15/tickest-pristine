@@ -136,6 +136,37 @@ public sealed class ChangeRequiredUserPasswordCommandHandlerTests : BaseHandlerT
         refreshToken.TokenHash.ShouldBe(RefreshTokenHasher.Hash("refresh-token"));
     }
 
+    [Fact]
+    public async Task Handle_Should_RevokeOnlyCallerPreviousRefreshTokens_WhenPasswordIsChanged()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        User user = await SeedUserAsync(context);
+        var otherUserId = Guid.NewGuid();
+        context.RefreshTokens.Add(new RefreshToken { Id = Guid.NewGuid(), TokenHash = "old-hash-1", UserId = user.Id, ExpiresOnUtc = DateTime.UtcNow.AddDays(7) });
+        context.RefreshTokens.Add(new RefreshToken { Id = Guid.NewGuid(), TokenHash = "other-hash", UserId = otherUserId, ExpiresOnUtc = DateTime.UtcNow.AddDays(7) });
+        await context.SaveChangesAsync();
+
+        IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
+        passwordHasher.Verify(CurrentPassword, "old-hash").Returns(true);
+        passwordHasher.Hash(NewPassword).Returns("new-hash");
+
+        ITokenProvider tokenProvider = Substitute.For<ITokenProvider>();
+        tokenProvider.CreateAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns("access-token");
+        tokenProvider.GenerateRefreshToken().Returns(new GeneratedRefreshToken("refresh-token", DateTime.UtcNow.AddDays(7)));
+
+        var handler = new ChangeRequiredUserPasswordCommandHandler(context, passwordHasher, tokenProvider);
+
+        // Act
+        Result<AccessTokensResponse> result = await handler.Handle(Command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        List<string> remainingHashes = await context.RefreshTokens.Select(r => r.TokenHash).ToListAsync();
+        remainingHashes.ShouldBe([RefreshTokenHasher.Hash("refresh-token"), "other-hash"], ignoreOrder: true);
+    }
+
     private static async Task<User> SeedUserAsync(TestDbContext context, bool isActive = true, bool mustChangePassword = true)
     {
         var user = new User

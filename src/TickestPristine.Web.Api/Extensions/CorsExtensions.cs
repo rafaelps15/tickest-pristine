@@ -21,17 +21,20 @@ internal static class CorsExtensions
             {
                 CorsPolicyOptions options = corsPolicyOptions.Value;
 
+                // O navegador manda a origem sem barra no final; a configuração pode ter sido escrita com ela.
+                string[] allowedOrigins = [.. options.AllowedOrigins.Select(origin => origin.TrimEnd('/'))];
+
                 cors.AddPolicy(DefaultPolicyName, policy =>
                 {
                     if (options.AllowLoopbackOrigins)
                     {
-                        policy.SetIsOriginAllowed(origin => IsLoopbackOrigin(origin) || options.AllowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase))
+                        policy.SetIsOriginAllowed(origin => IsLoopbackOrigin(origin) || allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase))
                             .AllowAnyHeader()
                             .AllowAnyMethod();
                     }
-                    else if (options.AllowedOrigins.Length > 0)
+                    else if (allowedOrigins.Length > 0)
                     {
-                        policy.WithOrigins(options.AllowedOrigins)
+                        policy.WithOrigins(allowedOrigins)
                             .AllowAnyHeader()
                             .AllowAnyMethod();
                     }

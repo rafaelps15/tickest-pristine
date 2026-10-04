@@ -10,6 +10,8 @@ public sealed class UserCredential : Entity
 
     /// <summary>
     /// Senha provisória (ex.: a do primeiro administrador): o login só entrega tokens depois que ela for trocada.
+    /// Quem ligar a pendência numa conta que já existe precisa revogar os refresh tokens dela, porque a renovação de
+    /// token não confere esta marcação.
     /// </summary>
     public bool MustChangePassword { get; set; }
 }

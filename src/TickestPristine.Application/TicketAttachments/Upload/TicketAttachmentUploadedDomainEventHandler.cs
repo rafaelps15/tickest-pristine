@@ -26,7 +26,7 @@ internal sealed class TicketAttachmentUploadedDomainEventHandler(
             TicketId = domainEvent.TicketId,
             ChangedByUserId = attachment.UploadedByUserId,
             Action = TicketHistoryAction.AttachmentAdded,
-            Description = $"Anexo '{attachment.FileName}' adicionado",
+            Description = TicketHistoryDescriptions.AttachmentAdded(attachment.FileName),
             OldValue = null,
             NewValue = null,
             OccurredAtUtc = dateTimeProvider.UtcNow

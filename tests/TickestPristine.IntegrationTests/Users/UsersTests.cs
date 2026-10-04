@@ -133,6 +133,44 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
+    public async Task ChangeRequiredPassword_Should_ReturnInvalidCredentials_WhenCurrentPasswordIsWrong()
+    {
+        // Arrange
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
+        await MarkPasswordAsProvisionalAsync(userId);
+        var request = new { email, currentPassword = "WrongPassword1!", newPassword = "NewPassword123!" };
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users/login/new-password", request);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.InvalidCredentials");
+    }
+
+    [Fact]
+    public async Task ChangeRequiredPassword_Should_ReturnBadRequest_WhenNewPasswordIsWeak()
+    {
+        // Arrange
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
+        await MarkPasswordAsProvisionalAsync(userId);
+        var request = new { email, currentPassword = "Password123!", newPassword = "weak" };
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users/login/new-password", request);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        HttpResponseMessage loginResponse = await HttpClient.PostAsJsonAsync("users/login", new { email, password = "Password123!" });
+        loginResponse.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public async Task ChangeRequiredPassword_Should_ReturnConflict_WhenPasswordIsNotProvisional()
     {
         // Arrange

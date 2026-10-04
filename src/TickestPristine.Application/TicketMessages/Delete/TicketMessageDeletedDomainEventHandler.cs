@@ -20,7 +20,7 @@ internal sealed class TicketMessageDeletedDomainEventHandler(
             TicketId = domainEvent.TicketId,
             ChangedByUserId = userContext.UserId,
             Action = TicketHistoryAction.MessageRemoved,
-            Description = "Mensagem removida",
+            Description = TicketHistoryDescriptions.MessageRemoved,
             OldValue = null,
             NewValue = null,
             OccurredAtUtc = dateTimeProvider.UtcNow

@@ -608,6 +608,20 @@ public sealed class UserValidatorsTests
     }
 
     [Fact]
+    public void ChangeRequiredPasswordValidator_Should_HaveError_WhenNewPasswordIsEmpty()
+    {
+        // Arrange
+        var command = new ChangeRequiredUserPasswordCommand("test@example.com", "Current123!", string.Empty);
+
+        // Act
+        TestValidationResult<ChangeRequiredUserPasswordCommand> result = _changeRequiredPasswordValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.NewPassword)
+            .WithErrorMessage("Informe a nova senha.");
+    }
+
+    [Fact]
     public void ChangeRequiredPasswordValidator_Should_HaveError_WhenNewPasswordIsWeak()
     {
         // Arrange
