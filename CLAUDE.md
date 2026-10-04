@@ -71,7 +71,7 @@ SharedKernel  <-- Domain <-- Application <-- Infrastructure
                                   ^--------------- Web.Api
 ```
 
-- **SharedKernel** — peças básicas de DDD, sem dependência de nenhum outro projeto da solução: `Entity` (classe base que guarda os eventos disparados), `Result`/`Result<T>`, `Error`/`ErrorType`/`ValidationError`, `IDomainEvent`, `IDomainEventHandler<T>`, `IDateTimeProvider`.
+- **SharedKernel** — peças básicas de DDD, sem dependência de nenhum outro projeto da solução: `Entity` (classe base que guarda os eventos disparados), `Result`/`Result<T>`, `Error`/`ErrorType`/`ValidationError`, `IDomainEvent`, `IDomainEventHandler<T>`, `IDateTimeProvider`, `IAuditable`.
 - **Domain** — entidades, eventos de domínio e uma classe estática `*Errors` por agregado (ex.: `TodoItemErrors`, `UserErrors`), organizados por pasta de agregado (`Todos/`, `Users/`), e não por tipo técnico. As entidades são classes simples, com propriedades com setter e ids das chaves estrangeiras (sem propriedades de navegação); as regras de negócio ficam nos handlers da Application.
 - **Application** — casos de uso, um por pasta de slice vertical (ex.: `Todos/Create/`, `Todos/Complete/`), mais `Abstractions/` com as interfaces transversais (`Messaging`, `Behaviors`, `Data`, `Authentication`, `Authorization`, `Pagination`) e `Authorization/` com o catálogo de permissões e os guards. Sem MediatR — commands e queries são tratados por interfaces próprias `ICommandHandler`/`IQueryHandler`, resolvidas pela DI com varredura de assembly do `Scrutor`.
 - **Infrastructure** — EF Core (`ApplicationDbContext`, PostgreSQL, nomes em snake_case, migrations em `Database/Migrations`, seeders em `Database/Seeding`), JWT + refresh tokens, provedor de permissões e policies de autorização, `HybridCache` e despacho dos eventos de domínio.
@@ -102,6 +102,14 @@ O `Application/DependencyInjection.cs` envolve os handlers com decorators usando
 ### Eventos de domínio
 
 Os handlers chamam `entity.Raise(new SomeDomainEvent(...))` antes do `SaveChangesAsync`. O `ApplicationDbContext.SaveChangesAsync` salva primeiro e depois o `DomainEventsDispatcher` publica os eventos, cada um no seu próprio escopo de DI e **fora da transação original**. Os handlers de evento implementam `IDomainEventHandler<T>` e são registrados automaticamente pela varredura de assembly.
+
+### Log de auditoria
+
+O `AuditLoggingInterceptor` (`Infrastructure/Audit`, um `SaveChangesInterceptor`) grava um `AuditLogEntry` para cada entidade marcada com `IAuditable` que foi incluída, alterada ou excluída, no mesmo `SaveChanges` (portanto na mesma transação) da mudança: nome e id da entidade, ação (`Added`/`Modified`/`Deleted`), usuário (nulo fora de requisição autenticada, como cadastro, login e seed), horário, valores antigos e novos em `jsonb` (na alteração, só as colunas modificadas) e a lista de colunas alteradas. Chaves compostas viram as partes separadas por vírgula. A consulta fica em `GET audit-logs/{entityName}/{entityId}`, com a permissão de leitura de auditoria.
+
+- Entidade nova que precisa de trilha de quem mudou o quê implementa `IAuditable`. Dados técnicos de escrita frequente (ex.: refresh tokens) e históricos de negócio (ex.: o histórico do chamado) ficam de fora.
+- Propriedades sensíveis (hashes de senha e de token, segredos) entram na lista `ExcludedProperties` do interceptor quando a entidade é criada: o valor nunca vai para o log, só o nome da coluna em `AffectedColumns`.
+- `ExecuteUpdate`/`ExecuteDelete` e SQL puro não passam pelo `SaveChanges` e não são auditados; quem usar precisa gravar o `AuditLogEntry` explicitamente.
 
 ## Autenticação e autorização
 

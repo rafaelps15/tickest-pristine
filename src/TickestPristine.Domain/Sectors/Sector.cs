@@ -2,7 +2,7 @@ using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Domain.Sectors;
 
-public sealed class Sector : Entity
+public sealed class Sector : Entity, IAuditable
 {
     public Guid Id { get; set; }
     public string Name { get; set; }

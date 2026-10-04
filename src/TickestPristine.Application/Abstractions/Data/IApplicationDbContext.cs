@@ -1,4 +1,5 @@
-﻿using TickestPristine.Domain.Departments;
+﻿using TickestPristine.Domain.Audit;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
@@ -21,6 +22,7 @@ public interface IApplicationDbContext
     DbSet<Role> Roles { get; }
     DbSet<RolePermission> RolePermissions { get; }
     DbSet<UserRole> UserRoles { get; }
+    DbSet<AuditLogEntry> AuditLogs { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

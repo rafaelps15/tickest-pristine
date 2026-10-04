@@ -24,6 +24,63 @@ namespace TickestPristine.Infrastructure.Database.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "citext");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("TickestPristine.Domain.Audit.AuditLogEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("action");
+
+                    b.Property<string>("AffectedColumns")
+                        .HasColumnType("text")
+                        .HasColumnName("affected_columns");
+
+                    b.Property<string>("EntityId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("entity_name");
+
+                    b.Property<string>("NewValues")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("new_values");
+
+                    b.Property<string>("OldValues")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("old_values");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("timestamp");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_audit_logs");
+
+                    b.HasIndex("EntityName")
+                        .HasDatabaseName("ix_audit_logs_entity_name");
+
+                    b.HasIndex("Timestamp")
+                        .HasDatabaseName("ix_audit_logs_timestamp");
+
+                    b.HasIndex("EntityName", "EntityId")
+                        .HasDatabaseName("ix_audit_logs_entity_name_entity_id");
+
+                    b.ToTable("audit_logs", "public");
+                });
+
             modelBuilder.Entity("TickestPristine.Domain.Departments.Department", b =>
                 {
                     b.Property<Guid>("Id")
@@ -228,6 +285,11 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         {
                             RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
                             PermissionCode = "sectors:manage"
+                        },
+                        new
+                        {
+                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
+                            PermissionCode = "audit:read"
                         },
                         new
                         {

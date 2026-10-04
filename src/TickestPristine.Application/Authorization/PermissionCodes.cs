@@ -37,10 +37,16 @@ public static class PermissionCodes
         public const string Manage = "sectors:manage";
     }
 
+    public static class Audit
+    {
+        public const string Read = "audit:read";
+    }
+
     private const string TicketsGroup = "Chamados";
     private const string UsersGroup = "Usuários";
     private const string RolesGroup = "Funções e permissões";
     private const string OrganizationGroup = "Estrutura organizacional";
+    private const string AuditGroup = "Auditoria";
 
     /// <summary>
     /// Catálogo de todas as permissões, com o nome, a descrição e o grupo exibidos na tela.
@@ -64,7 +70,9 @@ public static class PermissionCodes
         new(Roles.Manage, "Gerenciar funções", "Criar funções e definir as permissões de cada uma.", RolesGroup),
 
         new(Departments.Manage, "Gerenciar departamentos", "Criar, editar e desativar departamentos.", OrganizationGroup),
-        new(Sectors.Manage, "Gerenciar setores", "Criar, editar e desativar setores.", OrganizationGroup)
+        new(Sectors.Manage, "Gerenciar setores", "Criar, editar e desativar setores.", OrganizationGroup),
+
+        new(Audit.Read, "Ver o log de auditoria", "Consultar quem alterou cada registro, quando e quais valores mudaram.", AuditGroup)
     ];
 
     public static IReadOnlyList<string> All { get; } = Definitions.Select(d => d.Code).ToList();

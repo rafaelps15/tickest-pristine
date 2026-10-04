@@ -2,7 +2,7 @@ using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Domain.Roles;
 
-public sealed class Role : Entity
+public sealed class Role : Entity, IAuditable
 {
     /// <summary>
     /// Role de administrador: recebe todas as permissões do catálogo.

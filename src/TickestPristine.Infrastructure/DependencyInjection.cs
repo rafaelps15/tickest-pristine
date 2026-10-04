@@ -2,6 +2,7 @@
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Storage;
+using TickestPristine.Infrastructure.Audit;
 using TickestPristine.Infrastructure.Authentication;
 using TickestPristine.Infrastructure.Authorization;
 using TickestPristine.Infrastructure.Database;
@@ -75,10 +76,13 @@ public static class DependencyInjection
                 .UseNpgsql(connectionString, npgsqlOptions =>
                     npgsqlOptions.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schemas.Default))
                 .UseSnakeCaseNamingConvention()
+                .AddInterceptors(serviceProvider.GetRequiredService<AuditLoggingInterceptor>())
                 .UseSeeding((context, _) =>
                     serviceProvider.GetRequiredService<DatabaseSeeder>().Seed(context))
                 .UseAsyncSeeding((context, _, cancellationToken) =>
                     serviceProvider.GetRequiredService<DatabaseSeeder>().SeedAsync(context, cancellationToken)));
+
+        services.AddScoped<AuditLoggingInterceptor>();
 
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
 

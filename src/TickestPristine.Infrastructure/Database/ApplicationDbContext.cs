@@ -1,4 +1,5 @@
 ﻿using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Domain.Audit;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Sectors;
@@ -38,6 +39,8 @@ public sealed class ApplicationDbContext(
     public DbSet<RolePermission> RolePermissions { get; set; }
 
     public DbSet<UserRole> UserRoles { get; set; }
+
+    public DbSet<AuditLogEntry> AuditLogs { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

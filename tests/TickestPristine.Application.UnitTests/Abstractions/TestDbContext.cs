@@ -1,4 +1,5 @@
 ﻿using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Domain.Audit;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Sectors;
@@ -37,6 +38,8 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
     public DbSet<RolePermission> RolePermissions { get; set; }
 
     public DbSet<UserRole> UserRoles { get; set; }
+
+    public DbSet<AuditLogEntry> AuditLogs { get; set; }
 
     /// <summary>
     /// Aplica a chave composta e os filtros de exclusão lógica do banco real.

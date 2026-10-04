@@ -2,7 +2,7 @@ using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Domain.Tickets;
 
-public sealed class Ticket : Entity
+public sealed class Ticket : Entity, IAuditable
 {
     public Guid Id { get; set; }
     public string Title { get; set; }
