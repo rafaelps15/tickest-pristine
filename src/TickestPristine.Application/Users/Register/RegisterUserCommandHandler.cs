@@ -36,7 +36,7 @@ internal sealed class RegisterUserCommandHandler(
 
         context.Users.Add(user);
         context.UserCredentials.Add(new UserCredential { Id = Guid.NewGuid(), UserId = user.Id, PasswordHash = passwordHasher.Hash(command.Password) });
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = Role.Collaborator.Id });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = Role.Collaborator.Name });
 
         await context.SaveChangesAsync(cancellationToken);
 

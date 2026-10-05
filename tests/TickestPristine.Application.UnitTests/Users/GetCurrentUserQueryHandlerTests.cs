@@ -77,11 +77,11 @@ public sealed class GetCurrentUserQueryHandlerTests : BaseHandlerTest
             IsActive = true,
             CreatedAtUtc = DateTime.UtcNow
         };
-        var assignedRole = new Role(Guid.NewGuid(), "Atendente");
-        var otherRole = new Role(Guid.NewGuid(), "Outra");
+        Role assignedRole = CreateRole("Atendente");
+        Role otherRole = CreateRole("Outra");
         context.Users.Add(user);
         context.Roles.AddRange(assignedRole, otherRole);
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = assignedRole.Id });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = assignedRole.Name });
         await context.SaveChangesAsync();
 
         IUserContext userContext = Substitute.For<IUserContext>();
@@ -102,7 +102,6 @@ public sealed class GetCurrentUserQueryHandlerTests : BaseHandlerTest
         result.Value.FirstName.ShouldBe(user.FirstName);
         result.Value.LastName.ShouldBe(user.LastName);
         CurrentUserRoleResponse role = result.Value.Roles.ShouldHaveSingleItem();
-        role.Id.ShouldBe(assignedRole.Id);
         role.Name.ShouldBe(assignedRole.Name);
         result.Value.Permissions.ShouldBe(["tickets:create", "tickets:manage"]);
     }

@@ -14,6 +14,5 @@ public sealed record UserSummaryResponse
 
 public sealed record RoleSummaryResponse
 {
-    public Guid Id { get; init; }
     public string Name { get; init; }
 }

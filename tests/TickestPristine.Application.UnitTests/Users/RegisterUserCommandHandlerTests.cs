@@ -69,6 +69,6 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         credential.PasswordHash.ShouldBe("hashed-password");
 
         UserRole userRole = await context.UserRoles.SingleAsync(ur => ur.UserId == user.Id);
-        userRole.RoleId.ShouldBe(Role.Collaborator.Id);
+        userRole.RoleName.ShouldBe(Role.Collaborator.Name);
     }
 }

@@ -7,7 +7,7 @@ internal sealed class AssignRolePermissionsCommandValidator : AbstractValidator<
 {
     public AssignRolePermissionsCommandValidator()
     {
-        RuleFor(c => c.RoleId).NotEmpty();
+        RuleFor(c => c.RoleName).NotEmpty();
 
         RuleFor(c => c.PermissionCodes).NotNull();
 

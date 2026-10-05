@@ -44,14 +44,23 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
     public DbSet<AuditLogEntry> AuditLogs { get; set; }
 
     /// <summary>
-    /// Aplica a chave composta e os filtros de exclusão lógica do banco real.
+    /// Aplica as chaves e os filtros de exclusão lógica do banco real.
     /// </summary>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.Entity<Permission>().HasKey(p => p.Code);
-        modelBuilder.Entity<RolePermission>().HasKey(p => new { p.RoleId, p.PermissionCode });
+        modelBuilder.Entity<Role>().HasKey(r => r.Name);
+        modelBuilder.Entity<Role>().Property<int>("Version").IsConcurrencyToken();
+        modelBuilder.Entity<Permission>(permission =>
+        {
+            permission.HasKey(p => p.Code);
+            permission.Property(p => p.Name);
+            permission.Property(p => p.Description);
+            permission.Property(p => p.Group);
+            permission.Property(p => p.IsAdministrative);
+        });
+        modelBuilder.Entity<RolePermission>().HasKey(p => new { p.RoleName, p.PermissionCode });
 
         modelBuilder.Entity<Ticket>().HasQueryFilter(t => t.DeletedAtUtc == null);
         modelBuilder.Entity<TicketMessage>().HasQueryFilter(m => m.DeletedAtUtc == null);

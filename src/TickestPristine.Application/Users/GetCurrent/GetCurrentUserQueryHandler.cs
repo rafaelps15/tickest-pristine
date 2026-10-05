@@ -30,9 +30,9 @@ internal sealed class GetCurrentUserQueryHandler(
                     FirstName = u.FirstName,
                     LastName = u.LastName,
                     Roles = context.Roles
-                        .Where(r => context.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleId == r.Id))
+                        .Where(r => context.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleName == r.Name))
                         .OrderBy(r => r.Name)
-                        .Select(r => new CurrentUserRoleResponse { Id = r.Id, Name = r.Name })
+                        .Select(r => new CurrentUserRoleResponse { Name = r.Name })
                         .ToList()
                 }
             })

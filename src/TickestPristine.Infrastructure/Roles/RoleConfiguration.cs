@@ -8,13 +8,12 @@ internal sealed class RoleConfiguration : IEntityTypeConfiguration<Role>
 {
     public void Configure(EntityTypeBuilder<Role> builder)
     {
-        builder.HasKey(role => role.Id);
+        builder.HasKey(r => r.Name);
 
-        builder.Property(role => role.Name).HasMaxLength(100);
+        builder.Property(r => r.Name).HasMaxLength(50);
 
-        builder.HasIndex(role => role.Name).IsUnique();
-
-        builder.Property(role => role.Version).IsConcurrencyToken();
+        // Token de concorrência só no banco, incrementado pelo AdministratorGuard quando um administrador perde o acesso.
+        builder.Property<int>("Version").IsConcurrencyToken().HasDefaultValue(0);
 
         builder.HasData(
             Role.Administrator,

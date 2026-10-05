@@ -25,8 +25,7 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
         List<RoleDto>? roles = await HttpClient.GetFromJsonAsync<List<RoleDto>>("roles");
 
         // Assert
-        RoleDto administrator = roles!.Single(r => r.Id == Role.Administrator.Id);
-        administrator.Name.ShouldBe(Role.Administrator.Name);
+        RoleDto administrator = roles!.Single(r => r.Name == Role.Administrator.Name);
         administrator.IsAdministrator.ShouldBeTrue();
 
         RoleDto agent = roles!.Single(r => r.Name == "Atendente");
@@ -49,8 +48,8 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
         // Act
         List<RoleDto>? roles = await HttpClient.GetFromJsonAsync<List<RoleDto>>("roles");
 
-        // Assert: falha quando um código entra ou sai do PermissionCatalog sem a migration correspondente
-        RoleDto administrator = roles!.Single(r => r.Id == Role.Administrator.Id);
+        // Assert: falha quando um código entra ou sai do catálogo de Permission sem a migration correspondente
+        RoleDto administrator = roles!.Single(r => r.Name == Role.Administrator.Name);
         administrator.PermissionCodes.ShouldBe(Permission.All.Select(p => p.Code), ignoreOrder: true);
     }
 
@@ -68,9 +67,9 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
         User administrator = await context.Users.SingleAsync(u => u.Email == AdminEmail);
         administrator.IsActive.ShouldBeTrue();
 
-        Guid administratorRoleId = Role.Administrator.Id;
+        string administratorRoleName = Role.Administrator.Name;
         int administratorRoleLinks = await context.UserRoles
-            .CountAsync(ur => ur.UserId == administrator.Id && ur.RoleId == administratorRoleId);
+            .CountAsync(ur => ur.UserId == administrator.Id && ur.RoleName == administratorRoleName);
         administratorRoleLinks.ShouldBe(1);
     }
 
@@ -78,7 +77,7 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
     public async Task Seeding_Should_NotRestoreAdministratorRole_WhenAnotherActiveAdministratorExists()
     {
         // Arrange
-        Guid administratorRoleId = Role.Administrator.Id;
+        string administratorRoleName = Role.Administrator.Name;
         Guid anotherAdministratorId = await RegisterUserAsync(UniqueEmail());
 
         using IServiceScope scope = Services.CreateScope();
@@ -86,8 +85,8 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
 
         User seededAdministrator = await context.Users.SingleAsync(u => u.Email == AdminEmail);
         UserRole seededAdministratorRole = await context.UserRoles
-            .SingleAsync(ur => ur.UserId == seededAdministrator.Id && ur.RoleId == administratorRoleId);
-        var anotherAdministratorRole = new UserRole { Id = Guid.NewGuid(), UserId = anotherAdministratorId, RoleId = administratorRoleId };
+            .SingleAsync(ur => ur.UserId == seededAdministrator.Id && ur.RoleName == administratorRoleName);
+        var anotherAdministratorRole = new UserRole { Id = Guid.NewGuid(), UserId = anotherAdministratorId, RoleName = administratorRoleName };
 
         context.UserRoles.Remove(seededAdministratorRole);
         context.UserRoles.Add(anotherAdministratorRole);
@@ -100,13 +99,13 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
 
             // Assert
             bool seededAdministratorHasRole = await context.UserRoles
-                .AnyAsync(ur => ur.UserId == seededAdministrator.Id && ur.RoleId == administratorRoleId);
+                .AnyAsync(ur => ur.UserId == seededAdministrator.Id && ur.RoleName == administratorRoleName);
             seededAdministratorHasRole.ShouldBeFalse();
         }
         finally
         {
             // Devolve o banco compartilhado ao estado inicial: só o administrador do seed.
-            context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = seededAdministrator.Id, RoleId = administratorRoleId });
+            context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = seededAdministrator.Id, RoleName = administratorRoleName });
             context.UserRoles.Remove(anotherAdministratorRole);
             await context.SaveChangesAsync();
         }
@@ -135,5 +134,5 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
             ignoreOrder: true);
     }
 
-    private sealed record RoleDto(Guid Id, string Name, bool IsDefault, bool IsAdministrator, List<string> PermissionCodes);
+    private sealed record RoleDto(string Name, bool IsDefault, bool IsAdministrator, List<string> PermissionCodes);
 }

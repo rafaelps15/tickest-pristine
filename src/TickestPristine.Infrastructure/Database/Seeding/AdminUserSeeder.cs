@@ -53,7 +53,7 @@ internal sealed class AdminUserSeeder(
             PasswordHash = passwordHasher.Hash(settings.Password),
             MustChangePassword = true
         });
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleId = Role.Administrator.Id });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleName = Role.Administrator.Name });
 
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -61,7 +61,7 @@ internal sealed class AdminUserSeeder(
     private static Task<bool> ActiveAdministratorExistsAsync(ApplicationDbContext context, CancellationToken cancellationToken)
     {
         return context.UserRoles.AnyAsync(
-            userRole => userRole.RoleId == Role.Administrator.Id &&
+            userRole => userRole.RoleName == Role.Administrator.Name &&
                         context.Users.Any(user => user.Id == userRole.UserId && user.IsActive),
             cancellationToken);
     }

@@ -19,11 +19,11 @@ public sealed class RoleConcurrencyTests(IntegrationTestWebAppFactory factory) :
         ApplicationDbContext firstContext = firstScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         ApplicationDbContext secondContext = secondScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        Role firstCopy = await firstContext.Roles.SingleAsync(r => r.Id == Role.Administrator.Id);
-        Role secondCopy = await secondContext.Roles.SingleAsync(r => r.Id == Role.Administrator.Id);
+        Role firstCopy = await firstContext.Roles.SingleAsync(r => r.Name == Role.Administrator.Name);
+        Role secondCopy = await secondContext.Roles.SingleAsync(r => r.Name == Role.Administrator.Name);
 
-        firstCopy.Version++;
-        secondCopy.Version++;
+        firstContext.Entry(firstCopy).Property<int>("Version").CurrentValue++;
+        secondContext.Entry(secondCopy).Property<int>("Version").CurrentValue++;
 
         // Act
         await firstContext.SaveChangesAsync();

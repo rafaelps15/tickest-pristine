@@ -339,15 +339,13 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
         Authenticate(adminTokens.AccessToken);
 
-        HttpResponseMessage createRoleResponse = await HttpClient.PostAsJsonAsync("roles", new { name = $"Role-{Guid.NewGuid():N}" });
-        createRoleResponse.EnsureSuccessStatusCode();
-        Guid roleId = await createRoleResponse.Content.ReadFromJsonAsync<Guid>();
+        string roleName = await CreateTestRoleAsync();
 
         string email = UniqueEmail();
         Guid userId = await RegisterUserAsync(email);
         HttpResponseMessage assignResponse = await HttpClient.PutAsJsonAsync(
             $"users/{userId}/roles",
-            new { roleIds = new[] { roleId } });
+            new { roleNames = new[] { roleName } });
         assignResponse.EnsureSuccessStatusCode();
 
         // Act
@@ -357,7 +355,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         response.EnsureSuccessStatusCode();
         PagedDto<UserSummaryDto>? users = await response.Content.ReadFromJsonAsync<PagedDto<UserSummaryDto>>();
         UserSummaryDto user = users!.Items.Single(u => u.Id == userId);
-        user.Roles.ShouldContain(r => r.Id == roleId);
+        user.Roles.ShouldContain(r => r.Name == roleName);
     }
 
     [Fact]
@@ -670,16 +668,14 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
         Authenticate(adminTokens.AccessToken);
 
-        HttpResponseMessage createRoleResponse = await HttpClient.PostAsJsonAsync("roles", new { name = $"Role-{Guid.NewGuid():N}" });
-        createRoleResponse.EnsureSuccessStatusCode();
-        Guid roleId = await createRoleResponse.Content.ReadFromJsonAsync<Guid>();
+        string roleName = await CreateTestRoleAsync();
 
         Guid userId = await RegisterUserAsync(UniqueEmail());
 
         // Act
         HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
             $"users/{userId}/roles",
-            new { roleIds = new[] { roleId } });
+            new { roleNames = new[] { roleName } });
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
@@ -697,7 +693,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         // Act
         HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
             $"users/{userId}/roles",
-            new { roleIds = new[] { Guid.NewGuid() } });
+            new { roleNames = new[] { $"Role-{Guid.NewGuid():N}" } });
 
         // Assert
         response.IsSuccessStatusCode.ShouldBeFalse();
@@ -710,13 +706,13 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
         Authenticate(adminTokens.AccessToken);
 
-        Guid delegateRoleId = await CreateRoleWithPermissionsAsync("users:assign-roles");
-        Guid privilegedRoleId = await CreateRoleWithPermissionsAsync("roles:manage");
-        Guid ticketRoleId = await CreateRoleWithPermissionsAsync("tickets:manage");
+        string delegateRoleName = await CreateRoleWithPermissionsAsync("users:assign-roles");
+        string privilegedRoleName = await CreateRoleWithPermissionsAsync("roles:manage");
+        string ticketRoleName = await CreateRoleWithPermissionsAsync("tickets:manage");
 
         string delegateEmail = UniqueEmail();
         Guid delegateUserId = await RegisterUserAsync(delegateEmail);
-        (await HttpClient.PutAsJsonAsync($"users/{delegateUserId}/roles", new { roleIds = new[] { delegateRoleId } }))
+        (await HttpClient.PutAsJsonAsync($"users/{delegateUserId}/roles", new { roleNames = new[] { delegateRoleName } }))
             .EnsureSuccessStatusCode();
 
         Guid targetUserId = await RegisterUserAsync(UniqueEmail());
@@ -727,11 +723,11 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         // Act
         HttpResponseMessage escalation = await HttpClient.PutAsJsonAsync(
             $"users/{targetUserId}/roles",
-            new { roleIds = new[] { privilegedRoleId } });
+            new { roleNames = new[] { privilegedRoleName } });
 
         HttpResponseMessage ticketOnly = await HttpClient.PutAsJsonAsync(
             $"users/{targetUserId}/roles",
-            new { roleIds = new[] { ticketRoleId } });
+            new { roleNames = new[] { ticketRoleName } });
 
         // Assert
         escalation.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
@@ -748,7 +744,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         // Act
         HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
             $"users/{userId}/roles",
-            new { roleIds = Array.Empty<Guid>() });
+            new { roleNames = Array.Empty<string>() });
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
@@ -766,7 +762,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         // Act
         HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
             $"users/{adminUserId}/roles",
-            new { roleIds = Array.Empty<Guid>() });
+            new { roleNames = Array.Empty<string>() });
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
@@ -1060,16 +1056,14 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 
-    private async Task<Guid> CreateRoleWithPermissionsAsync(params string[] permissionCodes)
+    private async Task<string> CreateRoleWithPermissionsAsync(params string[] permissionCodes)
     {
-        HttpResponseMessage createRoleResponse = await HttpClient.PostAsJsonAsync("roles", new { name = $"Role-{Guid.NewGuid():N}" });
-        createRoleResponse.EnsureSuccessStatusCode();
-        Guid roleId = await createRoleResponse.Content.ReadFromJsonAsync<Guid>();
+        string roleName = await CreateTestRoleAsync();
 
-        (await HttpClient.PutAsJsonAsync($"roles/{roleId}/permissions", new { permissionCodes }))
+        (await HttpClient.PutAsJsonAsync($"roles/{roleName}/permissions", new { permissionCodes }))
             .EnsureSuccessStatusCode();
 
-        return roleId;
+        return roleName;
     }
 
     private sealed record PagedDto<T>(List<T> Items, int Page, int PageSize, int TotalCount, int TotalPages, bool HasPreviousPage, bool HasNextPage);
@@ -1084,7 +1078,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         DateTime? DeactivatedAtUtc,
         List<RoleSummaryDto> Roles);
 
-    private sealed record RoleSummaryDto(Guid Id, string Name);
+    private sealed record RoleSummaryDto(string Name);
 
     private sealed record UserByEmailDto(Guid Id, string Email, string FirstName, string LastName);
 

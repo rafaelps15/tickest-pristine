@@ -31,57 +31,38 @@ public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
-    public async Task Create_Should_ReturnRoleId_WhenCallerIsAdmin()
-    {
-        // Arrange
-        await AuthenticateAsAdminAsync();
-
-        // Act
-        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("roles", new { name = $"Role-{Guid.NewGuid():N}" });
-
-        // Assert
-        response.EnsureSuccessStatusCode();
-        Guid roleId = await response.Content.ReadFromJsonAsync<Guid>();
-        roleId.ShouldNotBe(Guid.Empty);
-    }
-
-    [Fact]
-    public async Task Create_Should_ReturnForbidden_WhenCallerLacksRolesManagePermission()
-    {
-        // Arrange
-        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
-        Authenticate(tokens.AccessToken);
-
-        // Act
-        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("roles", new { name = $"Role-{Guid.NewGuid():N}" });
-
-        // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
-    }
-
-    [Fact]
     public async Task AssignPermissions_Should_ReflectAssignedPermissionsInGetAll()
     {
         // Arrange
         await AuthenticateAsAdminAsync();
-        HttpResponseMessage createResponse = await HttpClient.PostAsJsonAsync("roles", new { name = $"Role-{Guid.NewGuid():N}" });
-        createResponse.EnsureSuccessStatusCode();
-        Guid roleId = await createResponse.Content.ReadFromJsonAsync<Guid>();
+        string roleName = await CreateTestRoleAsync();
 
         // Act
         HttpResponseMessage assignResponse = await HttpClient.PutAsJsonAsync(
-            $"roles/{roleId}/permissions",
+            $"roles/{roleName}/permissions",
             new { permissionCodes = AssignedPermissionCodes });
 
         // Assert
         assignResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
-        HttpResponseMessage getAllResponse = await HttpClient.GetAsync("roles");
-        getAllResponse.EnsureSuccessStatusCode();
-        List<RoleDto>? roles = await getAllResponse.Content.ReadFromJsonAsync<List<RoleDto>>();
-
-        RoleDto role = roles!.Single(r => r.Id == roleId);
+        List<RoleDto>? roles = await HttpClient.GetFromJsonAsync<List<RoleDto>>("roles");
+        RoleDto role = roles!.Single(r => r.Name == roleName);
         role.PermissionCodes.ShouldBe(["tickets:create", "tickets:view-own"], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task AssignPermissions_Should_ReturnNotFound_WhenRoleDoesNotExist()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
+            $"roles/Role-{Guid.NewGuid():N}/permissions",
+            new { permissionCodes = AssignedPermissionCodes });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact]
@@ -97,26 +78,22 @@ public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseInteg
         response.EnsureSuccessStatusCode();
         List<RoleDto>? roles = await response.Content.ReadFromJsonAsync<List<RoleDto>>();
 
-        roles!.Where(r => r.IsDefault).ShouldHaveSingleItem().Name.ShouldBe("Colaborador");
+        roles!.Where(r => r.IsDefault).ShouldHaveSingleItem().Name.ShouldBe(Role.Collaborator.Name);
 
         RoleDto administrator = roles!.Where(r => r.IsAdministrator).ShouldHaveSingleItem();
         administrator.Name.ShouldBe(Role.Administrator.Name);
         administrator.PermissionCodes.ShouldContain("users:assign-roles");
     }
 
-    private sealed record RoleDto(Guid Id, string Name, bool IsDefault, bool IsAdministrator, List<string> PermissionCodes);
-
     [Fact]
     public async Task AssignPermissions_Should_ReturnConflict_WhenRoleIsAdministrator()
     {
         // Arrange
         await AuthenticateAsAdminAsync();
-        List<RoleDto>? roles = await HttpClient.GetFromJsonAsync<List<RoleDto>>("roles");
-        Guid administratorRoleId = roles!.Single(r => r.IsAdministrator).Id;
 
         // Act
         HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
-            $"roles/{administratorRoleId}/permissions",
+            $"roles/{Role.Administrator.Name}/permissions",
             new { permissionCodes = AssignedPermissionCodes });
 
         // Assert
@@ -132,17 +109,17 @@ public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseInteg
         // Arrange: role que só gerencia funções, atribuída a um colaborador
         await AuthenticateAsAdminAsync();
 
-        Guid roleManagerRoleId = await CreateRoleAsync();
+        string roleManagerRoleName = await CreateTestRoleAsync();
         (await HttpClient.PutAsJsonAsync(
-                $"roles/{roleManagerRoleId}/permissions",
+                $"roles/{roleManagerRoleName}/permissions",
                 new { permissionCodes = RoleManagerPermissionCodes }))
             .EnsureSuccessStatusCode();
 
-        Guid targetRoleId = await CreateRoleAsync();
+        string targetRoleName = await CreateTestRoleAsync();
 
         string roleManagerEmail = UniqueEmail();
         Guid roleManagerUserId = await RegisterUserAsync(roleManagerEmail);
-        (await HttpClient.PutAsJsonAsync($"users/{roleManagerUserId}/roles", new { roleIds = new[] { roleManagerRoleId } }))
+        (await HttpClient.PutAsJsonAsync($"users/{roleManagerUserId}/roles", new { roleNames = new[] { roleManagerRoleName } }))
             .EnsureSuccessStatusCode();
 
         AccessTokens roleManagerTokens = await LoginAsync(roleManagerEmail);
@@ -150,11 +127,11 @@ public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         // Act
         HttpResponseMessage escalation = await HttpClient.PutAsJsonAsync(
-            $"roles/{targetRoleId}/permissions",
+            $"roles/{targetRoleName}/permissions",
             new { permissionCodes = EscalationPermissionCodes });
 
         HttpResponseMessage ticketOnly = await HttpClient.PutAsJsonAsync(
-            $"roles/{targetRoleId}/permissions",
+            $"roles/{targetRoleName}/permissions",
             new { permissionCodes = TicketOnlyPermissionCodes });
 
         // Assert
@@ -162,11 +139,5 @@ public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseInteg
         ticketOnly.StatusCode.ShouldBe(HttpStatusCode.NoContent);
     }
 
-    private async Task<Guid> CreateRoleAsync()
-    {
-        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("roles", new { name = $"Role-{Guid.NewGuid():N}" });
-        response.EnsureSuccessStatusCode();
-
-        return await response.Content.ReadFromJsonAsync<Guid>();
-    }
+    private sealed record RoleDto(string Name, bool IsDefault, bool IsAdministrator, List<string> PermissionCodes);
 }

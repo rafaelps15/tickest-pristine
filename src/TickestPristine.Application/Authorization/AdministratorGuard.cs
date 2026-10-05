@@ -8,6 +8,11 @@ namespace TickestPristine.Application.Authorization;
 internal static class AdministratorGuard
 {
     /// <summary>
+    /// Nome da propriedade sombra (só no banco) usada como token de concorrência da role de administrador.
+    /// </summary>
+    internal const string RoleVersionProperty = "Version";
+
+    /// <summary>
     /// Chamado antes de um administrador perder o acesso (desativação ou remoção da role): falha se ele for o último
     /// administrador ativo. Usuário que não é administrador passa direto.
     /// </summary>
@@ -20,8 +25,10 @@ internal static class AdministratorGuard
         Guid leavingUserId,
         CancellationToken cancellationToken)
     {
+        string administratorRoleName = Role.Administrator.Name;
+
         bool isAdministrator = await context.UserRoles.AnyAsync(
-            userRole => userRole.UserId == leavingUserId && userRole.RoleId == Role.Administrator.Id,
+            userRole => userRole.UserId == leavingUserId && userRole.RoleName == administratorRoleName,
             cancellationToken);
 
         if (!isAdministrator)
@@ -30,7 +37,7 @@ internal static class AdministratorGuard
         }
 
         bool anotherActiveAdministratorExists = await context.UserRoles.AnyAsync(
-            userRole => userRole.RoleId == Role.Administrator.Id &&
+            userRole => userRole.RoleName == administratorRoleName &&
                         userRole.UserId != leavingUserId &&
                         context.Users.Any(user => user.Id == userRole.UserId && user.IsActive),
             cancellationToken);
@@ -40,9 +47,9 @@ internal static class AdministratorGuard
             return Result.Failure(RoleErrors.LastAdministrator);
         }
 
-        Role administratorRole = await context.Roles.SingleAsync(r => r.Id == Role.Administrator.Id, cancellationToken);
+        Role administratorRole = await context.Roles.SingleAsync(r => r.Name == administratorRoleName, cancellationToken);
 
-        administratorRole.Version++;
+        context.Entry(administratorRole).Property<int>(RoleVersionProperty).CurrentValue++;
 
         return Result.Success();
     }

@@ -10,7 +10,7 @@ internal sealed class AssignRoles : IEndpoint
 {
     public sealed class Request
     {
-        public List<Guid> RoleIds { get; set; } = [];
+        public List<string> RoleNames { get; set; } = [];
     }
 
     public void MapEndpoint(IEndpointRouteBuilder app)
@@ -24,7 +24,7 @@ internal sealed class AssignRoles : IEndpoint
             var command = new AssignUserRolesCommand
             {
                 UserId = userId,
-                RoleIds = request.RoleIds
+                RoleNames = request.RoleNames
             };
 
             Result result = await handler.Handle(command, cancellationToken);

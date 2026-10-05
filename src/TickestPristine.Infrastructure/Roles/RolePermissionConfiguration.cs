@@ -8,13 +8,13 @@ internal sealed class RolePermissionConfiguration : IEntityTypeConfiguration<Rol
 {
     public void Configure(EntityTypeBuilder<RolePermission> builder)
     {
-        builder.HasKey(rolePermission => new { rolePermission.RoleId, rolePermission.PermissionCode });
+        builder.HasKey(rolePermission => new { rolePermission.RoleName, rolePermission.PermissionCode });
 
         builder.Property(rolePermission => rolePermission.PermissionCode).HasMaxLength(100);
 
         builder.HasOne<Role>()
             .WithMany()
-            .HasForeignKey(rolePermission => rolePermission.RoleId);
+            .HasForeignKey(rolePermission => rolePermission.RoleName);
 
         builder.HasOne<Permission>()
             .WithMany()
@@ -47,5 +47,5 @@ internal sealed class RolePermissionConfiguration : IEntityTypeConfiguration<Rol
     }
 
     private static RolePermission Create(Role role, Permission permission) =>
-        new() { RoleId = role.Id, PermissionCode = permission.Code };
+        new() { RoleName = role.Name, PermissionCode = permission.Code };
 }

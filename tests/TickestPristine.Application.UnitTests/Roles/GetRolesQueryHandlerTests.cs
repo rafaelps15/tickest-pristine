@@ -13,10 +13,10 @@ public sealed class GetRolesQueryHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
 
-        var manager = new Role(Guid.NewGuid(), "Manager");
-        var agent = new Role(Guid.NewGuid(), "Atendente");
+        Role manager = CreateRole("Manager");
+        Role agent = CreateRole("Atendente");
         context.Roles.AddRange(manager, agent);
-        context.RolePermissions.Add(new RolePermission { RoleId = manager.Id, PermissionCode = "tickets:manage" });
+        context.RolePermissions.Add(new RolePermission { RoleName = manager.Name, PermissionCode = "tickets:manage" });
         await context.SaveChangesAsync();
 
         var handler = new GetRolesQueryHandler(context);
@@ -28,10 +28,10 @@ public sealed class GetRolesQueryHandlerTests : BaseHandlerTest
         result.IsSuccess.ShouldBeTrue();
         result.Value.Select(r => r.Name).ShouldBe(["Atendente", "Manager"]);
 
-        RoleResponse managerResponse = result.Value.Single(r => r.Id == manager.Id);
+        RoleResponse managerResponse = result.Value.Single(r => r.Name == manager.Name);
         managerResponse.PermissionCodes.ShouldContain("tickets:manage");
 
-        RoleResponse agentResponse = result.Value.Single(r => r.Id == agent.Id);
+        RoleResponse agentResponse = result.Value.Single(r => r.Name == agent.Name);
         agentResponse.PermissionCodes.ShouldBeEmpty();
     }
 
@@ -41,9 +41,9 @@ public sealed class GetRolesQueryHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
 
-        var administrator = new Role(Role.Administrator.Id, "Administrador do Sistema");
-        var collaborator = new Role(Role.Collaborator.Id, "Colaborador");
-        var agent = new Role(Guid.NewGuid(), "Atendente");
+        Role administrator = CreateRole(Role.Administrator.Name);
+        Role collaborator = CreateRole(Role.Collaborator.Name);
+        Role agent = CreateRole("Atendente");
         context.Roles.AddRange(administrator, collaborator, agent);
         await context.SaveChangesAsync();
 
@@ -55,15 +55,15 @@ public sealed class GetRolesQueryHandlerTests : BaseHandlerTest
         // Assert
         result.IsSuccess.ShouldBeTrue();
 
-        RoleResponse administratorResponse = result.Value.Single(r => r.Id == administrator.Id);
+        RoleResponse administratorResponse = result.Value.Single(r => r.Name == administrator.Name);
         administratorResponse.IsAdministrator.ShouldBeTrue();
         administratorResponse.IsDefault.ShouldBeFalse();
 
-        RoleResponse collaboratorResponse = result.Value.Single(r => r.Id == collaborator.Id);
+        RoleResponse collaboratorResponse = result.Value.Single(r => r.Name == collaborator.Name);
         collaboratorResponse.IsDefault.ShouldBeTrue();
         collaboratorResponse.IsAdministrator.ShouldBeFalse();
 
-        RoleResponse agentResponse = result.Value.Single(r => r.Id == agent.Id);
+        RoleResponse agentResponse = result.Value.Single(r => r.Name == agent.Name);
         agentResponse.IsDefault.ShouldBeFalse();
         agentResponse.IsAdministrator.ShouldBeFalse();
     }

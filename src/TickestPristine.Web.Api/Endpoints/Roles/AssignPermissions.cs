@@ -16,15 +16,15 @@ internal sealed class AssignPermissions : IEndpoint
 
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapPut("roles/{roleId:guid}/permissions", async (
-            Guid roleId,
+        app.MapPut("roles/{roleName}/permissions", async (
+            string roleName,
             Request request,
             ICommandHandler<AssignRolePermissionsCommand> handler,
             CancellationToken cancellationToken) =>
         {
             var command = new AssignRolePermissionsCommand
             {
-                RoleId = roleId,
+                RoleName = roleName,
                 PermissionCodes = request.PermissionCodes
             };
 

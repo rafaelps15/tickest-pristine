@@ -2,7 +2,6 @@ namespace TickestPristine.Application.Roles.GetAll;
 
 public sealed class RoleResponse
 {
-    public Guid Id { get; set; }
     public string Name { get; set; }
     public bool IsDefault { get; set; }
     public bool IsAdministrator { get; set; }

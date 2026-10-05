@@ -1,4 +1,6 @@
-﻿using TickestPristine.Domain.Users;
+﻿using System.Reflection;
+using TickestPristine.Domain.Roles;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
@@ -40,4 +42,13 @@ public abstract class BaseHandlerTest
         IsActive = isActive,
         CreatedAtUtc = new DateTime(2026, 10, 1, 9, 0, 0, DateTimeKind.Utc)
     };
+
+    /// <summary>
+    /// Role com qualquer nome, como as que já existem no banco além das do código. O construtor da Role é privado
+    /// (só o código define roles), então o teste o chama por reflexão.
+    /// </summary>
+    protected static Role CreateRole(string name) =>
+        (Role)typeof(Role)
+            .GetConstructor(BindingFlags.Instance | BindingFlags.NonPublic, [typeof(string)])!
+            .Invoke([name]);
 }

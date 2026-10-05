@@ -27,7 +27,7 @@ public sealed class Permission
     public static readonly Permission UsersAssignRoles = new(PermissionCodes.Users.AssignRoles, "Alterar funções de colaboradores", "Definir quais funções cada colaborador tem.", UsersGroup);
 
     public static readonly Permission RolesRead = new(PermissionCodes.Roles.Read, "Ver funções", "Consultar as funções existentes e as permissões de cada uma.", RolesGroup);
-    public static readonly Permission RolesManage = new(PermissionCodes.Roles.Manage, "Gerenciar funções", "Criar funções e definir as permissões de cada uma.", RolesGroup);
+    public static readonly Permission RolesManage = new(PermissionCodes.Roles.Manage, "Gerenciar funções", "Definir as permissões de cada função.", RolesGroup);
 
     public static readonly Permission DepartmentsManage = new(PermissionCodes.Departments.Manage, "Gerenciar departamentos", "Criar, editar e desativar departamentos.", OrganizationGroup);
     public static readonly Permission SectorsManage = new(PermissionCodes.Sectors.Manage, "Gerenciar setores", "Criar, editar e desativar setores.", OrganizationGroup);
@@ -43,7 +43,7 @@ public sealed class Permission
         AuditRead
     ];
 
-    private Permission(string code, string name, string description, string group, bool isAdministrative = true)
+    public Permission(string code, string name, string description, string group, bool isAdministrative = true)
     {
         Code = code;
         Name = name;
@@ -52,19 +52,15 @@ public sealed class Permission
         IsAdministrative = isAdministrative;
     }
 
-    private Permission()
-    {
-    }
-
-    public string Code { get; private set; }
-    public string Name { get; private set; }
-    public string Description { get; private set; }
-    public string Group { get; private set; }
+    public string Code { get; }
+    public string Name { get; }
+    public string Description { get; }
+    public string Group { get; }
 
     /// <summary>
     /// Permissão administrativa: só pode ser concedida ou removida por quem já a possui.
     /// </summary>
-    public bool IsAdministrative { get; private set; }
+    public bool IsAdministrative { get; }
 
     public static Permission? Find(string code) => All.FirstOrDefault(p => p.Code == code);
 

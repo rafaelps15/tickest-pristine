@@ -25,32 +25,32 @@ internal sealed class AssignUserRolesCommandHandler(
             return Result.Failure(UserErrors.NotFound(command.UserId));
         }
 
-        HashSet<Guid> requestedRoleIds = [.. command.RoleIds];
+        HashSet<string> requestedRoleNames = [.. command.RoleNames];
 
-        List<Guid> existingRoleIds = await context.Roles
-            .Where(r => requestedRoleIds.Contains(r.Id))
-            .Select(r => r.Id)
+        List<string> existingRoleNames = await context.Roles
+            .Where(r => requestedRoleNames.Contains(r.Name))
+            .Select(r => r.Name)
             .ToListAsync(cancellationToken);
 
-        Guid? missingRoleId = requestedRoleIds.Except(existingRoleIds).Cast<Guid?>().FirstOrDefault();
+        string? missingRoleName = requestedRoleNames.Except(existingRoleNames).FirstOrDefault();
 
-        if (missingRoleId is { } roleId)
+        if (missingRoleName is not null)
         {
-            return Result.Failure(RoleErrors.NotFound(roleId));
+            return Result.Failure(RoleErrors.NotFound(missingRoleName));
         }
 
         List<UserRole> existingUserRoles = await context.UserRoles
             .Where(ur => ur.UserId == user.Id)
             .ToListAsync(cancellationToken);
 
-        HashSet<Guid> currentRoleIds = [.. existingUserRoles.Select(ur => ur.RoleId)];
+        HashSet<string> currentRoleNames = [.. existingUserRoles.Select(ur => ur.RoleName)];
 
         // Considera tanto as roles adicionadas quanto as removidas.
-        HashSet<Guid> changedRoleIds = [.. currentRoleIds];
-        changedRoleIds.SymmetricExceptWith(requestedRoleIds);
+        HashSet<string> changedRoleNames = [.. currentRoleNames];
+        changedRoleNames.SymmetricExceptWith(requestedRoleNames);
 
         List<string> changedPermissions = await context.RolePermissions
-            .Where(p => changedRoleIds.Contains(p.RoleId))
+            .Where(p => changedRoleNames.Contains(p.RoleName))
             .Select(p => p.PermissionCode)
             .ToListAsync(cancellationToken);
 
@@ -65,7 +65,7 @@ internal sealed class AssignUserRolesCommandHandler(
             return escalationCheck;
         }
 
-        if (currentRoleIds.Contains(Role.Administrator.Id) && !requestedRoleIds.Contains(Role.Administrator.Id))
+        if (currentRoleNames.Contains(Role.Administrator.Name) && !requestedRoleNames.Contains(Role.Administrator.Name))
         {
             Result administratorCheck = await AdministratorGuard.EnsureNotLastAdministratorAsync(
                 context,
@@ -78,11 +78,11 @@ internal sealed class AssignUserRolesCommandHandler(
             }
         }
 
-        context.UserRoles.RemoveRange(existingUserRoles.Where(ur => !requestedRoleIds.Contains(ur.RoleId)));
+        context.UserRoles.RemoveRange(existingUserRoles.Where(ur => !requestedRoleNames.Contains(ur.RoleName)));
 
-        foreach (Guid addedRoleId in requestedRoleIds.Except(currentRoleIds))
+        foreach (string addedRoleName in requestedRoleNames.Except(currentRoleNames))
         {
-            context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = addedRoleId });
+            context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = addedRoleName });
         }
 
         user.Raise(new UserRolesAssignedDomainEvent(user.Id));

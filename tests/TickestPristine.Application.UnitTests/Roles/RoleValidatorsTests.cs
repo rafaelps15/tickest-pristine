@@ -1,53 +1,12 @@
 using TickestPristine.Domain.Roles;
 using TickestPristine.Application.Roles.AssignPermissions;
-using TickestPristine.Application.Roles.Create;
 using FluentValidation.TestHelper;
 
 namespace TickestPristine.Application.UnitTests.Roles;
 
 public sealed class RoleValidatorsTests
 {
-    private readonly CreateRoleCommandValidator _createValidator = new();
     private readonly AssignRolePermissionsCommandValidator _assignPermissionsValidator = new();
-
-    [Fact]
-    public void CreateValidator_Should_HaveError_WhenNameIsEmpty()
-    {
-        // Arrange
-        var command = new CreateRoleCommand { Name = string.Empty };
-
-        // Act
-        TestValidationResult<CreateRoleCommand> result = _createValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Name);
-    }
-
-    [Fact]
-    public void CreateValidator_Should_HaveError_WhenNameExceedsMaxLength()
-    {
-        // Arrange
-        var command = new CreateRoleCommand { Name = new string('a', 101) };
-
-        // Act
-        TestValidationResult<CreateRoleCommand> result = _createValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Name);
-    }
-
-    [Fact]
-    public void CreateValidator_Should_NotHaveErrors_WhenCommandIsValid()
-    {
-        // Arrange
-        var command = new CreateRoleCommand { Name = "Manager" };
-
-        // Act
-        TestValidationResult<CreateRoleCommand> result = _createValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldNotHaveAnyValidationErrors();
-    }
 
     [Fact]
     public void AssignPermissionsValidator_Should_HaveError_WhenPermissionCodeIsUnknown()
@@ -55,7 +14,7 @@ public sealed class RoleValidatorsTests
         // Arrange
         var command = new AssignRolePermissionsCommand
         {
-            RoleId = Guid.NewGuid(),
+            RoleName = "Atendente",
             PermissionCodes = ["not-a-real-permission"]
         };
 
@@ -73,7 +32,7 @@ public sealed class RoleValidatorsTests
         // Arrange
         var command = new AssignRolePermissionsCommand
         {
-            RoleId = Guid.NewGuid(),
+            RoleName = "Atendente",
             PermissionCodes = [PermissionCodes.Tickets.Create]
         };
 
@@ -85,12 +44,12 @@ public sealed class RoleValidatorsTests
     }
 
     [Fact]
-    public void AssignPermissionsValidator_Should_HaveError_WhenRoleIdIsEmpty()
+    public void AssignPermissionsValidator_Should_HaveError_WhenRoleNameIsEmpty()
     {
         // Arrange
         var command = new AssignRolePermissionsCommand
         {
-            RoleId = Guid.Empty,
+            RoleName = string.Empty,
             PermissionCodes = [PermissionCodes.Tickets.Create]
         };
 
@@ -98,7 +57,7 @@ public sealed class RoleValidatorsTests
         TestValidationResult<AssignRolePermissionsCommand> result = _assignPermissionsValidator.TestValidate(command);
 
         // Assert
-        result.ShouldHaveValidationErrorFor(c => c.RoleId);
+        result.ShouldHaveValidationErrorFor(c => c.RoleName);
     }
 
     [Fact]
@@ -107,7 +66,7 @@ public sealed class RoleValidatorsTests
         // Arrange
         var command = new AssignRolePermissionsCommand
         {
-            RoleId = Guid.NewGuid(),
+            RoleName = "Atendente",
             PermissionCodes = null!
         };
 

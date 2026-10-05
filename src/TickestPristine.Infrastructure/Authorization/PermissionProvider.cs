@@ -16,7 +16,7 @@ internal sealed class PermissionProvider(IApplicationDbContext context, HybridCa
                 where userRole.UserId == userId
                 join user in context.Users on userRole.UserId equals user.Id
                 where user.IsActive
-                join rolePermission in context.RolePermissions on userRole.RoleId equals rolePermission.RoleId
+                join rolePermission in context.RolePermissions on userRole.RoleName equals rolePermission.RoleName
                 select rolePermission.PermissionCode)
                 .Distinct()
                 .ToListAsync(cancellation),

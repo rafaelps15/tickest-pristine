@@ -15,12 +15,11 @@ internal sealed class GetRolesQueryHandler(IApplicationDbContext context)
             .OrderBy(r => r.Name)
             .Select(r => new RoleResponse
             {
-                Id = r.Id,
                 Name = r.Name,
-                IsDefault = r.Id == Role.Collaborator.Id,
-                IsAdministrator = r.Id == Role.Administrator.Id,
+                IsDefault = r.Name == Role.Collaborator.Name,
+                IsAdministrator = r.Name == Role.Administrator.Name,
                 PermissionCodes = context.RolePermissions
-                    .Where(p => p.RoleId == r.Id)
+                    .Where(p => p.RoleName == r.Name)
                     .Select(p => p.PermissionCode)
                     .ToList()
             })

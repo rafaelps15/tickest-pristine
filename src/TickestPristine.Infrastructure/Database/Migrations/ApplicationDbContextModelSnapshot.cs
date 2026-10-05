@@ -256,7 +256,7 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         new
                         {
                             Code = "roles:manage",
-                            Description = "Criar funções e definir as permissões de cada uma.",
+                            Description = "Definir as permissões de cada função.",
                             Group = "Funções e permissões",
                             IsAdministrative = true,
                             Name = "Gerenciar funções"
@@ -289,64 +289,50 @@ namespace TickestPristine.Infrastructure.Database.Migrations
 
             modelBuilder.Entity("TickestPristine.Domain.Roles.Role", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
                     b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
                         .HasColumnName("name");
 
                     b.Property<int>("Version")
                         .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
+                        .HasDefaultValue(0)
                         .HasColumnName("version");
 
-                    b.HasKey("Id")
+                    b.HasKey("Name")
                         .HasName("pk_roles");
-
-                    b.HasIndex("Name")
-                        .IsUnique()
-                        .HasDatabaseName("ix_roles_name");
 
                     b.ToTable("roles", "public");
 
                     b.HasData(
                         new
                         {
-                            Id = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            Name = "Administrador",
-                            Version = 0
+                            Name = "Administrador"
                         },
                         new
                         {
-                            Id = new Guid("0199a7c4-0000-7000-8000-000000000002"),
-                            Name = "Atendente",
-                            Version = 0
+                            Name = "Atendente"
                         },
                         new
                         {
-                            Id = new Guid("0199a7c4-0000-7000-8000-000000000003"),
-                            Name = "Colaborador",
-                            Version = 0
+                            Name = "Colaborador"
                         });
                 });
 
             modelBuilder.Entity("TickestPristine.Domain.Roles.RolePermission", b =>
                 {
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("role_id");
+                    b.Property<string>("RoleName")
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("role_name");
 
                     b.Property<string>("PermissionCode")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("permission_code");
 
-                    b.HasKey("RoleId", "PermissionCode")
+                    b.HasKey("RoleName", "PermissionCode")
                         .HasName("pk_role_permissions");
 
                     b.HasIndex("PermissionCode")
@@ -357,137 +343,137 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasData(
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
+                            RoleName = "Administrador",
                             PermissionCode = "tickets:create"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
+                            RoleName = "Administrador",
                             PermissionCode = "tickets:view-own"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
+                            RoleName = "Administrador",
                             PermissionCode = "tickets:update-own"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
+                            RoleName = "Administrador",
                             PermissionCode = "tickets:delete-own"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
+                            RoleName = "Administrador",
                             PermissionCode = "tickets:reopen-own"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
+                            RoleName = "Administrador",
                             PermissionCode = "tickets:manage"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
+                            RoleName = "Administrador",
                             PermissionCode = "users:read"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
+                            RoleName = "Administrador",
                             PermissionCode = "users:create"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
+                            RoleName = "Administrador",
                             PermissionCode = "users:update"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
+                            RoleName = "Administrador",
                             PermissionCode = "users:deactivate"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
+                            RoleName = "Administrador",
                             PermissionCode = "users:assign-roles"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
+                            RoleName = "Administrador",
                             PermissionCode = "roles:read"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
+                            RoleName = "Administrador",
                             PermissionCode = "roles:manage"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
+                            RoleName = "Administrador",
                             PermissionCode = "departments:manage"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
+                            RoleName = "Administrador",
                             PermissionCode = "sectors:manage"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
+                            RoleName = "Administrador",
                             PermissionCode = "audit:read"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
+                            RoleName = "Atendente",
                             PermissionCode = "tickets:create"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
+                            RoleName = "Atendente",
                             PermissionCode = "tickets:view-own"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
+                            RoleName = "Atendente",
                             PermissionCode = "tickets:update-own"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
+                            RoleName = "Atendente",
                             PermissionCode = "tickets:delete-own"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
+                            RoleName = "Atendente",
                             PermissionCode = "tickets:reopen-own"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
+                            RoleName = "Atendente",
                             PermissionCode = "tickets:manage"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
+                            RoleName = "Colaborador",
                             PermissionCode = "tickets:create"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
+                            RoleName = "Colaborador",
                             PermissionCode = "tickets:view-own"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
+                            RoleName = "Colaborador",
                             PermissionCode = "tickets:update-own"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
+                            RoleName = "Colaborador",
                             PermissionCode = "tickets:delete-own"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
+                            RoleName = "Colaborador",
                             PermissionCode = "tickets:reopen-own"
                         });
                 });
@@ -873,9 +859,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("role_id");
+                    b.Property<string>("RoleName")
+                        .IsRequired()
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("role_name");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
@@ -884,12 +871,12 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasKey("Id")
                         .HasName("pk_user_roles");
 
-                    b.HasIndex("RoleId")
-                        .HasDatabaseName("ix_user_roles_role_id");
+                    b.HasIndex("RoleName")
+                        .HasDatabaseName("ix_user_roles_role_name");
 
-                    b.HasIndex("UserId", "RoleId")
+                    b.HasIndex("UserId", "RoleName")
                         .IsUnique()
-                        .HasDatabaseName("ix_user_roles_user_id_role_id");
+                        .HasDatabaseName("ix_user_roles_user_id_role_name");
 
                     b.ToTable("user_roles", "public");
                 });
@@ -914,10 +901,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
 
                     b.HasOne("TickestPristine.Domain.Roles.Role", null)
                         .WithMany()
-                        .HasForeignKey("RoleId")
+                        .HasForeignKey("RoleName")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_role_permissions_roles_role_id");
+                        .HasConstraintName("fk_role_permissions_roles_role_name");
                 });
 
             modelBuilder.Entity("TickestPristine.Domain.Sectors.Sector", b =>
@@ -1027,10 +1014,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                 {
                     b.HasOne("TickestPristine.Domain.Roles.Role", null)
                         .WithMany()
-                        .HasForeignKey("RoleId")
+                        .HasForeignKey("RoleName")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_user_roles_roles_role_id");
+                        .HasConstraintName("fk_user_roles_roles_role_name");
 
                     b.HasOne("TickestPristine.Domain.Users.User", null)
                         .WithMany()

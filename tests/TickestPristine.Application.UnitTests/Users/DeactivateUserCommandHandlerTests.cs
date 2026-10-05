@@ -119,7 +119,7 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(RoleErrors.LastAdministrator);
-        (await context.Roles.SingleAsync(r => r.Id == administratorRole.Id)).Version.ShouldBe(0);
+        context.Entry(await context.Roles.SingleAsync(r => r.Name == administratorRole.Name)).Property<int>("Version").CurrentValue.ShouldBe(0);
         await permissionProvider.DidNotReceive().InvalidateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
@@ -144,7 +144,7 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsSuccess.ShouldBeTrue();
         (await context.Users.SingleAsync(u => u.Id == administratorId)).IsActive.ShouldBeFalse();
-        (await context.Roles.SingleAsync(r => r.Id == administratorRole.Id)).Version.ShouldBe(1);
+        context.Entry(await context.Roles.SingleAsync(r => r.Name == administratorRole.Name)).Property<int>("Version").CurrentValue.ShouldBe(1);
     }
 
     private static IUserContext CallerContext(Guid? callerId = null)
@@ -157,7 +157,7 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
 
     private static async Task<Role> SeedAdministratorRoleAsync(TestDbContext context)
     {
-        var role = new Role(Role.Administrator.Id, "Administrador");
+        Role role = CreateRole(Role.Administrator.Name);
         context.Roles.Add(role);
         await context.SaveChangesAsync();
 
@@ -177,7 +177,7 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
     private static async Task<Guid> SeedUserAsync(TestDbContext context, bool isActive, Role role)
     {
         Guid userId = await SeedUserAsync(context, isActive);
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = userId, RoleId = role.Id });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = userId, RoleName = role.Name });
         await context.SaveChangesAsync();
 
         return userId;

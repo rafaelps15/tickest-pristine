@@ -190,9 +190,9 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
         User user = AddUser(context, "Ana", "ana@tickestpristine.dev", isActive: true);
-        var role = new Role(Guid.NewGuid(), "Atendente");
+        Role role = CreateRole("Atendente");
         context.Roles.Add(role);
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = role.Id });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = role.Name });
         await context.SaveChangesAsync();
 
         var handler = new GetUsersQueryHandler(context);
@@ -202,7 +202,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
 
         // Assert
         UserSummaryResponse response = result.Value.Items.Single(u => u.Id == user.Id);
-        response.Roles.ShouldContain(r => r.Id == role.Id && r.Name == "Atendente");
+        response.Roles.ShouldContain(r => r.Name == role.Name && r.Name == "Atendente");
     }
 
     [Fact]

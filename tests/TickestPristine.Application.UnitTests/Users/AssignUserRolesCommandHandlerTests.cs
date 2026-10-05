@@ -21,7 +21,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         permissionProvider.GetForUserIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns([]);
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
 
-        var command = new AssignUserRolesCommand { UserId = Guid.NewGuid(), RoleIds = [Guid.NewGuid()] };
+        var command = new AssignUserRolesCommand { UserId = Guid.NewGuid(), RoleNames = ["Gestor"] };
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -52,14 +52,14 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         permissionProvider.GetForUserIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns([]);
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
 
-        var command = new AssignUserRolesCommand { UserId = user.Id, RoleIds = [Guid.NewGuid()] };
+        var command = new AssignUserRolesCommand { UserId = user.Id, RoleNames = ["Gestor"] };
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(RoleErrors.NotFound(command.RoleIds[0]));
+        result.Error.ShouldBe(RoleErrors.NotFound(command.RoleNames[0]));
     }
 
     [Fact]
@@ -77,11 +77,11 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         };
         context.Users.Add(user);
 
-        var oldRole = new Role(Guid.NewGuid(), "Colaborador");
-        var newRole = new Role(Guid.NewGuid(), "Manager");
+        Role oldRole = CreateRole("Colaborador");
+        Role newRole = CreateRole("Manager");
         context.Roles.Add(oldRole);
         context.Roles.Add(newRole);
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = oldRole.Id });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = oldRole.Name });
 
         await context.SaveChangesAsync();
 
@@ -90,7 +90,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         permissionProvider.GetForUserIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns([]);
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
 
-        var command = new AssignUserRolesCommand { UserId = user.Id, RoleIds = [newRole.Id] };
+        var command = new AssignUserRolesCommand { UserId = user.Id, RoleNames = [newRole.Name] };
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -98,11 +98,11 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsSuccess.ShouldBeTrue();
 
-        List<Guid> assignedRoleIds = await context.UserRoles
+        List<string> assignedRoleNames = await context.UserRoles
             .Where(ur => ur.UserId == user.Id)
-            .Select(ur => ur.RoleId)
+            .Select(ur => ur.RoleName)
             .ToListAsync();
-        assignedRoleIds.ShouldBe([newRole.Id]);
+        assignedRoleNames.ShouldBe([newRole.Name]);
 
         User updated = await context.Users.SingleAsync(u => u.Id == user.Id);
         updated.DomainEvents.ShouldContain(domainEvent => domainEvent is UserRolesAssignedDomainEvent);
@@ -125,10 +125,10 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         };
         context.Users.Add(user);
 
-        var gestorRole = new Role(Guid.NewGuid(), "Gestor");
+        Role gestorRole = CreateRole("Gestor");
         context.Roles.Add(gestorRole);
-        context.RolePermissions.Add(new RolePermission { RoleId = gestorRole.Id, PermissionCode = PermissionCodes.Users.Read });
-        context.RolePermissions.Add(new RolePermission { RoleId = gestorRole.Id, PermissionCode = PermissionCodes.Roles.Manage });
+        context.RolePermissions.Add(new RolePermission { RoleName = gestorRole.Name, PermissionCode = PermissionCodes.Users.Read });
+        context.RolePermissions.Add(new RolePermission { RoleName = gestorRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
 
         await context.SaveChangesAsync();
 
@@ -140,7 +140,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             .Returns([PermissionCodes.Users.Read, PermissionCodes.Users.AssignRoles]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
-        var command = new AssignUserRolesCommand { UserId = user.Id, RoleIds = [gestorRole.Id] };
+        var command = new AssignUserRolesCommand { UserId = user.Id, RoleNames = [gestorRole.Name] };
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -168,9 +168,9 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         };
         context.Users.Add(user);
 
-        var agentRole = new Role(Guid.NewGuid(), "Agente");
+        Role agentRole = CreateRole("Agente");
         context.Roles.Add(agentRole);
-        context.RolePermissions.Add(new RolePermission { RoleId = agentRole.Id, PermissionCode = PermissionCodes.Tickets.Manage });
+        context.RolePermissions.Add(new RolePermission { RoleName = agentRole.Name, PermissionCode = PermissionCodes.Tickets.Manage });
 
         await context.SaveChangesAsync();
 
@@ -182,7 +182,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             .Returns([PermissionCodes.Users.AssignRoles]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
-        var command = new AssignUserRolesCommand { UserId = user.Id, RoleIds = [agentRole.Id] };
+        var command = new AssignUserRolesCommand { UserId = user.Id, RoleNames = [agentRole.Name] };
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -206,11 +206,11 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         };
         context.Users.Add(admin);
 
-        var adminRole = new Role(Guid.NewGuid(), "Administrador");
+        Role adminRole = CreateRole("Administrador");
         context.Roles.Add(adminRole);
-        context.RolePermissions.Add(new RolePermission { RoleId = adminRole.Id, PermissionCode = PermissionCodes.Roles.Manage });
-        context.RolePermissions.Add(new RolePermission { RoleId = adminRole.Id, PermissionCode = PermissionCodes.Users.AssignRoles });
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleId = adminRole.Id });
+        context.RolePermissions.Add(new RolePermission { RoleName = adminRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
+        context.RolePermissions.Add(new RolePermission { RoleName = adminRole.Name, PermissionCode = PermissionCodes.Users.AssignRoles });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleName = adminRole.Name });
 
         await context.SaveChangesAsync();
 
@@ -222,7 +222,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             .Returns([PermissionCodes.Users.AssignRoles]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
-        var command = new AssignUserRolesCommand { UserId = admin.Id, RoleIds = [] };
+        var command = new AssignUserRolesCommand { UserId = admin.Id, RoleNames = [] };
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -231,11 +231,11 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(RoleErrors.PrivilegeEscalation([Permission.GetDisplayName(PermissionCodes.Roles.Manage)]));
 
-        List<Guid> assignedRoleIds = await context.UserRoles
+        List<string> assignedRoleNames = await context.UserRoles
             .Where(ur => ur.UserId == admin.Id)
-            .Select(ur => ur.RoleId)
+            .Select(ur => ur.RoleName)
             .ToListAsync();
-        assignedRoleIds.ShouldBe([adminRole.Id]);
+        assignedRoleNames.ShouldBe([adminRole.Name]);
     }
 
     [Fact]
@@ -253,13 +253,13 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         };
         context.Users.Add(user);
 
-        var gestorRole = new Role(Guid.NewGuid(), "Gestor");
-        var agentRole = new Role(Guid.NewGuid(), "Agente");
+        Role gestorRole = CreateRole("Gestor");
+        Role agentRole = CreateRole("Agente");
         context.Roles.Add(gestorRole);
         context.Roles.Add(agentRole);
-        context.RolePermissions.Add(new RolePermission { RoleId = gestorRole.Id, PermissionCode = PermissionCodes.Roles.Manage });
-        context.RolePermissions.Add(new RolePermission { RoleId = agentRole.Id, PermissionCode = PermissionCodes.Tickets.Manage });
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = gestorRole.Id });
+        context.RolePermissions.Add(new RolePermission { RoleName = gestorRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
+        context.RolePermissions.Add(new RolePermission { RoleName = agentRole.Name, PermissionCode = PermissionCodes.Tickets.Manage });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = gestorRole.Name });
 
         await context.SaveChangesAsync();
 
@@ -271,7 +271,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             .Returns([PermissionCodes.Users.AssignRoles]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
-        var command = new AssignUserRolesCommand { UserId = user.Id, RoleIds = [gestorRole.Id, agentRole.Id] };
+        var command = new AssignUserRolesCommand { UserId = user.Id, RoleNames = [gestorRole.Name, agentRole.Name] };
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -295,9 +295,9 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         };
         context.Users.Add(admin);
 
-        var adminRole = new Role(Role.Administrator.Id, "Administrador");
+        Role adminRole = CreateRole(Role.Administrator.Name);
         context.Roles.Add(adminRole);
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleId = adminRole.Id });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleName = adminRole.Name });
         await context.SaveChangesAsync();
 
         IUserContext userContext = Substitute.For<IUserContext>();
@@ -307,7 +307,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             .Returns([.. Permission.All.Select(p => p.Code)]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
-        var command = new AssignUserRolesCommand { UserId = admin.Id, RoleIds = [] };
+        var command = new AssignUserRolesCommand { UserId = admin.Id, RoleNames = [] };
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -315,8 +315,8 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(RoleErrors.LastAdministrator);
-        (await context.UserRoles.AnyAsync(ur => ur.UserId == admin.Id && ur.RoleId == adminRole.Id)).ShouldBeTrue();
-        (await context.Roles.SingleAsync(r => r.Id == adminRole.Id)).Version.ShouldBe(0);
+        (await context.UserRoles.AnyAsync(ur => ur.UserId == admin.Id && ur.RoleName == adminRole.Name)).ShouldBeTrue();
+        context.Entry(await context.Roles.SingleAsync(r => r.Name == adminRole.Name)).Property<int>("Version").CurrentValue.ShouldBe(0);
     }
 
     [Fact]
@@ -343,10 +343,10 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         };
         context.Users.AddRange(admin, otherAdmin);
 
-        var adminRole = new Role(Role.Administrator.Id, "Administrador");
+        Role adminRole = CreateRole(Role.Administrator.Name);
         context.Roles.Add(adminRole);
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleId = adminRole.Id });
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = otherAdmin.Id, RoleId = adminRole.Id });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleName = adminRole.Name });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = otherAdmin.Id, RoleName = adminRole.Name });
         await context.SaveChangesAsync();
 
         IUserContext userContext = Substitute.For<IUserContext>();
@@ -356,7 +356,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             .Returns([.. Permission.All.Select(p => p.Code)]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
-        var command = new AssignUserRolesCommand { UserId = admin.Id, RoleIds = [] };
+        var command = new AssignUserRolesCommand { UserId = admin.Id, RoleNames = [] };
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -365,8 +365,8 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         result.IsSuccess.ShouldBeTrue();
         (await context.UserRoles.AnyAsync(ur => ur.UserId == admin.Id)).ShouldBeFalse();
 
-        Role administratorRole = await context.Roles.SingleAsync(r => r.Id == adminRole.Id);
-        administratorRole.Version.ShouldBe(1);
+        Role administratorRole = await context.Roles.SingleAsync(r => r.Name == adminRole.Name);
+        context.Entry(administratorRole).Property<int>("Version").CurrentValue.ShouldBe(1);
     }
 
     [Fact]
@@ -378,10 +378,10 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         User deactivatedAdmin = CreateUser(isActive: false);
         context.Users.AddRange(admin, deactivatedAdmin);
 
-        var adminRole = new Role(Role.Administrator.Id, "Administrador");
+        Role adminRole = CreateRole(Role.Administrator.Name);
         context.Roles.Add(adminRole);
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleId = adminRole.Id });
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = deactivatedAdmin.Id, RoleId = adminRole.Id });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleName = adminRole.Name });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = deactivatedAdmin.Id, RoleName = adminRole.Name });
         await context.SaveChangesAsync();
 
         IUserContext userContext = Substitute.For<IUserContext>();
@@ -391,7 +391,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             .Returns([.. Permission.All.Select(p => p.Code)]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
-        var command = new AssignUserRolesCommand { UserId = admin.Id, RoleIds = [] };
+        var command = new AssignUserRolesCommand { UserId = admin.Id, RoleNames = [] };
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);

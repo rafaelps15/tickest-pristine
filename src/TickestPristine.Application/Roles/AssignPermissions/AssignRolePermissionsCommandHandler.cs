@@ -17,21 +17,21 @@ internal sealed class AssignRolePermissionsCommandHandler(
 {
     public async Task<Result> Handle(AssignRolePermissionsCommand command, CancellationToken cancellationToken)
     {
-        Role? role = await context.Roles.SingleOrDefaultAsync(r => r.Id == command.RoleId, cancellationToken);
+        Role? role = await context.Roles.SingleOrDefaultAsync(r => r.Name == command.RoleName, cancellationToken);
 
         if (role is null)
         {
-            return Result.Failure(RoleErrors.NotFound(command.RoleId));
+            return Result.Failure(RoleErrors.NotFound(command.RoleName));
         }
 
         // A role de administrador sempre recebe todas as permissões, por isso não pode ser editada.
-        if (role.Id == Role.Administrator.Id)
+        if (role.Name == Role.Administrator.Name)
         {
             return Result.Failure(RoleErrors.AdministratorRoleIsManaged);
         }
 
         List<RolePermission> existingPermissions = await context.RolePermissions
-            .Where(p => p.RoleId == role.Id)
+            .Where(p => p.RoleName == role.Name)
             .ToListAsync(cancellationToken);
 
         HashSet<string> currentCodes = [.. existingPermissions.Select(p => p.PermissionCode)];
@@ -57,15 +57,13 @@ internal sealed class AssignRolePermissionsCommandHandler(
 
         foreach (string permissionCode in requestedCodes.Except(currentCodes))
         {
-            context.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionCode = permissionCode });
+            context.RolePermissions.Add(new RolePermission { RoleName = role.Name, PermissionCode = permissionCode });
         }
 
         List<Guid> affectedUserIds = await context.UserRoles
-            .Where(userRole => userRole.RoleId == role.Id)
+            .Where(userRole => userRole.RoleName == role.Name)
             .Select(userRole => userRole.UserId)
             .ToListAsync(cancellationToken);
-
-        role.Raise(new RolePermissionsAssignedDomainEvent(role.Id));
 
         await context.SaveChangesAsync(cancellationToken);
 

@@ -8,6 +8,6 @@ internal sealed class AssignUserRolesCommandValidator : AbstractValidator<Assign
     {
         RuleFor(c => c.UserId).NotEmpty();
 
-        RuleFor(c => c.RoleIds).NotNull();
+        RuleFor(c => c.RoleNames).NotNull();
     }
 }

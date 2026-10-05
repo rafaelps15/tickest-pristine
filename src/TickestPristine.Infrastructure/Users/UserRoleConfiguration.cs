@@ -11,7 +11,7 @@ internal sealed class UserRoleConfiguration : IEntityTypeConfiguration<UserRole>
     {
         builder.HasKey(userRole => userRole.Id);
 
-        builder.HasIndex(userRole => new { userRole.UserId, userRole.RoleId }).IsUnique();
+        builder.HasIndex(userRole => new { userRole.UserId, userRole.RoleName }).IsUnique();
 
         builder.HasOne<User>()
             .WithMany()
@@ -19,6 +19,6 @@ internal sealed class UserRoleConfiguration : IEntityTypeConfiguration<UserRole>
 
         builder.HasOne<Role>()
             .WithMany()
-            .HasForeignKey(userRole => userRole.RoleId);
+            .HasForeignKey(userRole => userRole.RoleName);
     }
 }

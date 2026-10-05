@@ -18,6 +18,8 @@ internal sealed class PermissionConfiguration : IEntityTypeConfiguration<Permiss
 
         builder.Property(permission => permission.Group).HasMaxLength(100);
 
+        builder.Property(permission => permission.IsAdministrative);
+
         builder.HasData(Permission.All);
     }
 }

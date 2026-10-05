@@ -109,7 +109,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         await AuthenticateAsAdminAsync();
         HttpResponseMessage stripRolesResponse = await HttpClient.PutAsJsonAsync(
             $"users/{userId}/roles",
-            new { roleIds = Array.Empty<Guid>() });
+            new { roleNames = Array.Empty<string>() });
         stripRolesResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
         Authenticate(userTokens.AccessToken);
