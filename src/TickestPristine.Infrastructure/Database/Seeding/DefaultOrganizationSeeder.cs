@@ -14,30 +14,47 @@ internal sealed class DefaultOrganizationSeeder(IOptions<SeedingOptions> seeding
 {
     private static readonly DepartmentSeed[] Departments =
     [
-        new("TI", "Tecnologia da Informação: equipamentos, sistemas, redes e acessos.",
+        new("TI", "Tecnologia da Informação: equipamentos, sistemas, redes, acessos e segurança.",
         [
-            new("Helpdesk", "Computadores, impressoras, acessos e softwares de uso diário."),
-            new("Infraestrutura", "Internet, Wi-Fi, servidores, VPN e telefonia.")
+            new("Suporte ao Usuário", "Senhas, computadores, impressoras, periféricos e softwares de uso diário."),
+            new("Infraestrutura e Redes", "Internet, Wi-Fi, VPN, servidores, pontos de rede e telefonia."),
+            new("Sistemas Corporativos", "ERP, CRM e sistemas internos: acessos, perfis, erros e relatórios."),
+            new("Segurança da Informação", "Phishing, liberação de sites, perda de equipamentos e incidentes de segurança.")
         ]),
-        new("RH", "Recursos Humanos: vida funcional dos colaboradores.",
+        new("RH", "Recursos Humanos: vida funcional, benefícios e desenvolvimento dos colaboradores.",
         [
-            new("Recrutamento", "Vagas, processos seletivos e admissões."),
-            new("Departamento Pessoal", "Folha de pagamento, benefícios, férias e ponto.")
+            new("Departamento Pessoal", "Folha de pagamento, ponto, férias e documentos funcionais."),
+            new("Recrutamento e Seleção", "Abertura de vagas, processos seletivos e admissões."),
+            new("Benefícios", "Plano de saúde, odontológico, vale-transporte e vale-refeição."),
+            new("Treinamento e Desenvolvimento", "Cursos, treinamentos obrigatórios e avaliação de desempenho.")
         ]),
-        new("Financeiro", "Pagamentos, recebimentos e registros contábeis.",
+        new("Financeiro", "Pagamentos, recebimentos, impostos e registros contábeis.",
         [
             new("Contas a Pagar", "Pagamento de fornecedores, boletos e reembolsos."),
-            new("Contabilidade", "Lançamentos, notas fiscais e fechamento contábil.")
+            new("Contas a Receber", "Faturamento, cobrança, boletos e baixa de recebimentos."),
+            new("Contabilidade e Fiscal", "Lançamentos, notas fiscais, impostos e fechamento contábil.")
+        ]),
+        new("Compras e Suprimentos", "Aquisição de materiais e serviços, estoque e patrimônio.",
+        [
+            new("Compras", "Cotações e aquisição de materiais, equipamentos, licenças e serviços."),
+            new("Almoxarifado e Patrimônio", "Material de escritório, estoque, transferência e baixa de bens.")
+        ]),
+        new("Facilities", "Estrutura física, segurança, limpeza e serviços gerais.",
+        [
+            new("Manutenção Predial", "Elétrica, hidráulica, ar-condicionado, civil e pequenos reparos."),
+            new("Limpeza e Conservação", "Limpeza de ambientes, reposição de insumos e limpezas extras."),
+            new("Portaria e Controle de Acesso", "Crachás, catracas, visitantes, chaves e armários."),
+            new("Logística e Correspondência", "Envios, recebimentos, mudanças de layout e veículos da frota.")
+        ]),
+        new("Jurídico", "Contratos, proteção de dados e orientação jurídica.",
+        [
+            new("Contratos", "Elaboração, revisão, aditivos e renovação de contratos e NDAs."),
+            new("Privacidade e LGPD", "Pedidos de titulares de dados, incidentes com dados pessoais e orientação.")
         ]),
         new("Comercial", "Vendas e relacionamento com clientes.",
         [
-            new("Vendas", "Propostas, pedidos e contratos."),
-            new("Atendimento ao Cliente", "Dúvidas, reclamações e solicitações de clientes.")
-        ]),
-        new("Facilities", "Estrutura física, materiais e serviços gerais.",
-        [
-            new("Manutenção", "Elétrica, hidráulica, ar-condicionado e reparos."),
-            new("Logística", "Entregas, estoque, correspondência e transporte.")
+            new("Vendas", "Propostas, pedidos, descontos e cadastro de clientes."),
+            new("Atendimento ao Cliente", "Dúvidas, reclamações, trocas e cancelamentos de clientes.")
         ])
     ];
 

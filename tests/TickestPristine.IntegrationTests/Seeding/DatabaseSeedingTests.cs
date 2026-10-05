@@ -131,7 +131,9 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
             .Where(s => s.DepartmentId == informationTechnology.Id)
             .Select(s => s.Name)
             .ToListAsync();
-        sectorNames.ShouldBe(["Helpdesk", "Infraestrutura"], ignoreOrder: true);
+        sectorNames.ShouldBe(
+            ["Suporte ao Usuário", "Infraestrutura e Redes", "Sistemas Corporativos", "Segurança da Informação"],
+            ignoreOrder: true);
     }
 
     private sealed record RoleDto(Guid Id, string Name, bool IsDefault, bool IsAdministrator, List<string> PermissionCodes);
