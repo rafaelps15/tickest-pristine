@@ -1,3 +1,4 @@
+using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Roles.GetAll;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Roles;
@@ -41,7 +42,7 @@ public sealed class GetRolesQueryHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
 
-        var administrator = new Role { Id = Guid.NewGuid(), Name = "Administrador do Sistema", IsAdministrator = true };
+        var administrator = new Role { Id = SystemRoles.AdministratorId, Name = "Administrador do Sistema" };
         var collaborator = new Role { Id = Guid.NewGuid(), Name = "Colaborador", IsDefault = true };
         var agent = new Role { Id = Guid.NewGuid(), Name = "Atendente" };
         context.Roles.AddRange(administrator, collaborator, agent);

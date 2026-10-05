@@ -25,14 +25,14 @@ internal sealed class AssignUserRolesCommandHandler(
             return Result.Failure(UserErrors.NotFound(command.UserId));
         }
 
-        var distinctRoleIds = command.RoleIds.Distinct().ToList();
+        HashSet<Guid> requestedRoleIds = [.. command.RoleIds];
 
         List<Guid> existingRoleIds = await context.Roles
-            .Where(r => distinctRoleIds.Contains(r.Id))
+            .Where(r => requestedRoleIds.Contains(r.Id))
             .Select(r => r.Id)
             .ToListAsync(cancellationToken);
 
-        Guid? missingRoleId = distinctRoleIds.Except(existingRoleIds).Cast<Guid?>().FirstOrDefault();
+        Guid? missingRoleId = requestedRoleIds.Except(existingRoleIds).Cast<Guid?>().FirstOrDefault();
 
         if (missingRoleId is { } roleId)
         {
@@ -40,39 +40,36 @@ internal sealed class AssignUserRolesCommandHandler(
         }
 
         List<UserRole> existingUserRoles = await context.UserRoles
-            .Where(ur => ur.UserId == command.UserId)
+            .Where(ur => ur.UserId == user.Id)
             .ToListAsync(cancellationToken);
 
+        HashSet<Guid> currentRoleIds = [.. existingUserRoles.Select(ur => ur.RoleId)];
+
         // Considera tanto as roles adicionadas quanto as removidas.
-        var currentRoleIds = existingUserRoles.Select(ur => ur.RoleId).ToList();
-        var changedRoleIds = distinctRoleIds.Except(currentRoleIds)
-            .Union(currentRoleIds.Except(distinctRoleIds))
-            .ToList();
+        HashSet<Guid> changedRoleIds = [.. currentRoleIds];
+        changedRoleIds.SymmetricExceptWith(requestedRoleIds);
 
         List<string> changedPermissions = await context.RolePermissions
             .Where(p => changedRoleIds.Contains(p.RoleId))
             .Select(p => p.PermissionCode)
             .ToListAsync(cancellationToken);
 
-        HashSet<string> callerPermissions = await permissionProvider.GetForUserIdAsync(userContext.UserId, cancellationToken);
+        Result escalationCheck = await PrivilegeEscalationGuard.EnsureCallerCanChangeAsync(
+            permissionProvider,
+            userContext.UserId,
+            changedPermissions,
+            cancellationToken);
 
-        List<string> forbidden = PrivilegeEscalationGuard.FindPermissionsCallerCannotChange(changedPermissions, callerPermissions);
-
-        if (forbidden.Count > 0)
+        if (escalationCheck.IsFailure)
         {
-            return Result.Failure(RoleErrors.PrivilegeEscalation(forbidden.Select(PermissionCodes.GetDisplayName)));
+            return escalationCheck;
         }
 
-        Role? administratorRole = await context.Roles.SingleOrDefaultAsync(r => r.IsAdministrator, cancellationToken);
-
-        if (administratorRole is not null &&
-            currentRoleIds.Contains(administratorRole.Id) &&
-            !distinctRoleIds.Contains(administratorRole.Id))
+        if (currentRoleIds.Contains(SystemRoles.AdministratorId) && !requestedRoleIds.Contains(SystemRoles.AdministratorId))
         {
-            Result administratorCheck = await AdministratorGuard.EnsureAnotherActiveAdministratorAsync(
+            Result administratorCheck = await AdministratorGuard.EnsureNotLastAdministratorAsync(
                 context,
-                administratorRole,
-                command.UserId,
+                user.Id,
                 cancellationToken);
 
             if (administratorCheck.IsFailure)
@@ -81,18 +78,18 @@ internal sealed class AssignUserRolesCommandHandler(
             }
         }
 
-        context.UserRoles.RemoveRange(existingUserRoles);
+        context.UserRoles.RemoveRange(existingUserRoles.Where(ur => !requestedRoleIds.Contains(ur.RoleId)));
 
-        foreach (Guid distinctRoleId in distinctRoleIds)
+        foreach (Guid addedRoleId in requestedRoleIds.Except(currentRoleIds))
         {
-            context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = command.UserId, RoleId = distinctRoleId });
+            context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = addedRoleId });
         }
 
         user.Raise(new UserRolesAssignedDomainEvent(user.Id));
 
         await context.SaveChangesAsync(cancellationToken);
 
-        await permissionProvider.InvalidateAsync(command.UserId, cancellationToken);
+        await permissionProvider.InvalidateAsync(user.Id, cancellationToken);
 
         return Result.Success();
     }

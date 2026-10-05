@@ -1,24 +1,23 @@
 using System.Security.Claims;
-using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Domain.Users;
 
 namespace TickestPristine.Infrastructure.Authentication;
 
-internal sealed class ClaimsProvider(IPermissionProvider permissionProvider) : IClaimsProvider
+/// <summary>
+/// Claims de identificação do usuário. As permissões não vão no token: a API as resolve no servidor a cada requisição
+/// e os clientes as leem em GET /users/me.
+/// </summary>
+internal sealed class ClaimsProvider : IClaimsProvider
 {
-    public async Task<Claim[]> GetClaimsAsync(User user, CancellationToken cancellationToken = default)
+    public Task<Claim[]> GetClaimsAsync(User user, CancellationToken cancellationToken = default)
     {
-        var claims = new List<Claim>
-        {
+        Claim[] claims =
+        [
             new(TokenClaimTypes.UserId, user.Id.ToString()),
             new(TokenClaimTypes.Email, user.Email),
             new(TokenClaimTypes.Name, $"{user.FirstName} {user.LastName}")
-        };
+        ];
 
-        HashSet<string> permissions = await permissionProvider.GetForUserIdAsync(user.Id, cancellationToken);
-
-        claims.AddRange(permissions.Select(permission => new Claim(TokenClaimTypes.Permissions, permission)));
-
-        return [.. claims];
+        return Task.FromResult(claims);
     }
 }

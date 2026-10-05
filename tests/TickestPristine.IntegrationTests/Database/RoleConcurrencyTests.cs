@@ -1,3 +1,4 @@
+using TickestPristine.Application.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Domain.Roles;
@@ -19,8 +20,8 @@ public sealed class RoleConcurrencyTests(IntegrationTestWebAppFactory factory) :
         ApplicationDbContext firstContext = firstScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         ApplicationDbContext secondContext = secondScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        Role firstCopy = await firstContext.Roles.SingleAsync(r => r.IsAdministrator);
-        Role secondCopy = await secondContext.Roles.SingleAsync(r => r.IsAdministrator);
+        Role firstCopy = await firstContext.Roles.SingleAsync(r => r.Id == SystemRoles.AdministratorId);
+        Role secondCopy = await secondContext.Roles.SingleAsync(r => r.Id == SystemRoles.AdministratorId);
 
         firstCopy.Version++;
         secondCopy.Version++;

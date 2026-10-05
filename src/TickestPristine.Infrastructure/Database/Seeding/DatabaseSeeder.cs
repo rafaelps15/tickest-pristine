@@ -5,10 +5,11 @@ namespace TickestPristine.Infrastructure.Database.Seeding;
 
 /// <summary>
 /// Executado pelo EF Core junto com as migrations (UseSeeding/UseAsyncSeeding), ou seja, a cada Migrate: cada seeder
-/// confere antes o que já existe e não duplica nada. Roles e permissões padrão não passam por aqui: vêm das
-/// migrations (HasData), porque o código depende dos ids fixos delas.
+/// confere antes o que já existe e não duplica nada. A role de administrador e as permissões dela não passam por
+/// aqui: vêm das migrations (HasData), porque o código depende do id fixo dela.
 /// </summary>
 internal sealed class DatabaseSeeder(
+    DefaultRolesSeeder defaultRolesSeeder,
     AdminUserSeeder adminUserSeeder,
     DefaultOrganizationSeeder defaultOrganizationSeeder,
     SampleDataSeeder sampleDataSeeder)
@@ -20,7 +21,7 @@ internal sealed class DatabaseSeeder(
     public void Seed(DbContext context) => SeedAsync(context, CancellationToken.None).GetAwaiter().GetResult();
 
     /// <summary>
-    /// Roda os seeders em ordem: os chamados de exemplo dependem do administrador e dos setores já criados.
+    /// Roda os seeders em ordem: os chamados de exemplo dependem das roles, do administrador e dos setores já criados.
     /// </summary>
     public async Task SeedAsync(DbContext context, CancellationToken cancellationToken)
     {
@@ -28,6 +29,7 @@ internal sealed class DatabaseSeeder(
 
         await ReloadDatabaseTypesAsync(applicationDbContext, cancellationToken);
 
+        await defaultRolesSeeder.SeedAsync(applicationDbContext, cancellationToken);
         await adminUserSeeder.SeedAsync(applicationDbContext, cancellationToken);
         await defaultOrganizationSeeder.SeedAsync(applicationDbContext, cancellationToken);
         await sampleDataSeeder.SeedAsync(applicationDbContext, cancellationToken);

@@ -3,7 +3,6 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Authorization;
-using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -36,21 +35,14 @@ internal sealed class DeactivateUserCommandHandler(
             return Result.Failure(UserErrors.AlreadyDeactivated);
         }
 
-        Role? administratorRole = await context.Roles.SingleOrDefaultAsync(r => r.IsAdministrator, cancellationToken);
+        Result administratorCheck = await AdministratorGuard.EnsureNotLastAdministratorAsync(
+            context,
+            user.Id,
+            cancellationToken);
 
-        if (administratorRole is not null &&
-            await context.UserRoles.AnyAsync(ur => ur.UserId == user.Id && ur.RoleId == administratorRole.Id, cancellationToken))
+        if (administratorCheck.IsFailure)
         {
-            Result administratorCheck = await AdministratorGuard.EnsureAnotherActiveAdministratorAsync(
-                context,
-                administratorRole,
-                user.Id,
-                cancellationToken);
-
-            if (administratorCheck.IsFailure)
-            {
-                return administratorCheck;
-            }
+            return administratorCheck;
         }
 
         user.IsActive = false;

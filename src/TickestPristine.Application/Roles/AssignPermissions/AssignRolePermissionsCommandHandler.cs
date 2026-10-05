@@ -25,41 +25,43 @@ internal sealed class AssignRolePermissionsCommandHandler(
         }
 
         // A role de administrador sempre recebe todas as permissões, por isso não pode ser editada.
-        if (role.IsAdministrator)
+        if (role.Id == SystemRoles.AdministratorId)
         {
             return Result.Failure(RoleErrors.AdministratorRoleIsManaged);
         }
 
         List<RolePermission> existingPermissions = await context.RolePermissions
-            .Where(p => p.RoleId == command.RoleId)
+            .Where(p => p.RoleId == role.Id)
             .ToListAsync(cancellationToken);
 
+        HashSet<string> currentCodes = [.. existingPermissions.Select(p => p.PermissionCode)];
+        HashSet<string> requestedCodes = [.. command.PermissionCodes];
+
         // Considera tanto as permissões adicionadas quanto as removidas.
-        var currentPermissions = existingPermissions.Select(p => p.PermissionCode).ToList();
-        var changedPermissions = command.PermissionCodes.Except(currentPermissions)
-            .Union(currentPermissions.Except(command.PermissionCodes))
-            .ToList();
+        HashSet<string> changedCodes = [.. currentCodes];
+        changedCodes.SymmetricExceptWith(requestedCodes);
 
-        HashSet<string> callerPermissions = await permissionProvider.GetForUserIdAsync(userContext.UserId, cancellationToken);
+        Result escalationCheck = await PrivilegeEscalationGuard.EnsureCallerCanChangeAsync(
+            permissionProvider,
+            userContext.UserId,
+            changedCodes,
+            cancellationToken);
 
-        List<string> forbidden = PrivilegeEscalationGuard.FindPermissionsCallerCannotChange(changedPermissions, callerPermissions);
-
-        if (forbidden.Count > 0)
+        if (escalationCheck.IsFailure)
         {
-            return Result.Failure(RoleErrors.PrivilegeEscalation(forbidden.Select(PermissionCodes.GetDisplayName)));
+            return escalationCheck;
         }
 
         // A chave é (RoleId, PermissionCode): remove só as que saíram e inclui só as que entraram.
-        context.RolePermissions.RemoveRange(
-            existingPermissions.Where(p => !command.PermissionCodes.Contains(p.PermissionCode)));
+        context.RolePermissions.RemoveRange(existingPermissions.Where(p => !requestedCodes.Contains(p.PermissionCode)));
 
-        foreach (string permissionCode in command.PermissionCodes.Except(currentPermissions))
+        foreach (string permissionCode in requestedCodes.Except(currentCodes))
         {
-            context.RolePermissions.Add(new RolePermission { RoleId = command.RoleId, PermissionCode = permissionCode });
+            context.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionCode = permissionCode });
         }
 
         List<Guid> affectedUserIds = await context.UserRoles
-            .Where(userRole => userRole.RoleId == command.RoleId)
+            .Where(userRole => userRole.RoleId == role.Id)
             .Select(userRole => userRole.UserId)
             .ToListAsync(cancellationToken);
 

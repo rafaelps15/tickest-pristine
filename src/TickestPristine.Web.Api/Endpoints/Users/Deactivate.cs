@@ -1,5 +1,4 @@
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Users.Deactivate;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
@@ -22,7 +21,7 @@ internal sealed class Deactivate : IEndpoint
 
             return result.Match(Results.NoContent, CustomResults.Problem);
         })
-        .WithTags(Tags.Users)
-        .HasPermission(PermissionCodes.Users.Deactivate);
+        .HasPermission(Permissions.UsersDeactivate)
+        .WithTags(Tags.Users);
     }
 }

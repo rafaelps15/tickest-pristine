@@ -55,9 +55,9 @@ Avisos são tratados como erros (`TreatWarningsAsErrors`, `AnalysisMode=All`, So
 O seed (`Infrastructure/Database/Seeding`) roda dentro de `Migrate()` pelo `UseSeeding`/`UseAsyncSeeding` do EF Core. Isso vale para a API em Development, para o `dotnet ef database update` e para os migration bundles (`dotnet ef migrations bundle`), que são o caminho recomendado para produção. O script SQL (`dotnet ef migrations script --idempotent`) **não** roda o seed: quem usar esse caminho precisa chamar `Migrate()` depois, ou o banco fica sem o primeiro administrador.
 
 Cada dado fica no mecanismo de quem é dono dele:
-- **Dados de que o código depende** (roles padrão e permissões, com ids fixos): `HasData` na configuração do EF, ou seja, migration.
+- **Dados de que o código depende** (a role de administrador, com id fixo em `SystemRoles`, e as permissões dela, que são o catálogo inteiro): `HasData` na configuração do EF, ou seja, migration. Nada que a API permita editar fica no `HasData`: a migration seguinte entraria em conflito com a edição.
 - **Primeiro administrador**: seeder, porque usa segredo e configuração do ambiente (`Admin:*`). Só roda quando não há nenhum administrador ativo e cria a senha como provisória; depois disso os administradores são geridos pela API.
-- **Conteúdo inicial que o usuário edita** (ex.: cadastros de partida): seeder que só roda com a tabela vazia, ligado por uma flag em `Seeding:*`.
+- **Conteúdo inicial que o usuário edita** (ex.: cadastros de partida, as roles iniciais e as permissões delas): seeder que só roda com a tabela vazia, ligado por uma flag em `Seeding:*`.
 - **Dados fictícios de desenvolvimento**: seeder com Bogus e semente fixa, desligado por padrão (`Seeding:SampleData`). Nunca em migration.
 
 O teste `MigrationsTests` falha quando o modelo (inclusive o `HasData`) muda sem uma migration nova.
@@ -113,11 +113,17 @@ O `AuditLoggingInterceptor` (`Infrastructure/Audit`, um `SaveChangesInterceptor`
 
 ## Autenticação e autorização
 
-- **Modelo:** Usuários → Funções → Permissões. Os códigos de permissão (ex.: `"todos:manage"`) ficam catalogados em `Application/Authorization/PermissionCodes.cs`, com nome de exibição, descrição, grupo e a marcação `IsAdministrative`. As funções padrão e suas permissões são criadas via `HasData` nas configurações da Infrastructure; usuários novos recebem a função padrão no cadastro.
-- **No endpoint:** use `.HasPermission(PermissionCodes.X.Y)`, que impede a API de iniciar se o código não estiver no catálogo. Use `.RequireAuthorization()` simples quando a regra depende do dado (dono do item).
+- **Modelo:** Usuários → Funções → Permissões. Tudo o que é transversal fica em `Application/Authorization`:
+  - `PermissionCodes` — só as constantes dos códigos (ex.: `"todos:manage"`), usadas nos endpoints e handlers.
+  - `PermissionCatalog` — nome de exibição, descrição, grupo e a marcação `IsAdministrative` de cada código, mais `All`, `Administrative`, `Contains` e `GetDisplayName`. Toda constante nova entra aqui (um teste confere) e exige migration, porque o administrador recebe o catálogo inteiro.
+  - `SystemRoles` — as roles de que o código depende (hoje só o Administrador, identificado pelo id fixo; a API não edita as permissões dele).
+  - `PrivilegeEscalationGuard` e `AdministratorGuard` — devolvem `Result` prontos para o handler.
+
+  As demais roles são dados: as iniciais vêm do seeder, e a role marcada com `IsDefault` é a que usuários novos recebem no cadastro.
+- **No endpoint:** cada pasta de endpoints tem um `Permissions.cs` (`internal static class Permissions`) com as constantes que os endpoints dela usam, apontando para `PermissionCodes` (ex.: `internal const string TodosManage = PermissionCodes.Todos.Manage;`), e o endpoint chama `.HasPermission(Permissions.TodosManage)` antes do `.WithTags(...)`. O `HasPermission` só registra a policy; quem garante que o código existe é o teste do catálogo. Use `.RequireAuthorization()` simples quando a regra depende do dado (dono do item).
 - **No handler:** regras que dependem de uma permissão *e* do dado são conferidas no handler via `IPermissionProvider` — ex.: "o próprio item exige `todos:update-own`, o de qualquer pessoa exige `todos:manage`", ou `IsSelfOrHasPermissionAsync`. Falhas retornam `UserErrors.Unauthorized()` (403).
-- **Fonte da verdade:** as permissões são sempre resolvidas no servidor pelo `IPermissionProvider` (banco + `HybridCache` por usuário). Usuários desativados ficam sem nenhuma permissão. Todo command que muda as permissões efetivas de um usuário (funções, permissões de uma função, ativação) precisa chamar `permissionProvider.InvalidateAsync(userId)` depois de salvar. Os clientes leem a lista atualizada em `GET /users/me`; a API nunca autoriza com base nas claims do JWT.
-- **Guards:** o `PrivilegeEscalationGuard` impede conceder ou remover permissões administrativas que quem chama não tem; o `AdministratorGuard` garante que sempre reste pelo menos um administrador ativo.
+- **Fonte da verdade:** as permissões são sempre resolvidas no servidor pelo `IPermissionProvider` (banco + `HybridCache` por usuário). Usuários desativados ficam sem nenhuma permissão. Todo command que muda as permissões efetivas de um usuário (funções, permissões de uma função, ativação) precisa chamar `permissionProvider.InvalidateAsync(userId)` depois de salvar. Os clientes leem a lista atualizada em `GET /users/me`; o JWT só carrega a identidade (id, e-mail e nome), nunca permissões.
+- **Guards:** o `PrivilegeEscalationGuard.EnsureCallerCanChangeAsync` impede conceder ou remover permissões administrativas que quem chama não tem (recebe as permissões que entram e as que saem); o `AdministratorGuard.EnsureNotLastAdministratorAsync` é chamado antes de um usuário perder o acesso de administrador e garante que sempre reste pelo menos um administrador ativo.
 - **Senha provisória:** credenciais com `MustChangePassword` (como a do primeiro administrador) não recebem token no login, que responde 403 `Users.PasswordChangeRequired`. O cliente troca a senha em `POST users/login/new-password` (anônimo, confere as credenciais de novo), que já devolve os tokens.
 - **Tokens:** o access token expira após `Jwt:ExpirationInMinutes`; o refresh token, após `Jwt:RefreshTokenExpirationInDays`. O refresh token é guardado só como hash SHA-256 (que também é token de concorrência), trocado a cada renovação e revogado no logout ou na troca de senha.
 

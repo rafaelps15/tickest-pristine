@@ -1,14 +1,15 @@
+using System.Reflection;
 using TickestPristine.Application.Authorization;
 
 namespace TickestPristine.Application.UnitTests.Authorization;
 
-public sealed class PermissionCodesTests
+public sealed class PermissionCatalogTests
 {
     [Fact]
     public void Definitions_Should_HaveUniqueCodes()
     {
         // Arrange
-        IReadOnlyList<PermissionDefinition> definitions = PermissionCodes.Definitions;
+        IReadOnlyList<PermissionDefinition> definitions = PermissionCatalog.Definitions;
 
         // Act
         var codes = definitions.Select(d => d.Code).ToList();
@@ -21,7 +22,7 @@ public sealed class PermissionCodesTests
     public void Definitions_Should_HaveNameDescriptionAndGroupForEveryPermission()
     {
         // Arrange
-        IReadOnlyList<PermissionDefinition> definitions = PermissionCodes.Definitions;
+        IReadOnlyList<PermissionDefinition> definitions = PermissionCatalog.Definitions;
 
         // Act
         var incomplete = definitions
@@ -51,13 +52,13 @@ public sealed class PermissionCodesTests
     public void Administrative_Should_ContainExactlyTheDefinitionsMarkedAsAdministrative()
     {
         // Arrange
-        IReadOnlyList<PermissionDefinition> definitions = PermissionCodes.Definitions;
+        IReadOnlyList<PermissionDefinition> definitions = PermissionCatalog.Definitions;
 
         // Act
         var expected = definitions.Where(d => d.IsAdministrative).Select(d => d.Code).ToList();
 
         // Assert
-        PermissionCodes.Administrative.ShouldBe(expected, ignoreOrder: true);
+        PermissionCatalog.Administrative.ShouldBe(expected, ignoreOrder: true);
     }
 
     [Theory]
@@ -68,7 +69,7 @@ public sealed class PermissionCodesTests
     public void Administrative_Should_ContainPermissionsThatGivePowerOverOthers(string permission)
     {
         // Arrange
-        IReadOnlyList<string> administrative = PermissionCodes.Administrative;
+        IReadOnlyList<string> administrative = PermissionCatalog.Administrative;
 
         // Act
         bool isAdministrative = administrative.Contains(permission);
@@ -83,7 +84,7 @@ public sealed class PermissionCodesTests
     public void Administrative_Should_NotContainTicketPermissions(string permission)
     {
         // Arrange
-        IReadOnlyList<string> administrative = PermissionCodes.Administrative;
+        IReadOnlyList<string> administrative = PermissionCatalog.Administrative;
 
         // Act
         bool isAdministrative = administrative.Contains(permission);
@@ -99,10 +100,41 @@ public sealed class PermissionCodesTests
         const string code = PermissionCodes.Users.AssignRoles;
 
         // Act
-        string name = PermissionCodes.GetDisplayName(code);
+        string name = PermissionCatalog.GetDisplayName(code);
 
         // Assert
         name.ShouldBe("Alterar funções de colaboradores");
+    }
+
+    [Fact]
+    public void Definitions_Should_ContainEveryPermissionCodeConstant()
+    {
+        // Arrange
+        var constants = typeof(PermissionCodes)
+            .GetNestedTypes()
+            .SelectMany(type => type.GetFields(BindingFlags.Public | BindingFlags.Static))
+            .Where(field => field.IsLiteral)
+            .Select(field => (string)field.GetRawConstantValue()!)
+            .ToList();
+
+        // Act
+        IReadOnlyList<string> catalogCodes = PermissionCatalog.All;
+
+        // Assert
+        catalogCodes.ShouldBe(constants, ignoreOrder: true);
+    }
+
+    [Theory]
+    [InlineData(PermissionCodes.Roles.Manage, true)]
+    [InlineData(PermissionCodes.Tickets.Create, false)]
+    [InlineData("legacy:unknown", false)]
+    public void IsAdministrative_Should_FollowTheCatalog(string code, bool expected)
+    {
+        // Act
+        bool isAdministrative = PermissionCatalog.IsAdministrative(code);
+
+        // Assert
+        isAdministrative.ShouldBe(expected);
     }
 
     [Fact]
@@ -112,7 +144,7 @@ public sealed class PermissionCodesTests
         const string code = "legacy:unknown";
 
         // Act
-        string name = PermissionCodes.GetDisplayName(code);
+        string name = PermissionCatalog.GetDisplayName(code);
 
         // Assert
         name.ShouldBe(code);

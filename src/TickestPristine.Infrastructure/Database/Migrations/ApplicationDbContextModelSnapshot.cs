@@ -129,10 +129,6 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<bool>("IsAdministrator")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_administrator");
-
                     b.Property<bool>("IsDefault")
                         .HasColumnType("boolean")
                         .HasColumnName("is_default");
@@ -151,11 +147,6 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasKey("Id")
                         .HasName("pk_roles");
 
-                    b.HasIndex("IsAdministrator")
-                        .IsUnique()
-                        .HasDatabaseName("ix_roles_is_administrator")
-                        .HasFilter("is_administrator");
-
                     b.HasIndex("IsDefault")
                         .IsUnique()
                         .HasDatabaseName("ix_roles_is_default")
@@ -171,25 +162,8 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         new
                         {
                             Id = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            IsAdministrator = true,
                             IsDefault = false,
                             Name = "Administrador",
-                            Version = 0
-                        },
-                        new
-                        {
-                            Id = new Guid("0199a7c4-0000-7000-8000-000000000002"),
-                            IsAdministrator = false,
-                            IsDefault = false,
-                            Name = "Atendente",
-                            Version = 0
-                        },
-                        new
-                        {
-                            Id = new Guid("0199a7c4-0000-7000-8000-000000000003"),
-                            IsAdministrator = false,
-                            IsDefault = true,
-                            Name = "Colaborador",
                             Version = 0
                         });
                 });
@@ -290,61 +264,6 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         {
                             RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
                             PermissionCode = "audit:read"
-                        },
-                        new
-                        {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
-                            PermissionCode = "tickets:create"
-                        },
-                        new
-                        {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
-                            PermissionCode = "tickets:view-own"
-                        },
-                        new
-                        {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
-                            PermissionCode = "tickets:update-own"
-                        },
-                        new
-                        {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
-                            PermissionCode = "tickets:delete-own"
-                        },
-                        new
-                        {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
-                            PermissionCode = "tickets:reopen-own"
-                        },
-                        new
-                        {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
-                            PermissionCode = "tickets:manage"
-                        },
-                        new
-                        {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
-                            PermissionCode = "tickets:create"
-                        },
-                        new
-                        {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
-                            PermissionCode = "tickets:view-own"
-                        },
-                        new
-                        {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
-                            PermissionCode = "tickets:update-own"
-                        },
-                        new
-                        {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
-                            PermissionCode = "tickets:delete-own"
-                        },
-                        new
-                        {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
-                            PermissionCode = "tickets:reopen-own"
                         });
                 });
 

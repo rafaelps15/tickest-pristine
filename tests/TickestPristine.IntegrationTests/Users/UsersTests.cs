@@ -73,13 +73,12 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         jwt.Subject.ShouldBe(userId.ToString());
         jwt.Claims.Single(c => c.Type == "email").Value.ShouldBe(email);
         jwt.Claims.Single(c => c.Type == "name").Value.ShouldBe("Test User");
-        jwt.Claims.Where(c => c.Type == "permissions").Select(c => c.Value).ShouldContain(PermissionCodes.Tickets.Create);
     }
 
     [Fact]
-    public async Task Login_Should_IncludeEveryPermissionClaim_WhenUserIsSeededAdmin()
+    public async Task Login_Should_NotIncludePermissionClaims()
     {
-        // Arrange
+        // Arrange: as permissões são resolvidas no servidor e lidas em GET /users/me, nunca no token
         var handler = new JwtSecurityTokenHandler();
 
         // Act
@@ -87,9 +86,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         // Assert
         JwtSecurityToken jwt = handler.ReadJwtToken(tokens.AccessToken);
-        var permissions = jwt.Claims.Where(c => c.Type == "permissions").Select(c => c.Value).ToList();
-        permissions.ShouldNotBeEmpty();
-        permissions.ShouldBe(PermissionCodes.All, ignoreOrder: true);
+        jwt.Claims.ShouldNotContain(c => c.Type == "permissions");
     }
 
     [Fact]
@@ -577,7 +574,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         // Assert
         response.EnsureSuccessStatusCode();
         CurrentUserDto? me = await response.Content.ReadFromJsonAsync<CurrentUserDto>();
-        me!.Permissions.ShouldBe(PermissionCodes.All, ignoreOrder: true);
+        me!.Permissions.ShouldBe(PermissionCatalog.All, ignoreOrder: true);
     }
 
     [Fact]

@@ -1,5 +1,4 @@
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Tickets.Create;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.SharedKernel;
@@ -41,7 +40,7 @@ internal sealed class Create : IEndpoint
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })
-        .WithTags(Tags.Tickets)
-        .HasPermission(PermissionCodes.Tickets.Create);
+        .HasPermission(Permissions.TicketsCreate)
+        .WithTags(Tags.Tickets);
     }
 }

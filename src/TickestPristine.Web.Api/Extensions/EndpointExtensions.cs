@@ -1,6 +1,5 @@
 ﻿using System.Reflection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using TickestPristine.Application.Authorization;
 using TickestPristine.Web.Api.Endpoints;
 
 namespace TickestPristine.Web.Api.Extensions;
@@ -39,13 +38,6 @@ public static class EndpointExtensions
 
     public static RouteHandlerBuilder HasPermission(this RouteHandlerBuilder app, string permission)
     {
-        // Impede a API de iniciar com um código de permissão que não está no catálogo.
-        if (!PermissionCodes.All.Contains(permission))
-        {
-            throw new InvalidOperationException(
-                $"A permissão '{permission}' não existe no catálogo (PermissionCodes.Definitions).");
-        }
-
         return app.RequireAuthorization(permission);
     }
 }

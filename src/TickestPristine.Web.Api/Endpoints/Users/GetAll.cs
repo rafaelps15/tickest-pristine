@@ -1,6 +1,5 @@
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Pagination;
-using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Users.GetAll;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
@@ -34,7 +33,7 @@ internal sealed class GetAll : IEndpoint
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })
-        .WithTags(Tags.Users)
-        .HasPermission(PermissionCodes.Users.Read);
+        .HasPermission(Permissions.UsersRead)
+        .WithTags(Tags.Users);
     }
 }

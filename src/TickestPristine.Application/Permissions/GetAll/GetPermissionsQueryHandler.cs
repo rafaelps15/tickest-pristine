@@ -8,7 +8,7 @@ internal sealed class GetPermissionsQueryHandler : IQueryHandler<GetPermissionsQ
 {
     public Task<Result<List<PermissionResponse>>> Handle(GetPermissionsQuery query, CancellationToken cancellationToken)
     {
-        var permissions = PermissionCodes.Definitions
+        var permissions = PermissionCatalog.Definitions
             .Select(d => new PermissionResponse
             {
                 Code = d.Code,

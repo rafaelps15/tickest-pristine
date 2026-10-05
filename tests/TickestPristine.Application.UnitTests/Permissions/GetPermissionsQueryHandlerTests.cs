@@ -18,7 +18,7 @@ public sealed class GetPermissionsQueryHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
-        result.Value.Select(p => p.Code).ShouldBe(PermissionCodes.All);
+        result.Value.Select(p => p.Code).ShouldBe(PermissionCatalog.All);
 
         PermissionResponse assignRoles = result.Value.Single(p => p.Code == PermissionCodes.Users.AssignRoles);
         assignRoles.Name.ShouldBe("Alterar funções de colaboradores");

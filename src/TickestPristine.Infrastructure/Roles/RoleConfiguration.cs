@@ -1,3 +1,4 @@
+using TickestPristine.Application.Authorization;
 using TickestPristine.Domain.Roles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -14,14 +15,12 @@ internal sealed class RoleConfiguration : IEntityTypeConfiguration<Role>
 
         builder.HasIndex(role => role.Name).IsUnique();
 
-        // Permite no máximo uma role padrão e uma role de administrador.
+        // Permite no máximo uma role padrão.
         builder.HasIndex(role => role.IsDefault).IsUnique().HasFilter("is_default");
-
-        builder.HasIndex(role => role.IsAdministrator).IsUnique().HasFilter("is_administrator");
 
         builder.Property(role => role.Version).IsConcurrencyToken();
 
-        // Roles padrão: dados de referência versionados pelas migrations.
-        builder.HasData(Role.Administrator, Role.Agent, Role.Collaborator);
+        // Só as roles de que o código depende ficam nas migrations; as iniciais editáveis vêm do DefaultRolesSeeder.
+        builder.HasData(new Role { Id = SystemRoles.AdministratorId, Name = SystemRoles.AdministratorName });
     }
 }

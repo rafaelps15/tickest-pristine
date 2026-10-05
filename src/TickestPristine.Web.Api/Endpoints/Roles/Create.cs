@@ -1,5 +1,4 @@
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Roles.Create;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
@@ -27,7 +26,7 @@ internal sealed class Create : IEndpoint
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })
-        .WithTags(Tags.Roles)
-        .HasPermission(PermissionCodes.Roles.Manage);
+        .HasPermission(Permissions.RolesManage)
+        .WithTags(Tags.Roles);
     }
 }

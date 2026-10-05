@@ -17,31 +17,8 @@ internal sealed class RolePermissionConfiguration : IEntityTypeConfiguration<Rol
             .WithMany()
             .HasForeignKey(rolePermission => rolePermission.RoleId);
 
-        // Permissões das roles padrão. Qualquer mudança aqui, inclusive no catálogo PermissionCodes
-        // (que o Administrador recebe inteiro), exige uma nova migration.
-        RolePermission[] defaultRolePermissions =
-            [
-                .. PermissionCodes.All.Select(code => Create(Role.Administrator, code)),
-
-                // Atendente
-                Create(Role.Agent, PermissionCodes.Tickets.Create),
-                Create(Role.Agent, PermissionCodes.Tickets.ViewOwn),
-                Create(Role.Agent, PermissionCodes.Tickets.UpdateOwn),
-                Create(Role.Agent, PermissionCodes.Tickets.DeleteOwn),
-                Create(Role.Agent, PermissionCodes.Tickets.ReopenOwn),
-                Create(Role.Agent, PermissionCodes.Tickets.Manage),
-
-                // Colaborador
-                Create(Role.Collaborator, PermissionCodes.Tickets.Create),
-                Create(Role.Collaborator, PermissionCodes.Tickets.ViewOwn),
-                Create(Role.Collaborator, PermissionCodes.Tickets.UpdateOwn),
-                Create(Role.Collaborator, PermissionCodes.Tickets.DeleteOwn),
-                Create(Role.Collaborator, PermissionCodes.Tickets.ReopenOwn)
-            ];
-
-        builder.HasData(defaultRolePermissions);
+        // O Administrador recebe o catálogo inteiro: incluir ou remover uma permissão do catálogo exige uma migration.
+        builder.HasData(PermissionCatalog.All.Select(code =>
+            new RolePermission { RoleId = SystemRoles.AdministratorId, PermissionCode = code }));
     }
-
-    private static RolePermission Create(Role role, string permissionCode) =>
-        new() { RoleId = role.Id, PermissionCode = permissionCode };
 }

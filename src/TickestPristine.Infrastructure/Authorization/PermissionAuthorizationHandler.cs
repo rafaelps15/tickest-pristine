@@ -23,9 +23,9 @@ internal sealed class PermissionAuthorizationHandler(IServiceScopeFactory servic
 
         Guid userId = context.User.GetUserId();
 
-        bool hasPermission = await permissionProvider.HasPermissionAsync(userId, requirement.Permission);
+        HashSet<string> permissions = await permissionProvider.GetForUserIdAsync(userId);
 
-        if (hasPermission)
+        if (permissions.Contains(requirement.Permission))
         {
             context.Succeed(requirement);
         }

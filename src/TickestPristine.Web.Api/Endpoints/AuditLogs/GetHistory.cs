@@ -1,6 +1,5 @@
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.AuditLogs.GetHistory;
-using TickestPristine.Application.Authorization;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
 using TickestPristine.Web.Api.Infrastructure;
@@ -24,7 +23,7 @@ internal sealed class GetHistory : IEndpoint
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })
-        .WithTags(Tags.AuditLogs)
-        .HasPermission(PermissionCodes.Audit.Read);
+        .HasPermission(Permissions.AuditRead)
+        .WithTags(Tags.AuditLogs);
     }
 }

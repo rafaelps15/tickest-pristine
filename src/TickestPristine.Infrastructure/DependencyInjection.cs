@@ -65,6 +65,7 @@ public static class DependencyInjection
         services.AddOptions<SeedingOptions>()
             .BindConfiguration(SeedingOptions.SectionName);
 
+        services.AddSingleton<DefaultRolesSeeder>();
         services.AddSingleton<AdminUserSeeder>();
         services.AddSingleton<DefaultOrganizationSeeder>();
         services.AddSingleton<SampleDataSeeder>();

@@ -10,13 +10,13 @@ using TickestPristine.Infrastructure.Database;
 namespace TickestPristine.IntegrationTests.Seeding;
 
 /// <summary>
-/// Valida os dados que as migrations e o seed criam: roles padrão (HasData), o administrador inicial e a
-/// estrutura inicial de departamentos e setores.
+/// Valida os dados que as migrations e o seed criam: role de administrador (HasData), roles iniciais, o
+/// administrador inicial e a estrutura inicial de departamentos e setores.
 /// </summary>
 public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
     [Fact]
-    public async Task Migrations_Should_CreateDefaultRolesWithFixedIds()
+    public async Task Seeding_Should_CreateAdministratorAndDefaultRoles()
     {
         // Arrange
         AccessTokens tokens = await LoginAsync(AdminEmail, AdminPassword);
@@ -26,16 +26,18 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
         List<RoleDto>? roles = await HttpClient.GetFromJsonAsync<List<RoleDto>>("roles");
 
         // Assert
-        RoleDto administrator = roles!.Single(r => r.Id == Role.Administrator.Id);
-        administrator.Name.ShouldBe(Role.Administrator.Name);
+        RoleDto administrator = roles!.Single(r => r.Id == SystemRoles.AdministratorId);
+        administrator.Name.ShouldBe(SystemRoles.AdministratorName);
         administrator.IsAdministrator.ShouldBeTrue();
 
-        RoleDto agent = roles!.Single(r => r.Id == Role.Agent.Id);
-        agent.Name.ShouldBe(Role.Agent.Name);
+        RoleDto agent = roles!.Single(r => r.Name == "Atendente");
+        agent.IsDefault.ShouldBeFalse();
+        agent.PermissionCodes.ShouldContain(PermissionCodes.Tickets.Manage);
 
-        RoleDto collaborator = roles!.Single(r => r.Id == Role.Collaborator.Id);
-        collaborator.Name.ShouldBe(Role.Collaborator.Name);
+        RoleDto collaborator = roles!.Single(r => r.Name == "Colaborador");
         collaborator.IsDefault.ShouldBeTrue();
+        collaborator.PermissionCodes.ShouldContain(PermissionCodes.Tickets.Create);
+        collaborator.PermissionCodes.ShouldNotContain(PermissionCodes.Tickets.Manage);
     }
 
     [Fact]
@@ -48,9 +50,9 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
         // Act
         List<RoleDto>? roles = await HttpClient.GetFromJsonAsync<List<RoleDto>>("roles");
 
-        // Assert: falha quando um código entra ou sai do PermissionCodes sem a migration correspondente
-        RoleDto administrator = roles!.Single(r => r.Id == Role.Administrator.Id);
-        administrator.PermissionCodes.ShouldBe(PermissionCodes.All, ignoreOrder: true);
+        // Assert: falha quando um código entra ou sai do PermissionCatalog sem a migration correspondente
+        RoleDto administrator = roles!.Single(r => r.Id == SystemRoles.AdministratorId);
+        administrator.PermissionCodes.ShouldBe(PermissionCatalog.All, ignoreOrder: true);
     }
 
     [Fact]
@@ -67,7 +69,7 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
         User administrator = await context.Users.SingleAsync(u => u.Email == AdminEmail);
         administrator.IsActive.ShouldBeTrue();
 
-        Guid administratorRoleId = Role.Administrator.Id;
+        Guid administratorRoleId = SystemRoles.AdministratorId;
         int administratorRoleLinks = await context.UserRoles
             .CountAsync(ur => ur.UserId == administrator.Id && ur.RoleId == administratorRoleId);
         administratorRoleLinks.ShouldBe(1);
@@ -77,7 +79,7 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
     public async Task Seeding_Should_NotRestoreAdministratorRole_WhenAnotherActiveAdministratorExists()
     {
         // Arrange
-        Guid administratorRoleId = Role.Administrator.Id;
+        Guid administratorRoleId = SystemRoles.AdministratorId;
         Guid anotherAdministratorId = await RegisterUserAsync(UniqueEmail());
 
         using IServiceScope scope = Services.CreateScope();
