@@ -25,7 +25,7 @@ internal sealed class AssignRolePermissionsCommandHandler(
         }
 
         // A role de administrador sempre recebe todas as permissões, por isso não pode ser editada.
-        if (role.Id == SystemRoles.AdministratorId)
+        if (role.Id == Role.Administrator.Id)
         {
             return Result.Failure(RoleErrors.AdministratorRoleIsManaged);
         }

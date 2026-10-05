@@ -13,7 +13,7 @@ public sealed class CreateRoleCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        context.Roles.Add(new Role { Id = Guid.NewGuid(), Name = "Manager" });
+        context.Roles.Add(new Role(Guid.NewGuid(), "Manager"));
         await context.SaveChangesAsync();
 
         var handler = new CreateRoleCommandHandler(context);

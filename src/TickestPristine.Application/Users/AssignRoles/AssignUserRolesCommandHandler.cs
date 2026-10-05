@@ -65,7 +65,7 @@ internal sealed class AssignUserRolesCommandHandler(
             return escalationCheck;
         }
 
-        if (currentRoleIds.Contains(SystemRoles.AdministratorId) && !requestedRoleIds.Contains(SystemRoles.AdministratorId))
+        if (currentRoleIds.Contains(Role.Administrator.Id) && !requestedRoleIds.Contains(Role.Administrator.Id))
         {
             Result administratorCheck = await AdministratorGuard.EnsureNotLastAdministratorAsync(
                 context,

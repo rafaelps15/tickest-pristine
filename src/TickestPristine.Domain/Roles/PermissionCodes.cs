@@ -1,8 +1,8 @@
-namespace TickestPristine.Application.Authorization;
+namespace TickestPristine.Domain.Roles;
 
 /// <summary>
-/// Códigos das permissões, usados nos endpoints e nos handlers. Nome, descrição e grupo de cada uma ficam no
-/// <see cref="PermissionCatalog"/>.
+/// Códigos das permissões, como constantes para uso nos endpoints, nos handlers e nos testes. Cada código tem a sua
+/// <see cref="Permission"/>, com nome, descrição e grupo.
 /// </summary>
 public static class PermissionCodes
 {

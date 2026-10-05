@@ -190,7 +190,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
         User user = AddUser(context, "Ana", "ana@tickestpristine.dev", isActive: true);
-        var role = new Role { Id = Guid.NewGuid(), Name = "Atendente" };
+        var role = new Role(Guid.NewGuid(), "Atendente");
         context.Roles.Add(role);
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = role.Id });
         await context.SaveChangesAsync();

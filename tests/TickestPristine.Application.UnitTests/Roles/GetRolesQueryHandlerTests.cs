@@ -1,4 +1,3 @@
-using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Roles.GetAll;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Roles;
@@ -14,8 +13,8 @@ public sealed class GetRolesQueryHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
 
-        var manager = new Role { Id = Guid.NewGuid(), Name = "Manager" };
-        var agent = new Role { Id = Guid.NewGuid(), Name = "Atendente" };
+        var manager = new Role(Guid.NewGuid(), "Manager");
+        var agent = new Role(Guid.NewGuid(), "Atendente");
         context.Roles.AddRange(manager, agent);
         context.RolePermissions.Add(new RolePermission { RoleId = manager.Id, PermissionCode = "tickets:manage" });
         await context.SaveChangesAsync();
@@ -42,9 +41,9 @@ public sealed class GetRolesQueryHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
 
-        var administrator = new Role { Id = SystemRoles.AdministratorId, Name = "Administrador do Sistema" };
-        var collaborator = new Role { Id = Guid.NewGuid(), Name = "Colaborador", IsDefault = true };
-        var agent = new Role { Id = Guid.NewGuid(), Name = "Atendente" };
+        var administrator = new Role(Role.Administrator.Id, "Administrador do Sistema");
+        var collaborator = new Role(Role.Collaborator.Id, "Colaborador");
+        var agent = new Role(Guid.NewGuid(), "Atendente");
         context.Roles.AddRange(administrator, collaborator, agent);
         await context.SaveChangesAsync();
 

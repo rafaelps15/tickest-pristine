@@ -23,8 +23,4 @@ public static class RoleErrors
     public static readonly Error LastAdministrator = Error.Conflict(
         "Roles.LastAdministrator",
         "O sistema precisa manter pelo menos um administrador ativo");
-
-    public static readonly Error DefaultRoleNotConfigured = Error.Failure(
-        "Roles.DefaultRoleNotConfigured",
-        "Nenhuma função padrão para novos usuários está configurada no sistema");
 }

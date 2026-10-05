@@ -1,6 +1,6 @@
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Authorization;
+using TickestPristine.Domain.Roles;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -17,8 +17,8 @@ internal sealed class GetRolesQueryHandler(IApplicationDbContext context)
             {
                 Id = r.Id,
                 Name = r.Name,
-                IsDefault = r.IsDefault,
-                IsAdministrator = r.Id == SystemRoles.AdministratorId,
+                IsDefault = r.Id == Role.Collaborator.Id,
+                IsAdministrator = r.Id == Role.Administrator.Id,
                 PermissionCodes = context.RolePermissions
                     .Where(p => p.RoleId == r.Id)
                     .Select(p => p.PermissionCode)

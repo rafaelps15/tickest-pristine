@@ -1,4 +1,4 @@
-using TickestPristine.Application.Authorization;
+using TickestPristine.Domain.Roles;
 using TickestPristine.Application.Roles.AssignPermissions;
 using TickestPristine.Application.Roles.Create;
 using FluentValidation.TestHelper;

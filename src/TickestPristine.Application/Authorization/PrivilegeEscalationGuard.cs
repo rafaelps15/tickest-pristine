@@ -17,7 +17,7 @@ internal static class PrivilegeEscalationGuard
         CancellationToken cancellationToken)
     {
         var administrativeChanges = changedPermissions
-            .Where(PermissionCatalog.IsAdministrative)
+            .Where(code => Permission.Find(code)?.IsAdministrative == true)
             .Distinct()
             .ToList();
 
@@ -35,6 +35,6 @@ internal static class PrivilegeEscalationGuard
 
         return forbidden.Count == 0
             ? Result.Success()
-            : Result.Failure(RoleErrors.PrivilegeEscalation(forbidden.Select(PermissionCatalog.GetDisplayName)));
+            : Result.Failure(RoleErrors.PrivilegeEscalation(forbidden.Select(Permission.GetDisplayName)));
     }
 }

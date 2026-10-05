@@ -21,16 +21,6 @@ internal sealed class RegisterUserCommandHandler(
             return Result.Failure<Guid>(UserErrors.EmailNotUnique);
         }
 
-        Guid? defaultRoleId = await context.Roles
-            .Where(r => r.IsDefault)
-            .Select(r => (Guid?)r.Id)
-            .SingleOrDefaultAsync(cancellationToken);
-
-        if (defaultRoleId is null)
-        {
-            return Result.Failure<Guid>(RoleErrors.DefaultRoleNotConfigured);
-        }
-
         var user = new User
         {
             Id = Guid.NewGuid(),
@@ -46,7 +36,7 @@ internal sealed class RegisterUserCommandHandler(
 
         context.Users.Add(user);
         context.UserCredentials.Add(new UserCredential { Id = Guid.NewGuid(), UserId = user.Id, PasswordHash = passwordHasher.Hash(command.Password) });
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = defaultRoleId.Value });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = Role.Collaborator.Id });
 
         await context.SaveChangesAsync(cancellationToken);
 

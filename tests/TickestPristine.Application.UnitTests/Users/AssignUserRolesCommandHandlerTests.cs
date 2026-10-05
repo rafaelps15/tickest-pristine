@@ -1,6 +1,5 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Authorization;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Users.AssignRoles;
 using TickestPristine.Domain.Roles;
@@ -78,8 +77,8 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         };
         context.Users.Add(user);
 
-        var oldRole = new Role { Id = Guid.NewGuid(), Name = "Colaborador" };
-        var newRole = new Role { Id = Guid.NewGuid(), Name = "Manager" };
+        var oldRole = new Role(Guid.NewGuid(), "Colaborador");
+        var newRole = new Role(Guid.NewGuid(), "Manager");
         context.Roles.Add(oldRole);
         context.Roles.Add(newRole);
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = oldRole.Id });
@@ -126,7 +125,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         };
         context.Users.Add(user);
 
-        var gestorRole = new Role { Id = Guid.NewGuid(), Name = "Gestor" };
+        var gestorRole = new Role(Guid.NewGuid(), "Gestor");
         context.Roles.Add(gestorRole);
         context.RolePermissions.Add(new RolePermission { RoleId = gestorRole.Id, PermissionCode = PermissionCodes.Users.Read });
         context.RolePermissions.Add(new RolePermission { RoleId = gestorRole.Id, PermissionCode = PermissionCodes.Roles.Manage });
@@ -148,7 +147,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(RoleErrors.PrivilegeEscalation([PermissionCatalog.GetDisplayName(PermissionCodes.Roles.Manage)]));
+        result.Error.ShouldBe(RoleErrors.PrivilegeEscalation([Permission.GetDisplayName(PermissionCodes.Roles.Manage)]));
 
         (await context.UserRoles.AnyAsync(ur => ur.UserId == user.Id)).ShouldBeFalse();
         await permissionProvider.DidNotReceive().InvalidateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
@@ -169,7 +168,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         };
         context.Users.Add(user);
 
-        var agentRole = new Role { Id = Guid.NewGuid(), Name = "Agente" };
+        var agentRole = new Role(Guid.NewGuid(), "Agente");
         context.Roles.Add(agentRole);
         context.RolePermissions.Add(new RolePermission { RoleId = agentRole.Id, PermissionCode = PermissionCodes.Tickets.Manage });
 
@@ -207,7 +206,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         };
         context.Users.Add(admin);
 
-        var adminRole = new Role { Id = Guid.NewGuid(), Name = "Administrador" };
+        var adminRole = new Role(Guid.NewGuid(), "Administrador");
         context.Roles.Add(adminRole);
         context.RolePermissions.Add(new RolePermission { RoleId = adminRole.Id, PermissionCode = PermissionCodes.Roles.Manage });
         context.RolePermissions.Add(new RolePermission { RoleId = adminRole.Id, PermissionCode = PermissionCodes.Users.AssignRoles });
@@ -230,7 +229,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(RoleErrors.PrivilegeEscalation([PermissionCatalog.GetDisplayName(PermissionCodes.Roles.Manage)]));
+        result.Error.ShouldBe(RoleErrors.PrivilegeEscalation([Permission.GetDisplayName(PermissionCodes.Roles.Manage)]));
 
         List<Guid> assignedRoleIds = await context.UserRoles
             .Where(ur => ur.UserId == admin.Id)
@@ -254,8 +253,8 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         };
         context.Users.Add(user);
 
-        var gestorRole = new Role { Id = Guid.NewGuid(), Name = "Gestor" };
-        var agentRole = new Role { Id = Guid.NewGuid(), Name = "Agente" };
+        var gestorRole = new Role(Guid.NewGuid(), "Gestor");
+        var agentRole = new Role(Guid.NewGuid(), "Agente");
         context.Roles.Add(gestorRole);
         context.Roles.Add(agentRole);
         context.RolePermissions.Add(new RolePermission { RoleId = gestorRole.Id, PermissionCode = PermissionCodes.Roles.Manage });
@@ -296,7 +295,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         };
         context.Users.Add(admin);
 
-        var adminRole = new Role { Id = SystemRoles.AdministratorId, Name = "Administrador" };
+        var adminRole = new Role(Role.Administrator.Id, "Administrador");
         context.Roles.Add(adminRole);
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleId = adminRole.Id });
         await context.SaveChangesAsync();
@@ -305,7 +304,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         userContext.UserId.Returns(admin.Id);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         permissionProvider.GetForUserIdAsync(admin.Id, Arg.Any<CancellationToken>())
-            .Returns([.. PermissionCatalog.All]);
+            .Returns([.. Permission.All.Select(p => p.Code)]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
         var command = new AssignUserRolesCommand { UserId = admin.Id, RoleIds = [] };
@@ -344,7 +343,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         };
         context.Users.AddRange(admin, otherAdmin);
 
-        var adminRole = new Role { Id = SystemRoles.AdministratorId, Name = "Administrador" };
+        var adminRole = new Role(Role.Administrator.Id, "Administrador");
         context.Roles.Add(adminRole);
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleId = adminRole.Id });
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = otherAdmin.Id, RoleId = adminRole.Id });
@@ -354,7 +353,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         userContext.UserId.Returns(otherAdmin.Id);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         permissionProvider.GetForUserIdAsync(otherAdmin.Id, Arg.Any<CancellationToken>())
-            .Returns([.. PermissionCatalog.All]);
+            .Returns([.. Permission.All.Select(p => p.Code)]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
         var command = new AssignUserRolesCommand { UserId = admin.Id, RoleIds = [] };
@@ -379,7 +378,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         User deactivatedAdmin = CreateUser(isActive: false);
         context.Users.AddRange(admin, deactivatedAdmin);
 
-        var adminRole = new Role { Id = SystemRoles.AdministratorId, Name = "Administrador" };
+        var adminRole = new Role(Role.Administrator.Id, "Administrador");
         context.Roles.Add(adminRole);
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleId = adminRole.Id });
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = deactivatedAdmin.Id, RoleId = adminRole.Id });
@@ -389,7 +388,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         userContext.UserId.Returns(admin.Id);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         permissionProvider.GetForUserIdAsync(admin.Id, Arg.Any<CancellationToken>())
-            .Returns([.. PermissionCatalog.All]);
+            .Returns([.. Permission.All.Select(p => p.Code)]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
         var command = new AssignUserRolesCommand { UserId = admin.Id, RoleIds = [] };

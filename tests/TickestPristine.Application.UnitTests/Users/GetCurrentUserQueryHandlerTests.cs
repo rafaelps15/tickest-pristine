@@ -77,8 +77,8 @@ public sealed class GetCurrentUserQueryHandlerTests : BaseHandlerTest
             IsActive = true,
             CreatedAtUtc = DateTime.UtcNow
         };
-        var assignedRole = new Role { Id = Guid.NewGuid(), Name = "Atendente" };
-        var otherRole = new Role { Id = Guid.NewGuid(), Name = "Outra" };
+        var assignedRole = new Role(Guid.NewGuid(), "Atendente");
+        var otherRole = new Role(Guid.NewGuid(), "Outra");
         context.Users.Add(user);
         context.Roles.AddRange(assignedRole, otherRole);
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = assignedRole.Id });

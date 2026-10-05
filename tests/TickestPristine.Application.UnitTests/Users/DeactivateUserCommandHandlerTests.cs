@@ -1,4 +1,3 @@
-using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Users.Deactivate;
@@ -158,7 +157,7 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
 
     private static async Task<Role> SeedAdministratorRoleAsync(TestDbContext context)
     {
-        var role = new Role { Id = SystemRoles.AdministratorId, Name = "Administrador" };
+        var role = new Role(Role.Administrator.Id, "Administrador");
         context.Roles.Add(role);
         await context.SaveChangesAsync();
 

@@ -21,7 +21,7 @@ internal static class AdministratorGuard
         CancellationToken cancellationToken)
     {
         bool isAdministrator = await context.UserRoles.AnyAsync(
-            userRole => userRole.UserId == leavingUserId && userRole.RoleId == SystemRoles.AdministratorId,
+            userRole => userRole.UserId == leavingUserId && userRole.RoleId == Role.Administrator.Id,
             cancellationToken);
 
         if (!isAdministrator)
@@ -30,7 +30,7 @@ internal static class AdministratorGuard
         }
 
         bool anotherActiveAdministratorExists = await context.UserRoles.AnyAsync(
-            userRole => userRole.RoleId == SystemRoles.AdministratorId &&
+            userRole => userRole.RoleId == Role.Administrator.Id &&
                         userRole.UserId != leavingUserId &&
                         context.Users.Any(user => user.Id == userRole.UserId && user.IsActive),
             cancellationToken);
@@ -40,7 +40,7 @@ internal static class AdministratorGuard
             return Result.Failure(RoleErrors.LastAdministrator);
         }
 
-        Role administratorRole = await context.Roles.SingleAsync(r => r.Id == SystemRoles.AdministratorId, cancellationToken);
+        Role administratorRole = await context.Roles.SingleAsync(r => r.Id == Role.Administrator.Id, cancellationToken);
 
         administratorRole.Version++;
 

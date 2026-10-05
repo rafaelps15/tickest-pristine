@@ -1,5 +1,5 @@
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Authorization;
+using TickestPristine.Domain.Roles;
 using TickestPristine.Application.Roles.AssignPermissions;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;

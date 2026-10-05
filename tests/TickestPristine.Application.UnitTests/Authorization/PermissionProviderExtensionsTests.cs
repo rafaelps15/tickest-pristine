@@ -1,5 +1,5 @@
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Authorization;
+using TickestPristine.Domain.Roles;
 
 namespace TickestPristine.Application.UnitTests.Authorization;
 

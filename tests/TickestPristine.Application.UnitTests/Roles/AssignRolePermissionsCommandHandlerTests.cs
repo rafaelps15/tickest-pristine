@@ -1,6 +1,5 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Roles.AssignPermissions;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Roles;
@@ -42,7 +41,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
 
-        var role = new Role { Id = Guid.NewGuid(), Name = "Manager" };
+        var role = new Role(Guid.NewGuid(), "Manager");
         context.Roles.Add(role);
         context.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionCode = PermissionCodes.Tickets.DeleteOwn });
 
@@ -89,7 +88,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
 
-        var role = new Role { Id = Guid.NewGuid(), Name = "Gestor" };
+        var role = new Role(Guid.NewGuid(), "Gestor");
         context.Roles.Add(role);
         context.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionCode = PermissionCodes.Tickets.Create });
         await context.SaveChangesAsync();
@@ -113,7 +112,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(RoleErrors.PrivilegeEscalation([PermissionCatalog.GetDisplayName(PermissionCodes.Users.AssignRoles)]));
+        result.Error.ShouldBe(RoleErrors.PrivilegeEscalation([Permission.GetDisplayName(PermissionCodes.Users.AssignRoles)]));
 
         List<string> permissionCodes = await context.RolePermissions
             .Where(p => p.RoleId == role.Id)
@@ -128,7 +127,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
 
-        var gestorRole = new Role { Id = Guid.NewGuid(), Name = "Gestor" };
+        var gestorRole = new Role(Guid.NewGuid(), "Gestor");
         context.Roles.Add(gestorRole);
         context.RolePermissions.Add(new RolePermission { RoleId = gestorRole.Id, PermissionCode = PermissionCodes.Roles.Manage });
         context.RolePermissions.Add(new RolePermission { RoleId = gestorRole.Id, PermissionCode = PermissionCodes.Users.AssignRoles });
@@ -153,7 +152,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(RoleErrors.PrivilegeEscalation([PermissionCatalog.GetDisplayName(PermissionCodes.Users.AssignRoles)]));
+        result.Error.ShouldBe(RoleErrors.PrivilegeEscalation([Permission.GetDisplayName(PermissionCodes.Users.AssignRoles)]));
 
         List<string> permissionCodes = await context.RolePermissions
             .Where(p => p.RoleId == gestorRole.Id)
@@ -168,7 +167,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
 
-        var adminRole = new Role { Id = SystemRoles.AdministratorId, Name = "Administrador do Sistema" };
+        var adminRole = new Role(Role.Administrator.Id, "Administrador do Sistema");
         context.Roles.Add(adminRole);
         context.RolePermissions.Add(new RolePermission { RoleId = adminRole.Id, PermissionCode = PermissionCodes.Users.Read });
         await context.SaveChangesAsync();
@@ -176,7 +175,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
         IUserContext userContext = Substitute.For<IUserContext>();
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         permissionProvider.GetForUserIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns([.. PermissionCatalog.All]);
+            .Returns([.. Permission.All.Select(p => p.Code)]);
 
         var handler = new AssignRolePermissionsCommandHandler(context, userContext, permissionProvider);
         var command = new AssignRolePermissionsCommand { RoleId = adminRole.Id, PermissionCodes = [] };

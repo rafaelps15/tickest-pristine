@@ -3,7 +3,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using TickestPristine.Application.Authorization;
+using TickestPristine.Domain.Roles;
 using TickestPristine.Infrastructure.Database;
 
 namespace TickestPristine.IntegrationTests.Users;
@@ -574,7 +574,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         // Assert
         response.EnsureSuccessStatusCode();
         CurrentUserDto? me = await response.Content.ReadFromJsonAsync<CurrentUserDto>();
-        me!.Permissions.ShouldBe(PermissionCatalog.All, ignoreOrder: true);
+        me!.Permissions.ShouldBe(Permission.All.Select(p => p.Code), ignoreOrder: true);
     }
 
     [Fact]

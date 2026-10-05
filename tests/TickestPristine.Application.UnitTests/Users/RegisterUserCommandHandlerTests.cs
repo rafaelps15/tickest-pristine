@@ -44,11 +44,7 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
 
-        var requesterRole = new Role { Id = Guid.NewGuid(), Name = "Colaborador", IsDefault = true };
-        context.Roles.Add(requesterRole);
-        await context.SaveChangesAsync();
-
-        IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
+                IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
         passwordHasher.Hash(Command.Password).Returns("hashed-password");
 
         var registeredAtUtc = new DateTime(2026, 10, 2, 12, 0, 0, DateTimeKind.Utc);
@@ -73,25 +69,6 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         credential.PasswordHash.ShouldBe("hashed-password");
 
         UserRole userRole = await context.UserRoles.SingleAsync(ur => ur.UserId == user.Id);
-        userRole.RoleId.ShouldBe(requesterRole.Id);
-    }
-
-    [Fact]
-    public async Task Handle_Should_ReturnDefaultRoleNotConfigured_WhenNoRoleIsMarkedAsDefault()
-    {
-        // Arrange: role chamada "Colaborador", mas sem a flag de role padrão
-        await using TestDbContext context = CreateDbContext();
-        context.Roles.Add(new Role { Id = Guid.NewGuid(), Name = "Colaborador" });
-        await context.SaveChangesAsync();
-
-        var handler = new RegisterUserCommandHandler(context, Substitute.For<IPasswordHasher>(), Substitute.For<IDateTimeProvider>());
-
-        // Act
-        Result<Guid> result = await handler.Handle(Command, CancellationToken.None);
-
-        // Assert
-        result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(RoleErrors.DefaultRoleNotConfigured);
-        (await context.Users.AnyAsync()).ShouldBeFalse();
+        userRole.RoleId.ShouldBe(Role.Collaborator.Id);
     }
 }

@@ -122,16 +122,177 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.ToTable("departments", "public");
                 });
 
+            modelBuilder.Entity("TickestPristine.Domain.Roles.Permission", b =>
+                {
+                    b.Property<string>("Code")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("code");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Group")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("group");
+
+                    b.Property<bool>("IsAdministrative")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_administrative");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Code")
+                        .HasName("pk_permissions");
+
+                    b.ToTable("permissions", "public");
+
+                    b.HasData(
+                        new
+                        {
+                            Code = "tickets:create",
+                            Description = "Abrir novos chamados.",
+                            Group = "Chamados",
+                            IsAdministrative = false,
+                            Name = "Abrir chamados"
+                        },
+                        new
+                        {
+                            Code = "tickets:view-own",
+                            Description = "Consultar os chamados que a própria pessoa abriu.",
+                            Group = "Chamados",
+                            IsAdministrative = false,
+                            Name = "Ver os próprios chamados"
+                        },
+                        new
+                        {
+                            Code = "tickets:update-own",
+                            Description = "Alterar os chamados que a própria pessoa abriu.",
+                            Group = "Chamados",
+                            IsAdministrative = false,
+                            Name = "Editar os próprios chamados"
+                        },
+                        new
+                        {
+                            Code = "tickets:delete-own",
+                            Description = "Excluir os chamados que a própria pessoa abriu.",
+                            Group = "Chamados",
+                            IsAdministrative = false,
+                            Name = "Excluir os próprios chamados"
+                        },
+                        new
+                        {
+                            Code = "tickets:reopen-own",
+                            Description = "Reabrir chamados resolvidos que a própria pessoa abriu.",
+                            Group = "Chamados",
+                            IsAdministrative = false,
+                            Name = "Reabrir os próprios chamados"
+                        },
+                        new
+                        {
+                            Code = "tickets:manage",
+                            Description = "Ver e tratar os chamados de todos os colaboradores.",
+                            Group = "Chamados",
+                            IsAdministrative = false,
+                            Name = "Atender a fila de chamados"
+                        },
+                        new
+                        {
+                            Code = "users:read",
+                            Description = "Listar e consultar os colaboradores cadastrados.",
+                            Group = "Usuários",
+                            IsAdministrative = true,
+                            Name = "Ver usuários"
+                        },
+                        new
+                        {
+                            Code = "users:create",
+                            Description = "Incluir novos colaboradores no sistema.",
+                            Group = "Usuários",
+                            IsAdministrative = true,
+                            Name = "Cadastrar colaboradores"
+                        },
+                        new
+                        {
+                            Code = "users:update",
+                            Description = "Alterar nome e sobrenome de outros colaboradores.",
+                            Group = "Usuários",
+                            IsAdministrative = true,
+                            Name = "Editar dados de colaboradores"
+                        },
+                        new
+                        {
+                            Code = "users:deactivate",
+                            Description = "Bloquear ou devolver o acesso de colaboradores ao sistema.",
+                            Group = "Usuários",
+                            IsAdministrative = true,
+                            Name = "Desativar e reativar colaboradores"
+                        },
+                        new
+                        {
+                            Code = "users:assign-roles",
+                            Description = "Definir quais funções cada colaborador tem.",
+                            Group = "Usuários",
+                            IsAdministrative = true,
+                            Name = "Alterar funções de colaboradores"
+                        },
+                        new
+                        {
+                            Code = "roles:read",
+                            Description = "Consultar as funções existentes e as permissões de cada uma.",
+                            Group = "Funções e permissões",
+                            IsAdministrative = true,
+                            Name = "Ver funções"
+                        },
+                        new
+                        {
+                            Code = "roles:manage",
+                            Description = "Criar funções e definir as permissões de cada uma.",
+                            Group = "Funções e permissões",
+                            IsAdministrative = true,
+                            Name = "Gerenciar funções"
+                        },
+                        new
+                        {
+                            Code = "departments:manage",
+                            Description = "Criar, editar e desativar departamentos.",
+                            Group = "Estrutura organizacional",
+                            IsAdministrative = true,
+                            Name = "Gerenciar departamentos"
+                        },
+                        new
+                        {
+                            Code = "sectors:manage",
+                            Description = "Criar, editar e desativar setores.",
+                            Group = "Estrutura organizacional",
+                            IsAdministrative = true,
+                            Name = "Gerenciar setores"
+                        },
+                        new
+                        {
+                            Code = "audit:read",
+                            Description = "Consultar quem alterou cada registro, quando e quais valores mudaram.",
+                            Group = "Auditoria",
+                            IsAdministrative = true,
+                            Name = "Ver o log de auditoria"
+                        });
+                });
+
             modelBuilder.Entity("TickestPristine.Domain.Roles.Role", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
-
-                    b.Property<bool>("IsDefault")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_default");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -147,11 +308,6 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasKey("Id")
                         .HasName("pk_roles");
 
-                    b.HasIndex("IsDefault")
-                        .IsUnique()
-                        .HasDatabaseName("ix_roles_is_default")
-                        .HasFilter("is_default");
-
                     b.HasIndex("Name")
                         .IsUnique()
                         .HasDatabaseName("ix_roles_name");
@@ -162,8 +318,19 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         new
                         {
                             Id = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            IsDefault = false,
                             Name = "Administrador",
+                            Version = 0
+                        },
+                        new
+                        {
+                            Id = new Guid("0199a7c4-0000-7000-8000-000000000002"),
+                            Name = "Atendente",
+                            Version = 0
+                        },
+                        new
+                        {
+                            Id = new Guid("0199a7c4-0000-7000-8000-000000000003"),
+                            Name = "Colaborador",
                             Version = 0
                         });
                 });
@@ -181,6 +348,9 @@ namespace TickestPristine.Infrastructure.Database.Migrations
 
                     b.HasKey("RoleId", "PermissionCode")
                         .HasName("pk_role_permissions");
+
+                    b.HasIndex("PermissionCode")
+                        .HasDatabaseName("ix_role_permissions_permission_code");
 
                     b.ToTable("role_permissions", "public");
 
@@ -264,6 +434,61 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         {
                             RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
                             PermissionCode = "audit:read"
+                        },
+                        new
+                        {
+                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
+                            PermissionCode = "tickets:create"
+                        },
+                        new
+                        {
+                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
+                            PermissionCode = "tickets:view-own"
+                        },
+                        new
+                        {
+                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
+                            PermissionCode = "tickets:update-own"
+                        },
+                        new
+                        {
+                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
+                            PermissionCode = "tickets:delete-own"
+                        },
+                        new
+                        {
+                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
+                            PermissionCode = "tickets:reopen-own"
+                        },
+                        new
+                        {
+                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
+                            PermissionCode = "tickets:manage"
+                        },
+                        new
+                        {
+                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
+                            PermissionCode = "tickets:create"
+                        },
+                        new
+                        {
+                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
+                            PermissionCode = "tickets:view-own"
+                        },
+                        new
+                        {
+                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
+                            PermissionCode = "tickets:update-own"
+                        },
+                        new
+                        {
+                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
+                            PermissionCode = "tickets:delete-own"
+                        },
+                        new
+                        {
+                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
+                            PermissionCode = "tickets:reopen-own"
                         });
                 });
 
@@ -680,6 +905,13 @@ namespace TickestPristine.Infrastructure.Database.Migrations
 
             modelBuilder.Entity("TickestPristine.Domain.Roles.RolePermission", b =>
                 {
+                    b.HasOne("TickestPristine.Domain.Roles.Permission", null)
+                        .WithMany()
+                        .HasForeignKey("PermissionCode")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_role_permissions_permissions_permission_code");
+
                     b.HasOne("TickestPristine.Domain.Roles.Role", null)
                         .WithMany()
                         .HasForeignKey("RoleId")

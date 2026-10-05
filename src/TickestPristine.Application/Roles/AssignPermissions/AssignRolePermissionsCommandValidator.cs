@@ -1,5 +1,5 @@
 using FluentValidation;
-using TickestPristine.Application.Authorization;
+using TickestPristine.Domain.Roles;
 
 namespace TickestPristine.Application.Roles.AssignPermissions;
 
@@ -12,7 +12,7 @@ internal sealed class AssignRolePermissionsCommandValidator : AbstractValidator<
         RuleFor(c => c.PermissionCodes).NotNull();
 
         RuleForEach(c => c.PermissionCodes)
-            .Must(code => PermissionCatalog.Contains(code))
+            .Must(code => Permission.Find(code) is not null)
             .WithMessage("'{PropertyValue}' não é um código de permissão conhecido.");
     }
 }

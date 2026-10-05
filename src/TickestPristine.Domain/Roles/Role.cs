@@ -4,16 +4,17 @@ namespace TickestPristine.Domain.Roles;
 
 public sealed class Role : Entity, IAuditable
 {
-    public Guid Id { get; set; }
-    public string Name { get; set; }
+    public static readonly Role Administrator = new(new Guid("0199a7c4-0000-7000-8000-000000000001"), "Administrador");
+    public static readonly Role Agent = new(new Guid("0199a7c4-0000-7000-8000-000000000002"), "Atendente");
+    public static readonly Role Collaborator = new(new Guid("0199a7c4-0000-7000-8000-000000000003"), "Colaborador");
 
-    /// <summary>
-    /// Role que quem se cadastra recebe. No máximo uma role é a padrão.
-    /// </summary>
-    public bool IsDefault { get; set; }
+    public Role(Guid id, string name)
+    {
+        Id = id;
+        Name = name;
+    }
 
-    /// <summary>
-    /// Token de concorrência, incrementado quando um administrador perde o acesso (ver AdministratorGuard).
-    /// </summary>
+    public Guid Id { get; init; }
+    public string Name { get; init; }
     public int Version { get; set; }
 }

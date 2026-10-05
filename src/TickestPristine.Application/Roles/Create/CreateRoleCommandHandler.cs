@@ -18,7 +18,7 @@ internal sealed class CreateRoleCommandHandler(IApplicationDbContext context)
             return Result.Failure<Guid>(RoleErrors.NameNotUnique);
         }
 
-        var role = new Role { Id = Guid.NewGuid(), Name = command.Name };
+        var role = new Role(Guid.NewGuid(), command.Name);
 
         role.Raise(new RoleCreatedDomainEvent(role.Id));
 

@@ -35,6 +35,8 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
 
     public DbSet<Role> Roles { get; set; }
 
+    public DbSet<Permission> Permissions { get; set; }
+
     public DbSet<RolePermission> RolePermissions { get; set; }
 
     public DbSet<UserRole> UserRoles { get; set; }
@@ -48,6 +50,7 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
     {
         base.OnModelCreating(modelBuilder);
 
+        modelBuilder.Entity<Permission>().HasKey(p => p.Code);
         modelBuilder.Entity<RolePermission>().HasKey(p => new { p.RoleId, p.PermissionCode });
 
         modelBuilder.Entity<Ticket>().HasQueryFilter(t => t.DeletedAtUtc == null);
