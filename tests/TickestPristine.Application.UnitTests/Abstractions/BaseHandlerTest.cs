@@ -38,7 +38,7 @@ public abstract class BaseHandlerTest
         Email = $"{Guid.NewGuid():N}@example.com",
         FirstName = "Test",
         LastName = "User",
-        Code = $"usr_{Ulid.NewUlid()}",
+        Code = UserCodes.New(),
         IsActive = isActive,
         CreatedAtUtc = new DateTime(2026, 10, 1, 9, 0, 0, DateTimeKind.Utc)
     };

@@ -27,7 +27,7 @@ internal sealed class RegisterUserCommandHandler(
             Email = command.Email,
             FirstName = command.FirstName,
             LastName = command.LastName,
-            Code = $"usr_{Ulid.NewUlid()}",
+            Code = UserCodes.New(),
             IsActive = true,
             CreatedAtUtc = dateTimeProvider.UtcNow
         };

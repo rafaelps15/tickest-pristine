@@ -40,7 +40,7 @@ internal sealed class AdminUserSeeder(
             Email = settings.Email,
             FirstName = settings.FirstName,
             LastName = settings.LastName,
-            Code = $"usr_{Ulid.NewUlid()}",
+            Code = UserCodes.New(),
             IsActive = true,
             CreatedAtUtc = dateTimeProvider.UtcNow
         };

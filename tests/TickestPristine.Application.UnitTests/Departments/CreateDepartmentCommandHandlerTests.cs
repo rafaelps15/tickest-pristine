@@ -62,7 +62,7 @@ public sealed class CreateDepartmentCommandHandlerTests : BaseHandlerTest
             Email = "responsible@tickestpristine.dev",
             FirstName = "Resp",
             LastName = "User",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(responsibleUser);
         await context.SaveChangesAsync();

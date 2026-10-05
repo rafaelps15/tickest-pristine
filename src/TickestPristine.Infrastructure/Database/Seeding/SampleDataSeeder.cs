@@ -17,7 +17,7 @@ internal sealed class SampleDataSeeder(IOptions<SeedingOptions> seedingOptions, 
     private const int RandomSeed = 2026;
 
     /// <summary>
-    /// Status que cada chamado percorre a partir de Aberto até o status final, seguindo TicketStatusTransitions.
+    /// Status que cada chamado percorre a partir de Aberto até o status final (cada passo é conferido em CreateHistory).
     /// </summary>
     private static readonly Dictionary<TicketStatus, TicketStatus[]> StatusPaths = new()
     {
@@ -86,39 +86,32 @@ internal sealed class SampleDataSeeder(IOptions<SeedingOptions> seedingOptions, 
 
     /// <summary>
     /// Histórico igual ao que os handlers de evento de domínio gravam: a criação e cada mudança de status, em ordem.
+    /// Cada passo é conferido com TicketStatusTransitions, para o seed nunca gerar um histórico que a API recusaria.
     /// </summary>
     private static IEnumerable<TicketHistory> CreateHistory(Faker faker, Ticket ticket, DateTime now)
     {
         DateTime occurredAtUtc = ticket.CreatedAtUtc;
 
-        yield return new TicketHistory
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            ChangedByUserId = ticket.CreatedByUserId,
-            Action = TicketHistoryAction.Created,
-            Description = TicketHistoryDescriptions.Created,
-            NewValue = TicketStatus.Open.ToString(),
-            OccurredAtUtc = occurredAtUtc
-        };
+        yield return TicketHistoryEntries.Created(ticket.Id, ticket.CreatedByUserId, occurredAtUtc);
 
         TicketStatus oldStatus = TicketStatus.Open;
 
         foreach (TicketStatus newStatus in StatusPaths[ticket.Status])
         {
+            if (!TicketStatusTransitions.CanTransition(oldStatus, newStatus))
+            {
+                throw new InvalidOperationException(
+                    $"Sample status path is not allowed by TicketStatusTransitions: {oldStatus} -> {newStatus}.");
+            }
+
             occurredAtUtc = faker.Date.Between(occurredAtUtc, now);
 
-            yield return new TicketHistory
-            {
-                Id = Guid.NewGuid(),
-                TicketId = ticket.Id,
-                ChangedByUserId = ticket.AssignedToUserId ?? ticket.CreatedByUserId,
-                Action = TicketHistoryAction.StatusChanged,
-                Description = TicketHistoryDescriptions.StatusChanged(oldStatus, newStatus),
-                OldValue = oldStatus.ToString(),
-                NewValue = newStatus.ToString(),
-                OccurredAtUtc = occurredAtUtc
-            };
+            yield return TicketHistoryEntries.StatusChanged(
+                ticket.Id,
+                ticket.AssignedToUserId ?? ticket.CreatedByUserId,
+                oldStatus,
+                newStatus,
+                occurredAtUtc);
 
             oldStatus = newStatus;
         }

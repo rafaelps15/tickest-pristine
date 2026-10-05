@@ -227,8 +227,3 @@ internal static class SampleTicketCatalog
             TicketPriority.Medium)
     ];
 }
-
-/// <summary>
-/// Um chamado do catálogo de exemplo: o setor é localizado pelo nome.
-/// </summary>
-internal sealed record SampleTicket(string SectorName, string Title, string Description, TicketPriority Priority);

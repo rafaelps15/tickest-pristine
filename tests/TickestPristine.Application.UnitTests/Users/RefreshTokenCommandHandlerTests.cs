@@ -130,7 +130,7 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
             Email = "test@example.com",
             FirstName = "Test",
             LastName = "User",
-            Code = $"usr_{Ulid.NewUlid()}",
+            Code = UserCodes.New(),
             IsActive = isActive
         };
 

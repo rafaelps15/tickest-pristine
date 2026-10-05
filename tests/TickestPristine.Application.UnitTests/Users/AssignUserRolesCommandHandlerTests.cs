@@ -42,7 +42,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             Email = "user@example.com",
             FirstName = "Test",
             LastName = "User",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(user);
         await context.SaveChangesAsync();
@@ -73,7 +73,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             Email = "user@example.com",
             FirstName = "Test",
             LastName = "User",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(user);
 
@@ -121,7 +121,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             Email = "user@example.com",
             FirstName = "Test",
             LastName = "User",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(user);
 
@@ -164,7 +164,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             Email = "user@example.com",
             FirstName = "Test",
             LastName = "User",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(user);
 
@@ -202,7 +202,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             Email = "admin@example.com",
             FirstName = "Administrador",
             LastName = "User",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(admin);
 
@@ -249,7 +249,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             Email = "user@example.com",
             FirstName = "Test",
             LastName = "User",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(user);
 
@@ -291,7 +291,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             Email = "admin@example.com",
             FirstName = "Administrador",
             LastName = "User",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(admin);
 
@@ -330,7 +330,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             Email = "admin@example.com",
             FirstName = "Administrador",
             LastName = "User",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         var otherAdmin = new User
         {
@@ -338,7 +338,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             Email = "other@example.com",
             FirstName = "Other",
             LastName = "Administrador",
-            Code = $"usr_{Ulid.NewUlid()}",
+            Code = UserCodes.New(),
             IsActive = true
         };
         context.Users.AddRange(admin, otherAdmin);

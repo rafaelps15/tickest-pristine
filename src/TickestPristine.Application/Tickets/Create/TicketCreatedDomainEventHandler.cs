@@ -21,17 +21,7 @@ internal sealed class TicketCreatedDomainEventHandler(
             return;
         }
 
-        var history = new TicketHistory
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            ChangedByUserId = ticket.CreatedByUserId,
-            Action = TicketHistoryAction.Created,
-            Description = TicketHistoryDescriptions.Created,
-            OldValue = null,
-            NewValue = ticket.Status.ToString(),
-            OccurredAtUtc = dateTimeProvider.UtcNow
-        };
+        TicketHistory history = TicketHistoryEntries.Created(ticket.Id, ticket.CreatedByUserId, dateTimeProvider.UtcNow);
 
         history.Raise(new TicketHistoryRecordedDomainEvent(history.Id, history.TicketId));
 

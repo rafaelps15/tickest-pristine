@@ -175,7 +175,7 @@ public sealed class ChangeRequiredUserPasswordCommandHandlerTests : BaseHandlerT
             Email = Email,
             FirstName = "Test",
             LastName = "User",
-            Code = $"usr_{Ulid.NewUlid()}",
+            Code = UserCodes.New(),
             IsActive = isActive
         };
 

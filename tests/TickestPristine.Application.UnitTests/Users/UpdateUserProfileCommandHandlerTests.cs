@@ -22,7 +22,7 @@ public sealed class UpdateUserProfileCommandHandlerTests : BaseHandlerTest
             Email = "someone@example.com",
             FirstName = "Some",
             LastName = "One",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(user);
         await context.SaveChangesAsync();
@@ -78,7 +78,7 @@ public sealed class UpdateUserProfileCommandHandlerTests : BaseHandlerTest
             Email = "someone@example.com",
             FirstName = "Some",
             LastName = "One",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(user);
         await context.SaveChangesAsync();
@@ -119,7 +119,7 @@ public sealed class UpdateUserProfileCommandHandlerTests : BaseHandlerTest
             Email = "someone@example.com",
             FirstName = "Some",
             LastName = "One",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(user);
         await context.SaveChangesAsync();
@@ -156,7 +156,7 @@ public sealed class UpdateUserProfileCommandHandlerTests : BaseHandlerTest
             Email = "someone@example.com",
             FirstName = "Some",
             LastName = "One",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(user);
         await context.SaveChangesAsync();

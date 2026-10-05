@@ -22,7 +22,7 @@ public sealed class UserIsActiveTests(IntegrationTestWebAppFactory factory) : Ba
             Email = UniqueEmail(),
             FirstName = "Test",
             LastName = "User",
-            Code = $"usr_{Ulid.NewUlid()}",
+            Code = UserCodes.New(),
             IsActive = isActive
         };
 

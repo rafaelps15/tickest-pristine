@@ -24,7 +24,7 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
             Email = Command.Email,
             FirstName = "Existing",
             LastName = "User",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         });
         await context.SaveChangesAsync();
 
