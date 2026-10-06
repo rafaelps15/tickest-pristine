@@ -1,3 +1,4 @@
+using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Domain.Roles;
@@ -23,10 +24,10 @@ public sealed class GetTicketAttachmentsQueryHandlerTests : BaseHandlerTest
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
 
         var handler = new GetTicketAttachmentsQueryHandler(context, userContext, permissionProvider);
-        var query = new GetTicketAttachmentsQuery(Guid.NewGuid());
+        var query = new GetTicketAttachmentsQuery(Guid.NewGuid(), new CursorPageRequest(null, null, 20));
 
         // Act
-        Result<List<TicketAttachmentResponse>> result = await handler.Handle(query, CancellationToken.None);
+        Result<CursorPagedResponse<TicketAttachmentResponse>> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsFailure.ShouldBeTrue();
@@ -48,10 +49,10 @@ public sealed class GetTicketAttachmentsQueryHandlerTests : BaseHandlerTest
             .Returns(false);
 
         var handler = new GetTicketAttachmentsQueryHandler(context, userContext, permissionProvider);
-        var query = new GetTicketAttachmentsQuery(ticketId);
+        var query = new GetTicketAttachmentsQuery(ticketId, new CursorPageRequest(null, null, 20));
 
         // Act
-        Result<List<TicketAttachmentResponse>> result = await handler.Handle(query, CancellationToken.None);
+        Result<CursorPagedResponse<TicketAttachmentResponse>> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsFailure.ShouldBeTrue();
@@ -70,15 +71,15 @@ public sealed class GetTicketAttachmentsQueryHandlerTests : BaseHandlerTest
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
 
         var handler = new GetTicketAttachmentsQueryHandler(context, userContext, permissionProvider);
-        var query = new GetTicketAttachmentsQuery(ticketId);
+        var query = new GetTicketAttachmentsQuery(ticketId, new CursorPageRequest(null, null, 20));
 
         // Act
-        Result<List<TicketAttachmentResponse>> result = await handler.Handle(query, CancellationToken.None);
+        Result<CursorPagedResponse<TicketAttachmentResponse>> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
-        result.Value.ShouldHaveSingleItem();
-        result.Value[0].FileName.ShouldBe("report.pdf");
+        result.Value.Items.ShouldHaveSingleItem();
+        result.Value.Items[0].FileName.ShouldBe("report.pdf");
     }
 
     private static async Task<Guid> SeedTicketWithAttachmentAsync(TestDbContext context)

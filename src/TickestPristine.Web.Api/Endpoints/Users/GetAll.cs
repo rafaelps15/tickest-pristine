@@ -16,8 +16,7 @@ internal sealed class GetAll : IEndpoint
             string? search,
             DateOnly? createdFrom,
             DateOnly? createdTo,
-            int? page,
-            int? pageSize,
+            [AsParameters] PageRequest paging,
             IQueryHandler<GetUsersQuery, PagedResponse<UserSummaryResponse>> handler,
             CancellationToken cancellationToken) =>
         {
@@ -26,8 +25,7 @@ internal sealed class GetAll : IEndpoint
                 search,
                 createdFrom,
                 createdTo,
-                page,
-                pageSize);
+                paging);
 
             Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(query, cancellationToken);
 

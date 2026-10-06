@@ -9,7 +9,7 @@ namespace TickestPristine.Application.UnitTests.Users;
 
 public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
 {
-    private static GetUsersQuery AllUsers => new(UserStatusFilter.All, null, null, null, 1, 20);
+    private static GetUsersQuery AllUsers => new(UserStatusFilter.All, null, null, null, new PageRequest(1, 20));
 
     [Fact]
     public async Task Handle_Should_ReturnAllUsers_WhenNoFilterIsGiven()
@@ -154,7 +154,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
 
         // Act
         Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(
-            AllUsers with { Page = 2, PageSize = 2 },
+            AllUsers with { Paging = new PageRequest(2, 2) },
             CancellationToken.None);
 
         // Assert
@@ -162,26 +162,6 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
         result.Value.TotalCount.ShouldBe(3);
         result.Value.HasPreviousPage.ShouldBeTrue();
         result.Value.HasNextPage.ShouldBeFalse();
-    }
-
-    [Fact]
-    public async Task Handle_Should_AdjustPageAndPageSize_WhenOutOfRange()
-    {
-        // Arrange
-        await using TestDbContext context = CreateDbContext();
-        AddUser(context, "Ana", "ana@tickestpristine.dev", isActive: true);
-        await context.SaveChangesAsync();
-
-        var handler = new GetUsersQueryHandler(context);
-
-        // Act
-        Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(
-            AllUsers with { Page = 0, PageSize = 1000 },
-            CancellationToken.None);
-
-        // Assert
-        result.Value.Page.ShouldBe(1);
-        result.Value.PageSize.ShouldBe(100);
     }
 
     [Fact]

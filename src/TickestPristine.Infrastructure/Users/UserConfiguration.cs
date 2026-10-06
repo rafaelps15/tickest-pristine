@@ -21,6 +21,9 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.HasIndex(u => u.Code).IsUnique();
 
+        // Listagem paginada de usuários: segue a ordenação da consulta (nome, sobrenome e a chave como desempate).
+        builder.HasIndex(u => new { u.FirstName, u.LastName, u.Id });
+
         builder.Property(u => u.IsActive)
             .IsRequired()
             .HasDefaultValue(true);

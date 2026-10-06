@@ -1,3 +1,4 @@
+using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Application.AuditLogs.GetHistory;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Audit;
@@ -15,14 +16,14 @@ public sealed class GetAuditHistoryQueryHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
         var handler = new GetAuditHistoryQueryHandler(context);
-        var query = new GetAuditHistoryQuery("Ticket", Guid.NewGuid().ToString());
+        var query = new GetAuditHistoryQuery("Ticket", Guid.NewGuid().ToString(), new CursorPageRequest(null, null, 20));
 
         // Act
-        Result<List<AuditLogResponse>> result = await handler.Handle(query, CancellationToken.None);
+        Result<CursorPagedResponse<AuditLogResponse>> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
-        result.Value.ShouldBeEmpty();
+        result.Value.Items.ShouldBeEmpty();
     }
 
     [Fact]
@@ -40,14 +41,14 @@ public sealed class GetAuditHistoryQueryHandlerTests : BaseHandlerTest
         await context.SaveChangesAsync();
 
         var handler = new GetAuditHistoryQueryHandler(context);
-        var query = new GetAuditHistoryQuery("Ticket", entityId);
+        var query = new GetAuditHistoryQuery("Ticket", entityId, new CursorPageRequest(null, null, 20));
 
         // Act
-        Result<List<AuditLogResponse>> result = await handler.Handle(query, CancellationToken.None);
+        Result<CursorPagedResponse<AuditLogResponse>> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
-        result.Value.Select(a => a.Id).ShouldBe([modified.Id, added.Id]);
+        result.Value.Items.Select(a => a.Id).ShouldBe([modified.Id, added.Id]);
     }
 
     private static AuditLogEntry CreateEntry(string entityName, string entityId, string action, DateTime timestamp) => new()

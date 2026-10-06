@@ -1,21 +1,21 @@
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using Microsoft.EntityFrameworkCore;
+using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.AuditLogs.GetHistory;
 
 internal sealed class GetAuditHistoryQueryHandler(IApplicationDbContext context)
-    : IQueryHandler<GetAuditHistoryQuery, List<AuditLogResponse>>
+    : IQueryHandler<GetAuditHistoryQuery, CursorPagedResponse<AuditLogResponse>>
 {
-    public async Task<Result<List<AuditLogResponse>>> Handle(
+    public async Task<Result<CursorPagedResponse<AuditLogResponse>>> Handle(
         GetAuditHistoryQuery query,
         CancellationToken cancellationToken)
     {
-        List<AuditLogResponse> history = await context.AuditLogs
+        CursorPagedResponse<AuditLogResponse> history = await context.AuditLogs
             .Where(a => a.EntityName == query.EntityName &&
                         a.EntityId == query.EntityId)
-            .OrderByDescending(a => a.Timestamp)
+            .AfterCursor(query.Paging, a => a.Timestamp, a => a.Id)
             .Select(a => new AuditLogResponse
             {
                 Id = a.Id,
@@ -28,7 +28,7 @@ internal sealed class GetAuditHistoryQueryHandler(IApplicationDbContext context)
                 NewValues = a.NewValues,
                 AffectedColumns = a.AffectedColumns
             })
-            .ToListAsync(cancellationToken);
+            .ToCursorPagedListAsync(query.Paging, a => a.Timestamp, a => a.Id, cancellationToken);
 
         return history;
     }

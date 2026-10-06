@@ -40,7 +40,7 @@ internal sealed class GetUsersQueryHandler(IApplicationDbContext context)
                     .Select(r => new RoleSummaryResponse { Name = r.Name })
                     .ToList()
             })
-            .ToPagedResponseAsync(query.Page, query.PageSize, cancellationToken);
+            .ToPagedListAsync(query.Paging, cancellationToken);
 
         return users;
     }

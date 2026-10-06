@@ -2,10 +2,9 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Domain.Roles;
-using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
-using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Tickets.GetByUser;
@@ -14,9 +13,9 @@ internal sealed class GetTicketsByUserQueryHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IPermissionProvider permissionProvider)
-    : IQueryHandler<GetTicketsByUserQuery, List<TicketResponse>>
+    : IQueryHandler<GetTicketsByUserQuery, PagedResponse<TicketResponse>>
 {
-    public async Task<Result<List<TicketResponse>>> Handle(GetTicketsByUserQuery query, CancellationToken cancellationToken)
+    public async Task<Result<PagedResponse<TicketResponse>>> Handle(GetTicketsByUserQuery query, CancellationToken cancellationToken)
     {
         bool isSelf = query.UserId == userContext.UserId;
         string requiredPermission = isSelf ? PermissionCodes.Tickets.ViewOwn : PermissionCodes.Tickets.Manage;
@@ -25,13 +24,13 @@ internal sealed class GetTicketsByUserQueryHandler(
 
         if (!hasPermission)
         {
-            return Result.Failure<List<TicketResponse>>(UserErrors.Unauthorized());
+            return Result.Failure<PagedResponse<TicketResponse>>(UserErrors.Unauthorized());
         }
 
-        List<TicketResponse> tickets = await context.Tickets
+        PagedResponse<TicketResponse> tickets = await context.Tickets
             .Where(t => t.CreatedByUserId == query.UserId)
             .OrderByDescending(t => t.CreatedAtUtc)
-            .ThenBy(t => t.Id)
+            .ThenByDescending(t => t.Id)
             .Select(t => new TicketResponse
             {
                 Id = t.Id,
@@ -40,9 +39,10 @@ internal sealed class GetTicketsByUserQueryHandler(
                 Priority = t.Priority,
                 Status = t.Status,
                 OpenedByUserId = t.CreatedByUserId,
-                AssignedToUserId = t.AssignedToUserId
+                AssignedToUserId = t.AssignedToUserId,
+                CreatedAtUtc = t.CreatedAtUtc
             })
-            .ToListAsync(cancellationToken);
+            .ToPagedListAsync(query.Paging, cancellationToken);
 
         return tickets;
     }

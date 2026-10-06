@@ -34,7 +34,7 @@ public sealed class AuditLogsTests(IntegrationTestWebAppFactory factory) : BaseI
         HttpResponseMessage response = await HttpClient.GetAsync($"audit-logs/{entityName}/{entityId}");
         response.EnsureSuccessStatusCode();
 
-        List<AuditLogDto>? history = await response.Content.ReadFromJsonAsync<List<AuditLogDto>>();
+        List<AuditLogDto>? history = (await response.Content.ReadFromJsonAsync<CursorPageDto<AuditLogDto>>())?.Items;
 
         return history!;
     }

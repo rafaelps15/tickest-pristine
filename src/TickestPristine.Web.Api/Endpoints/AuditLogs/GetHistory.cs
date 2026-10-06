@@ -1,4 +1,5 @@
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Application.AuditLogs.GetHistory;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
@@ -14,12 +15,13 @@ internal sealed class GetHistory : IEndpoint
         app.MapGet("audit-logs/{entityName}/{entityId}", async (
             string entityName,
             string entityId,
-            IQueryHandler<GetAuditHistoryQuery, List<AuditLogResponse>> handler,
+            [AsParameters] CursorPageRequest paging,
+            IQueryHandler<GetAuditHistoryQuery, CursorPagedResponse<AuditLogResponse>> handler,
             CancellationToken cancellationToken) =>
         {
-            var query = new GetAuditHistoryQuery(entityName, entityId);
+            var query = new GetAuditHistoryQuery(entityName, entityId, paging);
 
-            Result<List<AuditLogResponse>> result = await handler.Handle(query, cancellationToken);
+            Result<CursorPagedResponse<AuditLogResponse>> result = await handler.Handle(query, cancellationToken);
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })

@@ -13,5 +13,8 @@ public sealed class Ticket : Entity, IAuditable
     public Guid? AssignedToUserId { get; set; }
     public Guid SectorId { get; set; }
     public DateTime CreatedAtUtc { get; set; }
+    public DateTime DueAtUtc { get; set; }
+    public DateTime SlaWarningAtUtc { get; set; }
+    public DateTime? ResolvedAtUtc { get; set; }
     public DateTime? DeletedAtUtc { get; set; }
 }

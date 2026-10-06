@@ -161,7 +161,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         // Assert
         response.EnsureSuccessStatusCode();
-        List<TicketDto>? tickets = await response.Content.ReadFromJsonAsync<List<TicketDto>>();
+        List<TicketDto>? tickets = (await response.Content.ReadFromJsonAsync<PagedTicketsByUserDto>())?.Items;
         tickets!.ShouldContain(t => t.Id == ticketId);
     }
 
@@ -193,7 +193,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         // Assert
         response.EnsureSuccessStatusCode();
-        List<TicketDto>? tickets = await response.Content.ReadFromJsonAsync<List<TicketDto>>();
+        List<TicketDto>? tickets = (await response.Content.ReadFromJsonAsync<PagedTicketsByUserDto>())?.Items;
         tickets!.ShouldContain(t => t.Id == ticketId && t.Status == 3);
     }
 
@@ -247,5 +247,223 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
     }
 
+    [Fact]
+    public async Task GetAll_Should_ReturnForbidden_WhenCallerLacksManagePermission()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnActiveTicketsWithRequesterAndSla_WhenCallerIsAdmin()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (Guid requesterId, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets?sectorId={sectorId}");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        PagedTicketsDto? page = await response.Content.ReadFromJsonAsync<PagedTicketsDto>();
+        TicketSummaryDto ticket = page!.Items.ShouldHaveSingleItem();
+        ticket.Id.ShouldBe(ticketId);
+        ticket.RequesterId.ShouldBe(requesterId);
+        ticket.RequesterName.ShouldNotBeNullOrWhiteSpace();
+        ticket.DueAtUtc.ShouldBe(ticket.CreatedAtUtc.AddHours(24), TimeSpan.FromSeconds(1));
+        ticket.SlaStatus.ShouldBe(1); // OnTime
+    }
+
+    [Fact]
+    public async Task GetAll_Should_FilterByStatusAndSlaStatus_WhenTicketWasResolvedWithinDeadline()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        await AuthenticateAsAdminAsync();
+
+        HttpResponseMessage inProgressResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = "Looking into the printer",
+            status = 2 // InProgress
+        });
+        inProgressResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        HttpResponseMessage resolveResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = "Fixed the printer",
+            status = 3 // Resolved
+        });
+        resolveResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        HttpResponseMessage metResponse = await HttpClient.GetAsync($"tickets?sectorId={sectorId}&status=3&status=4&slaStatus=4");
+        HttpResponseMessage missedResponse = await HttpClient.GetAsync($"tickets?sectorId={sectorId}&status=3&slaStatus=5");
+
+        // Assert
+        metResponse.EnsureSuccessStatusCode();
+        PagedTicketsDto? metPage = await metResponse.Content.ReadFromJsonAsync<PagedTicketsDto>();
+        TicketSummaryDto ticket = metPage!.Items.ShouldHaveSingleItem();
+        ticket.Id.ShouldBe(ticketId);
+        ticket.Status.ShouldBe(3); // Resolved
+        ticket.SlaStatus.ShouldBe(4); // Met
+
+        missedResponse.EnsureSuccessStatusCode();
+        PagedTicketsDto? missedPage = await missedResponse.Content.ReadFromJsonAsync<PagedTicketsDto>();
+        missedPage!.Items.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task GetById_Should_ReturnTicket_WhenCallerIsRequester()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (Guid requesterId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/{ticketId}");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        TicketDetailDto? ticket = await response.Content.ReadFromJsonAsync<TicketDetailDto>();
+        ticket!.Id.ShouldBe(ticketId);
+        ticket.OpenedByUserId.ShouldBe(requesterId);
+        ticket.SectorId.ShouldBe(sectorId);
+        ticket.SlaStatus.ShouldBe(1); // OnTime
+    }
+
+    [Fact]
+    public async Task GetById_Should_ReturnForbidden_WhenCallerIsNotParticipant()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        (_, AccessTokens outsiderTokens) = await RegisterAndLoginAsync();
+        Authenticate(outsiderTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/{ticketId}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetSummaryByUser_Should_CountOwnTicketsByPriorityAndStatus()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        await CreateTicketAsync(sectorId);
+        await CreateTicketAsync(sectorId);
+
+        // Act
+        List<TicketCountDto>? counts = await HttpClient.GetFromJsonAsync<List<TicketCountDto>>($"tickets/users/{userId}/summary");
+
+        // Assert
+        TicketCountDto count = counts!.ShouldHaveSingleItem();
+        count.Priority.ShouldBe(2); // Medium
+        count.Status.ShouldBe(1); // Open
+        count.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task GetByUser_Should_ReturnRequestedPage_WhenPageSizeIsGiven()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        await CreateTicketAsync(sectorId);
+        await CreateTicketAsync(sectorId);
+        await CreateTicketAsync(sectorId);
+
+        // Act
+        PagedTicketsByUserDto? page = await HttpClient.GetFromJsonAsync<PagedTicketsByUserDto>(
+            $"tickets/users/{userId}?page=2&pageSize=2");
+
+        // Assert
+        page!.Items.ShouldHaveSingleItem();
+        page.TotalCount.ShouldBe(3);
+    }
+
+    [Fact]
+    public async Task GetSlaSummary_Should_ReturnForbidden_WhenCallerLacksManagePermission()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/sla-summary");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetSlaSummary_Should_CountActiveTicketsOfSector_WhenCallerIsAdmin()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        await CreateTicketAsync(sectorId);
+        await CreateTicketAsync(sectorId);
+
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/sla-summary?sectorId={sectorId}");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        SlaSummaryDto? summary = await response.Content.ReadFromJsonAsync<SlaSummaryDto>();
+        summary!.ActiveCount.ShouldBe(2);
+        summary.OnTimeCount.ShouldBe(2);
+        summary.AtRiskCount.ShouldBe(0);
+        summary.BreachedCount.ShouldBe(0);
+    }
+
     private sealed record TicketDto(Guid Id, string Title, string Description, int Priority, int Status);
+
+    private sealed record PagedTicketsByUserDto(List<TicketDto> Items, int TotalCount);
+
+    private sealed record TicketDetailDto(Guid Id, Guid OpenedByUserId, Guid SectorId, int Status, int SlaStatus);
+
+    private sealed record TicketCountDto(int Priority, int Status, int Count);
+
+    private sealed record PagedTicketsDto(List<TicketSummaryDto> Items, int TotalCount);
+
+    private sealed record TicketSummaryDto(
+        Guid Id,
+        Guid RequesterId,
+        string RequesterName,
+        DateTime CreatedAtUtc,
+        DateTime DueAtUtc,
+        int Status,
+        int SlaStatus);
+
+    private sealed record SlaSummaryDto(int ActiveCount, int OnTimeCount, int AtRiskCount, int BreachedCount);
 }

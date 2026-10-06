@@ -108,6 +108,34 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
+    public async Task Handle_Should_SetSlaDeadlinesFromPriority_WhenTicketIsOpened()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid sectorId = await SeedSectorAsync(context);
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(UserId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        var nowUtc = new DateTime(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc);
+        dateTimeProvider.UtcNow.Returns(nowUtc);
+
+        var handler = new CreateTicketCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        CreateTicketCommand command = Command;
+        command.SectorId = sectorId;
+
+        // Act
+        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == result.Value);
+        ticket.CreatedAtUtc.ShouldBe(nowUtc);
+        ticket.DueAtUtc.ShouldBe(nowUtc.AddHours(24));
+        ticket.SlaWarningAtUtc.ShouldBe(nowUtc.AddHours(18));
+        ticket.ResolvedAtUtc.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task Handle_Should_ReturnUnauthorized_WhenOpeningOnBehalfOfAnotherUserWithoutManagePermission()
     {
         // Arrange

@@ -19,6 +19,10 @@ internal sealed class TicketHistoryConfiguration : IEntityTypeConfiguration<Tick
 
         // O histórico é imutável, por isso não tem filtro de exclusão lógica.
 
+        // Paginação por cursor composto (data + id), do mais novo para o mais antigo, dentro de cada chamado.
+        builder.HasIndex(h => new { h.TicketId, h.OccurredAtUtc, h.Id })
+            .IsDescending(false, true, true);
+
         builder.HasOne<Ticket>()
             .WithMany()
             .HasForeignKey(h => h.TicketId)

@@ -2,10 +2,8 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Domain.Roles;
-using TickestPristine.Domain.Tickets;
-using TickestPristine.Domain.Users;
-using Microsoft.EntityFrameworkCore;
+using TickestPristine.Application.Abstractions.Pagination;
+using TickestPristine.Application.Authorization;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.TicketAttachments.GetAll;
@@ -14,37 +12,27 @@ internal sealed class GetTicketAttachmentsQueryHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IPermissionProvider permissionProvider)
-    : IQueryHandler<GetTicketAttachmentsQuery, List<TicketAttachmentResponse>>
+    : IQueryHandler<GetTicketAttachmentsQuery, CursorPagedResponse<TicketAttachmentResponse>>
 {
-    public async Task<Result<List<TicketAttachmentResponse>>> Handle(
+    public async Task<Result<CursorPagedResponse<TicketAttachmentResponse>>> Handle(
         GetTicketAttachmentsQuery query,
         CancellationToken cancellationToken)
     {
-        Ticket? ticket = await context.Tickets.SingleOrDefaultAsync(t => t.Id == query.TicketId, cancellationToken);
+        Result access = await TicketAccessGuard.EnsureCanViewAsync(
+            context,
+            permissionProvider,
+            userContext.UserId,
+            query.TicketId,
+            cancellationToken);
 
-        if (ticket is null)
+        if (access.IsFailure)
         {
-            return Result.Failure<List<TicketAttachmentResponse>>(TicketErrors.NotFound(query.TicketId));
+            return Result.Failure<CursorPagedResponse<TicketAttachmentResponse>>(access.Error);
         }
 
-        bool isParticipant = ticket.CreatedByUserId == userContext.UserId || ticket.AssignedToUserId == userContext.UserId;
-
-        if (!isParticipant)
-        {
-            bool canManageTickets = await permissionProvider.HasPermissionAsync(
-                userContext.UserId,
-                PermissionCodes.Tickets.Manage,
-                cancellationToken);
-
-            if (!canManageTickets)
-            {
-                return Result.Failure<List<TicketAttachmentResponse>>(UserErrors.Unauthorized());
-            }
-        }
-
-        List<TicketAttachmentResponse> attachments = await context.TicketAttachments
+        CursorPagedResponse<TicketAttachmentResponse> attachments = await context.TicketAttachments
             .Where(a => a.TicketId == query.TicketId)
-            .OrderBy(a => a.UploadedAtUtc)
+            .AfterCursor(query.Paging, a => a.UploadedAtUtc, a => a.Id)
             .Select(a => new TicketAttachmentResponse
             {
                 Id = a.Id,
@@ -55,7 +43,7 @@ internal sealed class GetTicketAttachmentsQueryHandler(
                 FileSizeBytes = a.FileSizeBytes,
                 UploadedAtUtc = a.UploadedAtUtc
             })
-            .ToListAsync(cancellationToken);
+            .ToCursorPagedListAsync(query.Paging, a => a.UploadedAtUtc, a => a.Id, cancellationToken);
 
         return attachments;
     }

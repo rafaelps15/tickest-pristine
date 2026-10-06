@@ -25,6 +25,11 @@ public abstract class BaseIntegrationTest
 
     protected sealed record AccessTokens(string AccessToken, string RefreshToken);
 
+    /// <summary>
+    /// Página de uma listagem por cursor composto (data + id), como devolvida pela API.
+    /// </summary>
+    protected sealed record CursorPageDto<T>(List<T> Items, DateTime? NextCursorDate, Guid? NextCursorId, bool HasNextPage);
+
     protected static string UniqueEmail() => $"test-{Guid.NewGuid():N}@example.com";
 
     protected async Task<Guid> RegisterUserAsync(string email)

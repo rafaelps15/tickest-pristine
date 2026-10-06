@@ -2,10 +2,8 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Domain.Roles;
-using TickestPristine.Domain.Tickets;
-using TickestPristine.Domain.Users;
-using Microsoft.EntityFrameworkCore;
+using TickestPristine.Application.Abstractions.Pagination;
+using TickestPristine.Application.Authorization;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.TicketHistories.GetAll;
@@ -14,37 +12,27 @@ internal sealed class GetTicketHistoryQueryHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IPermissionProvider permissionProvider)
-    : IQueryHandler<GetTicketHistoryQuery, List<TicketHistoryResponse>>
+    : IQueryHandler<GetTicketHistoryQuery, CursorPagedResponse<TicketHistoryResponse>>
 {
-    public async Task<Result<List<TicketHistoryResponse>>> Handle(
+    public async Task<Result<CursorPagedResponse<TicketHistoryResponse>>> Handle(
         GetTicketHistoryQuery query,
         CancellationToken cancellationToken)
     {
-        Ticket? ticket = await context.Tickets.SingleOrDefaultAsync(t => t.Id == query.TicketId, cancellationToken);
+        Result access = await TicketAccessGuard.EnsureCanViewAsync(
+            context,
+            permissionProvider,
+            userContext.UserId,
+            query.TicketId,
+            cancellationToken);
 
-        if (ticket is null)
+        if (access.IsFailure)
         {
-            return Result.Failure<List<TicketHistoryResponse>>(TicketErrors.NotFound(query.TicketId));
+            return Result.Failure<CursorPagedResponse<TicketHistoryResponse>>(access.Error);
         }
 
-        bool isParticipant = ticket.CreatedByUserId == userContext.UserId || ticket.AssignedToUserId == userContext.UserId;
-
-        if (!isParticipant)
-        {
-            bool canManageTickets = await permissionProvider.HasPermissionAsync(
-                userContext.UserId,
-                PermissionCodes.Tickets.Manage,
-                cancellationToken);
-
-            if (!canManageTickets)
-            {
-                return Result.Failure<List<TicketHistoryResponse>>(UserErrors.Unauthorized());
-            }
-        }
-
-        List<TicketHistoryResponse> history = await context.TicketHistories
+        CursorPagedResponse<TicketHistoryResponse> history = await context.TicketHistories
             .Where(h => h.TicketId == query.TicketId)
-            .OrderBy(h => h.OccurredAtUtc)
+            .AfterCursor(query.Paging, h => h.OccurredAtUtc, h => h.Id)
             .Select(h => new TicketHistoryResponse
             {
                 Id = h.Id,
@@ -56,7 +44,7 @@ internal sealed class GetTicketHistoryQueryHandler(
                 NewValue = h.NewValue,
                 OccurredAtUtc = h.OccurredAtUtc
             })
-            .ToListAsync(cancellationToken);
+            .ToCursorPagedListAsync(query.Paging, h => h.OccurredAtUtc, h => h.Id, cancellationToken);
 
         return history;
     }

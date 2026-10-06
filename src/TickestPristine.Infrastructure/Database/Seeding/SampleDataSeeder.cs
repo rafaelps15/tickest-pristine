@@ -9,7 +9,7 @@ namespace TickestPristine.Infrastructure.Database.Seeding;
 /// <summary>
 /// Chamados de exemplo para desenvolvimento, com "Seeding:SampleData" ligado: os do <see cref="SampleTicketCatalog"/>
 /// cujo setor existe e está ativo, abertos por usuários ativos. Só roda num banco sem chamados. Cada chamado nasce com
-/// o histórico que a API teria gravado até o status dele.
+/// o histórico que a API teria gravado até o status dele e os prazos de SLA da prioridade.
 /// </summary>
 internal sealed class SampleDataSeeder(IOptions<SeedingOptions> seedingOptions, IDateTimeProvider dateTimeProvider)
 {
@@ -68,6 +68,18 @@ internal sealed class SampleDataSeeder(IOptions<SeedingOptions> seedingOptions, 
     private static Ticket CreateTicket(Faker faker, SampleTicket sampleTicket, Guid sectorId, Guid[] userIds, DateTime now)
     {
         TicketStatus status = faker.PickRandom<TicketStatus>();
+        TimeSpan resolutionTime = TicketSla.ResolutionTime(sampleTicket.Priority);
+
+        // Os ativos nascem dentro ou pouco além da janela do SLA, para o painel ter chamados no prazo, em risco e
+        // atrasados. Os demais nascem no último ano, até uma semana atrás, para caberem a resolução e o fechamento.
+        DateTime createdAtUtc = TicketStatusTransitions.IsActive(status)
+            ? now - resolutionTime * faker.Random.Double(0.1, 1.5)
+            : faker.Date.Past(1, now.AddDays(-7));
+
+        // Resolvidos dentro ou fora do prazo, para o painel mostrar SLA cumprido e violado.
+        DateTime? resolvedAtUtc = StatusPaths[status].Contains(TicketStatus.Resolved)
+            ? createdAtUtc + resolutionTime * faker.Random.Double(0.3, 1.4)
+            : null;
 
         return new Ticket
         {
@@ -80,7 +92,10 @@ internal sealed class SampleDataSeeder(IOptions<SeedingOptions> seedingOptions, 
             // Chamado que passou por "Em andamento" teve alguém atendendo.
             AssignedToUserId = StatusPaths[status].Contains(TicketStatus.InProgress) ? faker.PickRandom(userIds) : null,
             SectorId = sectorId,
-            CreatedAtUtc = faker.Date.Past(1, now)
+            CreatedAtUtc = createdAtUtc,
+            DueAtUtc = TicketSla.DueAt(createdAtUtc, sampleTicket.Priority),
+            SlaWarningAtUtc = TicketSla.WarningAt(createdAtUtc, sampleTicket.Priority),
+            ResolvedAtUtc = resolvedAtUtc
         };
     }
 
@@ -104,7 +119,13 @@ internal sealed class SampleDataSeeder(IOptions<SeedingOptions> seedingOptions, 
                     $"Sample status path is not allowed by TicketStatusTransitions: {oldStatus} -> {newStatus}.");
             }
 
-            occurredAtUtc = faker.Date.Between(occurredAtUtc, now);
+            // A resolução cai na data gravada no chamado; o que vem antes dela fica entre a abertura e a resolução.
+            occurredAtUtc = newStatus switch
+            {
+                TicketStatus.Resolved => ticket.ResolvedAtUtc!.Value,
+                TicketStatus.Closed => faker.Date.Between(occurredAtUtc, occurredAtUtc.AddDays(2)),
+                _ => faker.Date.Between(occurredAtUtc, ticket.ResolvedAtUtc ?? now)
+            };
 
             yield return TicketHistoryEntries.StatusChanged(
                 ticket.Id,

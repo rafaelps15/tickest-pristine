@@ -114,6 +114,64 @@ internal sealed class GetOverdue : IEndpoint
 }
 ```
 
+## Query paginada (GET → 200 + `PagedResponse<T>`)
+
+Os filtros vêm como parâmetros opcionais da URL, e a página num único parâmetro, `[AsParameters] PageRequest paging`, que vira `?page=&pageSize=`. Nunca declare `page`/`pageSize` soltos nem escreva `if (pageSize > 100)` ou parecidos no endpoint: ele só repassa o objeto, e a `PaginationExtensions` ajusta os valores no handler:
+
+```csharp
+using Application.Abstractions.Messaging;
+using Application.Abstractions.Pagination;
+using Application.Todos.GetAll;
+using SharedKernel;
+using Web.Api.Extensions;
+using Web.Api.Infrastructure;
+
+namespace Web.Api.Endpoints.Todos;
+
+internal sealed class GetAll : IEndpoint
+{
+    public void MapEndpoint(IEndpointRouteBuilder app)
+    {
+        app.MapGet("todos", async (
+            bool? isCompleted,
+            string? search,
+            [AsParameters] PageRequest paging,
+            IQueryHandler<GetTodosQuery, PagedResponse<TodoSummaryResponse>> handler,
+            CancellationToken cancellationToken) =>
+        {
+            var query = new GetTodosQuery(isCompleted, search, paging);
+
+            Result<PagedResponse<TodoSummaryResponse>> result = await handler.Handle(query, cancellationToken);
+
+            return result.Match(Results.Ok, CustomResults.Problem);
+        })
+        .WithTags(Tags.Todos)
+        .RequireAuthorization();
+    }
+}
+```
+
+## Query por cursor (GET → 200 + página por cursor)
+
+Troque o `PageRequest` pelo `[AsParameters] CursorPageRequest paging`, que vira `?cursorDate=&cursorId=&pageSize=`. Sem cursor, a API devolve a primeira página. O endpoint também só repassa o objeto:
+
+```csharp
+app.MapGet("todos/{todoItemId:guid}/comments", async (
+    Guid todoItemId,
+    [AsParameters] CursorPageRequest paging,
+    IQueryHandler<GetTodoCommentsQuery, CursorPagedResponse<TodoCommentResponse>> handler,
+    CancellationToken cancellationToken) =>
+{
+    var query = new GetTodoCommentsQuery(todoItemId, paging);
+
+    Result<CursorPagedResponse<TodoCommentResponse>> result = await handler.Handle(query, cancellationToken);
+
+    return result.Match(Results.Ok, CustomResults.Problem);
+})
+.WithTags(Tags.Todos)
+.RequireAuthorization();
+```
+
 ## Regras
 
 - Rotas em minúsculas, no plural, sem barra inicial: `todos`, `todos/{id:guid}`, `users/{userId:guid}/todos`. Use restrição de tipo (`:guid`) em todo parâmetro tipado.

@@ -1,3 +1,4 @@
+using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Domain.Roles;
@@ -23,10 +24,10 @@ public sealed class GetTicketHistoryQueryHandlerTests : BaseHandlerTest
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
 
         var handler = new GetTicketHistoryQueryHandler(context, userContext, permissionProvider);
-        var query = new GetTicketHistoryQuery(Guid.NewGuid());
+        var query = new GetTicketHistoryQuery(Guid.NewGuid(), new CursorPageRequest(null, null, 20));
 
         // Act
-        Result<List<TicketHistoryResponse>> result = await handler.Handle(query, CancellationToken.None);
+        Result<CursorPagedResponse<TicketHistoryResponse>> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsFailure.ShouldBeTrue();
@@ -48,10 +49,10 @@ public sealed class GetTicketHistoryQueryHandlerTests : BaseHandlerTest
             .Returns(false);
 
         var handler = new GetTicketHistoryQueryHandler(context, userContext, permissionProvider);
-        var query = new GetTicketHistoryQuery(ticketId);
+        var query = new GetTicketHistoryQuery(ticketId, new CursorPageRequest(null, null, 20));
 
         // Act
-        Result<List<TicketHistoryResponse>> result = await handler.Handle(query, CancellationToken.None);
+        Result<CursorPagedResponse<TicketHistoryResponse>> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsFailure.ShouldBeTrue();
@@ -59,7 +60,7 @@ public sealed class GetTicketHistoryQueryHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnHistoryOrderedByOccurredAt_WhenCallerIsParticipant()
+    public async Task Handle_Should_ReturnNewestHistoryFirst_WhenCallerIsParticipant()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -70,16 +71,16 @@ public sealed class GetTicketHistoryQueryHandlerTests : BaseHandlerTest
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
 
         var handler = new GetTicketHistoryQueryHandler(context, userContext, permissionProvider);
-        var query = new GetTicketHistoryQuery(ticketId);
+        var query = new GetTicketHistoryQuery(ticketId, new CursorPageRequest(null, null, 20));
 
         // Act
-        Result<List<TicketHistoryResponse>> result = await handler.Handle(query, CancellationToken.None);
+        Result<CursorPagedResponse<TicketHistoryResponse>> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
-        result.Value.Count.ShouldBe(2);
-        result.Value[0].Action.ShouldBe(TicketHistoryAction.Created);
-        result.Value[1].Action.ShouldBe(TicketHistoryAction.MessageAdded);
+        result.Value.Items.Count.ShouldBe(2);
+        result.Value.Items[0].Action.ShouldBe(TicketHistoryAction.MessageAdded);
+        result.Value.Items[1].Action.ShouldBe(TicketHistoryAction.Created);
     }
 
     [Fact]
@@ -97,14 +98,14 @@ public sealed class GetTicketHistoryQueryHandlerTests : BaseHandlerTest
             .Returns(true);
 
         var handler = new GetTicketHistoryQueryHandler(context, userContext, permissionProvider);
-        var query = new GetTicketHistoryQuery(ticketId);
+        var query = new GetTicketHistoryQuery(ticketId, new CursorPageRequest(null, null, 20));
 
         // Act
-        Result<List<TicketHistoryResponse>> result = await handler.Handle(query, CancellationToken.None);
+        Result<CursorPagedResponse<TicketHistoryResponse>> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
-        result.Value.Count.ShouldBe(2);
+        result.Value.Items.Count.ShouldBe(2);
     }
 
     private static async Task<Guid> SeedTicketWithHistoryAsync(TestDbContext context)

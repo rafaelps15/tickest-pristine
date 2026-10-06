@@ -69,14 +69,12 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasKey("Id")
                         .HasName("pk_audit_logs");
 
-                    b.HasIndex("EntityName")
-                        .HasDatabaseName("ix_audit_logs_entity_name");
-
                     b.HasIndex("Timestamp")
                         .HasDatabaseName("ix_audit_logs_timestamp");
 
-                    b.HasIndex("EntityName", "EntityId")
-                        .HasDatabaseName("ix_audit_logs_entity_name_entity_id");
+                    b.HasIndex("EntityName", "EntityId", "Timestamp", "Id")
+                        .IsDescending(false, false, true, true)
+                        .HasDatabaseName("ix_audit_logs_entity_name_entity_id_timestamp_id");
 
                     b.ToTable("audit_logs", "public");
                 });
@@ -544,13 +542,25 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("description");
 
+                    b.Property<DateTime>("DueAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("due_at_utc");
+
                     b.Property<int>("Priority")
                         .HasColumnType("integer")
                         .HasColumnName("priority");
 
+                    b.Property<DateTime?>("ResolvedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at_utc");
+
                     b.Property<Guid>("SectorId")
                         .HasColumnType("uuid")
                         .HasColumnName("sector_id");
+
+                    b.Property<DateTime>("SlaWarningAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sla_warning_at_utc");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
@@ -559,7 +569,7 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("citext")
                         .HasColumnName("title");
 
                     b.HasKey("Id")
@@ -568,11 +578,15 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasIndex("AssignedToUserId")
                         .HasDatabaseName("ix_tickets_assigned_to_user_id");
 
-                    b.HasIndex("CreatedByUserId")
-                        .HasDatabaseName("ix_tickets_created_by_user_id");
-
                     b.HasIndex("SectorId")
                         .HasDatabaseName("ix_tickets_sector_id");
+
+                    b.HasIndex("CreatedByUserId", "CreatedAtUtc")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_tickets_created_by_user_id_created_at_utc");
+
+                    b.HasIndex("Status", "DueAtUtc")
+                        .HasDatabaseName("ix_tickets_status_due_at_utc");
 
                     b.ToTable("tickets", "public");
                 });
@@ -625,11 +639,12 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasKey("Id")
                         .HasName("pk_ticket_attachments");
 
-                    b.HasIndex("TicketId")
-                        .HasDatabaseName("ix_ticket_attachments_ticket_id");
-
                     b.HasIndex("UploadedByUserId")
                         .HasDatabaseName("ix_ticket_attachments_uploaded_by_user_id");
+
+                    b.HasIndex("TicketId", "UploadedAtUtc", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_ticket_attachments_ticket_id_uploaded_at_utc_id");
 
                     b.ToTable("ticket_attachments", "public");
                 });
@@ -679,8 +694,9 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasIndex("ChangedByUserId")
                         .HasDatabaseName("ix_ticket_histories_changed_by_user_id");
 
-                    b.HasIndex("TicketId")
-                        .HasDatabaseName("ix_ticket_histories_ticket_id");
+                    b.HasIndex("TicketId", "OccurredAtUtc", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_ticket_histories_ticket_id_occurred_at_utc_id");
 
                     b.ToTable("ticket_histories", "public");
                 });
@@ -724,8 +740,9 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasIndex("AuthorUserId")
                         .HasDatabaseName("ix_ticket_messages_author_user_id");
 
-                    b.HasIndex("TicketId")
-                        .HasDatabaseName("ix_ticket_messages_ticket_id");
+                    b.HasIndex("TicketId", "CreatedAtUtc", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_ticket_messages_ticket_id_created_at_utc_id");
 
                     b.ToTable("ticket_messages", "public");
                 });
@@ -817,6 +834,9 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasIndex("Email")
                         .IsUnique()
                         .HasDatabaseName("ix_users_email");
+
+                    b.HasIndex("FirstName", "LastName", "Id")
+                        .HasDatabaseName("ix_users_first_name_last_name_id");
 
                     b.ToTable("users", "public");
                 });

@@ -1,3 +1,4 @@
+using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Domain.Roles;
@@ -25,10 +26,10 @@ public sealed class GetTicketsByUserQueryHandlerTests : BaseHandlerTest
             .Returns(false);
 
         var handler = new GetTicketsByUserQueryHandler(context, userContext, permissionProvider);
-        var query = new GetTicketsByUserQuery(OwnerId);
+        var query = new GetTicketsByUserQuery(OwnerId, new PageRequest(1, 20));
 
         // Act
-        Result<List<TicketResponse>> result = await handler.Handle(query, CancellationToken.None);
+        Result<PagedResponse<TicketResponse>> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsFailure.ShouldBeTrue();
@@ -52,15 +53,15 @@ public sealed class GetTicketsByUserQueryHandlerTests : BaseHandlerTest
             .Returns(true);
 
         var handler = new GetTicketsByUserQueryHandler(context, userContext, permissionProvider);
-        var query = new GetTicketsByUserQuery(OwnerId);
+        var query = new GetTicketsByUserQuery(OwnerId, new PageRequest(1, 20));
 
         // Act
-        Result<List<TicketResponse>> result = await handler.Handle(query, CancellationToken.None);
+        Result<PagedResponse<TicketResponse>> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
-        result.Value.Count.ShouldBe(3);
-        result.Value.ShouldAllBe(t => t.OpenedByUserId == OwnerId);
+        result.Value.Items.Count.ShouldBe(3);
+        result.Value.Items.ShouldAllBe(t => t.OpenedByUserId == OwnerId);
     }
 
     [Fact]
@@ -77,10 +78,10 @@ public sealed class GetTicketsByUserQueryHandlerTests : BaseHandlerTest
             .Returns(false);
 
         var handler = new GetTicketsByUserQueryHandler(context, userContext, permissionProvider);
-        var query = new GetTicketsByUserQuery(OwnerId);
+        var query = new GetTicketsByUserQuery(OwnerId, new PageRequest(1, 20));
 
         // Act
-        Result<List<TicketResponse>> result = await handler.Handle(query, CancellationToken.None);
+        Result<PagedResponse<TicketResponse>> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsFailure.ShouldBeTrue();

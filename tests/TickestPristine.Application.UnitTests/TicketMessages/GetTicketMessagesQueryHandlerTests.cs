@@ -1,3 +1,4 @@
+using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Domain.Roles;
@@ -23,10 +24,10 @@ public sealed class GetTicketMessagesQueryHandlerTests : BaseHandlerTest
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
 
         var handler = new GetTicketMessagesQueryHandler(context, userContext, permissionProvider);
-        var query = new GetTicketMessagesQuery(Guid.NewGuid());
+        var query = new GetTicketMessagesQuery(Guid.NewGuid(), new CursorPageRequest(null, null, 20));
 
         // Act
-        Result<List<TicketMessageResponse>> result = await handler.Handle(query, CancellationToken.None);
+        Result<CursorPagedResponse<TicketMessageResponse>> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsFailure.ShouldBeTrue();
@@ -48,10 +49,10 @@ public sealed class GetTicketMessagesQueryHandlerTests : BaseHandlerTest
             .Returns(false);
 
         var handler = new GetTicketMessagesQueryHandler(context, userContext, permissionProvider);
-        var query = new GetTicketMessagesQuery(ticketId);
+        var query = new GetTicketMessagesQuery(ticketId, new CursorPageRequest(null, null, 20));
 
         // Act
-        Result<List<TicketMessageResponse>> result = await handler.Handle(query, CancellationToken.None);
+        Result<CursorPagedResponse<TicketMessageResponse>> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsFailure.ShouldBeTrue();
@@ -59,7 +60,7 @@ public sealed class GetTicketMessagesQueryHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnMessagesOrderedByCreatedAt_WhenCallerIsParticipant()
+    public async Task Handle_Should_ReturnNewestMessagesFirst_WhenCallerIsParticipant()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -70,16 +71,16 @@ public sealed class GetTicketMessagesQueryHandlerTests : BaseHandlerTest
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
 
         var handler = new GetTicketMessagesQueryHandler(context, userContext, permissionProvider);
-        var query = new GetTicketMessagesQuery(ticketId);
+        var query = new GetTicketMessagesQuery(ticketId, new CursorPageRequest(null, null, 20));
 
         // Act
-        Result<List<TicketMessageResponse>> result = await handler.Handle(query, CancellationToken.None);
+        Result<CursorPagedResponse<TicketMessageResponse>> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
-        result.Value.Count.ShouldBe(2);
-        result.Value[0].Content.ShouldBe("First message");
-        result.Value[1].Content.ShouldBe("Second message");
+        result.Value.Items.Count.ShouldBe(2);
+        result.Value.Items[0].Content.ShouldBe("Second message");
+        result.Value.Items[1].Content.ShouldBe("First message");
     }
 
     [Fact]
@@ -119,14 +120,80 @@ public sealed class GetTicketMessagesQueryHandlerTests : BaseHandlerTest
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
 
         var handler = new GetTicketMessagesQueryHandler(context, userContext, permissionProvider);
-        var query = new GetTicketMessagesQuery(ticket.Id);
+        var query = new GetTicketMessagesQuery(ticket.Id, new CursorPageRequest(null, null, 20));
 
         // Act
-        Result<List<TicketMessageResponse>> result = await handler.Handle(query, CancellationToken.None);
+        Result<CursorPagedResponse<TicketMessageResponse>> result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
-        result.Value.ShouldBeEmpty();
+        result.Value.Items.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_Should_WalkAllMessagesByCursor_WhenMessagesShareTheSameCreationDate()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketWithMessagesAsync(context);
+        var sameDate = new DateTime(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc);
+        context.TicketMessages.AddRange(
+            new TicketMessage { Id = Guid.NewGuid(), TicketId = ticketId, AuthorUserId = CreatorId, Content = "Tie A", CreatedAtUtc = sameDate },
+            new TicketMessage { Id = Guid.NewGuid(), TicketId = ticketId, AuthorUserId = CreatorId, Content = "Tie B", CreatedAtUtc = sameDate },
+            new TicketMessage { Id = Guid.NewGuid(), TicketId = ticketId, AuthorUserId = CreatorId, Content = "Tie C", CreatedAtUtc = sameDate });
+        await context.SaveChangesAsync();
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(CreatorId);
+        var handler = new GetTicketMessagesQueryHandler(context, userContext, Substitute.For<IPermissionProvider>());
+
+        // Act
+        var seen = new List<Guid>();
+        DateTime? cursorDate = null;
+        Guid? cursorId = null;
+        int pages = 0;
+        bool hasNextPage;
+
+        do
+        {
+            Result<CursorPagedResponse<TicketMessageResponse>> page = await handler.Handle(
+                new GetTicketMessagesQuery(ticketId, new CursorPageRequest(cursorDate, cursorId, 2)),
+                CancellationToken.None);
+
+            seen.AddRange(page.Value.Items.Select(m => m.Id));
+            (cursorDate, cursorId, hasNextPage) = (page.Value.NextCursorDate, page.Value.NextCursorId, page.Value.HasNextPage);
+            pages++;
+        }
+        while (hasNextPage);
+
+        // Assert
+        pages.ShouldBe(3);
+        seen.Count.ShouldBe(5);
+        seen.Distinct().Count().ShouldBe(5);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnCursorOfLastItem_WhenThereIsANextPage()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketWithMessagesAsync(context);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(CreatorId);
+        var handler = new GetTicketMessagesQueryHandler(context, userContext, Substitute.For<IPermissionProvider>());
+
+        // Act
+        Result<CursorPagedResponse<TicketMessageResponse>> result = await handler.Handle(
+            new GetTicketMessagesQuery(ticketId, new CursorPageRequest(null, null, 1)),
+            CancellationToken.None);
+
+        // Assert
+        TicketMessageResponse newest = result.Value.Items.ShouldHaveSingleItem();
+        newest.Content.ShouldBe("Second message");
+        result.Value.HasNextPage.ShouldBeTrue();
+        result.Value.NextCursorDate.ShouldBe(newest.CreatedAtUtc);
+        result.Value.NextCursorId.ShouldBe(newest.Id);
     }
 
     private static async Task<Guid> SeedTicketWithMessagesAsync(TestDbContext context)

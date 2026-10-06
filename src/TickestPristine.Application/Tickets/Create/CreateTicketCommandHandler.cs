@@ -64,6 +64,8 @@ internal sealed class CreateTicketCommandHandler(
             return Result.Failure<Guid>(SectorErrors.NotFound(command.SectorId));
         }
 
+        DateTime createdAtUtc = dateTimeProvider.UtcNow;
+
         var ticket = new Ticket
         {
             Id = Guid.NewGuid(),
@@ -74,7 +76,9 @@ internal sealed class CreateTicketCommandHandler(
             CreatedByUserId = openedByUserId,
             AssignedToUserId = command.AssignedToUserId,
             SectorId = command.SectorId,
-            CreatedAtUtc = dateTimeProvider.UtcNow
+            CreatedAtUtc = createdAtUtc,
+            DueAtUtc = TicketSla.DueAt(createdAtUtc, command.Priority),
+            SlaWarningAtUtc = TicketSla.WarningAt(createdAtUtc, command.Priority)
         };
 
         ticket.Raise(new TicketCreatedDomainEvent(ticket.Id));

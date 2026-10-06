@@ -5,4 +5,5 @@ namespace TickestPristine.Web.Api.Endpoints.Tickets;
 internal static class Permissions
 {
     internal const string TicketsCreate = PermissionCodes.Tickets.Create;
+    internal const string TicketsManage = PermissionCodes.Tickets.Manage;
 }

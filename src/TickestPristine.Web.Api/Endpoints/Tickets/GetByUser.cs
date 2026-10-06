@@ -1,4 +1,5 @@
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Application.Tickets.GetByUser;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
@@ -12,12 +13,13 @@ internal sealed class GetByUser : IEndpoint
     {
         app.MapGet("tickets/users/{userId:guid}", async (
             Guid userId,
-            IQueryHandler<GetTicketsByUserQuery, List<TicketResponse>> handler,
+            [AsParameters] PageRequest paging,
+            IQueryHandler<GetTicketsByUserQuery, PagedResponse<TicketResponse>> handler,
             CancellationToken cancellationToken) =>
         {
-            var query = new GetTicketsByUserQuery(userId);
+            var query = new GetTicketsByUserQuery(userId, paging);
 
-            Result<List<TicketResponse>> result = await handler.Handle(query, cancellationToken);
+            Result<PagedResponse<TicketResponse>> result = await handler.Handle(query, cancellationToken);
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })

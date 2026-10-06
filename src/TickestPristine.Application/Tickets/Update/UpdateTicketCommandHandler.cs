@@ -13,7 +13,8 @@ namespace TickestPristine.Application.Tickets.Update;
 internal sealed class UpdateTicketCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IPermissionProvider permissionProvider)
+    IPermissionProvider permissionProvider,
+    IDateTimeProvider dateTimeProvider)
     : ICommandHandler<UpdateTicketCommand>
 {
     public async Task<Result> Handle(UpdateTicketCommand command, CancellationToken cancellationToken)
@@ -49,6 +50,12 @@ internal sealed class UpdateTicketCommandHandler(
 
         ticket.Description = command.Description;
         ticket.Status = command.Status;
+
+        // O SLA é medido até a primeira resolução; reaberturas não mudam o resultado.
+        if (command.Status == TicketStatus.Resolved && ticket.ResolvedAtUtc is null)
+        {
+            ticket.ResolvedAtUtc = dateTimeProvider.UtcNow;
+        }
 
         ticket.Raise(new TicketUpdatedDomainEvent(ticket.Id));
 

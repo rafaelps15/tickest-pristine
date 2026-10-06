@@ -139,7 +139,7 @@ public sealed class TicketAttachmentsTests(IntegrationTestWebAppFactory factory)
 
         HttpResponseMessage getResponse = await HttpClient.GetAsync($"tickets/{ticketId}/attachments");
         getResponse.EnsureSuccessStatusCode();
-        List<TicketAttachmentDto>? attachments = await getResponse.Content.ReadFromJsonAsync<List<TicketAttachmentDto>>();
+        List<TicketAttachmentDto>? attachments = (await getResponse.Content.ReadFromJsonAsync<CursorPageDto<TicketAttachmentDto>>())?.Items;
         attachments!.ShouldContain(a => a.Id == attachmentId && a.FileName == "report.pdf");
     }
 
@@ -200,7 +200,7 @@ public sealed class TicketAttachmentsTests(IntegrationTestWebAppFactory factory)
 
         HttpResponseMessage getResponse = await HttpClient.GetAsync($"tickets/{ticketId}/attachments");
         getResponse.EnsureSuccessStatusCode();
-        List<TicketAttachmentDto>? attachments = await getResponse.Content.ReadFromJsonAsync<List<TicketAttachmentDto>>();
+        List<TicketAttachmentDto>? attachments = (await getResponse.Content.ReadFromJsonAsync<CursorPageDto<TicketAttachmentDto>>())?.Items;
         attachments!.ShouldNotContain(a => a.Id == attachmentId);
     }
 

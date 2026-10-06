@@ -11,4 +11,5 @@ public sealed class TicketResponse
     public TicketStatus Status { get; set; }
     public Guid OpenedByUserId { get; set; }
     public Guid? AssignedToUserId { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
 }

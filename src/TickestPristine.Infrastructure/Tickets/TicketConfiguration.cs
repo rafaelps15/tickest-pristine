@@ -12,11 +12,19 @@ internal sealed class TicketConfiguration : IEntityTypeConfiguration<Ticket>
     {
         builder.HasKey(t => t.Id);
 
-        builder.Property(t => t.Title).HasMaxLength(200);
+        // citext: a busca do painel não diferencia maiúsculas de minúsculas.
+        builder.Property(t => t.Title).HasMaxLength(200).HasColumnType("citext");
 
         builder.Property(t => t.Description).HasMaxLength(500);
 
         builder.HasQueryFilter(t => t.DeletedAtUtc == null);
+
+        // Painel de SLA: filtra por status e ordena pelo prazo.
+        builder.HasIndex(t => new { t.Status, t.DueAtUtc });
+
+        // "Meus chamados": filtra pelo solicitante e ordena do mais novo para o mais antigo.
+        builder.HasIndex(t => new { t.CreatedByUserId, t.CreatedAtUtc })
+            .IsDescending(false, true);
 
         builder.HasOne<User>()
             .WithMany()

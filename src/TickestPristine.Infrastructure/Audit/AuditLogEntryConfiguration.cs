@@ -17,8 +17,10 @@ internal sealed class AuditLogEntryConfiguration : IEntityTypeConfiguration<Audi
 
         // Sem chave estrangeira para users: o registro de auditoria sobrevive ao usuário que fez a mudança.
 
-        builder.HasIndex(x => x.EntityName);
         builder.HasIndex(x => x.Timestamp);
-        builder.HasIndex(x => new { x.EntityName, x.EntityId });
+
+        // Trilha de uma entidade paginada por cursor composto (horário + id), da mudança mais nova para a mais antiga.
+        builder.HasIndex(x => new { x.EntityName, x.EntityId, x.Timestamp, x.Id })
+            .IsDescending(false, false, true, true);
     }
 }

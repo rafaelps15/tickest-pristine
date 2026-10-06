@@ -95,7 +95,7 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
 
         // Assert
         response.EnsureSuccessStatusCode();
-        List<TicketHistoryDto>? history = await response.Content.ReadFromJsonAsync<List<TicketHistoryDto>>();
+        List<TicketHistoryDto>? history = (await response.Content.ReadFromJsonAsync<CursorPageDto<TicketHistoryDto>>())?.Items;
         history!.ShouldContain(h => h.TicketId == ticketId && h.Action == 1 /* Created */);
     }
 
@@ -118,7 +118,7 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
 
         // Assert
         response.EnsureSuccessStatusCode();
-        List<TicketHistoryDto>? history = await response.Content.ReadFromJsonAsync<List<TicketHistoryDto>>();
+        List<TicketHistoryDto>? history = (await response.Content.ReadFromJsonAsync<CursorPageDto<TicketHistoryDto>>())?.Items;
         history!.ShouldContain(h => h.TicketId == ticketId && h.Action == 6 /* MessageAdded */);
     }
 
@@ -143,7 +143,7 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
 
         // Assert
         response.EnsureSuccessStatusCode();
-        List<TicketHistoryDto>? history = await response.Content.ReadFromJsonAsync<List<TicketHistoryDto>>();
+        List<TicketHistoryDto>? history = (await response.Content.ReadFromJsonAsync<CursorPageDto<TicketHistoryDto>>())?.Items;
         history!.ShouldContain(h => h.TicketId == ticketId && h.Action == 2 /* StatusChanged */);
     }
 
@@ -171,7 +171,7 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
 
         // Assert
         response.EnsureSuccessStatusCode();
-        List<TicketHistoryDto>? history = await response.Content.ReadFromJsonAsync<List<TicketHistoryDto>>();
+        List<TicketHistoryDto>? history = (await response.Content.ReadFromJsonAsync<CursorPageDto<TicketHistoryDto>>())?.Items;
         history!.ShouldContain(h => h.TicketId == ticketId && h.Action == 4 /* Reopened */);
     }
 
@@ -314,7 +314,7 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
         HttpResponseMessage response = await HttpClient.GetAsync($"tickets/{ticketId}/history");
         response.EnsureSuccessStatusCode();
 
-        List<TicketHistoryDto>? history = await response.Content.ReadFromJsonAsync<List<TicketHistoryDto>>();
+        List<TicketHistoryDto>? history = (await response.Content.ReadFromJsonAsync<CursorPageDto<TicketHistoryDto>>())?.Items;
 
         return history!;
     }

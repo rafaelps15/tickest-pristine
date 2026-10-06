@@ -936,6 +936,22 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
+    public async Task GetAll_Should_AdjustPageAndPageSize_WhenOutOfRange()
+    {
+        // Arrange
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+
+        // Act
+        PagedDto<UserSummaryDto>? users = await HttpClient.GetFromJsonAsync<PagedDto<UserSummaryDto>>(
+            "users?page=0&pageSize=1000");
+
+        // Assert
+        users!.Page.ShouldBe(1);
+        users.PageSize.ShouldBe(100);
+    }
+
+    [Fact]
     public async Task GetAll_Should_ReturnRequestedPage_WhenPageSizeIsGiven()
     {
         // Arrange
