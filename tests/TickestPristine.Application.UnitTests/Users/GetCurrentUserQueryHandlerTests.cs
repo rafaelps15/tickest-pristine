@@ -4,7 +4,6 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Users.GetCurrent;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.Users;
 

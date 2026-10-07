@@ -389,6 +389,21 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
+    public async Task GetSummaryByUser_Should_ReturnForbidden_WhenCallerQueriesAnotherUserWithoutManagePermission()
+    {
+        // Arrange
+        (Guid otherUserId, _) = await RegisterAndLoginAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/users/{otherUserId}/summary");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public async Task GetByUser_Should_ReturnRequestedPage_WhenPageSizeIsGiven()
     {
         // Arrange
@@ -444,6 +459,67 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         summary.OnTimeCount.ShouldBe(2);
         summary.AtRiskCount.ShouldBe(0);
         summary.BreachedCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Update_Should_ReturnNotFound_WhenTicketDoesNotExist()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{Guid.NewGuid()}", new
+        {
+            description = "Updated description",
+            status = 2 // InProgress
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Reopen_Should_ReturnNotFound_WhenTicketDoesNotExist()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsync($"tickets/{Guid.NewGuid()}/reopen", null);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Delete_Should_ReturnNotFound_WhenTicketDoesNotExist()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"tickets/{Guid.NewGuid()}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task GetByUser_Should_ReturnForbidden_WhenCallerQueriesAnotherUserWithoutManagePermission()
+    {
+        // Arrange
+        (Guid otherUserId, _) = await RegisterAndLoginAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/users/{otherUserId}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 
     private sealed record TicketDto(Guid Id, string Title, string Description, int Priority, int Status);

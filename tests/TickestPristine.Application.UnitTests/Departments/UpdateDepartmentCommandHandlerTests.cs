@@ -2,7 +2,6 @@ using TickestPristine.Application.Departments.Update;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Departments;
 using Microsoft.EntityFrameworkCore;
-using TickestPristine.SharedKernel;
 using TickestPristine.Domain.Users;
 
 namespace TickestPristine.Application.UnitTests.Departments;

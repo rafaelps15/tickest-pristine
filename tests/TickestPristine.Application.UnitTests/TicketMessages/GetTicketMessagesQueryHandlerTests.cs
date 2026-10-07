@@ -6,7 +6,6 @@ using TickestPristine.Application.TicketMessages.GetAll;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.TicketMessages;
 

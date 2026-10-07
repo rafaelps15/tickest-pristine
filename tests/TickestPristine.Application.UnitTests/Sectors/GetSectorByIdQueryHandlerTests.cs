@@ -1,7 +1,6 @@
 using TickestPristine.Application.Sectors.GetById;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Sectors;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.Sectors;
 

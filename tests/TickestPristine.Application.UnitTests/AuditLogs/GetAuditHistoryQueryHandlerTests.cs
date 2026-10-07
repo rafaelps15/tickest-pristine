@@ -2,7 +2,6 @@ using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Application.AuditLogs.GetHistory;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Audit;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.AuditLogs;
 

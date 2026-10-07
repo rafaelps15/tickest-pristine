@@ -204,6 +204,39 @@ public sealed class TicketAttachmentsTests(IntegrationTestWebAppFactory factory)
         attachments!.ShouldNotContain(a => a.Id == attachmentId);
     }
 
+    [Fact]
+    public async Task Delete_Should_ReturnNotFound_WhenAttachmentDoesNotExist()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"ticket-attachments/{Guid.NewGuid()}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnForbidden_WhenCallerIsNotParticipantAndLacksManagePermission()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens ownerTokens) = await RegisterAndLoginAsync();
+        Authenticate(ownerTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        (_, AccessTokens outsiderTokens) = await RegisterAndLoginAsync();
+        Authenticate(outsiderTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/{ticketId}/attachments");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
     private sealed record TicketAttachmentDto(
         Guid Id,
         Guid TicketId,

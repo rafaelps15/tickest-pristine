@@ -198,5 +198,35 @@ public sealed class SectorsTests(IntegrationTestWebAppFactory factory) : BaseInt
         sectorId.ShouldNotBe(Guid.Empty);
     }
 
+    [Fact]
+    public async Task Update_Should_ReturnNotFound_WhenSectorDoesNotExist()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"sectors/{Guid.NewGuid()}", new
+        {
+            name = "Technical Support",
+            description = "Updated description"
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Deactivate_Should_ReturnNotFound_WhenSectorDoesNotExist()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"sectors/{Guid.NewGuid()}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
     private sealed record SectorDto(Guid Id, string Name, string? Description);
 }

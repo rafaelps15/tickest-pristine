@@ -6,7 +6,6 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -56,6 +55,23 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(UserErrors.Unauthorized());
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnNotActive_WhenTicketIsResolved()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Resolved);
+        UpdateTicketCommandHandler handler = CreateManagerHandler(context, DateTime.UtcNow);
+        var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.Closed };
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketErrors.NotActive(ticketId));
     }
 
     [Fact]

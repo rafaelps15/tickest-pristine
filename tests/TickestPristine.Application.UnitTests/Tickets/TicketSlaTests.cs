@@ -13,21 +13,27 @@ public sealed class TicketSlaTests
     [InlineData(TicketPriority.Low, 72)]
     public void DueAt_Should_AddResolutionHoursOfPriority(TicketPriority priority, int hours)
     {
+        // Arrange
+        DateTime expectedDueAtUtc = CreatedAtUtc.AddHours(hours);
+
         // Act
         DateTime dueAtUtc = TicketSla.DueAt(CreatedAtUtc, priority);
 
         // Assert
-        dueAtUtc.ShouldBe(CreatedAtUtc.AddHours(hours));
+        dueAtUtc.ShouldBe(expectedDueAtUtc);
     }
 
     [Fact]
     public void WarningAt_Should_BeAtSeventyFivePercentOfWindow()
     {
+        // Arrange
+        DateTime expectedWarningAtUtc = CreatedAtUtc.AddHours(3);
+
         // Act
         DateTime warningAtUtc = TicketSla.WarningAt(CreatedAtUtc, TicketPriority.Urgent);
 
         // Assert
-        warningAtUtc.ShouldBe(CreatedAtUtc.AddHours(3));
+        warningAtUtc.ShouldBe(expectedWarningAtUtc);
     }
 
     [Theory]
@@ -79,11 +85,15 @@ public sealed class TicketSlaTests
     [Fact]
     public void GetStatus_Should_ReturnNotApplicable_WhenTicketWasCanceledWithoutResolution()
     {
+        // Arrange
+        DateTime dueAtUtc = TicketSla.DueAt(CreatedAtUtc, TicketPriority.Urgent);
+        DateTime warningAtUtc = TicketSla.WarningAt(CreatedAtUtc, TicketPriority.Urgent);
+
         // Act
         TicketSlaStatus status = TicketSla.GetStatus(
             TicketStatus.Canceled,
-            CreatedAtUtc.AddHours(4),
-            CreatedAtUtc.AddHours(3),
+            dueAtUtc,
+            warningAtUtc,
             null,
             CreatedAtUtc.AddDays(10));
 

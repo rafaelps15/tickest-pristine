@@ -4,7 +4,6 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.Authorization;
 

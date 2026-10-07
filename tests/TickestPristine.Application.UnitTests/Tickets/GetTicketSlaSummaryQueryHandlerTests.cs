@@ -1,7 +1,6 @@
 using TickestPristine.Application.Tickets.GetSlaSummary;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 

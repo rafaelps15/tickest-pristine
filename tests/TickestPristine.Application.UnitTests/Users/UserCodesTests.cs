@@ -7,19 +7,24 @@ public sealed class UserCodesTests
     [Fact]
     public void New_Should_StartWithPrefixFollowedByUlid()
     {
+        // Arrange
+        string prefix = UserCodes.Prefix;
+
         // Act
         string code = UserCodes.New();
 
         // Assert
-        code.ShouldStartWith(UserCodes.Prefix);
-        Ulid.TryParse(code[UserCodes.Prefix.Length..], out _).ShouldBeTrue();
+        code.ShouldStartWith(prefix);
+        Ulid.TryParse(code[prefix.Length..], out _).ShouldBeTrue();
     }
 
     [Fact]
     public void New_Should_ReturnDifferentCodes_WhenCalledTwice()
     {
-        // Act
+        // Arrange
         string first = UserCodes.New();
+
+        // Act
         string second = UserCodes.New();
 
         // Assert

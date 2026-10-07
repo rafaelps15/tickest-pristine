@@ -210,5 +210,49 @@ public sealed class TicketMessagesTests(IntegrationTestWebAppFactory factory) : 
         messages!.ShouldNotContain(m => m.Id == messageId);
     }
 
+    [Fact]
+    public async Task GetAll_Should_ReturnNotFound_WhenTicketDoesNotExist()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/{Guid.NewGuid()}/messages");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Edit_Should_ReturnNotFound_WhenMessageDoesNotExist()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
+            $"ticket-messages/{Guid.NewGuid()}",
+            new { content = "Edited content" });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Delete_Should_ReturnNotFound_WhenMessageDoesNotExist()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"ticket-messages/{Guid.NewGuid()}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
     private sealed record TicketMessageDto(Guid Id, Guid TicketId, Guid AuthorUserId, string Content);
 }

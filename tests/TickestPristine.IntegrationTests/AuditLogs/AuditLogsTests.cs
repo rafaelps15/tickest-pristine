@@ -52,6 +52,9 @@ public sealed class AuditLogsTests(IntegrationTestWebAppFactory factory) : BaseI
     [Fact]
     public async Task GetHistory_Should_ReturnUnauthorized_WhenNoTokenProvided()
     {
+        // Arrange
+        HttpClient.DefaultRequestHeaders.Authorization = null;
+
         // Act
         HttpResponseMessage response = await HttpClient.GetAsync($"audit-logs/Department/{Guid.NewGuid()}");
 

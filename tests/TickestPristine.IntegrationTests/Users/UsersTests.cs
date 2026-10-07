@@ -599,6 +599,9 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     [Fact]
     public async Task GetCurrent_Should_ReturnUnauthorized_WhenNotAuthenticated()
     {
+        // Arrange
+        HttpClient.DefaultRequestHeaders.Authorization = null;
+
         // Act
         HttpResponseMessage response = await HttpClient.GetAsync("users/me");
 
@@ -652,6 +655,9 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     [Fact]
     public async Task Logout_Should_ReturnUnauthorized_WhenNotAuthenticated()
     {
+        // Arrange
+        HttpClient.DefaultRequestHeaders.Authorization = null;
+
         // Act
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
             "users/logout",
@@ -1070,6 +1076,21 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetById_Should_ReturnForbidden_WhenQueryingAnotherUserWithoutReadPermission()
+    {
+        // Arrange
+        (Guid otherUserId, _) = await RegisterAndLoginAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"users/{otherUserId}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 
     private async Task<string> CreateRoleWithPermissionsAsync(params string[] permissionCodes)

@@ -4,7 +4,6 @@ using TickestPristine.Application.Users.ChangeRequiredPassword;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.Users;
 

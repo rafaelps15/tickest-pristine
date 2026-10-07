@@ -6,7 +6,6 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
-using TickestPristine.SharedKernel;
 using TickestPristine.Domain.Users;
 
 namespace TickestPristine.Application.UnitTests.Tickets;

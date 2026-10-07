@@ -3,7 +3,6 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using Microsoft.EntityFrameworkCore;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.Sectors;
 

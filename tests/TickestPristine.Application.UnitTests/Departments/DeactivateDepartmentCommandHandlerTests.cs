@@ -4,7 +4,6 @@ using TickestPristine.Domain.Departments;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.Departments;
 

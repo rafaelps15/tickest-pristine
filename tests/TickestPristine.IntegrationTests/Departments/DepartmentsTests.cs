@@ -198,6 +198,23 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
         deleteResponse.StatusCode.ShouldBe(HttpStatusCode.Conflict);
     }
 
+    [Fact]
+    public async Task Update_Should_ReturnNotFound_WhenDepartmentDoesNotExist()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"departments/{Guid.NewGuid()}", new
+        {
+            name = "Customer Support",
+            description = "Updated description"
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
     private sealed record DepartmentDto(Guid Id, string Name, string Description, bool IsActive, Guid? ResponsibleUserId);
 
     private sealed record DepartmentSummaryDto(Guid Id, string Name, string Description);

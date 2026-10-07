@@ -1,7 +1,6 @@
 using TickestPristine.Application.Roles.GetAll;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Roles;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.Roles;
 

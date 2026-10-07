@@ -5,7 +5,6 @@ using TickestPristine.Domain.Roles;
 using TickestPristine.Application.Tickets.GetByUser;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
-using TickestPristine.SharedKernel;
 using TickestPristine.Domain.Users;
 
 namespace TickestPristine.Application.UnitTests.Tickets;

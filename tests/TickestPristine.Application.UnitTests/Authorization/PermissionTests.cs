@@ -8,12 +8,20 @@ public sealed class PermissionTests
     [Fact]
     public void All_Should_HaveUniqueCodes()
     {
-        Permission.All.Select(p => p.Code).ShouldBeUnique();
+        // Arrange
+        IReadOnlyList<Permission> catalog = Permission.All;
+
+        // Act
+        var codes = catalog.Select(p => p.Code).ToList();
+
+        // Assert
+        codes.ShouldBeUnique();
     }
 
     [Fact]
     public void All_Should_ContainEveryPermissionCodeConstant()
     {
+        // Arrange
         var constants = typeof(PermissionCodes)
             .GetNestedTypes()
             .SelectMany(type => type.GetFields(BindingFlags.Public | BindingFlags.Static))
@@ -21,7 +29,11 @@ public sealed class PermissionTests
             .Select(field => (string)field.GetRawConstantValue()!)
             .ToList();
 
-        Permission.All.Select(p => p.Code).ShouldBe(constants, ignoreOrder: true);
+        // Act
+        var codes = Permission.All.Select(p => p.Code).ToList();
+
+        // Assert
+        codes.ShouldBe(constants, ignoreOrder: true);
     }
 
     [Theory]
@@ -29,12 +41,28 @@ public sealed class PermissionTests
     [InlineData(PermissionCodes.Tickets.Create, false)]
     public void Find_Should_ReturnAdministrativeFlagFromCatalog(string code, bool expected)
     {
-        Permission.Find(code)!.IsAdministrative.ShouldBe(expected);
+        // Arrange
+        Permission catalogPermission = Permission.All.Single(p => p.Code == code);
+
+        // Act
+        var permission = Permission.Find(code);
+
+        // Assert
+        permission.ShouldNotBeNull();
+        permission.ShouldBeSameAs(catalogPermission);
+        permission.IsAdministrative.ShouldBe(expected);
     }
 
     [Fact]
     public void GetDisplayName_Should_ReturnCode_WhenCodeIsNotInCatalog()
     {
-        Permission.GetDisplayName("legacy:unknown").ShouldBe("legacy:unknown");
+        // Arrange
+        const string unknownCode = "legacy:unknown";
+
+        // Act
+        string displayName = Permission.GetDisplayName(unknownCode);
+
+        // Assert
+        displayName.ShouldBe(unknownCode);
     }
 }
