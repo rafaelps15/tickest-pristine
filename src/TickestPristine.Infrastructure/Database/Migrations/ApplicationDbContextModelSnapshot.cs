@@ -572,6 +572,12 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("citext")
                         .HasColumnName("title");
 
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_tickets");
 

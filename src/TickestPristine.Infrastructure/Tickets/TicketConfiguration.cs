@@ -19,6 +19,10 @@ internal sealed class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 
         builder.HasQueryFilter(t => t.DeletedAtUtc == null);
 
+        // Token de concorrência sombra mapeado no xmin do PostgreSQL: de duas mudanças simultâneas no mesmo chamado
+        // (ex.: resolver e cancelar), só a primeira salva; a segunda falha com conflito em vez de sobrescrever a outra.
+        builder.Property<uint>("Version").IsRowVersion();
+
         // Painel de SLA: filtra por status e ordena pelo prazo.
         builder.HasIndex(t => new { t.Status, t.DueAtUtc });
 
