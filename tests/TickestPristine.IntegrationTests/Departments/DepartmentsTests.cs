@@ -215,6 +215,21 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task Deactivate_Should_ReturnConflict_WhenDepartmentIsAlreadyDeactivated()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid departmentId = await CreateDepartmentAsync();
+        (await HttpClient.DeleteAsync($"departments/{departmentId}")).EnsureSuccessStatusCode();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"departments/{departmentId}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+    }
+
     private sealed record DepartmentDto(Guid Id, string Name, string Description, bool IsActive, Guid? ResponsibleUserId);
 
     private sealed record DepartmentSummaryDto(Guid Id, string Name, string Description);

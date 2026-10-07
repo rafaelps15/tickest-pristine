@@ -15,4 +15,8 @@ public static class SectorErrors
     public static Error HasActiveTickets() => Error.Conflict(
         "Sectors.HasActiveTickets",
         "O setor tem chamados em aberto ou em andamento. Conclua ou cancele esses chamados antes de desativá-lo.");
+
+    public static Error AlreadyDeactivated(Guid sectorId) => Error.Conflict(
+        "Sectors.AlreadyDeactivated",
+        $"O setor com o Id = '{sectorId}' já está desativado.");
 }

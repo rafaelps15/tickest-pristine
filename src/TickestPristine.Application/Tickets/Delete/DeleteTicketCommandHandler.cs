@@ -26,11 +26,6 @@ internal sealed class DeleteTicketCommandHandler(
             return Result.Failure(TicketErrors.NotFound(command.TicketId));
         }
 
-        if (!TicketStatusTransitions.IsActive(ticket.Status))
-        {
-            return Result.Failure(TicketErrors.NotActive(ticket.Id));
-        }
-
         bool isOwner = ticket.CreatedByUserId == userContext.UserId;
         string requiredPermission = isOwner ? PermissionCodes.Tickets.DeleteOwn : PermissionCodes.Tickets.Manage;
 
@@ -39,6 +34,11 @@ internal sealed class DeleteTicketCommandHandler(
         if (!hasPermission)
         {
             return Result.Failure(UserErrors.Unauthorized());
+        }
+
+        if (!TicketStatusTransitions.IsActive(ticket.Status))
+        {
+            return Result.Failure(TicketErrors.NotActive(ticket.Id));
         }
 
         ticket.DeletedAtUtc = dateTimeProvider.UtcNow;

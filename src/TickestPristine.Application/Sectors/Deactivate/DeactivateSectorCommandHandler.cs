@@ -19,6 +19,11 @@ internal sealed class DeactivateSectorCommandHandler(IApplicationDbContext conte
             return Result.Failure(SectorErrors.NotFound(command.SectorId));
         }
 
+        if (!sector.IsActive)
+        {
+            return Result.Failure(SectorErrors.AlreadyDeactivated(sector.Id));
+        }
+
         bool hasActiveTickets = await context.Tickets.AnyAsync(
             t => t.SectorId == sector.Id && (t.Status == TicketStatus.Open || t.Status == TicketStatus.InProgress),
             cancellationToken);

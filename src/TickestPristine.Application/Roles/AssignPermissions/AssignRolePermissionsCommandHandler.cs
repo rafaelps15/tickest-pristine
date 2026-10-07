@@ -52,7 +52,7 @@ internal sealed class AssignRolePermissionsCommandHandler(
             return escalationCheck;
         }
 
-        // A chave é (RoleId, PermissionCode): remove só as que saíram e inclui só as que entraram.
+        // A chave é (RoleName, PermissionCode): remove só as que saíram e inclui só as que entraram.
         context.RolePermissions.RemoveRange(existingPermissions.Where(p => !requestedCodes.Contains(p.PermissionCode)));
 
         foreach (string permissionCode in requestedCodes.Except(currentCodes))

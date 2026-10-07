@@ -21,6 +21,11 @@ internal sealed class DeactivateDepartmentCommandHandler(IApplicationDbContext c
             return Result.Failure(DepartmentErrors.NotFound(command.DepartmentId));
         }
 
+        if (!department.IsActive)
+        {
+            return Result.Failure(DepartmentErrors.AlreadyDeactivated(department.Id));
+        }
+
         bool hasActiveTickets = await context.Tickets.AnyAsync(
             t => (t.Status == TicketStatus.Open || t.Status == TicketStatus.InProgress) &&
                  context.Sectors.Any(s => s.Id == t.SectorId && s.DepartmentId == department.Id),

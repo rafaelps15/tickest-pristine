@@ -26,11 +26,6 @@ internal sealed class UpdateTicketCommandHandler(
             return Result.Failure(TicketErrors.NotFound(command.TicketId));
         }
 
-        if (!TicketStatusTransitions.IsActive(ticket.Status))
-        {
-            return Result.Failure(TicketErrors.NotActive(ticket.Id));
-        }
-
         bool isOwner = ticket.CreatedByUserId == userContext.UserId;
         string requiredPermission = isOwner ? PermissionCodes.Tickets.UpdateOwn : PermissionCodes.Tickets.Manage;
 
@@ -39,6 +34,11 @@ internal sealed class UpdateTicketCommandHandler(
         if (!hasPermission)
         {
             return Result.Failure(UserErrors.Unauthorized());
+        }
+
+        if (!TicketStatusTransitions.IsActive(ticket.Status))
+        {
+            return Result.Failure(TicketErrors.NotActive(ticket.Id));
         }
 
         if (command.Status != ticket.Status && !TicketStatusTransitions.CanTransition(ticket.Status, command.Status))

@@ -25,6 +25,27 @@ public sealed class DeactivateSectorCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
+    public async Task Handle_Should_ReturnAlreadyDeactivated_WhenSectorIsInactive()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        var sector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = Guid.NewGuid(), IsActive = false };
+        context.Sectors.Add(sector);
+        await context.SaveChangesAsync();
+
+        var handler = new DeactivateSectorCommandHandler(context);
+        var command = new DeactivateSectorCommand(sector.Id);
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(SectorErrors.AlreadyDeactivated(sector.Id));
+        sector.DomainEvents.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task Handle_Should_DeactivateSector_WhenItExists()
     {
         // Arrange

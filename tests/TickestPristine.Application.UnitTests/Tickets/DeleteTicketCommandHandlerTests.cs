@@ -43,6 +43,8 @@ public sealed class DeleteTicketCommandHandlerTests : BaseHandlerTest
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(OwnerId);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.DeleteOwn, Arg.Any<CancellationToken>())
+            .Returns(true);
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
 
         var handler = new DeleteTicketCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
@@ -54,6 +56,31 @@ public sealed class DeleteTicketCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(TicketErrors.NotActive(ticketId));
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnUnauthorized_WhenNonOwnerLacksManagePermissionAndTicketIsInactive()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Resolved);
+        IUserContext userContext = Substitute.For<IUserContext>();
+        var outsiderId = Guid.NewGuid();
+        userContext.UserId.Returns(outsiderId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(outsiderId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+            .Returns(false);
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+
+        var handler = new DeleteTicketCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        var command = new DeleteTicketCommand(ticketId);
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.Unauthorized());
     }
 
     [Fact]

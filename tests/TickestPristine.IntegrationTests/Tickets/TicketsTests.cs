@@ -522,6 +522,25 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 
+    [Fact]
+    public async Task Reopen_Should_ReturnForbidden_WhenCallerIsNotOwnerAndTicketIsActive()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens ownerTokens) = await RegisterAndLoginAsync();
+        Authenticate(ownerTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        (_, AccessTokens outsiderTokens) = await RegisterAndLoginAsync();
+        Authenticate(outsiderTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsync($"tickets/{ticketId}/reopen", null);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
     private sealed record TicketDto(Guid Id, string Title, string Description, int Priority, int Status);
 
     private sealed record PagedTicketsByUserDto(List<TicketDto> Items, int TotalCount);

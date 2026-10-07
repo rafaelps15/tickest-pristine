@@ -228,5 +228,21 @@ public sealed class SectorsTests(IntegrationTestWebAppFactory factory) : BaseInt
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task Deactivate_Should_ReturnConflict_WhenSectorIsAlreadyDeactivated()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid departmentId = await CreateDepartmentAsync();
+        Guid sectorId = await CreateSectorAsync(departmentId);
+        (await HttpClient.DeleteAsync($"sectors/{sectorId}")).EnsureSuccessStatusCode();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"sectors/{sectorId}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+    }
+
     private sealed record SectorDto(Guid Id, string Name, string? Description);
 }

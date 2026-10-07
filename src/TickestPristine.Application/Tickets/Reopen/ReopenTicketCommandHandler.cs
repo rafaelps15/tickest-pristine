@@ -25,16 +25,6 @@ internal sealed class ReopenTicketCommandHandler(
             return Result.Failure(TicketErrors.NotFound(command.TicketId));
         }
 
-        if (TicketStatusTransitions.IsActive(ticket.Status))
-        {
-            return Result.Failure(TicketErrors.AlreadyActive(ticket.Id));
-        }
-
-        if (!TicketStatusTransitions.CanTransition(ticket.Status, TicketStatus.Open))
-        {
-            return Result.Failure(TicketErrors.InvalidStatusTransition(ticket.Status, TicketStatus.Open));
-        }
-
         bool isOwner = ticket.CreatedByUserId == userContext.UserId;
         string requiredPermission = isOwner ? PermissionCodes.Tickets.ReopenOwn : PermissionCodes.Tickets.Manage;
 
@@ -43,6 +33,16 @@ internal sealed class ReopenTicketCommandHandler(
         if (!hasPermission)
         {
             return Result.Failure(UserErrors.Unauthorized());
+        }
+
+        if (TicketStatusTransitions.IsActive(ticket.Status))
+        {
+            return Result.Failure(TicketErrors.AlreadyActive(ticket.Id));
+        }
+
+        if (!TicketStatusTransitions.CanTransition(ticket.Status, TicketStatus.Open))
+        {
+            return Result.Failure(TicketErrors.InvalidStatusTransition(ticket.Status, TicketStatus.Open));
         }
 
         ticket.Status = TicketStatus.Open;
