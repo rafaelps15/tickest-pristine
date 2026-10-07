@@ -3,7 +3,7 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Storage;
-using TickestPristine.Domain.Roles;
+using TickestPristine.Application.Authorization;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -21,31 +21,39 @@ internal sealed class GetTicketAttachmentContentQueryHandler(
         GetTicketAttachmentContentQuery query,
         CancellationToken cancellationToken)
     {
-        Guid userId = userContext.UserId;
-        bool canManageTickets = await permissionProvider.HasPermissionAsync(
-            userId,
-            PermissionCodes.Tickets.Manage,
-            cancellationToken);
-
-        TicketAttachmentResponse? attachment = await context.TicketAttachments
-            .Where(a => a.Id == query.AttachmentId &&
-                        context.Tickets.Any(t => t.Id == a.TicketId &&
-                            (canManageTickets || t.CreatedByUserId == userId || t.AssignedToUserId == userId)))
-            .Select(a => new TicketAttachmentResponse
+        var stored = await context.TicketAttachments
+            .Where(a => a.Id == query.AttachmentId)
+            .Select(a => new
             {
-                FileName = a.FileName,
-                ContentType = a.ContentType,
-                StorageKey = a.StorageKey
+                a.TicketId,
+                Response = new TicketAttachmentResponse
+                {
+                    FileName = a.FileName,
+                    ContentType = a.ContentType,
+                    StorageKey = a.StorageKey
+                }
             })
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (attachment is null)
+        if (stored is null)
         {
             return Result.Failure<TicketAttachmentResponse>(TicketAttachmentErrors.NotFound(query.AttachmentId));
         }
 
-        attachment.Content = await fileStorage.OpenReadAsync(attachment.StorageKey, cancellationToken);
+        Result access = await TicketAccessGuard.EnsureCanViewAsync(
+            context,
+            permissionProvider,
+            userContext.UserId,
+            stored.TicketId,
+            cancellationToken);
 
-        return attachment;
+        if (access.IsFailure)
+        {
+            return Result.Failure<TicketAttachmentResponse>(access.Error);
+        }
+
+        stored.Response.Content = await fileStorage.OpenReadAsync(stored.Response.StorageKey, cancellationToken);
+
+        return stored.Response;
     }
 }

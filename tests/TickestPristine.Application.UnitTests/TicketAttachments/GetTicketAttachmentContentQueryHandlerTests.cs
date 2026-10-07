@@ -5,6 +5,7 @@ using TickestPristine.Domain.Roles;
 using TickestPristine.Application.TicketAttachments.Download;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.TicketAttachments;
@@ -35,7 +36,7 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests : BaseHandlerTes
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnNotFound_WhenCallerIsNotParticipantAndLacksManagePermission()
+    public async Task Handle_Should_ReturnUnauthorized_WhenCallerIsNotParticipantAndLacksManagePermission()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -57,7 +58,7 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests : BaseHandlerTes
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(TicketAttachmentErrors.NotFound(query.AttachmentId));
+        result.Error.ShouldBe(UserErrors.Unauthorized());
         await fileStorage.DidNotReceive().OpenReadAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
@@ -86,6 +87,34 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests : BaseHandlerTes
         result.Value.FileName.ShouldBe("report.pdf");
         result.Value.ContentType.ShouldBe("application/pdf");
         result.Value.StorageKey.ShouldBe("storage-key.pdf");
+        result.Value.Content.ShouldBeSameAs(expectedContent);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnAttachment_WhenCallerHasManagePermission()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid attachmentId = await SeedAttachmentAsync(context);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        var managerId = Guid.NewGuid();
+        userContext.UserId.Returns(managerId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(managerId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+            .Returns(true);
+        IFileStorage fileStorage = Substitute.For<IFileStorage>();
+        Stream expectedContent = new MemoryStream([1, 2, 3]);
+        fileStorage.OpenReadAsync("storage-key.pdf", Arg.Any<CancellationToken>()).Returns(expectedContent);
+
+        var handler = new GetTicketAttachmentContentQueryHandler(context, userContext, permissionProvider, fileStorage);
+        var query = new GetTicketAttachmentContentQuery(attachmentId);
+
+        // Act
+        Result<TicketAttachmentResponse> result = await handler.Handle(query, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
         result.Value.Content.ShouldBeSameAs(expectedContent);
     }
 

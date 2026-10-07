@@ -18,6 +18,18 @@ internal sealed class GetTicketByIdQueryHandler(
 {
     public async Task<Result<TicketResponse>> Handle(GetTicketByIdQuery query, CancellationToken cancellationToken)
     {
+        Result access = await TicketAccessGuard.EnsureCanViewAsync(
+            context,
+            permissionProvider,
+            userContext.UserId,
+            query.TicketId,
+            cancellationToken);
+
+        if (access.IsFailure)
+        {
+            return Result.Failure<TicketResponse>(access.Error);
+        }
+
         DateTime nowUtc = dateTimeProvider.UtcNow;
 
         TicketResponse? ticket = await context.Tickets
@@ -55,18 +67,6 @@ internal sealed class GetTicketByIdQueryHandler(
         if (ticket is null)
         {
             return Result.Failure<TicketResponse>(TicketErrors.NotFound(query.TicketId));
-        }
-
-        Result access = await TicketAccessGuard.EnsureCanViewAsync(
-            permissionProvider,
-            userContext.UserId,
-            ticket.OpenedByUserId,
-            ticket.AssignedToUserId,
-            cancellationToken);
-
-        if (access.IsFailure)
-        {
-            return Result.Failure<TicketResponse>(access.Error);
         }
 
         return ticket;

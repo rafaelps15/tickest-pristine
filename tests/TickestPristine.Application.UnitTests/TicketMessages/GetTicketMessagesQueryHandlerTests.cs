@@ -196,6 +196,31 @@ public sealed class GetTicketMessagesQueryHandlerTests : BaseHandlerTest
         result.Value.NextCursorId.ShouldBe(newest.Id);
     }
 
+    [Fact]
+    public async Task Handle_Should_ReturnMessages_WhenCallerHasManagePermission()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketWithMessagesAsync(context);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        var managerId = Guid.NewGuid();
+        userContext.UserId.Returns(managerId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(managerId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var handler = new GetTicketMessagesQueryHandler(context, userContext, permissionProvider);
+        var query = new GetTicketMessagesQuery(ticketId, new CursorPageRequest(null, null, 20));
+
+        // Act
+        Result<CursorPagedResponse<TicketMessageResponse>> result = await handler.Handle(query, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Items.Count.ShouldBe(2);
+    }
+
     private static async Task<Guid> SeedTicketWithMessagesAsync(TestDbContext context)
     {
         var ticket = new Ticket

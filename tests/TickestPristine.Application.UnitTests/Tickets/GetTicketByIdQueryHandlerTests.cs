@@ -66,6 +66,22 @@ public sealed class GetTicketByIdQueryHandlerTests : BaseHandlerTest
         result.Value.SlaStatus.ShouldBe(TicketSlaStatus.AtRisk);
     }
 
+    [Fact]
+    public async Task Handle_Should_ReturnTicket_WhenCallerHasManagePermission()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Ticket ticket = await SeedTicketAsync(context);
+        GetTicketByIdQueryHandler handler = CreateHandler(context, Guid.NewGuid(), canManage: true);
+
+        // Act
+        Result<TicketResponse> result = await handler.Handle(new GetTicketByIdQuery(ticket.Id), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Id.ShouldBe(ticket.Id);
+    }
+
     private static GetTicketByIdQueryHandler CreateHandler(TestDbContext context, Guid callerId, bool canManage)
     {
         IUserContext userContext = Substitute.For<IUserContext>();

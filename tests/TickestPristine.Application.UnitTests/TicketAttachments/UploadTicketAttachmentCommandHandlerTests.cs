@@ -97,6 +97,37 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         attachment.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketAttachmentUploadedDomainEvent);
     }
 
+    [Fact]
+    public async Task Handle_Should_UploadAttachment_WhenCallerHasManagePermission()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        var managerId = Guid.NewGuid();
+        userContext.UserId.Returns(managerId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(managerId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+            .Returns(true);
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
+        IFileStorage fileStorage = Substitute.For<IFileStorage>();
+        fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns("generated-storage-key.pdf");
+
+        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage);
+
+        // Act
+        Result<Guid> result = await handler.Handle(ValidCommand(ticketId), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        TicketAttachment attachment = await context.TicketAttachments.SingleAsync(a => a.Id == result.Value);
+        attachment.UploadedByUserId.ShouldBe(managerId);
+    }
+
     private static UploadTicketAttachmentCommand ValidCommand(Guid ticketId) => new()
     {
         TicketId = ticketId,

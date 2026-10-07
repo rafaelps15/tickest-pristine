@@ -32,26 +32,7 @@ internal static class TicketAccessGuard
             return Result.Failure(TicketErrors.NotFound(ticketId));
         }
 
-        return await EnsureCanViewAsync(
-            permissionProvider,
-            callerId,
-            participants.CreatedByUserId,
-            participants.AssignedToUserId,
-            cancellationToken);
-    }
-
-    /// <summary>
-    /// Mesma regra de <see cref="EnsureCanViewAsync(IApplicationDbContext, IPermissionProvider, Guid, Guid, CancellationToken)"/>
-    /// para quando o handler já carregou o chamado: recebe o solicitante e o responsável em vez de consultar o banco.
-    /// </summary>
-    public static async Task<Result> EnsureCanViewAsync(
-        IPermissionProvider permissionProvider,
-        Guid callerId,
-        Guid requesterId,
-        Guid? assigneeId,
-        CancellationToken cancellationToken)
-    {
-        if (requesterId == callerId || assigneeId == callerId)
+        if (participants.CreatedByUserId == callerId || participants.AssignedToUserId == callerId)
         {
             return Result.Success();
         }

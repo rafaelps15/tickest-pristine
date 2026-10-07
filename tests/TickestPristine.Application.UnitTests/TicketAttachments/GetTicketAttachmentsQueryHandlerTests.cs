@@ -82,6 +82,31 @@ public sealed class GetTicketAttachmentsQueryHandlerTests : BaseHandlerTest
         result.Value.Items[0].FileName.ShouldBe("report.pdf");
     }
 
+    [Fact]
+    public async Task Handle_Should_ReturnAttachments_WhenCallerHasManagePermission()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketWithAttachmentAsync(context);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        var managerId = Guid.NewGuid();
+        userContext.UserId.Returns(managerId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(managerId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var handler = new GetTicketAttachmentsQueryHandler(context, userContext, permissionProvider);
+        var query = new GetTicketAttachmentsQuery(ticketId, new CursorPageRequest(null, null, 20));
+
+        // Act
+        Result<CursorPagedResponse<TicketAttachmentResponse>> result = await handler.Handle(query, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Items.ShouldHaveSingleItem();
+    }
+
     private static async Task<Guid> SeedTicketWithAttachmentAsync(TestDbContext context)
     {
         var ticket = new Ticket
