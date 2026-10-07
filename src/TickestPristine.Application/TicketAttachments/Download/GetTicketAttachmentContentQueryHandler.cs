@@ -22,7 +22,7 @@ internal sealed class GetTicketAttachmentContentQueryHandler(
         CancellationToken cancellationToken)
     {
         var stored = await context.TicketAttachments
-            .Where(a => a.Id == query.AttachmentId)
+            .Where(a => a.Id == query.AttachmentId && context.Tickets.Any(t => t.Id == a.TicketId))
             .Select(a => new
             {
                 a.TicketId,

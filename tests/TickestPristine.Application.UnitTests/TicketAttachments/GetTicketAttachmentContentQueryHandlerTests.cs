@@ -6,6 +6,7 @@ using TickestPristine.Application.TicketAttachments.Download;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
+using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.TicketAttachments;
@@ -33,6 +34,33 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests : BaseHandlerTes
         // Assert
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(TicketAttachmentErrors.NotFound(query.AttachmentId));
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnNotFound_WhenTicketIsDeleted()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid attachmentId = await SeedAttachmentAsync(context);
+        Ticket ticket = await context.Tickets.SingleAsync();
+        ticket.DeletedAtUtc = DateTime.UtcNow;
+        await context.SaveChangesAsync();
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(CreatorId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        IFileStorage fileStorage = Substitute.For<IFileStorage>();
+
+        var handler = new GetTicketAttachmentContentQueryHandler(context, userContext, permissionProvider, fileStorage);
+        var query = new GetTicketAttachmentContentQuery(attachmentId);
+
+        // Act
+        Result<TicketAttachmentResponse> result = await handler.Handle(query, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketAttachmentErrors.NotFound(query.AttachmentId));
+        await fileStorage.DidNotReceive().OpenReadAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

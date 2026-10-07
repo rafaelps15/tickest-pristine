@@ -126,6 +126,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
 
         TicketAttachment attachment = await context.TicketAttachments.SingleAsync(a => a.Id == result.Value);
         attachment.UploadedByUserId.ShouldBe(managerId);
+        attachment.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketAttachmentUploadedDomainEvent);
     }
 
     private static UploadTicketAttachmentCommand ValidCommand(Guid ticketId) => new()
