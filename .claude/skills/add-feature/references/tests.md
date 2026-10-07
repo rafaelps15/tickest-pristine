@@ -1,10 +1,10 @@
-# Templates de teste
+# Modelos de teste
 
-Ferramentas: xUnit + Shouldly + NSubstitute (unitários), FluentValidation.TestHelper (validators), WebApplicationFactory + Testcontainers (integração). Todo caso de uso novo ganha os três tipos.
+Stack: xUnit + Shouldly + NSubstitute (unitários), FluentValidation.TestHelper (validators), WebApplicationFactory + Testcontainers (integração). Todo caso de uso novo recebe os três.
 
-## Testes unitários de handler
+## Testes unitários do handler
 
-`tests/Application.UnitTests/{Feature}/{UseCase}{Command|Query}HandlerTests.cs`. Herde de `BaseHandlerTest` — ele fornece `CreateDbContext()` (um `TestDbContext` em memória que implementa `IApplicationDbContext`) e `CreateCache()` (um `HybridCache` real). Use NSubstitute só para interfaces (`IUserContext`, `IDateTimeProvider`).
+`tests/Application.UnitTests/{Feature}/{UseCase}{Command|Query}HandlerTests.cs`. Herde de `BaseHandlerTest` — ele fornece `CreateDbContext()` (`TestDbContext` em memória, que implementa `IApplicationDbContext`) e `CreateCache()` (`HybridCache` real). Faça mock só de interfaces (`IUserContext`, `IDateTimeProvider`) com o NSubstitute.
 
 Cubra: cada caminho de falha (um teste por cláusula de guarda) e o caminho feliz, incluindo o estado gravado e os eventos de domínio disparados.
 
@@ -79,15 +79,15 @@ public sealed class ArchiveTodoCommandHandlerTests : BaseHandlerTest
 ```
 
 Convenções:
-- Nome dos testes: `Handle_Should_{Outcome}_When{Condition}`.
-- Comentários `// Arrange` / `// Act` / `// Assert` em todos os testes.
-- Confira falhas comparando o erro exato: `result.Error.ShouldBe(TodoItemErrors.NotFound(id))`.
+- Nomes dos testes: `Handle_Should_{Outcome}_When{Condition}`.
+- Comentários `// Arrange` / `// Act` / `// Assert` em todo teste.
+- Confira as falhas comparando o erro exato: `result.Error.ShouldBe(TodoItemErrors.NotFound(id))`.
 - O `GlobalUsings.cs` já importa `Xunit`, `NSubstitute`, `Shouldly` e `SharedKernel` — não repita esses usings.
-- Se a entidade ganhar propriedades novas, o `TestDbContext` as reconhece sozinho; só mexa nele ao adicionar um `DbSet` novo.
+- Se a entidade ganhar propriedades novas, o `TestDbContext` as pega automaticamente; só mexa nele ao adicionar um `DbSet` inteiro novo.
 
 ## Testes de validator
 
-`tests/Application.UnitTests/{Feature}/{Feature}ValidatorsTests.cs` (se o arquivo já existir, amplie-o). Uma classe cobre todos os validators de uma feature.
+`tests/Application.UnitTests/{Feature}/{Feature}ValidatorsTests.cs` (amplie o arquivo existente, se houver). Uma classe cobre todos os validators de uma feature.
 
 ```csharp
 [Fact]
@@ -106,11 +106,11 @@ public void CreateValidator_Should_HaveError_WhenDescriptionIsEmpty()
 }
 ```
 
-Cubra a falha de cada regra e um command totalmente válido (`ShouldNotHaveAnyValidationErrors`).
+Cubra a falha de cada regra, mais um command totalmente válido (`ShouldNotHaveAnyValidationErrors`).
 
 ## Testes de integração
 
-`tests/IntegrationTests/{Feature}/{Feature}Tests.cs` (se o arquivo já existir, amplie-o). Herde de `BaseIntegrationTest(factory)` — ele sobe a API real contra um Postgres do Testcontainers e fornece `HttpClient`, `RegisterAndLoginAsync()` e `Authenticate(token)`. Os testes passam por HTTP de verdade e nunca chamam handlers direto.
+`tests/IntegrationTests/{Feature}/{Feature}Tests.cs` (amplie o arquivo existente, se houver). Herde de `BaseIntegrationTest(factory)` — ele roda a API real contra um Postgres do Testcontainers e fornece `HttpClient`, `RegisterAndLoginAsync()` e `Authenticate(token)`. Os testes passam por HTTP real e nunca chamam os handlers direto.
 
 ```csharp
 [Fact]
@@ -139,12 +139,12 @@ public async Task ArchiveTodo_Should_MarkTodoAsArchived()
 }
 ```
 
-Cobertura mínima por endpoint: um teste sem autenticação (sem token → 401) se for uma família de rotas nova, um teste do caminho feliz conferindo o estado por um GET em seguida, e um teste de tradução de falha (ex.: id inexistente → 404) quando o handler tem caminhos de falha.
+Cobertura mínima por endpoint: um teste sem autorização (sem token → 401) se for uma família de rotas nova, um teste do caminho feliz conferindo o estado observável por um GET em seguida, e um teste de tradução de falha (ex.: id desconhecido → 404) quando o handler tem caminhos de falha.
 
-## Rodar
+## Execução
 
 ```
 dotnet test
 ```
 
-Os testes de integração precisam do Docker rodando (Testcontainers). Os testes de arquitetura falham se alguma regra de dependência entre camadas for violada — corrija a dependência, nunca o teste.
+Os testes de integração precisam do Docker rodando (Testcontainers). Os testes de arquitetura quebram o build se uma regra de dependência entre camadas for violada — corrija a dependência, nunca o teste.

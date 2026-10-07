@@ -1,18 +1,18 @@
 ---
 name: ca-review
 description: Revisa as mudanças pendentes contra as convenções do template de Clean Architecture — limites entre camadas, tratamento de erro com Result, estrutura dos slices, validação, endpoints e cobertura de testes. Use quando o usuário pedir para revisar mudanças, conferir convenções ou auditar uma feature antes do commit.
-argument-hint: [opcional: arquivos ou feature específicos; por padrão, o diff do working tree]
+argument-hint: [opcional: arquivos ou feature específicos a revisar; por padrão, o diff da cópia de trabalho]
 ---
 
 # Revisão das convenções de Clean Architecture
 
-Revise o escopo informado (por padrão: `git diff` + arquivos não versionados) contra as convenções deste template. Aponte os problemas com referência `arquivo:linha`, em ordem de gravidade. Não corrija nada a menos que isso seja pedido. Escreva o relatório em português.
+Revise o escopo informado (por padrão: `git diff` + arquivos não versionados) contra as convenções deste template. Aponte os problemas com referência `arquivo:linha`, em ordem de gravidade. Não corrija nada a menos que isso seja pedido.
 
 ## Checklist
 
 ### Limites entre camadas (violações são bloqueantes)
-- O Domain referencia só o `SharedKernel` — nada de EF Core nem de tipos da Application, Infrastructure ou Web.Api.
-- A Application referencia só Domain + SharedKernel; acesso a dados exclusivamente via `IApplicationDbContext`; nenhum `using Infrastructure.*` na Application.
+- O Domain referencia só o `SharedKernel` — nada de EF Core, nada de tipos da Application, Infrastructure ou Web.Api.
+- A Application referencia só Domain + SharedKernel; acesso a dados exclusivamente via `IApplicationDbContext`; nenhum `using Infrastructure.*` em lugar nenhum da Application.
 - Detalhes de persistência (chaves, conversões, relacionamentos) ficam nas classes `IEntityTypeConfiguration<>` da Infrastructure, não nas entidades.
 - Endpoints da Web.Api não têm regra de negócio — só mapeiam a requisição para o command e traduzem o resultado.
 
@@ -21,23 +21,20 @@ Revise o escopo informado (por padrão: `git diff` + arquivos não versionados) 
 - Nomes: `{Verb}{Entity}Command` / `Get{X}Query` / `...Handler` / `...Validator` / `{X}Response`.
 - Handlers são `internal sealed`, com construtor primário, implementando os `ICommandHandler<>`/`IQueryHandler<>` próprios — sem MediatR e sem registro manual na DI de handlers, validators ou endpoints.
 - DTOs de resposta são por slice; queries projetam com `.Select(...)` e nunca retornam entidades de domínio.
-- Nenhuma coleção que cresce sem limite volta inteira (só catálogos de tamanho fixo ou administrado devolvem lista). Os dados da página nunca aparecem soltos: endpoint com um único `[AsParameters] PageRequest paging` (offset) ou `[AsParameters] CursorPageRequest paging` (cursor), que só é repassado, e query com `PageRequest Paging` ou `CursorPageRequest Paging`. Offset (telas administrativas): handler terminando em `.ToPagedListAsync(query.Paging, ...)`. Cursor (linhas do tempo, feeds, tabelas grandes): `.AfterCursor(query.Paging, ...)` para filtrar e ordenar (nunca o filtro `data < cursor || ...` escrito à mão), ordem do mais novo para o mais antigo com `ThenByDescending` na chave e handler terminando em `.ToCursorPagedListAsync(...)`, que devolve `CursorPagedResponse<T>`. Nas duas: filtros antes da paginação, índice que acompanhe filtro e ordenação, `COUNT` só quando a tela mostra o total e contagens de painel numa query de resumo própria — ajuste de página/tamanho, `Skip`/`Take` e o "um a mais" do cursor ficam só na `PaginationExtensions`, nunca em endpoint ou handler.
 
 ### Tratamento de erro
 - Falhas esperadas retornam `Result`/`Result<T>` — sem exceções para controle de fluxo e sem try/catch em volta de regra de negócio.
-- Os erros vêm de métodos estáticos de `{Entity}Errors`, com códigos `"{Feature}.{Reason}"` e o tipo semanticamente correto (`NotFound`/`Conflict`/`Forbidden`/`Problem`/`Failure`).
+- Os erros vêm de métodos estáticos de `{Entity}Errors`, com códigos `"{Feature}.{Reason}"` e o tipo semanticamente correto (`NotFound`/`Conflict`/`Problem`/`Failure`).
 - Endpoints traduzem falhas só via `result.Match(Results.Ok|NoContent, CustomResults.Problem)`.
 
 ### Validação e segurança
-- Todo command tem um `{Command}Validator` do FluentValidation, `internal sealed`; os handlers não reconferem o formato da entrada (mas aplicam as regras de negócio). Limites usados por vários validators vêm da classe `{Feature}ValidationRules` da feature, e não de números repetidos.
-- Texto mostrado ao usuário (descrições de erro, mensagens de validação) fica em português do Brasil; os códigos de erro continuam em inglês.
-- Handlers que lidam com dados de um usuário garantem o acesso: filtram por `IUserContext.UserId` ou retornam `UserErrors.Unauthorized()`. Regras que dependem de uma permissão *e* do dado (o próprio item vs. o de qualquer pessoa) são conferidas no handler via `IPermissionProvider`.
+- Todo command tem um `{Command}Validator` do FluentValidation; os handlers não reconferem o formato da entrada (mas aplicam as regras de negócio).
+- Handlers que lidam com dados de um usuário garantem que ele é o dono: filtram por `IUserContext.UserId` ou retornam `UserErrors.Unauthorized()`.
 - Endpoints novos chamam `.RequireAuthorization()` (ou `.HasPermission(...)`) e `.WithTags(Tags.X)`.
 - Nada de `DateTime.UtcNow`/`DateTime.Now` na Application — use `IDateTimeProvider`.
 
 ### Mudanças de estado e cache
 - Commands que alteram estado disparam um evento de domínio com `entity.Raise(new XDomainEvent(id))` antes do `SaveChangesAsync`.
-- Commands que mudam as permissões efetivas de um usuário (funções, permissões de uma função, ativação) chamam `permissionProvider.InvalidateAsync(userId)` depois de salvar.
 - Toda leitura com cache em `HybridCache` tem a invalidação correspondente (`cache.RemoveAsync`) em todos os commands que alteram aquele dado; as chaves vêm da classe `{Feature}CacheKeys`.
 
 ### Testes

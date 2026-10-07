@@ -1,6 +1,6 @@
-# Templates de slice de command
+# Modelos de slice de command
 
-Os arquivos ficam em `src/Application/{Feature}/{UseCase}/`. Substitua `{Feature}` (no plural, ex.: `Todos`), `{Entity}` (ex.: `TodoItem`) e os nomes do caso de uso em todos os trechos.
+Os arquivos ficam em `src/Application/{Feature}/{UseCase}/`. Troque `{Feature}` (no plural, ex.: `Todos`), `{Entity}` (ex.: `TodoItem`) e os nomes do caso de uso em todo o código.
 
 ## Command
 
@@ -37,16 +37,14 @@ public sealed class CreateTodoCommand : ICommand<Guid>
 
 ## Validator
 
-Fica na mesma pasta do command. É registrado automaticamente e executado pelo `ValidationDecorator` antes do handler. É sempre `internal sealed class {Command}Validator`, qualquer que seja o formato do command (o `AddValidatorsFromAssembly` é chamado com `includeInternalTypes: true`, e o projeto de testes unitários enxerga os tipos internos via `InternalsVisibleTo`).
-
-Limites usados por mais de um validator do mesmo agregado (tamanhos máximos, política de senha) ficam numa classe estática `{Feature}ValidationRules` ao lado dos slices do agregado (ex.: `src/Application/Todos/TodoValidationRules.cs`), em vez de repetidos como números soltos.
+Classe pública, na mesma pasta. É registrado automaticamente e executado pelo `ValidationDecorator` antes de o handler rodar.
 
 ```csharp
 using FluentValidation;
 
 namespace Application.Todos.Create;
 
-internal sealed class CreateTodoCommandValidator : AbstractValidator<CreateTodoCommand>
+public class CreateTodoCommandValidator : AbstractValidator<CreateTodoCommand>
 {
     public CreateTodoCommandValidator()
     {
@@ -109,13 +107,13 @@ internal sealed class ArchiveTodoCommandHandler(
 
 Observações:
 - Dono do dado: filtre por `userContext.UserId` na consulta (preferível) ou compare explicitamente e retorne `Result.Failure(UserErrors.Unauthorized())`.
-- Use `IDateTimeProvider` (do `SharedKernel`) para datas e horas — nunca `DateTime.UtcNow` direto.
-- Se o command deixa desatualizado algum dado em cache, injete `HybridCache` e chame `cache.RemoveAsync({Feature}CacheKeys.X(...), cancellationToken)` depois de salvar.
-- Num command que devolve valor (`ICommand<Guid>`), retorne o valor direto — `Result<T>` tem conversão implícita: `return todoItem.Id;`.
+- `IDateTimeProvider` (do `SharedKernel`) para datas e horas — nunca `DateTime.UtcNow` direto.
+- Se o command invalida dados de query em cache, injete o `HybridCache` e chame `cache.RemoveAsync({Feature}CacheKeys.X(...), cancellationToken)` depois de salvar.
+- Num command com retorno (`ICommand<Guid>`), retorne o valor direto — o `Result<T>` tem conversão implícita: `return todoItem.Id;`.
 
-## O que adicionar no Domain (se necessário)
+## Acréscimos no Domain (se necessário)
 
-Método de erro na classe `{Entity}Errors` existente em `src/Domain/{Feature}/`:
+Método de fábrica de erro na classe `{Entity}Errors` existente, em `src/Domain/{Feature}/`:
 
 ```csharp
 public static Error AlreadyArchived(Guid todoItemId) => Error.Problem(
@@ -123,11 +121,9 @@ public static Error AlreadyArchived(Guid todoItemId) => Error.Problem(
     $"A tarefa com o Id = '{todoItemId}' já está arquivada.");
 ```
 
-O código (`"TodoItems.AlreadyArchived"`) é um identificador estável, em inglês; a descrição é texto mostrado ao usuário e fica em português do Brasil.
+Tipo de erro → status HTTP (pelo `CustomResults.Problem`): `NotFound` → 404, `Conflict` → 409, `Problem`/`Validation` → 400, `Failure` → 500.
 
-Tipo de erro → status HTTP (via `CustomResults.Problem`): `NotFound` → 404, `Conflict` → 409, `Forbidden` → 403, `Problem`/`Validation` → 400, `Failure` → 500.
-
-Evento de domínio, um arquivo para cada, em `src/Domain/{Feature}/`:
+Evento de domínio, um arquivo para cada um em `src/Domain/{Feature}/`:
 
 ```csharp
 using SharedKernel;
@@ -137,7 +133,7 @@ namespace Domain.Todos;
 public sealed record TodoItemArchivedDomainEvent(Guid TodoItemId) : IDomainEvent;
 ```
 
-Handler do evento, opcional (camada Application, na pasta do caso de uso):
+Handler de evento opcional (camada Application, na pasta do caso de uso):
 
 ```csharp
 using Domain.Todos;
@@ -149,7 +145,7 @@ internal sealed class TodoItemArchivedDomainEventHandler : IDomainEventHandler<T
 {
     public Task Handle(TodoItemArchivedDomainEvent domainEvent, CancellationToken cancellationToken)
     {
-        // Side effects here (notifications, projections, ...)
+        // Efeitos colaterais aqui (notificações, projeções, ...)
         return Task.CompletedTask;
     }
 }
