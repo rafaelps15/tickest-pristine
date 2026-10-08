@@ -591,12 +591,12 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .IsDescending()
                         .HasDatabaseName("ix_tickets_created_at_utc_id");
 
-                    b.HasIndex("CreatedByUserId", "CreatedAtUtc")
-                        .IsDescending(false, true)
-                        .HasDatabaseName("ix_tickets_created_by_user_id_created_at_utc");
-
                     b.HasIndex("Status", "DueAtUtc")
                         .HasDatabaseName("ix_tickets_status_due_at_utc");
+
+                    b.HasIndex("CreatedByUserId", "CreatedAtUtc", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_tickets_created_by_user_id_created_at_utc_id");
 
                     b.ToTable("tickets", "public");
                 });
