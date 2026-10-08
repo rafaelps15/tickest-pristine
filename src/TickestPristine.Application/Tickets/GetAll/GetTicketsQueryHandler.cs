@@ -13,19 +13,23 @@ internal sealed class GetTicketsQueryHandler(IApplicationDbContext context, IDat
     {
         DateTime nowUtc = dateTimeProvider.UtcNow;
         string? search = string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim();
-        bool onlyActive = query.Statuses.Count == 0;
+        bool allStatuses = query.Statuses.Count == 0;
 
-        PagedResponse<TicketSummaryResponse> tickets = await context.Tickets
+        IQueryable<Ticket> filtered = context.Tickets
             .Where(t =>
-                (onlyActive
-                    ? t.Status == TicketStatus.Open || t.Status == TicketStatus.InProgress
-                    : query.Statuses.Contains(t.Status)) &&
+                (allStatuses || query.Statuses.Contains(t.Status)) &&
                 (query.Priority == null || t.Priority == query.Priority) &&
                 (query.SectorId == null || t.SectorId == query.SectorId) &&
+                (query.RequesterId == null || t.CreatedByUserId == query.RequesterId) &&
+                (query.AssignedToUserId == null || t.AssignedToUserId == query.AssignedToUserId) &&
                 (search == null || t.Title.Contains(search)))
-            .WhereSlaStatus(query.SlaStatus, nowUtc)
-            .OrderBy(t => t.DueAtUtc)
-            .ThenBy(t => t.Id)
+            .WhereSlaStatus(query.SlaStatus, nowUtc);
+
+        IQueryable<Ticket> ordered = query.Sort == TicketSortOrder.DueDate
+            ? filtered.OrderBy(t => t.DueAtUtc).ThenBy(t => t.Id)
+            : filtered.OrderByDescending(t => t.CreatedAtUtc).ThenByDescending(t => t.Id);
+
+        PagedResponse<TicketSummaryResponse> tickets = await ordered
             .Select(t => new TicketSummaryResponse
             {
                 Id = t.Id,

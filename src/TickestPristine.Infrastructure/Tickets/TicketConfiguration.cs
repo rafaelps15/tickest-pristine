@@ -26,6 +26,10 @@ internal sealed class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         // Painel de SLA: filtra por status e ordena pelo prazo.
         builder.HasIndex(t => new { t.Status, t.DueAtUtc });
 
+        // Todos os chamados: ordena do mais novo para o mais antigo, com o id para desempatar.
+        builder.HasIndex(t => new { t.CreatedAtUtc, t.Id })
+            .IsDescending(true, true);
+
         // "Meus chamados": filtra pelo solicitante e ordena do mais novo para o mais antigo.
         builder.HasIndex(t => new { t.CreatedByUserId, t.CreatedAtUtc })
             .IsDescending(false, true);

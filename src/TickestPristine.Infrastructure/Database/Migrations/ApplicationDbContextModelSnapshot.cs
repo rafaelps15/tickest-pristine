@@ -587,6 +587,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasIndex("SectorId")
                         .HasDatabaseName("ix_tickets_sector_id");
 
+                    b.HasIndex("CreatedAtUtc", "Id")
+                        .IsDescending()
+                        .HasDatabaseName("ix_tickets_created_at_utc_id");
+
                     b.HasIndex("CreatedByUserId", "CreatedAtUtc")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_tickets_created_by_user_id_created_at_utc");

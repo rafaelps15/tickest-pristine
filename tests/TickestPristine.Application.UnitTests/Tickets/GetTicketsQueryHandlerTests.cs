@@ -12,14 +12,14 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
     private static readonly DateTime NowUtc = new(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc);
 
     [Fact]
-    public async Task Handle_Should_ReturnOnlyActiveTicketsOrderedByDueDate_WhenNoStatusIsInformed()
+    public async Task Handle_Should_ReturnAllStatusesNewestFirst_WhenNoStatusIsInformed()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
         (User requester, Sector sector) = await SeedRequesterAndSectorAsync(context);
-        Ticket later = await SeedTicketAsync(context, requester, sector, TicketStatus.Open, NowUtc.AddHours(-1));
-        Ticket breached = await SeedTicketAsync(context, requester, sector, TicketStatus.InProgress, NowUtc.AddHours(-10));
-        await SeedTicketAsync(context, requester, sector, TicketStatus.Closed, NowUtc.AddHours(-20), NowUtc.AddHours(-19));
+        Ticket newest = await SeedTicketAsync(context, requester, sector, TicketStatus.Open, NowUtc.AddHours(-1));
+        Ticket inProgress = await SeedTicketAsync(context, requester, sector, TicketStatus.InProgress, NowUtc.AddHours(-10));
+        Ticket closed = await SeedTicketAsync(context, requester, sector, TicketStatus.Closed, NowUtc.AddHours(-20), NowUtc.AddHours(-19));
 
         GetTicketsQueryHandler handler = CreateHandler(context);
 
@@ -28,7 +28,70 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
+        result.Value.Items.Select(t => t.Id).ShouldBe([newest.Id, inProgress.Id, closed.Id]);
+    }
+
+    [Fact]
+    public async Task Handle_Should_OrderByDueDate_WhenSortIsDueDate()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        (User requester, Sector sector) = await SeedRequesterAndSectorAsync(context);
+        Ticket later = await SeedTicketAsync(context, requester, sector, TicketStatus.Open, NowUtc.AddHours(-1));
+        Ticket breached = await SeedTicketAsync(context, requester, sector, TicketStatus.InProgress, NowUtc.AddHours(-10));
+
+        GetTicketsQueryHandler handler = CreateHandler(context);
+
+        // Act
+        Result<PagedResponse<TicketSummaryResponse>> result = await handler.Handle(
+            CreateQuery(sort: TicketSortOrder.DueDate),
+            CancellationToken.None);
+
+        // Assert
         result.Value.Items.Select(t => t.Id).ShouldBe([breached.Id, later.Id]);
+    }
+
+    [Fact]
+    public async Task Handle_Should_FilterByRequester_WhenRequesterIsInformed()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        (User requester, Sector sector) = await SeedRequesterAndSectorAsync(context);
+        (User otherRequester, _) = await SeedRequesterAndSectorAsync(context);
+        Ticket own = await SeedTicketAsync(context, requester, sector, TicketStatus.Open, NowUtc.AddHours(-1));
+        await SeedTicketAsync(context, otherRequester, sector, TicketStatus.Open, NowUtc.AddHours(-1));
+
+        GetTicketsQueryHandler handler = CreateHandler(context);
+
+        // Act
+        Result<PagedResponse<TicketSummaryResponse>> result = await handler.Handle(
+            CreateQuery(requesterId: requester.Id),
+            CancellationToken.None);
+
+        // Assert
+        result.Value.Items.ShouldHaveSingleItem().Id.ShouldBe(own.Id);
+    }
+
+    [Fact]
+    public async Task Handle_Should_FilterByAssignee_WhenAssigneeIsInformed()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        (User requester, Sector sector) = await SeedRequesterAndSectorAsync(context);
+        var assigneeId = Guid.NewGuid();
+        Ticket assigned = await SeedTicketAsync(context, requester, sector, TicketStatus.InProgress, NowUtc.AddHours(-1), assignedToUserId: assigneeId);
+        await SeedTicketAsync(context, requester, sector, TicketStatus.InProgress, NowUtc.AddHours(-1), assignedToUserId: Guid.NewGuid());
+        await SeedTicketAsync(context, requester, sector, TicketStatus.Open, NowUtc.AddHours(-1));
+
+        GetTicketsQueryHandler handler = CreateHandler(context);
+
+        // Act
+        Result<PagedResponse<TicketSummaryResponse>> result = await handler.Handle(
+            CreateQuery(assignedToUserId: assigneeId),
+            CancellationToken.None);
+
+        // Assert
+        result.Value.Items.ShouldHaveSingleItem().Id.ShouldBe(assigned.Id);
     }
 
     [Fact]
@@ -143,8 +206,11 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
         TicketStatus[]? statuses = null,
         TicketSlaStatus? slaStatus = null,
         Guid? sectorId = null,
-        string? search = null) =>
-        new(statuses ?? [], null, sectorId, slaStatus, search, new PageRequest(1, 20));
+        string? search = null,
+        Guid? requesterId = null,
+        Guid? assignedToUserId = null,
+        TicketSortOrder sort = TicketSortOrder.Newest) =>
+        new(statuses ?? [], null, sectorId, requesterId, assignedToUserId, slaStatus, search, sort, new PageRequest(1, 20));
 
     private static async Task<(User Requester, Sector Sector)> SeedRequesterAndSectorAsync(TestDbContext context)
     {
@@ -174,7 +240,8 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
         TicketStatus status,
         DateTime createdAtUtc,
         DateTime? resolvedAtUtc = null,
-        string title = "Printer is broken")
+        string title = "Printer is broken",
+        Guid? assignedToUserId = null)
     {
         var ticket = new Ticket
         {
@@ -184,6 +251,7 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
             Priority = TicketPriority.Urgent,
             Status = status,
             CreatedByUserId = requester.Id,
+            AssignedToUserId = assignedToUserId,
             SectorId = sector.Id,
             CreatedAtUtc = createdAtUtc,
             DueAtUtc = TicketSla.DueAt(createdAtUtc, TicketPriority.Urgent),

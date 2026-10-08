@@ -17,8 +17,11 @@ internal sealed class GetAll : IEndpoint
             [FromQuery(Name = "status")] TicketStatus[]? statuses,
             TicketPriority? priority,
             Guid? sectorId,
+            Guid? requesterId,
+            Guid? assignedToUserId,
             TicketSlaStatus? slaStatus,
             string? search,
+            TicketSortOrder? sort,
             [AsParameters] PageRequest paging,
             IQueryHandler<GetTicketsQuery, PagedResponse<TicketSummaryResponse>> handler,
             CancellationToken cancellationToken) =>
@@ -27,8 +30,11 @@ internal sealed class GetAll : IEndpoint
                 statuses ?? [],
                 priority,
                 sectorId,
+                requesterId,
+                assignedToUserId,
                 slaStatus,
                 search,
+                sort ?? TicketSortOrder.Newest,
                 paging);
 
             Result<PagedResponse<TicketSummaryResponse>> result = await handler.Handle(query, cancellationToken);

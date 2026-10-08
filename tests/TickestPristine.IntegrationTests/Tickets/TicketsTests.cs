@@ -262,7 +262,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
-    public async Task GetAll_Should_ReturnActiveTicketsWithRequesterAndSla_WhenCallerIsAdmin()
+    public async Task GetAll_Should_ReturnTicketsWithRequesterAndSla_WhenCallerIsAdmin()
     {
         // Arrange
         Guid sectorId = await CreateSectorAsAdminAsync();
@@ -539,6 +539,36 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnEmployeeTicketsInAllStatusesNewestFirst_WhenAdminFiltersByRequester()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (Guid employeeId, AccessTokens employeeTokens) = await RegisterAndLoginAsync();
+        Authenticate(employeeTokens.AccessToken);
+        Guid resolvedTicketId = await CreateTicketAsync(sectorId);
+        Guid openTicketId = await CreateTicketAsync(sectorId);
+
+        (_, AccessTokens otherTokens) = await RegisterAndLoginAsync();
+        Authenticate(otherTokens.AccessToken);
+        await CreateTicketAsync(sectorId);
+
+        await AuthenticateAsAdminAsync();
+        (await HttpClient.PutAsJsonAsync($"tickets/{resolvedTicketId}", new { description = "Looking into the printer", status = 2 }))
+            .EnsureSuccessStatusCode();
+        (await HttpClient.PutAsJsonAsync($"tickets/{resolvedTicketId}", new { description = "Fixed the printer", status = 3 }))
+            .EnsureSuccessStatusCode();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets?requesterId={employeeId}");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        PagedTicketsDto? page = await response.Content.ReadFromJsonAsync<PagedTicketsDto>();
+        page!.Items.Select(t => t.Id).ShouldBe([openTicketId, resolvedTicketId]);
+        page.Items.Select(t => t.Status).ShouldBe([1, 3]); // Open, Resolved
     }
 
     private sealed record TicketDto(Guid Id, string Title, string Description, int Priority, int Status);
