@@ -95,6 +95,47 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
     }
 
     [Fact]
+    public async Task Handle_Should_ReturnOnlyUnassignedTickets_WhenUnassignedOnlyIsTrue()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        (User requester, Sector sector) = await SeedRequesterAndSectorAsync(context);
+        Ticket unassigned = await SeedTicketAsync(context, requester, sector, TicketStatus.Open, NowUtc.AddHours(-1));
+        await SeedTicketAsync(context, requester, sector, TicketStatus.InProgress, NowUtc.AddHours(-1), assignedToUserId: Guid.NewGuid());
+
+        GetTicketsQueryHandler handler = CreateHandler(context);
+
+        // Act
+        Result<PagedResponse<TicketSummaryResponse>> result = await handler.Handle(
+            CreateQuery(unassignedOnly: true),
+            CancellationToken.None);
+
+        // Assert
+        result.Value.Items.ShouldHaveSingleItem().Id.ShouldBe(unassigned.Id);
+    }
+
+    [Fact]
+    public async Task Handle_Should_IgnoreAssignee_WhenUnassignedOnlyIsTrue()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        (User requester, Sector sector) = await SeedRequesterAndSectorAsync(context);
+        var assigneeId = Guid.NewGuid();
+        Ticket unassigned = await SeedTicketAsync(context, requester, sector, TicketStatus.Open, NowUtc.AddHours(-1));
+        await SeedTicketAsync(context, requester, sector, TicketStatus.InProgress, NowUtc.AddHours(-1), assignedToUserId: assigneeId);
+
+        GetTicketsQueryHandler handler = CreateHandler(context);
+
+        // Act
+        Result<PagedResponse<TicketSummaryResponse>> result = await handler.Handle(
+            CreateQuery(assignedToUserId: assigneeId, unassignedOnly: true),
+            CancellationToken.None);
+
+        // Assert
+        result.Value.Items.ShouldHaveSingleItem().Id.ShouldBe(unassigned.Id);
+    }
+
+    [Fact]
     public async Task Handle_Should_FillRequesterSectorAndSlaStatus_WhenTicketIsListed()
     {
         // Arrange
@@ -209,8 +250,9 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
         string? search = null,
         Guid? requesterId = null,
         Guid? assignedToUserId = null,
+        bool unassignedOnly = false,
         TicketSortOrder sort = TicketSortOrder.Newest) =>
-        new(statuses ?? [], null, sectorId, requesterId, assignedToUserId, slaStatus, search, sort, new PageRequest(1, 20));
+        new(statuses ?? [], null, sectorId, requesterId, assignedToUserId, unassignedOnly, slaStatus, search, sort, new PageRequest(1, 20));
 
     private static async Task<(User Requester, Sector Sector)> SeedRequesterAndSectorAsync(TestDbContext context)
     {
