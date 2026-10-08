@@ -49,13 +49,13 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
-    public async Task GetByUser_Should_ReturnUnauthorized_WhenNoTokenProvided()
+    public async Task GetOwn_Should_ReturnUnauthorized_WhenNoTokenProvided()
     {
         // Arrange
         HttpClient.DefaultRequestHeaders.Authorization = null;
 
         // Act
-        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/users/{Guid.NewGuid()}");
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/mine");
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
@@ -148,29 +148,29 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
-    public async Task GetByUser_Should_ReturnOpenTicket_WhenCallerRequestsOwnTickets()
+    public async Task GetOwn_Should_ReturnOpenTicket_WhenCallerHasOpenedIt()
     {
         // Arrange
         Guid sectorId = await CreateSectorAsAdminAsync();
-        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
         Authenticate(tokens.AccessToken);
         Guid ticketId = await CreateTicketAsync(sectorId);
 
         // Act
-        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/users/{userId}");
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/mine");
 
         // Assert
         response.EnsureSuccessStatusCode();
-        List<TicketDto>? tickets = (await response.Content.ReadFromJsonAsync<PagedTicketsByUserDto>())?.Items;
+        List<TicketDto>? tickets = (await response.Content.ReadFromJsonAsync<PagedOwnTicketsDto>())?.Items;
         tickets!.ShouldContain(t => t.Id == ticketId);
     }
 
     [Fact]
-    public async Task GetByUser_Should_ReturnResolvedTicket_WhenCallerRequestsOwnTickets()
+    public async Task GetOwn_Should_ReturnResolvedTicket_WhenCallerHasOpenedIt()
     {
         // Arrange
         Guid sectorId = await CreateSectorAsAdminAsync();
-        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
         Authenticate(tokens.AccessToken);
         Guid ticketId = await CreateTicketAsync(sectorId);
 
@@ -189,11 +189,11 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         resolveResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
         // Act
-        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/users/{userId}");
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/mine");
 
         // Assert
         response.EnsureSuccessStatusCode();
-        List<TicketDto>? tickets = (await response.Content.ReadFromJsonAsync<PagedTicketsByUserDto>())?.Items;
+        List<TicketDto>? tickets = (await response.Content.ReadFromJsonAsync<PagedOwnTicketsDto>())?.Items;
         tickets!.ShouldContain(t => t.Id == ticketId && t.Status == 3);
     }
 
@@ -369,17 +369,17 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
-    public async Task GetSummaryByUser_Should_CountOwnTicketsByPriorityAndStatus()
+    public async Task GetOwnSummary_Should_CountOwnTicketsByPriorityAndStatus()
     {
         // Arrange
         Guid sectorId = await CreateSectorAsAdminAsync();
-        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
         Authenticate(tokens.AccessToken);
         await CreateTicketAsync(sectorId);
         await CreateTicketAsync(sectorId);
 
         // Act
-        List<TicketCountDto>? counts = await HttpClient.GetFromJsonAsync<List<TicketCountDto>>($"tickets/users/{userId}/summary");
+        List<TicketCountDto>? counts = await HttpClient.GetFromJsonAsync<List<TicketCountDto>>("tickets/mine/summary");
 
         // Assert
         TicketCountDto count = counts!.ShouldHaveSingleItem();
@@ -389,34 +389,58 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
-    public async Task GetSummaryByUser_Should_ReturnForbidden_WhenCallerQueriesAnotherUserWithoutManagePermission()
-    {
-        // Arrange
-        (Guid otherUserId, _) = await RegisterAndLoginAsync();
-        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
-        Authenticate(tokens.AccessToken);
-
-        // Act
-        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/users/{otherUserId}/summary");
-
-        // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
-    }
-
-    [Fact]
-    public async Task GetByUser_Should_ReturnRequestedPage_WhenPageSizeIsGiven()
+    public async Task GetOwn_Should_NotReturnOtherUsersTickets()
     {
         // Arrange
         Guid sectorId = await CreateSectorAsAdminAsync();
-        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        (_, AccessTokens ownerTokens) = await RegisterAndLoginAsync();
+        Authenticate(ownerTokens.AccessToken);
+        Guid otherUsersTicketId = await CreateTicketAsync(sectorId);
+
+        (_, AccessTokens callerTokens) = await RegisterAndLoginAsync();
+        Authenticate(callerTokens.AccessToken);
+
+        // Act
+        PagedOwnTicketsDto? page = await HttpClient.GetFromJsonAsync<PagedOwnTicketsDto>("tickets/mine");
+
+        // Assert
+        page!.Items.ShouldNotContain(t => t.Id == otherUsersTicketId);
+        page.TotalCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task GetOwnSummary_Should_NotCountOtherUsersTickets()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens ownerTokens) = await RegisterAndLoginAsync();
+        Authenticate(ownerTokens.AccessToken);
+        await CreateTicketAsync(sectorId);
+
+        (_, AccessTokens callerTokens) = await RegisterAndLoginAsync();
+        Authenticate(callerTokens.AccessToken);
+
+        // Act
+        List<TicketCountDto>? counts = await HttpClient.GetFromJsonAsync<List<TicketCountDto>>("tickets/mine/summary");
+
+        // Assert
+        counts!.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task GetOwn_Should_ReturnRequestedPage_WhenPageSizeIsGiven()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
         Authenticate(tokens.AccessToken);
         await CreateTicketAsync(sectorId);
         await CreateTicketAsync(sectorId);
         await CreateTicketAsync(sectorId);
 
         // Act
-        PagedTicketsByUserDto? page = await HttpClient.GetFromJsonAsync<PagedTicketsByUserDto>(
-            $"tickets/users/{userId}?page=2&pageSize=2");
+        PagedOwnTicketsDto? page = await HttpClient.GetFromJsonAsync<PagedOwnTicketsDto>(
+            "tickets/mine?page=2&pageSize=2");
 
         // Assert
         page!.Items.ShouldHaveSingleItem();
@@ -508,21 +532,6 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
-    public async Task GetByUser_Should_ReturnForbidden_WhenCallerQueriesAnotherUserWithoutManagePermission()
-    {
-        // Arrange
-        (Guid otherUserId, _) = await RegisterAndLoginAsync();
-        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
-        Authenticate(tokens.AccessToken);
-
-        // Act
-        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/users/{otherUserId}");
-
-        // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
-    }
-
-    [Fact]
     public async Task Reopen_Should_ReturnForbidden_WhenCallerIsNotOwnerAndTicketIsActive()
     {
         // Arrange
@@ -573,7 +582,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
     private sealed record TicketDto(Guid Id, string Title, string Description, int Priority, int Status);
 
-    private sealed record PagedTicketsByUserDto(List<TicketDto> Items, int TotalCount);
+    private sealed record PagedOwnTicketsDto(List<TicketDto> Items, int TotalCount);
 
     private sealed record TicketDetailDto(Guid Id, Guid OpenedByUserId, Guid SectorId, int Status, int SlaStatus);
 

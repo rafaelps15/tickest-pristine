@@ -1,8 +1,8 @@
 using TickestPristine.Domain.Tickets;
 
-namespace TickestPristine.Application.Tickets.GetByUser;
+namespace TickestPristine.Application.Tickets.GetOwn;
 
-public sealed class TicketResponse
+public sealed class OwnTicketResponse
 {
     public Guid Id { get; set; }
     public string Title { get; set; }
