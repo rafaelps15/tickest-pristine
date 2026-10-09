@@ -1,5 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.Extensions.DependencyInjection;
+using TickestPristine.Domain.Tickets;
+using TickestPristine.Infrastructure.Database;
 
 namespace TickestPristine.IntegrationTests.Tickets;
 
@@ -580,6 +583,268 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         page.Items.Select(t => t.Status).ShouldBe([1, 3]); // Open, Resolved
     }
 
+    [Fact]
+    public async Task GetAll_Should_ReturnOnlyUnassignedTickets_WhenUnassignedOnlyIsTrue()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (Guid assigneeId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        Guid unassignedTicketId = await CreateTicketAsync(sectorId);
+        HttpResponseMessage assignedResponse = await HttpClient.PostAsJsonAsync("tickets", new
+        {
+            title = "Printer is broken",
+            description = "The printer on the 3rd floor is not working",
+            priority = 2,
+            sectorId,
+            responsibleId = assigneeId
+        });
+        assignedResponse.EnsureSuccessStatusCode();
+
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync(
+            $"tickets?sectorId={sectorId}&unassignedOnly=true&assignedToUserId={assigneeId}");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        PagedTicketsDto? page = await response.Content.ReadFromJsonAsync<PagedTicketsDto>();
+        page!.Items.ShouldHaveSingleItem().Id.ShouldBe(unassignedTicketId);
+    }
+
+    [Fact]
+    public async Task GetStatusCounts_Should_ReturnUnauthorized_WhenNoTokenProvided()
+    {
+        // Arrange
+        HttpClient.DefaultRequestHeaders.Authorization = null;
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/status");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetStatusCounts_Should_CountOtherUsersTickets_WhenCallerHasNoManagePermission()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        (_, AccessTokens callerTokens) = await RegisterAndLoginAsync();
+
+        Authenticate(callerTokens.AccessToken);
+        StatusCountsDto? before = await HttpClient.GetFromJsonAsync<StatusCountsDto>("tickets/stats/status");
+
+        Authenticate(requesterTokens.AccessToken);
+        await CreateTicketAsync(sectorId);
+
+        Authenticate(callerTokens.AccessToken);
+
+        // Act
+        StatusCountsDto? after = await HttpClient.GetFromJsonAsync<StatusCountsDto>("tickets/stats/status");
+
+        // Assert
+        after!.TotalCount.ShouldBe(before!.TotalCount + 1);
+        after.OpenCount.ShouldBe(before.OpenCount + 1);
+    }
+
+    [Fact]
+    public async Task GetVolume_Should_ReturnUnauthorized_WhenNoTokenProvided()
+    {
+        // Arrange
+        HttpClient.DefaultRequestHeaders.Authorization = null;
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/volume");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetVolume_Should_CountNewTicketInCurrentDay_WhenGroupedByDay()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        (_, AccessTokens callerTokens) = await RegisterAndLoginAsync();
+
+        Authenticate(callerTokens.AccessToken);
+        List<VolumePointDto>? before = await HttpClient.GetFromJsonAsync<List<VolumePointDto>>("tickets/stats/volume?groupBy=Day");
+
+        Authenticate(requesterTokens.AccessToken);
+        await CreateTicketAsync(sectorId);
+
+        Authenticate(callerTokens.AccessToken);
+
+        // Act
+        List<VolumePointDto>? after = await HttpClient.GetFromJsonAsync<List<VolumePointDto>>("tickets/stats/volume?groupBy=Day");
+
+        // Assert
+        after!.Count.ShouldBe(30);
+        after[^1].Count.ShouldBe(before![^1].Count + 1);
+    }
+
+    [Fact]
+    public async Task GetVolume_Should_CountTicketInLocalDay_WhenOpenedLateAtNight()
+    {
+        // Arrange
+        (Guid requesterId, Guid sectorId) = await CreateRequesterAndSectorAsync();
+        DateOnly yesterday = BrasiliaToday().AddDays(-1);
+        Dictionary<DateOnly, int> before = await GetVolumeAsync("Day");
+
+        // 22:00 em Brasília já é o dia seguinte em UTC.
+        await InsertTicketAsync(requesterId, sectorId, BrasiliaToUtc(yesterday, 22));
+
+        // Act
+        Dictionary<DateOnly, int> after = await GetVolumeAsync("Day");
+
+        // Assert
+        after[yesterday].ShouldBe(before[yesterday] + 1);
+        after[BrasiliaToday()].ShouldBe(before[BrasiliaToday()]);
+    }
+
+    [Fact]
+    public async Task GetVolume_Should_CountTicketInPreviousWeek_WhenOpenedOnSundayNight()
+    {
+        // Arrange
+        (Guid requesterId, Guid sectorId) = await CreateRequesterAndSectorAsync();
+        DateOnly today = BrasiliaToday();
+        DateOnly currentMonday = today.AddDays(-(((int)today.DayOfWeek + 6) % 7));
+        DateOnly previousMonday = currentMonday.AddDays(-7);
+        Dictionary<DateOnly, int> before = await GetVolumeAsync("Week");
+
+        await InsertTicketAsync(requesterId, sectorId, BrasiliaToUtc(currentMonday.AddDays(-1), 23));
+
+        // Act
+        Dictionary<DateOnly, int> after = await GetVolumeAsync("Week");
+
+        // Assert
+        after[previousMonday].ShouldBe(before[previousMonday] + 1);
+        after[currentMonday].ShouldBe(before[currentMonday]);
+    }
+
+    [Fact]
+    public async Task GetVolume_Should_Return12MonthsAndCountTicketInPreviousMonth_WhenOpenedOnLastNightOfMonth()
+    {
+        // Arrange
+        (Guid requesterId, Guid sectorId) = await CreateRequesterAndSectorAsync();
+        DateOnly today = BrasiliaToday();
+        var currentMonth = new DateOnly(today.Year, today.Month, 1);
+        DateOnly previousMonth = currentMonth.AddMonths(-1);
+        Dictionary<DateOnly, int> before = await GetVolumeAsync("Month");
+
+        await InsertTicketAsync(requesterId, sectorId, BrasiliaToUtc(currentMonth.AddDays(-1), 23));
+
+        // Act
+        Dictionary<DateOnly, int> after = await GetVolumeAsync("Month");
+
+        // Assert
+        after.Count.ShouldBe(12);
+        after.Keys.Min().ShouldBe(currentMonth.AddMonths(-11));
+        after[previousMonth].ShouldBe(before[previousMonth] + 1);
+        after[currentMonth].ShouldBe(before[currentMonth]);
+    }
+
+    [Fact]
+    public async Task GetVolume_Should_NotCountTicket_WhenTicketIsDeleted()
+    {
+        // Arrange
+        (Guid requesterId, Guid sectorId) = await CreateRequesterAndSectorAsync();
+        Dictionary<DateOnly, int> before = await GetVolumeAsync("Day");
+
+        await InsertTicketAsync(requesterId, sectorId, DateTime.UtcNow.AddMinutes(-1), deletedAtUtc: DateTime.UtcNow);
+
+        // Act
+        Dictionary<DateOnly, int> after = await GetVolumeAsync("Day");
+
+        // Assert
+        after[BrasiliaToday()].ShouldBe(before[BrasiliaToday()]);
+    }
+
+    [Fact]
+    public async Task GetVolume_Should_Return12Weeks_WhenGroupedByWeek()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        List<VolumePointDto>? volume = await HttpClient.GetFromJsonAsync<List<VolumePointDto>>("tickets/stats/volume?groupBy=Week");
+
+        // Assert
+        volume!.Count.ShouldBe(12);
+        volume.ShouldAllBe(p => p.PeriodStart.DayOfWeek == DayOfWeek.Monday);
+    }
+
+    [Fact]
+    public async Task GetVolume_Should_ReturnBadRequest_WhenGroupByIsInvalid()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/volume?groupBy=Year");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    private static readonly TimeZoneInfo BrasiliaTimeZone = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
+
+    private static DateOnly BrasiliaToday() =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, BrasiliaTimeZone));
+
+    private static DateTime BrasiliaToUtc(DateOnly date, int hour) =>
+        TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(new TimeOnly(hour, 0)), BrasiliaTimeZone);
+
+    private async Task<(Guid RequesterId, Guid SectorId)> CreateRequesterAndSectorAsync()
+    {
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (Guid requesterId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        return (requesterId, sectorId);
+    }
+
+    private async Task<Dictionary<DateOnly, int>> GetVolumeAsync(string groupBy)
+    {
+        List<VolumePointDto>? volume = await HttpClient.GetFromJsonAsync<List<VolumePointDto>>($"tickets/stats/volume?groupBy={groupBy}");
+
+        return volume!.ToDictionary(p => p.PeriodStart, p => p.Count);
+    }
+
+    /// <summary>
+    /// Grava o chamado direto no banco: pela API a data de abertura é sempre agora, e os testes de volume precisam de
+    /// aberturas em horários e dias escolhidos.
+    /// </summary>
+    private async Task InsertTicketAsync(Guid requesterId, Guid sectorId, DateTime createdAtUtc, DateTime? deletedAtUtc = null)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        context.Tickets.Add(new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Title = "Printer is broken",
+            Description = "The printer on the 3rd floor is not working",
+            Priority = TicketPriority.Medium,
+            Status = TicketStatus.Open,
+            CreatedByUserId = requesterId,
+            SectorId = sectorId,
+            CreatedAtUtc = createdAtUtc,
+            DueAtUtc = createdAtUtc.AddHours(8),
+            SlaWarningAtUtc = createdAtUtc.AddHours(6),
+            DeletedAtUtc = deletedAtUtc
+        });
+
+        await context.SaveChangesAsync();
+    }
+
     private sealed record TicketDto(Guid Id, string Title, string Description, int Priority, int Status);
 
     private sealed record PagedOwnTicketsDto(List<TicketDto> Items, int TotalCount);
@@ -600,4 +865,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         int SlaStatus);
 
     private sealed record SlaSummaryDto(int ActiveCount, int OnTimeCount, int AtRiskCount, int BreachedCount);
+
+    private sealed record StatusCountsDto(int TotalCount, int OpenCount, int InProgressCount, int ResolvedCount);
+
+    private sealed record VolumePointDto(DateOnly PeriodStart, int Count);
 }

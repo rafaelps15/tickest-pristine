@@ -16,6 +16,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Infrastructure;
@@ -85,6 +86,9 @@ public static class DependencyInjection
         services.AddScoped<AuditLoggingInterceptor>();
 
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
+
+        services.AddSingleton(new NpgsqlDataSourceBuilder(connectionString).Build());
+        services.AddSingleton<IDbConnectionFactory, DbConnectionFactory>();
 
         return services;
     }
