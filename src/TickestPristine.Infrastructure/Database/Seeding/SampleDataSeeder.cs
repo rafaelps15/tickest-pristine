@@ -1,20 +1,41 @@
 using Bogus;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Infrastructure.Database.Seeding;
 
 /// <summary>
 /// Chamados de exemplo para desenvolvimento, com "Seeding:SampleData" ligado: os do <see cref="SampleTicketCatalog"/>
-/// cujo setor existe e está ativo, abertos por usuários ativos. Só roda num banco sem chamados. Cada chamado nasce com
-/// o histórico que a API teria gravado até o status dele e os prazos de SLA da prioridade.
+/// cujo setor existe e está ativo. Só roda num banco sem chamados. Cria também usuários fictícios de cada role, menos
+/// Administrador (atendente1@..., colaborador1@..., com a senha "Seeding:SampleUserPassword"): os chamados são abertos
+/// pelos colaboradores e atendidos pelos atendentes, para a tela pessoal do administrador não vir cheia de dados de
+/// exemplo.
+/// Cada chamado nasce com o histórico que a API teria gravado até o status dele e os prazos de SLA da prioridade.
 /// </summary>
-internal sealed class SampleDataSeeder(IOptions<SeedingOptions> seedingOptions, IDateTimeProvider dateTimeProvider)
+internal sealed class SampleDataSeeder(
+    IOptions<SeedingOptions> seedingOptions,
+    IPasswordHasher passwordHasher,
+    IDateTimeProvider dateTimeProvider)
 {
     // Semente fixa: todo ambiente recebe a mesma massa de dados, o que ajuda a reproduzir bugs.
     private const int RandomSeed = 2026;
+
+    private const string SampleEmailDomain = "tickest.dev";
+
+    /// <summary>
+    /// Usuários fictícios por role, com o prefixo do e-mail e a quantidade. O Administrador fica de fora: o primeiro
+    /// administrador já vem do <see cref="AdminUserSeeder"/>.
+    /// </summary>
+    private static readonly (Role Role, string EmailPrefix, int Count)[] SampleUserGroups =
+    [
+        (Role.Agent, "atendente", 3),
+        (Role.Collaborator, "colaborador", 6)
+    ];
 
     /// <summary>
     /// Status que cada chamado percorre a partir de Aberto até o status final (cada passo é conferido em CreateHistory).
@@ -38,15 +59,14 @@ internal sealed class SampleDataSeeder(IOptions<SeedingOptions> seedingOptions, 
         Dictionary<string, Guid> sectorIdsByName = await context.Sectors
             .Where(s => s.IsActive)
             .ToDictionaryAsync(s => s.Name, s => s.Id, cancellationToken);
-        Guid[] userIds = await context.Users.Where(u => u.IsActive).Select(u => u.Id).ToArrayAsync(cancellationToken);
-
-        if (userIds.Length == 0)
-        {
-            return;
-        }
 
         var faker = new Faker("pt_BR") { Random = new Randomizer(RandomSeed) };
         DateTime now = dateTimeProvider.UtcNow;
+
+        Dictionary<Role, Guid[]> userIdsByRole = await EnsureSampleUsersAsync(context, faker, now, cancellationToken);
+        // Colaboradores abrem os chamados; atendentes atendem e resolvem.
+        Guid[] requesterIds = userIdsByRole[Role.Collaborator];
+        Guid[] agentIds = userIdsByRole[Role.Agent];
 
         // Setores renomeados ou desativados pelo administrador ficam sem chamados de exemplo.
         foreach (SampleTicket sampleTicket in SampleTicketCatalog.Tickets)
@@ -56,7 +76,7 @@ internal sealed class SampleDataSeeder(IOptions<SeedingOptions> seedingOptions, 
                 continue;
             }
 
-            Ticket ticket = CreateTicket(faker, sampleTicket, sectorId, userIds, now);
+            Ticket ticket = CreateTicket(faker, sampleTicket, sectorId, requesterIds, agentIds, now);
 
             context.Tickets.Add(ticket);
             context.TicketHistories.AddRange(CreateHistory(faker, ticket, now));
@@ -65,7 +85,87 @@ internal sealed class SampleDataSeeder(IOptions<SeedingOptions> seedingOptions, 
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    private static Ticket CreateTicket(Faker faker, SampleTicket sampleTicket, Guid sectorId, Guid[] userIds, DateTime now)
+    /// <summary>
+    /// Garante os usuários fictícios de cada grupo, com a role e a credencial, e devolve os ids por role. Quem já existe
+    /// com o mesmo e-mail é reaproveitado (o banco pode ter perdido só os chamados). O nome é sorteado mesmo para quem
+    /// já existe, para a sequência da semente não depender do estado do banco.
+    /// </summary>
+    private async Task<Dictionary<Role, Guid[]>> EnsureSampleUsersAsync(
+        ApplicationDbContext context,
+        Faker faker,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        string password = seedingOptions.Value.SampleUserPassword is { Length: > 0 } configuredPassword
+            ? configuredPassword
+            : throw new InvalidOperationException(
+                $"'{SeedingOptions.SectionName}:{nameof(SeedingOptions.SampleUserPassword)}' is required when " +
+                $"'{SeedingOptions.SectionName}:{nameof(SeedingOptions.SampleData)}' is enabled. Set it with dotnet user-secrets.");
+
+        string[] emails = [.. SampleUserGroups.SelectMany(group =>
+            Enumerable.Range(1, group.Count).Select(number => SampleEmail(group.EmailPrefix, number)))];
+
+        Dictionary<string, Guid> existingUserIds = await context.Users
+            .Where(u => emails.Contains(u.Email))
+            .ToDictionaryAsync(u => u.Email, u => u.Id, cancellationToken);
+
+        var userIdsByRole = new Dictionary<Role, Guid[]>();
+
+        foreach ((Role role, string emailPrefix, int count) in SampleUserGroups)
+        {
+            var userIds = new List<Guid>();
+
+            for (int number = 1; number <= count; number++)
+            {
+                string email = SampleEmail(emailPrefix, number);
+                string firstName = faker.Name.FirstName();
+                string lastName = faker.Name.LastName();
+
+                if (existingUserIds.TryGetValue(email, out Guid existingUserId))
+                {
+                    userIds.Add(existingUserId);
+                    continue;
+                }
+
+                var user = new User
+                {
+                    Id = Guid.NewGuid(),
+                    Email = email,
+                    FirstName = firstName,
+                    LastName = lastName,
+                    Code = UserCodes.New(),
+                    IsActive = true,
+                    CreatedAtUtc = now
+                };
+
+                context.Users.Add(user);
+                context.UserCredentials.Add(new UserCredential
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = user.Id,
+                    PasswordHash = passwordHasher.Hash(password),
+                    MustChangePassword = false
+                });
+                context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = role.Name });
+
+                userIds.Add(user.Id);
+            }
+
+            userIdsByRole[role] = [.. userIds];
+        }
+
+        return userIdsByRole;
+    }
+
+    private static string SampleEmail(string emailPrefix, int number) => $"{emailPrefix}{number}@{SampleEmailDomain}";
+
+    private static Ticket CreateTicket(
+        Faker faker,
+        SampleTicket sampleTicket,
+        Guid sectorId,
+        Guid[] requesterIds,
+        Guid[] agentIds,
+        DateTime now)
     {
         TicketStatus status = faker.PickRandom<TicketStatus>();
         TimeSpan resolutionTime = TicketSla.ResolutionTime(sampleTicket.Priority);
@@ -88,9 +188,9 @@ internal sealed class SampleDataSeeder(IOptions<SeedingOptions> seedingOptions, 
             Description = sampleTicket.Description,
             Priority = sampleTicket.Priority,
             Status = status,
-            CreatedByUserId = faker.PickRandom(userIds),
-            // Chamado que passou por "Em andamento" teve alguém atendendo.
-            AssignedToUserId = StatusPaths[status].Contains(TicketStatus.InProgress) ? faker.PickRandom(userIds) : null,
+            CreatedByUserId = faker.PickRandom(requesterIds),
+            // Chamado que passou por "Em andamento" teve um atendente atendendo.
+            AssignedToUserId = StatusPaths[status].Contains(TicketStatus.InProgress) ? faker.PickRandom(agentIds) : null,
             SectorId = sectorId,
             CreatedAtUtc = createdAtUtc,
             DueAtUtc = TicketSla.DueAt(createdAtUtc, sampleTicket.Priority),
