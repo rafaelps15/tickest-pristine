@@ -11,8 +11,6 @@ public sealed class GetOwnTicketsQueryHandlerTests : BaseHandlerTest
     private static readonly Guid OwnerId = Guid.NewGuid();
     private static readonly DateTime NowUtc = new(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc);
 
-    private readonly IUserContext userContext = Substitute.For<IUserContext>();
-
     [Fact]
     public async Task Handle_Should_ReturnOnlyCallerTickets_WhenTicketsHaveDifferentStatuses()
     {
@@ -70,8 +68,9 @@ public sealed class GetOwnTicketsQueryHandlerTests : BaseHandlerTest
         result.Value.TotalCount.ShouldBe(0);
     }
 
-    private GetOwnTicketsQueryHandler CreateHandler(TestDbContext context, Guid callerId)
+    private static GetOwnTicketsQueryHandler CreateHandler(TestDbContext context, Guid callerId)
     {
+        IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(callerId);
 
         return new GetOwnTicketsQueryHandler(context, userContext);
