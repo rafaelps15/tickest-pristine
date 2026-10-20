@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Diagnostics.CodeAnalysis;
 
 namespace TickestPristine.Application.TicketAttachments;
 
@@ -29,10 +30,30 @@ internal static class TicketAttachmentLimits
             pair => pair.Value.ToFrozenSet(StringComparer.OrdinalIgnoreCase),
             StringComparer.OrdinalIgnoreCase);
 
-    public static bool IsAllowedContentType(string contentType) =>
-        AllowedExtensionsByContentType.ContainsKey(contentType);
+    public static bool IsAllowedContentType(string? contentType) =>
+        TryGetAllowedExtensions(contentType, out _);
 
-    public static bool HasExtensionOfContentType(string fileName, string contentType) =>
-        AllowedExtensionsByContentType.TryGetValue(contentType, out FrozenSet<string>? extensions) &&
+    public static bool HasExtensionOfContentType(string? fileName, string? contentType) =>
+        !string.IsNullOrEmpty(fileName) &&
+        TryGetAllowedExtensions(contentType, out FrozenSet<string>? extensions) &&
         extensions.Contains(Path.GetExtension(fileName));
+
+    /// <summary>
+    /// Extensões aceitas para o tipo informado. Os parâmetros do tipo são ignorados: "text/plain; charset=utf-8" é o
+    /// mesmo formato que "text/plain". Tipo vazio ou nulo não é aceito.
+    /// </summary>
+    private static bool TryGetAllowedExtensions(
+        string? contentType,
+        [NotNullWhen(true)] out FrozenSet<string>? extensions)
+    {
+        string mediaType = contentType?.Split(';', 2)[0].Trim() ?? string.Empty;
+
+        if (mediaType.Length == 0)
+        {
+            extensions = null;
+            return false;
+        }
+
+        return AllowedExtensionsByContentType.TryGetValue(mediaType, out extensions);
+    }
 }

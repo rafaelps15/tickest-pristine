@@ -21,7 +21,7 @@ internal sealed class UploadTicketAttachmentCommandValidator : AbstractValidator
             .WithMessage("O tipo de arquivo '{PropertyValue}' não é suportado.");
         RuleFor(c => c.FileName)
             .Must((command, fileName) => TicketAttachmentLimits.HasExtensionOfContentType(fileName, command.ContentType))
-            .When(c => !string.IsNullOrEmpty(c.FileName) && TicketAttachmentLimits.IsAllowedContentType(c.ContentType ?? string.Empty))
+            .When(c => !string.IsNullOrEmpty(c.FileName) && TicketAttachmentLimits.IsAllowedContentType(c.ContentType))
             .WithMessage(c => $"A extensão do arquivo não corresponde ao tipo '{c.ContentType}'.");
         RuleFor(c => c.FileSizeBytes)
             .GreaterThan(0)

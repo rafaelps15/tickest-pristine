@@ -234,6 +234,21 @@ public sealed class TicketAttachmentValidatorsTests
     }
 
     [Fact]
+    public void UploadValidator_Should_NotHaveErrors_WhenContentTypeHasParameters()
+    {
+        // Arrange: alguns clientes enviam o charset junto com o tipo
+        UploadTicketAttachmentCommand command = ValidUploadCommand;
+        command.FileName = "notas.txt";
+        command.ContentType = "text/plain; charset=utf-8";
+
+        // Act
+        TestValidationResult<UploadTicketAttachmentCommand> result = _uploadValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
     public void UploadValidator_Should_HaveError_WhenContentTypeIsNotAllowed()
     {
         // Arrange
