@@ -100,6 +100,34 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
     }
 
     [Fact]
+    public async Task GetAll_Should_RecordCallerInCreatedEntry_WhenManagerOpensTicketOnBehalfOfRequester()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        Guid requesterId = await RegisterUserAsync(UniqueEmail());
+
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+
+        HttpResponseMessage createResponse = await HttpClient.PostAsJsonAsync("tickets", new
+        {
+            title = "Printer is broken",
+            description = "The printer on the 3rd floor is not working",
+            priority = 2,
+            sectorId,
+            requesterId
+        });
+        createResponse.EnsureSuccessStatusCode();
+        Guid ticketId = await createResponse.Content.ReadFromJsonAsync<Guid>();
+
+        // Act
+        List<TicketHistoryDto> history = await GetHistoryAsync(ticketId);
+
+        // Assert
+        history.ShouldContain(h => h.Action == 1 /* Created */ && h.ChangedByUserId == GetUserId(adminTokens));
+    }
+
+    [Fact]
     public async Task GetAll_Should_ContainMessageAddedEntry_WhenMessageWasPosted()
     {
         // Arrange

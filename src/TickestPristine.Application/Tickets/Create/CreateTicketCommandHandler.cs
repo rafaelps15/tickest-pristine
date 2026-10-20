@@ -81,7 +81,7 @@ internal sealed class CreateTicketCommandHandler(
             SlaWarningAtUtc = TicketSla.WarningAt(createdAtUtc, command.Priority)
         };
 
-        ticket.Raise(new TicketCreatedDomainEvent(ticket.Id));
+        ticket.Raise(new TicketCreatedDomainEvent(ticket.Id, userContext.UserId));
 
         context.Tickets.Add(ticket);
 

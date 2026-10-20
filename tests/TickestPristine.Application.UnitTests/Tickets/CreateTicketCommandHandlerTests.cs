@@ -189,6 +189,7 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
 
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == result.Value);
         ticket.CreatedByUserId.ShouldBe(requesterId);
+        ticket.DomainEvents.OfType<TicketCreatedDomainEvent>().ShouldHaveSingleItem().OpenedByUserId.ShouldBe(UserId);
     }
 
     [Fact]

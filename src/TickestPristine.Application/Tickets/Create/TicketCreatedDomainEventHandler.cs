@@ -1,4 +1,3 @@
-using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
@@ -21,7 +20,7 @@ internal sealed class TicketCreatedDomainEventHandler(
             return;
         }
 
-        context.TicketHistories.Add(TicketHistoryEntries.Created(ticket.Id, ticket.CreatedByUserId, dateTimeProvider.UtcNow));
+        context.TicketHistories.Add(TicketHistoryEntries.Created(ticket.Id, domainEvent.OpenedByUserId, dateTimeProvider.UtcNow));
 
         await context.SaveChangesAsync(cancellationToken);
     }
