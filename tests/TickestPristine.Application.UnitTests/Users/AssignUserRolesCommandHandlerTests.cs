@@ -91,8 +91,10 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
 
         var command = new AssignUserRolesCommand { UserId = user.Id, RoleNames = [newRole.Name] };
 
+        using var requestCancellation = new CancellationTokenSource();
+
         // Act
-        Result result = await handler.Handle(command, CancellationToken.None);
+        Result result = await handler.Handle(command, requestCancellation.Token);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
@@ -106,7 +108,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         User updated = await context.Users.SingleAsync(u => u.Id == user.Id);
         updated.DomainEvents.ShouldContain(domainEvent => domainEvent is UserRolesAssignedDomainEvent);
 
-        await permissionProvider.Received(1).InvalidateAsync(user.Id, Arg.Any<CancellationToken>());
+        await permissionProvider.Received(1).InvalidateAsync(user.Id, CancellationToken.None);
     }
 
     [Fact]

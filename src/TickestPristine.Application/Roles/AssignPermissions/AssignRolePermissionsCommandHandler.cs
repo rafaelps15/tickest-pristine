@@ -67,9 +67,10 @@ internal sealed class AssignRolePermissionsCommandHandler(
 
         await context.SaveChangesAsync(cancellationToken);
 
+        // Depois do commit, a invalidação não pode ser cancelada junto com a requisição: o banco já mudou.
         foreach (Guid userId in affectedUserIds)
         {
-            await permissionProvider.InvalidateAsync(userId, cancellationToken);
+            await permissionProvider.InvalidateAsync(userId, CancellationToken.None);
         }
 
         return Result.Success();

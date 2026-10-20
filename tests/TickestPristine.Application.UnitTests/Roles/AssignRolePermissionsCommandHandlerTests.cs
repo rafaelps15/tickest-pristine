@@ -62,8 +62,10 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
             PermissionCodes = [PermissionCodes.Tickets.Create, PermissionCodes.Tickets.ViewOwn]
         };
 
+        using var requestCancellation = new CancellationTokenSource();
+
         // Act
-        Result result = await handler.Handle(command, CancellationToken.None);
+        Result result = await handler.Handle(command, requestCancellation.Token);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
@@ -75,8 +77,8 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
         permissionCodes.ShouldBe([PermissionCodes.Tickets.Create, PermissionCodes.Tickets.ViewOwn], ignoreOrder: true);
 
 
-        await permissionProvider.Received(1).InvalidateAsync(firstUserId, Arg.Any<CancellationToken>());
-        await permissionProvider.Received(1).InvalidateAsync(secondUserId, Arg.Any<CancellationToken>());
+        await permissionProvider.Received(1).InvalidateAsync(firstUserId, CancellationToken.None);
+        await permissionProvider.Received(1).InvalidateAsync(secondUserId, CancellationToken.None);
     }
 
     [Fact]

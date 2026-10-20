@@ -58,8 +58,10 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         dateTimeProvider.UtcNow.Returns(deactivatedAtUtc);
         var handler = new DeactivateUserCommandHandler(context, CallerContext(), permissionProvider, dateTimeProvider);
 
+        using var requestCancellation = new CancellationTokenSource();
+
         // Act
-        Result result = await handler.Handle(new DeactivateUserCommand(userId), CancellationToken.None);
+        Result result = await handler.Handle(new DeactivateUserCommand(userId), requestCancellation.Token);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
@@ -69,7 +71,7 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         user.DeactivatedAtUtc.ShouldBe(deactivatedAtUtc);
         user.DomainEvents.ShouldContain(domainEvent => domainEvent is UserDeactivatedDomainEvent);
 
-        await permissionProvider.Received(1).InvalidateAsync(userId, Arg.Any<CancellationToken>());
+        await permissionProvider.Received(1).InvalidateAsync(userId, CancellationToken.None);
     }
 
     [Fact]

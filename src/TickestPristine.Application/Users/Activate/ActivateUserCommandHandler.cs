@@ -49,7 +49,8 @@ internal sealed class ActivateUserCommandHandler(
         await context.SaveChangesAsync(cancellationToken);
 
         // O cache guardou a lista vazia de quando o usuário estava inativo; sem invalidar, ele seguiria sem permissões.
-        await permissionProvider.InvalidateAsync(user.Id, cancellationToken);
+        // Depois do commit, a invalidação não pode ser cancelada junto com a requisição.
+        await permissionProvider.InvalidateAsync(user.Id, CancellationToken.None);
 
         return Result.Success();
     }

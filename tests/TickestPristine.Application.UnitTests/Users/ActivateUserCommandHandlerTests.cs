@@ -55,8 +55,10 @@ public sealed class ActivateUserCommandHandlerTests : BaseHandlerTest
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         var handler = new ActivateUserCommandHandler(context, Substitute.For<IUserContext>(), permissionProvider);
 
+        using var requestCancellation = new CancellationTokenSource();
+
         // Act
-        Result result = await handler.Handle(new ActivateUserCommand(userId), CancellationToken.None);
+        Result result = await handler.Handle(new ActivateUserCommand(userId), requestCancellation.Token);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
@@ -66,7 +68,7 @@ public sealed class ActivateUserCommandHandlerTests : BaseHandlerTest
         user.DeactivatedAtUtc.ShouldBeNull();
         user.DomainEvents.ShouldContain(domainEvent => domainEvent is UserActivatedDomainEvent);
 
-        await permissionProvider.Received(1).InvalidateAsync(userId, Arg.Any<CancellationToken>());
+        await permissionProvider.Received(1).InvalidateAsync(userId, CancellationToken.None);
     }
 
     [Fact]
