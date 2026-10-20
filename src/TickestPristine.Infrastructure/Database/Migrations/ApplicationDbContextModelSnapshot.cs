@@ -768,6 +768,23 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_on_utc");
 
+                    b.Property<string>("PreviousTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("previous_token_hash");
+
+                    b.Property<DateTime?>("RotatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("rotated_at_utc");
+
+                    b.Property<Guid>("SecurityStamp")
+                        .HasColumnType("uuid")
+                        .HasColumnName("security_stamp");
+
+                    b.Property<DateTime>("SessionExpiresOnUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("session_expires_on_utc");
+
                     b.Property<string>("TokenHash")
                         .IsConcurrencyToken()
                         .IsRequired()
@@ -781,6 +798,9 @@ namespace TickestPristine.Infrastructure.Database.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_refresh_tokens");
+
+                    b.HasIndex("PreviousTokenHash")
+                        .HasDatabaseName("ix_refresh_tokens_previous_token_hash");
 
                     b.HasIndex("TokenHash")
                         .IsUnique()
@@ -858,6 +878,14 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<int>("FailedLoginAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("failed_login_attempts");
+
+                    b.Property<DateTime?>("LockoutEndsAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lockout_ends_at_utc");
+
                     b.Property<bool>("MustChangePassword")
                         .HasColumnType("boolean")
                         .HasColumnName("must_change_password");
@@ -867,6 +895,12 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("password_hash");
+
+                    b.Property<Guid>("SecurityStamp")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("security_stamp")
+                        .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")

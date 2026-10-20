@@ -37,10 +37,16 @@ if (app.Environment.IsDevelopment())
     app.ApplyMigrations();
 }
 
-app.MapHealthChecks("health", new HealthCheckOptions
+// O relatório detalhado (cada checagem, tempos e a mensagem de erro do banco) é anônimo: fica só em Development. Nos
+// demais ambientes a resposta é apenas o status (Healthy, Degraded ou Unhealthy).
+var healthCheckOptions = new HealthCheckOptions();
+
+if (app.Environment.IsDevelopment())
 {
-    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
-});
+    healthCheckOptions.ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse;
+}
+
+app.MapHealthChecks("health", healthCheckOptions);
 
 app.UseRequestContextLogging();
 

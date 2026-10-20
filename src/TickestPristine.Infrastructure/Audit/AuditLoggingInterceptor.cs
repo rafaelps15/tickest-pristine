@@ -16,7 +16,11 @@ internal sealed class AuditLoggingInterceptor(IUserContext currentUser, IDateTim
     : SaveChangesInterceptor
 {
     // Valores que nunca vão para o log de auditoria; o nome da coluna alterada continua em AffectedColumns.
-    private static readonly HashSet<string> ExcludedProperties = [nameof(Domain.Users.UserCredential.PasswordHash)];
+    private static readonly HashSet<string> ExcludedProperties =
+    [
+        nameof(Domain.Users.UserCredential.PasswordHash),
+        nameof(Domain.Users.UserCredential.SecurityStamp)
+    ];
 
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData,

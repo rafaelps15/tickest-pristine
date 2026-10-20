@@ -11,13 +11,20 @@ namespace TickestPristine.Application.Users;
 internal static class UserSessions
 {
     /// <summary>
-    /// Gera o access token e inclui no contexto o refresh token novo (só o hash). Também marca para remoção os refresh
-    /// tokens já expirados do usuário, para a tabela não crescer a cada login. Quem chama salva o contexto.
+    /// Duração máxima de uma sessão, contada do login: depois dela, só um novo login devolve tokens.
+    /// </summary>
+    internal static readonly TimeSpan MaxSessionDuration = TimeSpan.FromDays(30);
+
+    /// <summary>
+    /// Gera o access token e inclui no contexto o refresh token novo (só o hash), ligado ao
+    /// <paramref name="securityStamp"/> da credencial. Também marca para remoção os refresh tokens já expirados do
+    /// usuário, para a tabela não crescer a cada login. Quem chama salva o contexto.
     /// </summary>
     public static async Task<AccessTokensResponse> StartAsync(
         IApplicationDbContext context,
         ITokenProvider tokenProvider,
         User user,
+        Guid securityStamp,
         DateTime nowUtc,
         CancellationToken cancellationToken)
     {
@@ -29,13 +36,16 @@ internal static class UserSessions
 
         string accessToken = await tokenProvider.CreateAsync(user, cancellationToken);
         GeneratedRefreshToken generatedRefreshToken = tokenProvider.GenerateRefreshToken();
+        DateTime sessionExpiresOnUtc = nowUtc.Add(MaxSessionDuration);
 
         var refreshToken = new RefreshToken
         {
             Id = Guid.NewGuid(),
             TokenHash = RefreshTokenHasher.Hash(generatedRefreshToken.Token),
             UserId = user.Id,
-            ExpiresOnUtc = generatedRefreshToken.ExpiresOnUtc
+            ExpiresOnUtc = Earliest(generatedRefreshToken.ExpiresOnUtc, sessionExpiresOnUtc),
+            SessionExpiresOnUtc = sessionExpiresOnUtc,
+            SecurityStamp = securityStamp
         };
 
         refreshToken.Raise(new RefreshTokenCreatedDomainEvent(refreshToken.Id, refreshToken.UserId));
@@ -56,4 +66,9 @@ internal static class UserSessions
 
         context.RefreshTokens.RemoveRange(refreshTokens);
     }
+
+    /// <summary>
+    /// A data mais próxima entre as duas: a validade de um refresh token nunca passa do limite da sessão.
+    /// </summary>
+    public static DateTime Earliest(DateTime first, DateTime second) => first < second ? first : second;
 }

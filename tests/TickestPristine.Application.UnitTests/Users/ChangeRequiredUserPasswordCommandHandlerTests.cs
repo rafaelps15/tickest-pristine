@@ -145,11 +145,13 @@ public sealed class ChangeRequiredUserPasswordCommandHandlerTests : BaseHandlerT
         UserCredential credential = await context.UserCredentials.SingleAsync();
         credential.PasswordHash.ShouldBe("new-hash");
         credential.MustChangePassword.ShouldBeFalse();
+        credential.SecurityStamp.ShouldNotBe(Guid.Empty);
         credential.DomainEvents.ShouldContain(domainEvent => domainEvent is UserPasswordChangedDomainEvent);
 
         RefreshToken refreshToken = await context.RefreshTokens.SingleAsync();
         refreshToken.UserId.ShouldBe(user.Id);
         refreshToken.TokenHash.ShouldBe(RefreshTokenHasher.Hash("refresh-token"));
+        refreshToken.SecurityStamp.ShouldBe(credential.SecurityStamp);
     }
 
     [Fact]

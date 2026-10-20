@@ -82,6 +82,7 @@ public sealed class ChangeUserPasswordCommandHandlerTests : BaseHandlerTest
 
         UserCredential updated = await context.UserCredentials.SingleAsync(c => c.UserId == userId);
         updated.PasswordHash.ShouldBe("new-hash");
+        updated.SecurityStamp.ShouldNotBe(Guid.Empty);
         updated.DomainEvents.ShouldContain(domainEvent => domainEvent is UserPasswordChangedDomainEvent);
     }
 

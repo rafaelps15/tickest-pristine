@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -32,10 +33,33 @@ public static class DependencyInjection
 
         return services
             .AddServices()
+            .AddCaching(configuration)
             .AddDatabase(connectionString)
             .AddHealthChecks(connectionString)
             .AddAuthenticationInternal()
             .AddAuthorizationInternal();
+    }
+
+    private static IServiceCollection AddCaching(this IServiceCollection services, IConfiguration configuration)
+    {
+        // Com mais de uma instância da API, o Redis vira o segundo nível do HybridCache e a invalidação feita numa
+        // instância passa a valer nas outras. Sem a connection string, o cache fica só em memória (uma instância).
+        string? cacheConnectionString = configuration.GetConnectionString("Cache");
+
+        if (!string.IsNullOrWhiteSpace(cacheConnectionString))
+        {
+            services.AddStackExchangeRedisCache(options => options.Configuration = cacheConnectionString);
+        }
+
+        // A cópia em memória de cada instância vale pouco tempo: mesmo com o Redis, uma instância que não tratou a
+        // invalidação deixa de usar o valor antigo em no máximo um minuto.
+        services.AddHybridCache(options => options.DefaultEntryOptions = new HybridCacheEntryOptions
+        {
+            Expiration = TimeSpan.FromMinutes(5),
+            LocalCacheExpiration = TimeSpan.FromMinutes(1)
+        });
+
+        return services;
     }
 
     private static IServiceCollection AddServices(this IServiceCollection services)
@@ -43,8 +67,6 @@ public static class DependencyInjection
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
 
         services.AddTransient<IDomainEventsDispatcher, DomainEventsDispatcher>();
-
-        services.AddHybridCache();
 
         services.AddOptions<FileStorageOptions>()
             .BindConfiguration(FileStorageOptions.SectionName)

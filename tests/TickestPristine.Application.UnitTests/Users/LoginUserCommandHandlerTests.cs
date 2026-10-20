@@ -57,6 +57,67 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(UserErrors.InvalidCredentials);
+        (await context.UserCredentials.SingleAsync()).FailedLoginAttempts.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Handle_Should_LockAccount_WhenMaxFailedAttemptsIsReached()
+    {
+        // Arrange: a conta já tem uma tentativa a menos que o limite
+        await using TestDbContext context = CreateDbContext();
+        await SeedUserAsync(context);
+        UserCredential credential = await context.UserCredentials.SingleAsync();
+        credential.FailedLoginAttempts = UserCredentialsVerifier.MaxFailedAttempts - 1;
+        await context.SaveChangesAsync();
+
+        IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
+        passwordHasher.Verify(Arg.Any<string>(), Arg.Any<string>()).Returns(false);
+        var nowUtc = new DateTime(2026, 10, 1, 9, 0, 0, DateTimeKind.Utc);
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(nowUtc);
+
+        var handler = new LoginUserCommandHandler(context, passwordHasher, Substitute.For<ITokenProvider>(), dateTimeProvider);
+
+        // Act
+        Result<AccessTokensResponse> result = await handler.Handle(
+            new LoginUserCommand(Email, Password),
+            CancellationToken.None);
+
+        // Assert
+        result.Error.ShouldBe(UserErrors.LockedOut);
+        UserCredential locked = await context.UserCredentials.SingleAsync();
+        locked.LockoutEndsAtUtc.ShouldBe(nowUtc.Add(UserCredentialsVerifier.LockoutDuration));
+        locked.FailedLoginAttempts.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnLockedOut_WhenAccountIsLockedEvenWithCorrectPassword()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        await SeedUserAsync(context);
+        var nowUtc = new DateTime(2026, 10, 1, 9, 0, 0, DateTimeKind.Utc);
+        UserCredential credential = await context.UserCredentials.SingleAsync();
+        credential.LockoutEndsAtUtc = nowUtc.AddMinutes(5);
+        await context.SaveChangesAsync();
+
+        IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
+        passwordHasher.Verify(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        ITokenProvider tokenProvider = Substitute.For<ITokenProvider>();
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(nowUtc);
+
+        var handler = new LoginUserCommandHandler(context, passwordHasher, tokenProvider, dateTimeProvider);
+
+        // Act
+        Result<AccessTokensResponse> result = await handler.Handle(
+            new LoginUserCommand(Email, Password),
+            CancellationToken.None);
+
+        // Assert
+        result.Error.ShouldBe(UserErrors.LockedOut);
+        passwordHasher.DidNotReceive().Verify(Arg.Any<string>(), Arg.Any<string>());
+        await tokenProvider.DidNotReceive().CreateAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -72,14 +133,17 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
 
         ITokenProvider tokenProvider = Substitute.For<ITokenProvider>();
         tokenProvider.CreateAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns("access-token");
-        DateTime expiresOnUtc = DateTime.UtcNow.AddDays(7);
+        DateTime nowUtc = DateTime.UtcNow;
+        DateTime expiresOnUtc = nowUtc.AddDays(7);
         tokenProvider.GenerateRefreshToken().Returns(new GeneratedRefreshToken("refresh-token", expiresOnUtc));
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(nowUtc);
 
         var handler = new LoginUserCommandHandler(
             context,
             passwordHasher,
             tokenProvider,
-            Substitute.For<IDateTimeProvider>());
+            dateTimeProvider);
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -96,6 +160,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         RefreshToken refreshToken = await context.RefreshTokens.SingleAsync();
         refreshToken.TokenHash.ShouldBe(RefreshTokenHasher.Hash("refresh-token"));
         refreshToken.ExpiresOnUtc.ShouldBe(expiresOnUtc);
+        refreshToken.SessionExpiresOnUtc.ShouldBe(nowUtc.AddDays(30));
+        refreshToken.SecurityStamp.ShouldBe((await context.UserCredentials.SingleAsync()).SecurityStamp);
         refreshToken.DomainEvents.ShouldContain(domainEvent => domainEvent is RefreshTokenCreatedDomainEvent);
     }
 

@@ -2,7 +2,6 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Domain.Users;
-using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Users.ChangeRequiredPassword;
@@ -19,25 +18,20 @@ internal sealed class ChangeRequiredUserPasswordCommandHandler(
 {
     public async Task<Result<AccessTokensResponse>> Handle(ChangeRequiredUserPasswordCommand command, CancellationToken cancellationToken)
     {
-        User? user = await context.Users
-            .AsNoTracking()
-            .SingleOrDefaultAsync(u => u.Email == command.Email, cancellationToken);
+        Result<VerifiedCredentials> verification = await UserCredentialsVerifier.VerifyAsync(
+            context,
+            passwordHasher,
+            command.Email,
+            command.CurrentPassword,
+            dateTimeProvider.UtcNow,
+            cancellationToken);
 
-        if (user is null)
+        if (verification.IsFailure)
         {
-            // Gasta o mesmo tempo de uma conferência de senha, para o tempo de resposta não revelar quais e-mails existem.
-            _ = passwordHasher.Hash(command.CurrentPassword);
-
-            return Result.Failure<AccessTokensResponse>(UserErrors.InvalidCredentials);
+            return Result.Failure<AccessTokensResponse>(verification.Error);
         }
 
-        UserCredential? credential = await context.UserCredentials
-            .SingleOrDefaultAsync(c => c.UserId == user.Id, cancellationToken);
-
-        if (credential is null || !passwordHasher.Verify(command.CurrentPassword, credential.PasswordHash))
-        {
-            return Result.Failure<AccessTokensResponse>(UserErrors.InvalidCredentials);
-        }
+        (User user, UserCredential credential) = verification.Value;
 
         if (!user.IsActive)
         {
@@ -51,13 +45,20 @@ internal sealed class ChangeRequiredUserPasswordCommandHandler(
 
         credential.PasswordHash = passwordHasher.Hash(command.NewPassword);
         credential.MustChangePassword = false;
+        credential.SecurityStamp = Guid.NewGuid();
 
         credential.Raise(new UserPasswordChangedDomainEvent(credential.UserId));
 
         // Como na troca de senha comum, nenhuma sessão aberta com a senha anterior continua valendo.
         await UserSessions.RevokeAllAsync(context, user.Id, cancellationToken);
 
-        AccessTokensResponse tokens = await UserSessions.StartAsync(context, tokenProvider, user, dateTimeProvider.UtcNow, cancellationToken);
+        AccessTokensResponse tokens = await UserSessions.StartAsync(
+            context,
+            tokenProvider,
+            user,
+            credential.SecurityStamp,
+            dateTimeProvider.UtcNow,
+            cancellationToken);
 
         await context.SaveChangesAsync(cancellationToken);
 

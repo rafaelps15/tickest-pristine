@@ -16,6 +16,10 @@ public static class UserErrors
         "Users.CannotManagePrivilegedUser",
         $"Você não pode desativar nem reativar quem tem permissões administrativas que você não possui: {string.Join(", ", permissionNames)}");
 
+    public static readonly Error LockedOut = Error.Forbidden(
+        "Users.LockedOut",
+        "Muitas tentativas de login sem sucesso. A conta está bloqueada por alguns minutos; tente de novo mais tarde.");
+
     public static readonly Error NotFoundByEmail = Error.NotFound(
         "Users.NotFoundByEmail",
         "Usuário com o e-mail informado não foi encontrado");

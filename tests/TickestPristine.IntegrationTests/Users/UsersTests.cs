@@ -83,6 +83,59 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
+    public async Task Login_Should_LockAccount_WhenPasswordIsWrongFiveTimesInARow()
+    {
+        // Arrange
+        string email = UniqueEmail();
+        await RegisterUserAsync(email);
+
+        for (int attempt = 1; attempt < 5; attempt++)
+        {
+            (await HttpClient.PostAsJsonAsync("users/login", new { email, password = "WrongPassword1!" }))
+                .StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        }
+
+        // Act: a quinta senha errada bloqueia, e nem a senha certa entra depois
+        HttpResponseMessage fifthAttempt = await HttpClient.PostAsJsonAsync("users/login", new { email, password = "WrongPassword1!" });
+        HttpResponseMessage correctPassword = await HttpClient.PostAsJsonAsync("users/login", new { email, password = "Password123!" });
+
+        // Assert
+        fifthAttempt.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        correctPassword.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        ProblemDto? problem = await correctPassword.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.LockedOut");
+    }
+
+    [Fact]
+    public async Task Refresh_Should_RevokeAllSessions_WhenRotatedTokenIsReused()
+    {
+        // Arrange: o token antigo foi trocado há mais de 30 segundos e volta a ser usado
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
+        AccessTokens tokens = await LoginAsync(email);
+
+        HttpResponseMessage refreshResponse = await HttpClient.PostAsJsonAsync(
+            "users/refresh-token",
+            new { refreshToken = tokens.RefreshToken });
+        refreshResponse.EnsureSuccessStatusCode();
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await context.RefreshTokens
+            .Where(r => r.UserId == userId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(r => r.RotatedAtUtc, DateTime.UtcNow.AddMinutes(-1)));
+
+        // Act
+        HttpResponseMessage reuseResponse = await HttpClient.PostAsJsonAsync(
+            "users/refresh-token",
+            new { refreshToken = tokens.RefreshToken });
+
+        // Assert
+        reuseResponse.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await context.RefreshTokens.AnyAsync(r => r.UserId == userId)).ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task Login_Should_IncludeIdentityClaims_WhenCredentialsAreValid()
     {
         // Arrange
