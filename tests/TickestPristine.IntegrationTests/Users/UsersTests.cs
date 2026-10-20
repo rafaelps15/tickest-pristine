@@ -58,6 +58,31 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
+    public async Task Login_Should_RemoveExpiredRefreshTokens_WhenUserLogsInAgain()
+    {
+        // Arrange: a sessão do primeiro login já expirou
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
+        await LoginAsync(email);
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await context.RefreshTokens
+            .Where(r => r.UserId == userId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(r => r.ExpiresOnUtc, DateTime.UtcNow.AddDays(-1)));
+
+        // Act
+        await LoginAsync(email);
+
+        // Assert
+        List<DateTime> remainingExpirations = await context.RefreshTokens
+            .Where(r => r.UserId == userId)
+            .Select(r => r.ExpiresOnUtc)
+            .ToListAsync();
+        remainingExpirations.ShouldHaveSingleItem().ShouldBeGreaterThan(DateTime.UtcNow);
+    }
+
+    [Fact]
     public async Task Login_Should_IncludeIdentityClaims_WhenCredentialsAreValid()
     {
         // Arrange

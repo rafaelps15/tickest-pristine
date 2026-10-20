@@ -14,7 +14,8 @@ namespace TickestPristine.Application.Users.ChangeRequiredPassword;
 internal sealed class ChangeRequiredUserPasswordCommandHandler(
     IApplicationDbContext context,
     IPasswordHasher passwordHasher,
-    ITokenProvider tokenProvider) : ICommandHandler<ChangeRequiredUserPasswordCommand, AccessTokensResponse>
+    ITokenProvider tokenProvider,
+    IDateTimeProvider dateTimeProvider) : ICommandHandler<ChangeRequiredUserPasswordCommand, AccessTokensResponse>
 {
     public async Task<Result<AccessTokensResponse>> Handle(ChangeRequiredUserPasswordCommand command, CancellationToken cancellationToken)
     {
@@ -56,7 +57,7 @@ internal sealed class ChangeRequiredUserPasswordCommandHandler(
         // Como na troca de senha comum, nenhuma sessão aberta com a senha anterior continua valendo.
         await UserSessions.RevokeAllAsync(context, user.Id, cancellationToken);
 
-        AccessTokensResponse tokens = await UserSessions.StartAsync(context, tokenProvider, user, cancellationToken);
+        AccessTokensResponse tokens = await UserSessions.StartAsync(context, tokenProvider, user, dateTimeProvider.UtcNow, cancellationToken);
 
         await context.SaveChangesAsync(cancellationToken);
 

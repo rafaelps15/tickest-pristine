@@ -10,7 +10,8 @@ namespace TickestPristine.Application.Users.Login;
 internal sealed class LoginUserCommandHandler(
     IApplicationDbContext context,
     IPasswordHasher passwordHasher,
-    ITokenProvider tokenProvider) : ICommandHandler<LoginUserCommand, AccessTokensResponse>
+    ITokenProvider tokenProvider,
+    IDateTimeProvider dateTimeProvider) : ICommandHandler<LoginUserCommand, AccessTokensResponse>
 {
     public async Task<Result<AccessTokensResponse>> Handle(LoginUserCommand command, CancellationToken cancellationToken)
     {
@@ -47,7 +48,7 @@ internal sealed class LoginUserCommandHandler(
             return Result.Failure<AccessTokensResponse>(UserErrors.PasswordChangeRequired);
         }
 
-        AccessTokensResponse tokens = await UserSessions.StartAsync(context, tokenProvider, user, cancellationToken);
+        AccessTokensResponse tokens = await UserSessions.StartAsync(context, tokenProvider, user, dateTimeProvider.UtcNow, cancellationToken);
 
         await context.SaveChangesAsync(cancellationToken);
 

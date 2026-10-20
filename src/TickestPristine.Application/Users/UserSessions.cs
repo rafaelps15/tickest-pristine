@@ -11,14 +11,22 @@ namespace TickestPristine.Application.Users;
 internal static class UserSessions
 {
     /// <summary>
-    /// Gera o access token e inclui no contexto o refresh token novo (só o hash). Quem chama salva o contexto.
+    /// Gera o access token e inclui no contexto o refresh token novo (só o hash). Também marca para remoção os refresh
+    /// tokens já expirados do usuário, para a tabela não crescer a cada login. Quem chama salva o contexto.
     /// </summary>
     public static async Task<AccessTokensResponse> StartAsync(
         IApplicationDbContext context,
         ITokenProvider tokenProvider,
         User user,
+        DateTime nowUtc,
         CancellationToken cancellationToken)
     {
+        List<RefreshToken> expiredRefreshTokens = await context.RefreshTokens
+            .Where(r => r.UserId == user.Id && r.ExpiresOnUtc < nowUtc)
+            .ToListAsync(cancellationToken);
+
+        context.RefreshTokens.RemoveRange(expiredRefreshTokens);
+
         string accessToken = await tokenProvider.CreateAsync(user, cancellationToken);
         GeneratedRefreshToken generatedRefreshToken = tokenProvider.GenerateRefreshToken();
 

@@ -23,7 +23,8 @@ public sealed class ChangeRequiredUserPasswordCommandHandlerTests : BaseHandlerT
         var handler = new ChangeRequiredUserPasswordCommandHandler(
             context,
             Substitute.For<IPasswordHasher>(),
-            Substitute.For<ITokenProvider>());
+            Substitute.For<ITokenProvider>(),
+            Substitute.For<IDateTimeProvider>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(Command, CancellationToken.None);
@@ -43,7 +44,11 @@ public sealed class ChangeRequiredUserPasswordCommandHandlerTests : BaseHandlerT
         IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
         passwordHasher.Verify(Arg.Any<string>(), Arg.Any<string>()).Returns(false);
 
-        var handler = new ChangeRequiredUserPasswordCommandHandler(context, passwordHasher, Substitute.For<ITokenProvider>());
+        var handler = new ChangeRequiredUserPasswordCommandHandler(
+            context,
+            passwordHasher,
+            Substitute.For<ITokenProvider>(),
+            Substitute.For<IDateTimeProvider>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(Command, CancellationToken.None);
@@ -67,7 +72,11 @@ public sealed class ChangeRequiredUserPasswordCommandHandlerTests : BaseHandlerT
         IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
         passwordHasher.Verify(CurrentPassword, "old-hash").Returns(true);
 
-        var handler = new ChangeRequiredUserPasswordCommandHandler(context, passwordHasher, Substitute.For<ITokenProvider>());
+        var handler = new ChangeRequiredUserPasswordCommandHandler(
+            context,
+            passwordHasher,
+            Substitute.For<ITokenProvider>(),
+            Substitute.For<IDateTimeProvider>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(Command, CancellationToken.None);
@@ -87,7 +96,11 @@ public sealed class ChangeRequiredUserPasswordCommandHandlerTests : BaseHandlerT
         IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
         passwordHasher.Verify(CurrentPassword, "old-hash").Returns(true);
 
-        var handler = new ChangeRequiredUserPasswordCommandHandler(context, passwordHasher, Substitute.For<ITokenProvider>());
+        var handler = new ChangeRequiredUserPasswordCommandHandler(
+            context,
+            passwordHasher,
+            Substitute.For<ITokenProvider>(),
+            Substitute.For<IDateTimeProvider>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(Command, CancellationToken.None);
@@ -115,7 +128,11 @@ public sealed class ChangeRequiredUserPasswordCommandHandlerTests : BaseHandlerT
         tokenProvider.CreateAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns("access-token");
         tokenProvider.GenerateRefreshToken().Returns(new GeneratedRefreshToken("refresh-token", DateTime.UtcNow.AddDays(7)));
 
-        var handler = new ChangeRequiredUserPasswordCommandHandler(context, passwordHasher, tokenProvider);
+        var handler = new ChangeRequiredUserPasswordCommandHandler(
+            context,
+            passwordHasher,
+            tokenProvider,
+            Substitute.For<IDateTimeProvider>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(Command, CancellationToken.None);
@@ -154,7 +171,11 @@ public sealed class ChangeRequiredUserPasswordCommandHandlerTests : BaseHandlerT
         tokenProvider.CreateAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns("access-token");
         tokenProvider.GenerateRefreshToken().Returns(new GeneratedRefreshToken("refresh-token", DateTime.UtcNow.AddDays(7)));
 
-        var handler = new ChangeRequiredUserPasswordCommandHandler(context, passwordHasher, tokenProvider);
+        var handler = new ChangeRequiredUserPasswordCommandHandler(
+            context,
+            passwordHasher,
+            tokenProvider,
+            Substitute.For<IDateTimeProvider>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(Command, CancellationToken.None);

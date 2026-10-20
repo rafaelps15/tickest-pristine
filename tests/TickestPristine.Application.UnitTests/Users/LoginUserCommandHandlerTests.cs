@@ -20,7 +20,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         var handler = new LoginUserCommandHandler(
             context,
             Substitute.For<IPasswordHasher>(),
-            Substitute.For<ITokenProvider>());
+            Substitute.For<ITokenProvider>(),
+            Substitute.For<IDateTimeProvider>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -45,7 +46,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         var handler = new LoginUserCommandHandler(
             context,
             passwordHasher,
-            Substitute.For<ITokenProvider>());
+            Substitute.For<ITokenProvider>(),
+            Substitute.For<IDateTimeProvider>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -76,7 +78,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         var handler = new LoginUserCommandHandler(
             context,
             passwordHasher,
-            tokenProvider);
+            tokenProvider,
+            Substitute.For<IDateTimeProvider>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -97,6 +100,55 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
+    public async Task Handle_Should_RemoveExpiredRefreshTokensOfUser_WhenCredentialsAreValid()
+    {
+        // Arrange: uma sessão expirada e outra ainda válida do mesmo usuário
+        await using TestDbContext context = CreateDbContext();
+        User user = await SeedUserAsync(context);
+
+        var nowUtc = new DateTime(2026, 10, 1, 9, 0, 0, DateTimeKind.Utc);
+        var expiredToken = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            TokenHash = "expired",
+            UserId = user.Id,
+            ExpiresOnUtc = nowUtc.AddDays(-1)
+        };
+        var validToken = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            TokenHash = "valid",
+            UserId = user.Id,
+            ExpiresOnUtc = nowUtc.AddDays(1)
+        };
+        context.RefreshTokens.AddRange(expiredToken, validToken);
+        await context.SaveChangesAsync();
+
+        IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
+        passwordHasher.Verify(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        ITokenProvider tokenProvider = Substitute.For<ITokenProvider>();
+        tokenProvider.CreateAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns("access-token");
+        tokenProvider.GenerateRefreshToken().Returns(new GeneratedRefreshToken("refresh-token", nowUtc.AddDays(7)));
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(nowUtc);
+
+        var handler = new LoginUserCommandHandler(context, passwordHasher, tokenProvider, dateTimeProvider);
+
+        // Act
+        Result<AccessTokensResponse> result = await handler.Handle(
+            new LoginUserCommand(Email, Password),
+            CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        List<Guid> remainingTokenIds = await context.RefreshTokens.Select(r => r.Id).ToListAsync();
+        remainingTokenIds.ShouldNotContain(expiredToken.Id);
+        remainingTokenIds.ShouldContain(validToken.Id);
+        remainingTokenIds.Count.ShouldBe(2);
+    }
+
+    [Fact]
     public async Task Handle_Should_ReturnDeactivated_WhenUserIsDeactivated()
     {
         // Arrange
@@ -110,7 +162,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         var handler = new LoginUserCommandHandler(
             context,
             passwordHasher,
-            tokenProvider);
+            tokenProvider,
+            Substitute.For<IDateTimeProvider>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -137,7 +190,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         var handler = new LoginUserCommandHandler(
             context,
             passwordHasher,
-            tokenProvider);
+            tokenProvider,
+            Substitute.For<IDateTimeProvider>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
