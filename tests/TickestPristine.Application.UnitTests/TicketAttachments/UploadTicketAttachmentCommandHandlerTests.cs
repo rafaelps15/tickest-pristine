@@ -94,6 +94,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         attachment.UploadedByUserId.ShouldBe(CreatorId);
         attachment.StorageKey.ShouldBe("generated-storage-key.pdf");
         attachment.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketAttachmentUploadedDomainEvent);
+        (await context.TicketHistories.SingleAsync(h => h.TicketId == attachment.TicketId)).Action.ShouldBe(TicketHistoryAction.AttachmentAdded);
     }
 
     [Fact]

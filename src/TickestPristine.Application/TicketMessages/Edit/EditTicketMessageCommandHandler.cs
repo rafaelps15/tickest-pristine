@@ -34,6 +34,13 @@ internal sealed class EditTicketMessageCommandHandler(
 
         message.Raise(new TicketMessageEditedDomainEvent(message.Id, message.TicketId, message.AuthorUserId));
 
+        context.TicketHistories.Add(TicketHistoryEntries.Create(
+            message.TicketId,
+            message.AuthorUserId,
+            TicketHistoryAction.MessageEdited,
+            TicketHistoryDescriptions.MessageEdited,
+            dateTimeProvider.UtcNow));
+
         await context.SaveChangesAsync(cancellationToken);
 
         return Result.Success();

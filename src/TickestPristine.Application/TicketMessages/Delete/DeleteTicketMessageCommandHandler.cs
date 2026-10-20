@@ -42,6 +42,13 @@ internal sealed class DeleteTicketMessageCommandHandler(
 
         message.Raise(new TicketMessageDeletedDomainEvent(message.Id, message.TicketId));
 
+        context.TicketHistories.Add(TicketHistoryEntries.Create(
+            message.TicketId,
+            userContext.UserId,
+            TicketHistoryAction.MessageRemoved,
+            TicketHistoryDescriptions.MessageRemoved,
+            dateTimeProvider.UtcNow));
+
         await context.SaveChangesAsync(cancellationToken);
 
         return Result.Success();

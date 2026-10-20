@@ -22,7 +22,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         userContext.UserId.Returns(OwnerId);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider);
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
         var command = new ReopenTicketCommand(Guid.NewGuid());
 
         // Act
@@ -46,7 +46,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.ReopenOwn, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider);
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
         var command = new ReopenTicketCommand(ticketId);
 
         // Act
@@ -71,7 +71,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(outsiderId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider);
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
         var command = new ReopenTicketCommand(ticketId);
 
         // Act
@@ -95,7 +95,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider);
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
         var command = new ReopenTicketCommand(ticketId);
 
         // Act
@@ -122,7 +122,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.ReopenOwn, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider);
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
         var command = new ReopenTicketCommand(ticketId);
 
         // Act
@@ -134,6 +134,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == ticketId);
         ticket.Status.ShouldBe(TicketStatus.Open);
         ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketReopenedDomainEvent);
+        (await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id)).Action.ShouldBe(TicketHistoryAction.Reopened);
     }
 
     [Fact]
@@ -149,7 +150,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider);
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
         var command = new ReopenTicketCommand(ticketId);
 
         // Act

@@ -42,6 +42,13 @@ internal sealed class DeleteTicketAttachmentCommandHandler(
 
         attachment.Raise(new TicketAttachmentDeletedDomainEvent(attachment.Id, attachment.TicketId));
 
+        context.TicketHistories.Add(TicketHistoryEntries.Create(
+            attachment.TicketId,
+            userContext.UserId,
+            TicketHistoryAction.AttachmentRemoved,
+            TicketHistoryDescriptions.AttachmentRemoved,
+            dateTimeProvider.UtcNow));
+
         await context.SaveChangesAsync(cancellationToken);
 
         return Result.Success();

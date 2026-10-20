@@ -13,7 +13,8 @@ namespace TickestPristine.Application.Tickets.Reopen;
 internal sealed class ReopenTicketCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IPermissionProvider permissionProvider)
+    IPermissionProvider permissionProvider,
+    IDateTimeProvider dateTimeProvider)
     : ICommandHandler<ReopenTicketCommand>
 {
     public async Task<Result> Handle(ReopenTicketCommand command, CancellationToken cancellationToken)
@@ -50,6 +51,13 @@ internal sealed class ReopenTicketCommandHandler(
         ticket.Status = TicketStatus.Open;
 
         ticket.Raise(new TicketReopenedDomainEvent(ticket.Id, userContext.UserId));
+
+        context.TicketHistories.Add(TicketHistoryEntries.Create(
+            ticket.Id,
+            userContext.UserId,
+            TicketHistoryAction.Reopened,
+            TicketHistoryDescriptions.Reopened,
+            dateTimeProvider.UtcNow));
 
         await context.SaveChangesAsync(cancellationToken);
 

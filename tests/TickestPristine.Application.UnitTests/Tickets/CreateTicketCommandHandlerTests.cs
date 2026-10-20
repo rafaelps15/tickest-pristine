@@ -104,6 +104,7 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
         ticket.CreatedByUserId.ShouldBe(UserId);
         ticket.Status.ShouldBe(TicketStatus.Open);
         ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketCreatedDomainEvent);
+        (await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id)).Action.ShouldBe(TicketHistoryAction.Created);
     }
 
     [Fact]

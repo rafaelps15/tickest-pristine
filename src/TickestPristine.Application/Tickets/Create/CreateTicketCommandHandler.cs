@@ -84,6 +84,7 @@ internal sealed class CreateTicketCommandHandler(
         ticket.Raise(new TicketCreatedDomainEvent(ticket.Id, userContext.UserId));
 
         context.Tickets.Add(ticket);
+        context.TicketHistories.Add(TicketHistoryEntries.Created(ticket.Id, userContext.UserId, createdAtUtc));
 
         await context.SaveChangesAsync(cancellationToken);
 

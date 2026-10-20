@@ -85,6 +85,7 @@ public sealed class DeleteTicketMessageCommandHandlerTests : BaseHandlerTest
         TicketMessage message = await context.TicketMessages.IgnoreQueryFilters().SingleAsync(m => m.Id == messageId);
         message.DeletedAtUtc.ShouldNotBeNull();
         message.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketMessageDeletedDomainEvent);
+        (await context.TicketHistories.SingleAsync(h => h.TicketId == message.TicketId)).Action.ShouldBe(TicketHistoryAction.MessageRemoved);
     }
 
     [Fact]

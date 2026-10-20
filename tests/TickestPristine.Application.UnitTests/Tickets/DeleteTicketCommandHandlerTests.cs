@@ -159,6 +159,7 @@ public sealed class DeleteTicketCommandHandlerTests : BaseHandlerTest
         Ticket ticket = await context.Tickets.IgnoreQueryFilters().SingleAsync(t => t.Id == ticketId);
         ticket.DeletedAtUtc.ShouldNotBeNull();
         ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketDeletedDomainEvent);
+        (await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id)).Action.ShouldBe(TicketHistoryAction.Deleted);
     }
 
     [Fact]

@@ -87,6 +87,7 @@ public sealed class DeleteTicketAttachmentCommandHandlerTests : BaseHandlerTest
             .SingleAsync(a => a.Id == attachmentId);
         attachment.DeletedAtUtc.ShouldNotBeNull();
         attachment.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketAttachmentDeletedDomainEvent);
+        (await context.TicketHistories.SingleAsync(h => h.TicketId == attachment.TicketId)).Action.ShouldBe(TicketHistoryAction.AttachmentRemoved);
     }
 
     private static async Task<Guid> SeedAttachmentAsync(TestDbContext context)

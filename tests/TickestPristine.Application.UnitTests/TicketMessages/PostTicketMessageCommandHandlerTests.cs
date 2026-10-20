@@ -88,6 +88,7 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
         message.AuthorUserId.ShouldBe(CreatorId);
         message.Content.ShouldBe("Hello there");
         message.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketMessagePostedDomainEvent);
+        (await context.TicketHistories.SingleAsync(h => h.TicketId == message.TicketId)).Action.ShouldBe(TicketHistoryAction.MessageAdded);
     }
 
     [Fact]

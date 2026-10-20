@@ -78,6 +78,7 @@ public sealed class EditTicketMessageCommandHandlerTests : BaseHandlerTest
         message.Content.ShouldBe("Updated content");
         message.EditedAtUtc.ShouldNotBeNull();
         message.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketMessageEditedDomainEvent);
+        (await context.TicketHistories.SingleAsync(h => h.TicketId == message.TicketId)).Action.ShouldBe(TicketHistoryAction.MessageEdited);
     }
 
     private static async Task<Guid> SeedMessageAsync(TestDbContext context)

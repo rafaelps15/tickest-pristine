@@ -64,6 +64,13 @@ internal sealed class UpdateTicketCommandHandler(
         if (previousStatus != command.Status)
         {
             ticket.Raise(new TicketStatusChangedDomainEvent(ticket.Id, previousStatus, command.Status, userContext.UserId));
+
+            context.TicketHistories.Add(TicketHistoryEntries.StatusChanged(
+                ticket.Id,
+                userContext.UserId,
+                previousStatus,
+                command.Status,
+                dateTimeProvider.UtcNow));
         }
 
         await context.SaveChangesAsync(cancellationToken);

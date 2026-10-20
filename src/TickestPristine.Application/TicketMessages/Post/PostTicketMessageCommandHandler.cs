@@ -42,6 +42,13 @@ internal sealed class PostTicketMessageCommandHandler(
 
         context.TicketMessages.Add(message);
 
+        context.TicketHistories.Add(TicketHistoryEntries.Create(
+            message.TicketId,
+            message.AuthorUserId,
+            TicketHistoryAction.MessageAdded,
+            TicketHistoryDescriptions.MessagePosted,
+            dateTimeProvider.UtcNow));
+
         await context.SaveChangesAsync(cancellationToken);
 
         return message.Id;

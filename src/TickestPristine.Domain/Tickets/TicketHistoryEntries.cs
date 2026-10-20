@@ -1,8 +1,8 @@
 namespace TickestPristine.Domain.Tickets;
 
 /// <summary>
-/// Monta os registros do histórico de chamados num lugar só: os handlers de evento de domínio gravam com a data atual
-/// e os dados de exemplo, com datas no passado.
+/// Monta os registros do histórico de chamados num lugar só: os handlers dos commands gravam com a data atual, no mesmo
+/// SaveChanges da mudança do chamado, e os dados de exemplo, com datas no passado.
 /// </summary>
 public static class TicketHistoryEntries
 {

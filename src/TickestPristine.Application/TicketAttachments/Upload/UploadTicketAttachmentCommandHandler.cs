@@ -53,14 +53,20 @@ internal sealed class UploadTicketAttachmentCommandHandler(
 
         context.TicketAttachments.Add(attachment);
 
+        context.TicketHistories.Add(TicketHistoryEntries.Create(
+            attachment.TicketId,
+            attachment.UploadedByUserId,
+            TicketHistoryAction.AttachmentAdded,
+            TicketHistoryDescriptions.AttachmentAdded(attachment.FileName),
+            dateTimeProvider.UtcNow));
+
         try
         {
             await context.SaveChangesAsync(cancellationToken);
         }
         catch
         {
-            // Sem a linha no banco, o arquivo ficaria órfão no disco. Falhas dos handlers de evento não chegam aqui:
-            // o dispatcher as registra sem propagar, porque nesse ponto o anexo já foi salvo.
+            // Sem a linha no banco, o arquivo ficaria órfão no disco.
             await fileStorage.DeleteAsync(storageKey, CancellationToken.None);
             throw;
         }

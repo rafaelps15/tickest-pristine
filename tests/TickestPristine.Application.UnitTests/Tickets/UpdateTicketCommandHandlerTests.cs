@@ -151,6 +151,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         ticket.Status.ShouldBe(TicketStatus.InProgress);
         ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketUpdatedDomainEvent);
         ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketStatusChangedDomainEvent);
+        (await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id)).Action.ShouldBe(TicketHistoryAction.StatusChanged);
     }
 
     [Fact]
