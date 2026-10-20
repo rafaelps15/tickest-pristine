@@ -1,6 +1,8 @@
+using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Authorization;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -9,6 +11,7 @@ namespace TickestPristine.Application.Users.Activate;
 
 internal sealed class ActivateUserCommandHandler(
     IApplicationDbContext context,
+    IUserContext userContext,
     IPermissionProvider permissionProvider)
     : ICommandHandler<ActivateUserCommand>
 {
@@ -24,6 +27,18 @@ internal sealed class ActivateUserCommandHandler(
         if (user.IsActive)
         {
             return Result.Failure(UserErrors.AlreadyActive);
+        }
+
+        Result privilegeCheck = await PrivilegeEscalationGuard.EnsureCallerCanManageUserAsync(
+            context,
+            permissionProvider,
+            userContext.UserId,
+            user.Id,
+            cancellationToken);
+
+        if (privilegeCheck.IsFailure)
+        {
+            return privilegeCheck;
         }
 
         user.IsActive = true;

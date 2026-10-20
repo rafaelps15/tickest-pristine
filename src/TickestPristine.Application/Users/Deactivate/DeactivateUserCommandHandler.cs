@@ -35,6 +35,18 @@ internal sealed class DeactivateUserCommandHandler(
             return Result.Failure(UserErrors.AlreadyDeactivated);
         }
 
+        Result privilegeCheck = await PrivilegeEscalationGuard.EnsureCallerCanManageUserAsync(
+            context,
+            permissionProvider,
+            userContext.UserId,
+            user.Id,
+            cancellationToken);
+
+        if (privilegeCheck.IsFailure)
+        {
+            return privilegeCheck;
+        }
+
         Result administratorCheck = await AdministratorGuard.EnsureNotLastAdministratorAsync(
             context,
             user.Id,

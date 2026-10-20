@@ -895,6 +895,35 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
+    public async Task Deactivate_Should_ReturnForbidden_WhenTargetHasAdministrativePermissionsCallerLacks()
+    {
+        // Arrange: quem chama só pode desativar colaboradores; o alvo também gerencia funções. Roles de teste, e não a
+        // de Administrador, para não deixar outro administrador no banco compartilhado entre os testes.
+        Authenticate((await LoginAsync(AdminEmail, AdminPassword)).AccessToken);
+        string deactivatorRole = await CreateRoleWithPermissionsAsync(PermissionCodes.Users.Deactivate);
+        string rolesManagerRole = await CreateRoleWithPermissionsAsync(PermissionCodes.Roles.Manage);
+
+        string callerEmail = UniqueEmail();
+        Guid callerId = await RegisterUserAsync(callerEmail);
+        (await HttpClient.PutAsJsonAsync($"users/{callerId}/roles", new { roleNames = new[] { deactivatorRole } }))
+            .EnsureSuccessStatusCode();
+
+        Guid targetId = await RegisterUserAsync(UniqueEmail());
+        (await HttpClient.PutAsJsonAsync($"users/{targetId}/roles", new { roleNames = new[] { rolesManagerRole } }))
+            .EnsureSuccessStatusCode();
+
+        Authenticate((await LoginAsync(callerEmail)).AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsync($"users/{targetId}/deactivate", null);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.CannotManagePrivilegedUser");
+    }
+
+    [Fact]
     public async Task Deactivate_Should_ReturnForbidden_WhenCallerLacksDeactivatePermission()
     {
         // Arrange

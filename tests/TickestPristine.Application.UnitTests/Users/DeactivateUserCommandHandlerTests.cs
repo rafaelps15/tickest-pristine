@@ -146,6 +146,69 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         context.Entry(await context.Roles.SingleAsync(r => r.Name == administratorRole.Name)).Property<int>("Version").CurrentValue.ShouldBe(1);
     }
 
+    [Fact]
+    public async Task Handle_Should_ReturnCannotManagePrivilegedUser_WhenUserHasAdministrativePermissionCallerLacks()
+    {
+        // Arrange: quem chama só pode desativar; o alvo também gerencia funções
+        await using TestDbContext context = CreateDbContext();
+        Guid userId = await SeedUserAsync(context, isActive: true);
+        await GrantPermissionAsync(context, userId, PermissionCodes.Roles.Manage);
+
+        var callerId = Guid.NewGuid();
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.GetForUserIdAsync(callerId, Arg.Any<CancellationToken>())
+            .Returns([PermissionCodes.Users.Deactivate]);
+        var handler = new DeactivateUserCommandHandler(
+            context,
+            CallerContext(callerId),
+            permissionProvider,
+            Substitute.For<IDateTimeProvider>());
+
+        // Act
+        Result result = await handler.Handle(new DeactivateUserCommand(userId), CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.CannotManagePrivilegedUser([Permission.GetDisplayName(PermissionCodes.Roles.Manage)]));
+        (await context.Users.SingleAsync(u => u.Id == userId)).IsActive.ShouldBeTrue();
+        await permissionProvider.DidNotReceive().InvalidateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Should_DeactivateUser_WhenCallerHasAllAdministrativePermissionsOfUser()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid userId = await SeedUserAsync(context, isActive: true);
+        await GrantPermissionAsync(context, userId, PermissionCodes.Users.Deactivate);
+
+        var callerId = Guid.NewGuid();
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.GetForUserIdAsync(callerId, Arg.Any<CancellationToken>())
+            .Returns([PermissionCodes.Users.Deactivate]);
+        var handler = new DeactivateUserCommandHandler(
+            context,
+            CallerContext(callerId),
+            permissionProvider,
+            Substitute.For<IDateTimeProvider>());
+
+        // Act
+        Result result = await handler.Handle(new DeactivateUserCommand(userId), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        (await context.Users.SingleAsync(u => u.Id == userId)).IsActive.ShouldBeFalse();
+    }
+
+    private static async Task GrantPermissionAsync(TestDbContext context, Guid userId, string permissionCode)
+    {
+        string roleName = $"Role-{Guid.NewGuid():N}";
+        context.Roles.Add(CreateRole(roleName));
+        context.RolePermissions.Add(new RolePermission { RoleName = roleName, PermissionCode = permissionCode });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = userId, RoleName = roleName });
+        await context.SaveChangesAsync();
+    }
+
     private static IUserContext CallerContext(Guid? callerId = null)
     {
         IUserContext userContext = Substitute.For<IUserContext>();

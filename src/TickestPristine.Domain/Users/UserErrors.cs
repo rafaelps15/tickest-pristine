@@ -12,6 +12,10 @@ public static class UserErrors
         "Users.Unauthorized",
         "Você não tem permissão para executar esta ação.");
 
+    public static Error CannotManagePrivilegedUser(IEnumerable<string> permissionNames) => Error.Forbidden(
+        "Users.CannotManagePrivilegedUser",
+        $"Você não pode desativar nem reativar quem tem permissões administrativas que você não possui: {string.Join(", ", permissionNames)}");
+
     public static readonly Error NotFoundByEmail = Error.NotFound(
         "Users.NotFoundByEmail",
         "Usuário com o e-mail informado não foi encontrado");
