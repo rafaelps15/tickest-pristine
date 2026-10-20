@@ -1,12 +1,12 @@
 # Modelos de teste
 
-Stack: xUnit + Shouldly + NSubstitute (unitários), FluentValidation.TestHelper (validators), WebApplicationFactory + Testcontainers (integração). Todo caso de uso novo recebe os três.
+Stack: xUnit + Shouldly + NSubstitute (unitários), FluentValidation.TestHelper (validators), WebApplicationFactory + Testcontainers (integração). Todo caso de uso novo ganha os três.
 
-## Testes unitários do handler
+## Testes unitários de handler
 
-`tests/Application.UnitTests/{Feature}/{UseCase}{Command|Query}HandlerTests.cs`. Herde de `BaseHandlerTest` — ele fornece `CreateDbContext()` (`TestDbContext` em memória, que implementa `IApplicationDbContext`) e `CreateCache()` (`HybridCache` real). Faça mock só de interfaces (`IUserContext`, `IDateTimeProvider`) com o NSubstitute.
+`tests/Application.UnitTests/{Feature}/{UseCase}{Command|Query}HandlerTests.cs`. Herde `BaseHandlerTest` — ele fornece `CreateDbContext()` (um `TestDbContext` em memória que implementa `IApplicationDbContext`) e `CreateCache()` (um `HybridCache` de verdade). Use mocks do NSubstitute só para interfaces (`IUserContext`, `IDateTimeProvider`).
 
-Cubra: cada caminho de falha (um teste por cláusula de guarda) e o caminho feliz, incluindo o estado gravado e os eventos de domínio disparados.
+Cubra: cada caminho de falha (um teste por guard clause) e o caminho feliz, incluindo o estado salvo e os eventos de domínio disparados.
 
 ```csharp
 using Application.Abstractions.Authentication;
@@ -83,7 +83,7 @@ Convenções:
 - Comentários `// Arrange` / `// Act` / `// Assert` em todo teste.
 - Confira as falhas comparando o erro exato: `result.Error.ShouldBe(TodoItemErrors.NotFound(id))`.
 - O `GlobalUsings.cs` já importa `Xunit`, `NSubstitute`, `Shouldly` e `SharedKernel` — não repita esses usings.
-- Se a entidade ganhar propriedades novas, o `TestDbContext` as pega automaticamente; só mexa nele ao adicionar um `DbSet` inteiro novo.
+- Se a entidade ganhar propriedades novas, o `TestDbContext` as reconhece sozinho; só mexa nele ao acrescentar um `DbSet` inteiro novo.
 
 ## Testes de validator
 
@@ -110,7 +110,7 @@ Cubra a falha de cada regra, mais um command totalmente válido (`ShouldNotHaveA
 
 ## Testes de integração
 
-`tests/IntegrationTests/{Feature}/{Feature}Tests.cs` (amplie o arquivo existente, se houver). Herde de `BaseIntegrationTest(factory)` — ele roda a API real contra um Postgres do Testcontainers e fornece `HttpClient`, `RegisterAndLoginAsync()` e `Authenticate(token)`. Os testes passam por HTTP real e nunca chamam os handlers direto.
+`tests/IntegrationTests/{Feature}/{Feature}Tests.cs` (amplie o arquivo existente, se houver). Herde `BaseIntegrationTest(factory)` — ele roda a API de verdade contra um Postgres do Testcontainers e fornece `HttpClient`, `RegisterAndLoginAsync()` e `Authenticate(token)`. Os testes passam por HTTP de verdade e nunca chamam os handlers diretamente.
 
 ```csharp
 [Fact]
@@ -139,7 +139,7 @@ public async Task ArchiveTodo_Should_MarkTodoAsArchived()
 }
 ```
 
-Cobertura mínima por endpoint: um teste sem autorização (sem token → 401) se for uma família de rotas nova, um teste do caminho feliz conferindo o estado observável por um GET em seguida, e um teste de tradução de falha (ex.: id desconhecido → 404) quando o handler tem caminhos de falha.
+Cobertura mínima por endpoint: um teste sem autorização (sem token → 401) se for uma família de rotas nova, um teste do caminho feliz conferindo o estado observável por um GET em seguida, e um teste da conversão de falha (ex.: id desconhecido → 404) quando o handler tiver caminhos de falha.
 
 ## Execução
 

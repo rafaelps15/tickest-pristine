@@ -1,6 +1,6 @@
 # Modelos de endpoint
 
-Um arquivo por caso de uso em `src/Web.Api/Endpoints/{Feature}/{UseCase}.cs`. Os endpoints implementam `IEndpoint` e são descobertos automaticamente por `AddEndpoints`/`MapEndpoints` — não é preciso registrar nada.
+Um arquivo por caso de uso em `src/Web.Api/Endpoints/{Feature}/{UseCase}.cs`. Os endpoints implementam `IEndpoint` e são descobertos automaticamente por `AddEndpoints`/`MapEndpoints` — não é preciso registrar.
 
 ## Command com corpo de resposta (POST → 200 + valor)
 
@@ -116,8 +116,8 @@ internal sealed class GetOverdue : IEndpoint
 
 ## Regras
 
-- Rotas em minúsculas, no plural e sem barra no início: `todos`, `todos/{id:guid}`, `users/{userId:guid}/todos`. Restrições de rota (`:guid`) em todos os parâmetros tipados.
+- Rotas em minúsculas, no plural, sem barra inicial: `todos`, `todos/{id:guid}`, `users/{userId:guid}/todos`. Restrições de rota (`:guid`) em todos os parâmetros tipados.
 - A classe aninhada `Request` só existe quando há corpo JSON; ela mapeia 1:1 para o command dentro da lambda (valores de enum chegam como `int` e são convertidos).
-- Resolva a interface do handler (`ICommandHandler<...>` / `IQueryHandler<...>`) direto como parâmetro da lambda — a instância já decorada é a que é injetada.
-- Termine sempre com `.WithTags(Tags.{Feature})` e `.RequireAuthorization()` (ou `.HasPermission(Permissions.X)` quando existir uma constante de permissão). Acrescente a constante da feature em `Tags.cs` se ela for nova.
-- Falhas nunca ganham respostas montadas à mão — o `CustomResults.Problem` traduz o `Error` para um ProblemDetails (RFC 7807) com o status certo.
+- Resolva a interface do handler (`ICommandHandler<...>` / `IQueryHandler<...>`) direto como parâmetro da lambda — é injetada a instância já com os decorators.
+- Termine sempre com `.WithTags(Tags.{Feature})` e `.RequireAuthorization()` (ou `.HasPermission(Permissions.X)` quando existir uma constante de permissão). Acrescente a constante da feature em `Tags.cs` se for nova.
+- Falhas nunca ganham respostas montadas à mão — o `CustomResults.Problem` converte o `Error` em ProblemDetails (RFC 7807) com o status certo.

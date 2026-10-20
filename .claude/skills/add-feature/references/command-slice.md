@@ -1,10 +1,10 @@
 # Modelos de slice de command
 
-Os arquivos ficam em `src/Application/{Feature}/{UseCase}/`. Troque `{Feature}` (no plural, ex.: `Todos`), `{Entity}` (ex.: `TodoItem`) e os nomes do caso de uso em todo o código.
+Os arquivos ficam em `src/Application/{Feature}/{UseCase}/`. Troque `{Feature}` (no plural, ex.: `Todos`), `{Entity}` (ex.: `TodoItem`) e os nomes do caso de uso em todo o texto.
 
 ## Command
 
-Record posicional quando há poucos parâmetros:
+Record posicional para poucos parâmetros:
 
 ```csharp
 using Application.Abstractions.Messaging;
@@ -14,7 +14,7 @@ namespace Application.Todos.Archive;
 public sealed record ArchiveTodoCommand(Guid TodoItemId) : ICommand;
 ```
 
-Classe com setters quando há muitos parâmetros (como o `CreateTodoCommand`):
+Classe com setters quando há muitos parâmetros (igual ao `CreateTodoCommand`):
 
 ```csharp
 using Application.Abstractions.Messaging;
@@ -37,7 +37,7 @@ public sealed class CreateTodoCommand : ICommand<Guid>
 
 ## Validator
 
-Classe pública, na mesma pasta. É registrado automaticamente e executado pelo `ValidationDecorator` antes de o handler rodar.
+Classe pública, na mesma pasta. Registrado automaticamente e executado pelo `ValidationDecorator` antes de o handler rodar.
 
 ```csharp
 using FluentValidation;
@@ -58,7 +58,7 @@ public class CreateTodoCommandValidator : AbstractValidator<CreateTodoCommand>
 
 ## Handler
 
-`internal sealed`, construtor primário e `IApplicationDbContext` para acesso a dados. As cláusulas de guarda retornam `Result.Failure` com erros do Domain; o caminho feliz altera a entidade, dispara um evento de domínio, salva e retorna.
+`internal sealed`, construtor primário, `IApplicationDbContext` para acesso a dados. As guard clauses retornam `Result.Failure` com erros do Domain; o caminho feliz altera, dispara um evento de domínio, salva e retorna.
 
 ```csharp
 using Application.Abstractions.Authentication;
@@ -108,22 +108,22 @@ internal sealed class ArchiveTodoCommandHandler(
 Observações:
 - Dono do dado: filtre por `userContext.UserId` na consulta (preferível) ou compare explicitamente e retorne `Result.Failure(UserErrors.Unauthorized())`.
 - `IDateTimeProvider` (do `SharedKernel`) para datas e horas — nunca `DateTime.UtcNow` direto.
-- Se o command invalida dados de query em cache, injete o `HybridCache` e chame `cache.RemoveAsync({Feature}CacheKeys.X(...), cancellationToken)` depois de salvar.
-- Num command com retorno (`ICommand<Guid>`), retorne o valor direto — o `Result<T>` tem conversão implícita: `return todoItem.Id;`.
+- Se o command invalida dados de query em cache, injete `HybridCache` e chame `cache.RemoveAsync({Feature}CacheKeys.X(...), cancellationToken)` depois de salvar.
+- Para um command com retorno (`ICommand<Guid>`), retorne o valor direto — `Result<T>` tem conversão implícita: `return todoItem.Id;`.
 
 ## Acréscimos no Domain (se necessário)
 
-Método de fábrica de erro na classe `{Entity}Errors` existente, em `src/Domain/{Feature}/`:
+Método de fábrica do erro na classe `{Entity}Errors` existente, em `src/Domain/{Feature}/`:
 
 ```csharp
 public static Error AlreadyArchived(Guid todoItemId) => Error.Problem(
     "TodoItems.AlreadyArchived",
-    $"A tarefa com o Id = '{todoItemId}' já está arquivada.");
+    $"The todo item with Id = '{todoItemId}' is already archived.");
 ```
 
 Tipo de erro → status HTTP (pelo `CustomResults.Problem`): `NotFound` → 404, `Conflict` → 409, `Problem`/`Validation` → 400, `Failure` → 500.
 
-Evento de domínio, um arquivo para cada um em `src/Domain/{Feature}/`:
+Evento de domínio, um arquivo cada em `src/Domain/{Feature}/`:
 
 ```csharp
 using SharedKernel;
@@ -145,7 +145,7 @@ internal sealed class TodoItemArchivedDomainEventHandler : IDomainEventHandler<T
 {
     public Task Handle(TodoItemArchivedDomainEvent domainEvent, CancellationToken cancellationToken)
     {
-        // Efeitos colaterais aqui (notificações, projeções, ...)
+        // Side effects here (notifications, projections, ...)
         return Task.CompletedTask;
     }
 }
