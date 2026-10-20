@@ -160,6 +160,24 @@ public sealed class TicketAttachmentsTests(IntegrationTestWebAppFactory factory)
         response.EnsureSuccessStatusCode();
         string downloaded = await response.Content.ReadAsStringAsync();
         downloaded.ShouldBe("hello from the attachment");
+        response.Headers.GetValues("X-Content-Type-Options").ShouldBe(["nosniff"]);
+    }
+
+    [Fact]
+    public async Task Upload_Should_ReturnBadRequest_WhenExtensionDoesNotMatchContentType()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        // Act: executável declarado como PDF
+        using MultipartFormDataContent content = BuildFileContent(fileName: "nota.pdf.exe");
+        HttpResponseMessage response = await HttpClient.PostAsync($"tickets/{ticketId}/attachments", content);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
     [Fact]
