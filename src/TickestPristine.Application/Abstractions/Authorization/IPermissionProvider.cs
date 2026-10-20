@@ -6,5 +6,7 @@ public interface IPermissionProvider
 
     Task<bool> HasPermissionAsync(Guid userId, string permission, CancellationToken cancellationToken = default);
 
+    Task<bool> IsActiveAsync(Guid userId, CancellationToken cancellationToken = default);
+
     Task InvalidateAsync(Guid userId, CancellationToken cancellationToken = default);
 }

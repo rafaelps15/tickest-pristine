@@ -827,6 +827,27 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
+    public async Task Deactivate_Should_BlockRoutesWithoutPermissionForIssuedAccessToken()
+    {
+        // Arrange: a rota de departamentos só exige autenticação, sem permissão própria
+        (Guid userId, AccessTokens userTokens) = await RegisterAndLoginAsync();
+        Authenticate(userTokens.AccessToken);
+        (await HttpClient.GetAsync("departments")).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+        (await HttpClient.PutAsync($"users/{userId}/deactivate", null)).EnsureSuccessStatusCode();
+
+        Authenticate(userTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("departments");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public async Task Deactivate_Should_ReturnBadRequest_WhenCallerDeactivatesOwnAccount()
     {
         // Arrange

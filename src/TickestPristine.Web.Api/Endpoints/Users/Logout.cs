@@ -24,6 +24,6 @@ internal sealed class Logout : IEndpoint
             return result.Match(Results.NoContent, CustomResults.Problem);
         })
         .WithTags(Tags.Users)
-        .RequireAuthorization();
+        .RequireAuthenticatedUser();
     }
 }

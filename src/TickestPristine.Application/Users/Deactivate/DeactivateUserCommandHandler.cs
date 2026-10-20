@@ -52,7 +52,8 @@ internal sealed class DeactivateUserCommandHandler(
 
         await context.SaveChangesAsync(cancellationToken);
 
-        // Sem as permissões em cache, o access token que o usuário ainda tem deixa de valer na próxima requisição.
+        // Sem as permissões e a situação do usuário em cache, o access token que ele ainda tem deixa de valer na próxima
+        // requisição (só users/me e logout continuam aceitando o usuário desativado).
         await permissionProvider.InvalidateAsync(user.Id, cancellationToken);
 
         return Result.Success();
