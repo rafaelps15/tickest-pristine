@@ -1,6 +1,7 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Domain.Users;
+using Microsoft.EntityFrameworkCore;
 
 namespace TickestPristine.Application.Users;
 
@@ -34,5 +35,17 @@ internal static class UserSessions
         context.RefreshTokens.Add(refreshToken);
 
         return new AccessTokensResponse(accessToken, generatedRefreshToken.Token);
+    }
+
+    /// <summary>
+    /// Marca para remoção todos os refresh tokens do usuário (todas as sessões abertas). Quem chama salva o contexto.
+    /// </summary>
+    public static async Task RevokeAllAsync(IApplicationDbContext context, Guid userId, CancellationToken cancellationToken)
+    {
+        List<RefreshToken> refreshTokens = await context.RefreshTokens
+            .Where(r => r.UserId == userId)
+            .ToListAsync(cancellationToken);
+
+        context.RefreshTokens.RemoveRange(refreshTokens);
     }
 }

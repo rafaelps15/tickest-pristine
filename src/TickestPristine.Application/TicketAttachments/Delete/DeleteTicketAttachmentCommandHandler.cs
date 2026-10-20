@@ -2,9 +2,8 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Domain.Roles;
+using TickestPristine.Application.Authorization;
 using TickestPristine.Domain.Tickets;
-using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -27,19 +26,16 @@ internal sealed class DeleteTicketAttachmentCommandHandler(
             return Result.Failure(TicketAttachmentErrors.NotFound(command.AttachmentId));
         }
 
-        bool isUploader = attachment.UploadedByUserId == userContext.UserId;
+        Result access = await TicketAccessGuard.EnsureOwnerOrManagerAsync(
+            permissionProvider,
+            userContext.UserId,
+            attachment.UploadedByUserId,
+            ownPermission: null,
+            cancellationToken);
 
-        if (!isUploader)
+        if (access.IsFailure)
         {
-            bool canManageTickets = await permissionProvider.HasPermissionAsync(
-                userContext.UserId,
-                PermissionCodes.Tickets.Manage,
-                cancellationToken);
-
-            if (!canManageTickets)
-            {
-                return Result.Failure(UserErrors.Unauthorized());
-            }
+            return access;
         }
 
         attachment.DeletedAtUtc = dateTimeProvider.UtcNow;

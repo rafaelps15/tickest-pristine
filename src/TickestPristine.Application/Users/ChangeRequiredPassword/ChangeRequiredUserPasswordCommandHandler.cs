@@ -54,11 +54,7 @@ internal sealed class ChangeRequiredUserPasswordCommandHandler(
         credential.Raise(new UserPasswordChangedDomainEvent(credential.UserId));
 
         // Como na troca de senha comum, nenhuma sessão aberta com a senha anterior continua valendo.
-        List<RefreshToken> refreshTokens = await context.RefreshTokens
-            .Where(r => r.UserId == user.Id)
-            .ToListAsync(cancellationToken);
-
-        context.RefreshTokens.RemoveRange(refreshTokens);
+        await UserSessions.RevokeAllAsync(context, user.Id, cancellationToken);
 
         AccessTokensResponse tokens = await UserSessions.StartAsync(context, tokenProvider, user, cancellationToken);
 

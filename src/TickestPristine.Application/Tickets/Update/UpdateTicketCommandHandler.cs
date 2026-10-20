@@ -2,9 +2,9 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Authorization;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Tickets;
-using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -26,14 +26,16 @@ internal sealed class UpdateTicketCommandHandler(
             return Result.Failure(TicketErrors.NotFound(command.TicketId));
         }
 
-        bool isOwner = ticket.CreatedByUserId == userContext.UserId;
-        string requiredPermission = isOwner ? PermissionCodes.Tickets.UpdateOwn : PermissionCodes.Tickets.Manage;
+        Result access = await TicketAccessGuard.EnsureOwnerOrManagerAsync(
+            permissionProvider,
+            userContext.UserId,
+            ticket.CreatedByUserId,
+            PermissionCodes.Tickets.UpdateOwn,
+            cancellationToken);
 
-        bool hasPermission = await permissionProvider.HasPermissionAsync(userContext.UserId, requiredPermission, cancellationToken);
-
-        if (!hasPermission)
+        if (access.IsFailure)
         {
-            return Result.Failure(UserErrors.Unauthorized());
+            return access;
         }
 
         if (!TicketStatusTransitions.IsActive(ticket.Status))

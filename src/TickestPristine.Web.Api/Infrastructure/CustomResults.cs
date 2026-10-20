@@ -11,34 +11,15 @@ public static class CustomResults
             throw new InvalidOperationException();
         }
 
+        // Falha inesperada não expõe o código nem a descrição internos.
+        bool isServerFailure = result.Error.Type == ErrorType.Failure;
+
         return Results.Problem(
-            title: GetTitle(result.Error),
-            detail: GetDetail(result.Error),
+            title: isServerFailure ? "Falha no servidor" : result.Error.Code,
+            detail: isServerFailure ? "Ocorreu um erro inesperado" : result.Error.Description,
             type: GetType(result.Error.Type),
             statusCode: GetStatusCode(result.Error.Type),
             extensions: GetErrors(result));
-
-        static string GetTitle(Error error) =>
-            error.Type switch
-            {
-                ErrorType.Validation => error.Code,
-                ErrorType.Problem => error.Code,
-                ErrorType.NotFound => error.Code,
-                ErrorType.Conflict => error.Code,
-                ErrorType.Forbidden => error.Code,
-                _ => "Falha no servidor"
-            };
-
-        static string GetDetail(Error error) =>
-            error.Type switch
-            {
-                ErrorType.Validation => error.Description,
-                ErrorType.Problem => error.Description,
-                ErrorType.NotFound => error.Description,
-                ErrorType.Conflict => error.Description,
-                ErrorType.Forbidden => error.Description,
-                _ => "Ocorreu um erro inesperado"
-            };
 
         static string GetType(ErrorType errorType) =>
             errorType switch

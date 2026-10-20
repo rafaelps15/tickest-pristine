@@ -14,21 +14,12 @@ internal sealed class TicketDeletedDomainEventHandler(
     public async Task Handle(TicketDeletedDomainEvent domainEvent, CancellationToken cancellationToken)
     {
         // O chamado já foi excluído; o histórico usa apenas os dados do evento e o usuário atual.
-        var history = new TicketHistory
-        {
-            Id = Guid.NewGuid(),
-            TicketId = domainEvent.TicketId,
-            ChangedByUserId = userContext.UserId,
-            Action = TicketHistoryAction.Deleted,
-            Description = TicketHistoryDescriptions.Deleted,
-            OldValue = null,
-            NewValue = null,
-            OccurredAtUtc = dateTimeProvider.UtcNow
-        };
-
-        history.Raise(new TicketHistoryRecordedDomainEvent(history.Id, history.TicketId));
-
-        context.TicketHistories.Add(history);
+        context.TicketHistories.Add(TicketHistoryEntries.Create(
+            domainEvent.TicketId,
+            userContext.UserId,
+            TicketHistoryAction.Deleted,
+            TicketHistoryDescriptions.Deleted,
+            dateTimeProvider.UtcNow));
 
         await context.SaveChangesAsync(cancellationToken);
     }

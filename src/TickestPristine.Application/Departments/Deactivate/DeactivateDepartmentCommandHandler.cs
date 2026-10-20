@@ -1,8 +1,8 @@
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Tickets;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
-using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -26,10 +26,11 @@ internal sealed class DeactivateDepartmentCommandHandler(IApplicationDbContext c
             return Result.Failure(DepartmentErrors.AlreadyDeactivated(department.Id));
         }
 
-        bool hasActiveTickets = await context.Tickets.AnyAsync(
-            t => (t.Status == TicketStatus.Open || t.Status == TicketStatus.InProgress) &&
-                 context.Sectors.Any(s => s.Id == t.SectorId && s.DepartmentId == department.Id),
-            cancellationToken);
+        bool hasActiveTickets = await context.Tickets
+            .WhereActive()
+            .AnyAsync(
+                t => context.Sectors.Any(s => s.Id == t.SectorId && s.DepartmentId == department.Id),
+                cancellationToken);
 
         if (hasActiveTickets)
         {

@@ -32,7 +32,7 @@ internal sealed class EditTicketMessageCommandHandler(
         message.Content = command.Content;
         message.EditedAtUtc = dateTimeProvider.UtcNow;
 
-        message.Raise(new TicketMessageEditedDomainEvent(message.Id, message.TicketId));
+        message.Raise(new TicketMessageEditedDomainEvent(message.Id, message.TicketId, message.AuthorUserId));
 
         await context.SaveChangesAsync(cancellationToken);
 

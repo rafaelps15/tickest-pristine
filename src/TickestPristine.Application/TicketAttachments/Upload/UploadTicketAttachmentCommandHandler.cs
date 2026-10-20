@@ -45,11 +45,25 @@ internal sealed class UploadTicketAttachmentCommandHandler(
             UploadedAtUtc = dateTimeProvider.UtcNow
         };
 
-        attachment.Raise(new TicketAttachmentUploadedDomainEvent(attachment.Id, attachment.TicketId));
+        attachment.Raise(new TicketAttachmentUploadedDomainEvent(
+            attachment.Id,
+            attachment.TicketId,
+            attachment.UploadedByUserId,
+            attachment.FileName));
 
         context.TicketAttachments.Add(attachment);
 
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            // Sem a linha no banco, o arquivo ficaria órfão no disco. Falhas dos handlers de evento não chegam aqui:
+            // o dispatcher as registra sem propagar, porque nesse ponto o anexo já foi salvo.
+            await fileStorage.DeleteAsync(storageKey, CancellationToken.None);
+            throw;
+        }
 
         return attachment.Id;
     }

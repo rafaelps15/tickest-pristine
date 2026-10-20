@@ -71,10 +71,14 @@ public static class DependencyInjection
         services.AddSingleton<SampleDataSeeder>();
         services.AddSingleton<DatabaseSeeder>();
 
+        // Uma fonte de conexões só, com um pool só, para o EF e para as leituras em SQL (IDbConnectionFactory).
+        services.AddSingleton(new NpgsqlDataSourceBuilder(connectionString).Build());
+        services.AddSingleton<IDbConnectionFactory, DbConnectionFactory>();
+
         // O seed roda junto com as migrations (Migrate/MigrateAsync e dotnet ef database update).
         services.AddDbContext<ApplicationDbContext>(
             (serviceProvider, options) => options
-                .UseNpgsql(connectionString, npgsqlOptions =>
+                .UseNpgsql(serviceProvider.GetRequiredService<NpgsqlDataSource>(), npgsqlOptions =>
                     npgsqlOptions.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schemas.Default))
                 .UseSnakeCaseNamingConvention()
                 .AddInterceptors(serviceProvider.GetRequiredService<AuditLoggingInterceptor>())
@@ -86,9 +90,6 @@ public static class DependencyInjection
         services.AddScoped<AuditLoggingInterceptor>();
 
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
-
-        services.AddSingleton(new NpgsqlDataSourceBuilder(connectionString).Build());
-        services.AddSingleton<IDbConnectionFactory, DbConnectionFactory>();
 
         return services;
     }

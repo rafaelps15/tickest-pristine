@@ -28,42 +28,48 @@ internal sealed class GetTicketsQueryHandler(IApplicationDbContext context, IDat
                 (search == null || t.Title.Contains(search)))
             .WhereSlaStatus(query.SlaStatus, nowUtc);
 
-        IQueryable<Ticket> ordered = query.Sort == TicketSortOrder.DueDate
-            ? filtered.OrderBy(t => t.DueAtUtc).ThenBy(t => t.Id)
-            : filtered.OrderByDescending(t => t.CreatedAtUtc).ThenByDescending(t => t.Id);
+        // O solicitante é obrigatório (chave estrangeira), então o join não descarta chamados; nome e e-mail saem da
+        // mesma linha, em vez de uma subconsulta para cada um.
+        var withRequester =
+            from t in filtered
+            join requester in context.Users on t.CreatedByUserId equals requester.Id
+            select new { Ticket = t, Requester = requester };
+
+        var ordered = query.Sort == TicketSortOrder.DueDate
+            ? withRequester.OrderBy(x => x.Ticket.DueAtUtc).ThenBy(x => x.Ticket.Id)
+            : withRequester.OrderByDescending(x => x.Ticket.CreatedAtUtc).ThenByDescending(x => x.Ticket.Id);
 
         PagedResponse<TicketSummaryResponse> tickets = await ordered
-            .Select(t => new TicketSummaryResponse
+            .Select(x => new TicketSummaryResponse
             {
-                Id = t.Id,
-                Title = t.Title,
-                Priority = t.Priority,
-                Status = t.Status,
-                RequesterId = t.CreatedByUserId,
-                RequesterName = context.Users
-                    .Where(u => u.Id == t.CreatedByUserId)
-                    .Select(u => u.FirstName + " " + u.LastName)
-                    .FirstOrDefault()!,
-                RequesterEmail = context.Users
-                    .Where(u => u.Id == t.CreatedByUserId)
-                    .Select(u => u.Email)
-                    .FirstOrDefault()!,
-                AssignedToUserId = t.AssignedToUserId,
+                Id = x.Ticket.Id,
+                Title = x.Ticket.Title,
+                Priority = x.Ticket.Priority,
+                Status = x.Ticket.Status,
+                RequesterId = x.Ticket.CreatedByUserId,
+                RequesterName = x.Requester.FirstName + " " + x.Requester.LastName,
+                RequesterEmail = x.Requester.Email,
+                AssignedToUserId = x.Ticket.AssignedToUserId,
                 AssignedToName = context.Users
-                    .Where(u => u.Id == t.AssignedToUserId)
+                    .Where(u => u.Id == x.Ticket.AssignedToUserId)
                     .Select(u => u.FirstName + " " + u.LastName)
                     .FirstOrDefault(),
-                SectorId = t.SectorId,
+                SectorId = x.Ticket.SectorId,
                 SectorName = context.Sectors
-                    .Where(s => s.Id == t.SectorId)
+                    .Where(s => s.Id == x.Ticket.SectorId)
                     .Select(s => s.Name)
                     .FirstOrDefault()!,
-                CreatedAtUtc = t.CreatedAtUtc,
-                DueAtUtc = t.DueAtUtc,
-                SlaWarningAtUtc = t.SlaWarningAtUtc,
-                ResolvedAtUtc = t.ResolvedAtUtc,
+                CreatedAtUtc = x.Ticket.CreatedAtUtc,
+                DueAtUtc = x.Ticket.DueAtUtc,
+                SlaWarningAtUtc = x.Ticket.SlaWarningAtUtc,
+                ResolvedAtUtc = x.Ticket.ResolvedAtUtc,
                 // Regra do Domain: o EF lê as colunas e calcula a situação na projeção final.
-                SlaStatus = TicketSla.GetStatus(t.Status, t.DueAtUtc, t.SlaWarningAtUtc, t.ResolvedAtUtc, nowUtc)
+                SlaStatus = TicketSla.GetStatus(
+                    x.Ticket.Status,
+                    x.Ticket.DueAtUtc,
+                    x.Ticket.SlaWarningAtUtc,
+                    x.Ticket.ResolvedAtUtc,
+                    nowUtc)
             })
             .ToPagedListAsync(query.Paging, cancellationToken);
 

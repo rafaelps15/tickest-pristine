@@ -2,7 +2,7 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Domain.Roles;
+using TickestPristine.Application.Authorization;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
@@ -22,17 +22,17 @@ internal sealed class CreateTicketCommandHandler(
     {
         Guid openedByUserId = command.RequesterId ?? userContext.UserId;
 
-        if (openedByUserId != userContext.UserId)
-        {
-            bool canManageTickets = await permissionProvider.HasPermissionAsync(
-                userContext.UserId,
-                PermissionCodes.Tickets.Manage,
-                cancellationToken);
+        // Abrir em nome de outra pessoa exige gerenciar chamados.
+        Result access = await TicketAccessGuard.EnsureOwnerOrManagerAsync(
+            permissionProvider,
+            userContext.UserId,
+            openedByUserId,
+            ownPermission: null,
+            cancellationToken);
 
-            if (!canManageTickets)
-            {
-                return Result.Failure<Guid>(UserErrors.Unauthorized());
-            }
+        if (access.IsFailure)
+        {
+            return Result.Failure<Guid>(access.Error);
         }
 
         // Solicitante e responsável informados são conferidos numa única consulta; o usuário logado já é válido.

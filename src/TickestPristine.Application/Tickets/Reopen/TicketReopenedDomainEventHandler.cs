@@ -11,21 +11,12 @@ internal sealed class TicketReopenedDomainEventHandler(
 {
     public async Task Handle(TicketReopenedDomainEvent domainEvent, CancellationToken cancellationToken)
     {
-        var history = new TicketHistory
-        {
-            Id = Guid.NewGuid(),
-            TicketId = domainEvent.TicketId,
-            ChangedByUserId = domainEvent.ReopenedByUserId,
-            Action = TicketHistoryAction.Reopened,
-            Description = TicketHistoryDescriptions.Reopened,
-            OldValue = null,
-            NewValue = null,
-            OccurredAtUtc = dateTimeProvider.UtcNow
-        };
-
-        history.Raise(new TicketHistoryRecordedDomainEvent(history.Id, history.TicketId));
-
-        context.TicketHistories.Add(history);
+        context.TicketHistories.Add(TicketHistoryEntries.Create(
+            domainEvent.TicketId,
+            domainEvent.ReopenedByUserId,
+            TicketHistoryAction.Reopened,
+            TicketHistoryDescriptions.Reopened,
+            dateTimeProvider.UtcNow));
 
         await context.SaveChangesAsync(cancellationToken);
     }

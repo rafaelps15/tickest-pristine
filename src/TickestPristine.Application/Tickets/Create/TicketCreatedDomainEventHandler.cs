@@ -21,11 +21,7 @@ internal sealed class TicketCreatedDomainEventHandler(
             return;
         }
 
-        TicketHistory history = TicketHistoryEntries.Created(ticket.Id, ticket.CreatedByUserId, dateTimeProvider.UtcNow);
-
-        history.Raise(new TicketHistoryRecordedDomainEvent(history.Id, history.TicketId));
-
-        context.TicketHistories.Add(history);
+        context.TicketHistories.Add(TicketHistoryEntries.Created(ticket.Id, ticket.CreatedByUserId, dateTimeProvider.UtcNow));
 
         await context.SaveChangesAsync(cancellationToken);
     }

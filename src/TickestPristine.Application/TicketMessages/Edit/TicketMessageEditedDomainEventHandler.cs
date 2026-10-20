@@ -1,7 +1,5 @@
-using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Domain.Tickets;
-using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.TicketMessages.Edit;
@@ -13,29 +11,12 @@ internal sealed class TicketMessageEditedDomainEventHandler(
 {
     public async Task Handle(TicketMessageEditedDomainEvent domainEvent, CancellationToken cancellationToken)
     {
-        TicketMessage? message = await context.TicketMessages
-            .SingleOrDefaultAsync(m => m.Id == domainEvent.MessageId, cancellationToken);
-
-        if (message is null)
-        {
-            return;
-        }
-
-        var history = new TicketHistory
-        {
-            Id = Guid.NewGuid(),
-            TicketId = domainEvent.TicketId,
-            ChangedByUserId = message.AuthorUserId,
-            Action = TicketHistoryAction.MessageEdited,
-            Description = TicketHistoryDescriptions.MessageEdited,
-            OldValue = null,
-            NewValue = null,
-            OccurredAtUtc = dateTimeProvider.UtcNow
-        };
-
-        history.Raise(new TicketHistoryRecordedDomainEvent(history.Id, history.TicketId));
-
-        context.TicketHistories.Add(history);
+        context.TicketHistories.Add(TicketHistoryEntries.Create(
+            domainEvent.TicketId,
+            domainEvent.AuthorUserId,
+            TicketHistoryAction.MessageEdited,
+            TicketHistoryDescriptions.MessageEdited,
+            dateTimeProvider.UtcNow));
 
         await context.SaveChangesAsync(cancellationToken);
     }

@@ -7,34 +7,51 @@ namespace TickestPristine.Domain.Tickets;
 public static class TicketHistoryEntries
 {
     /// <summary>
-    /// Abertura do chamado, que sempre nasce com o status Aberto.
+    /// Registro de qualquer ação do histórico; as ações com valores próprios têm os seus métodos abaixo.
     /// </summary>
-    public static TicketHistory Created(Guid ticketId, Guid createdByUserId, DateTime occurredAtUtc) => new()
+    public static TicketHistory Create(
+        Guid ticketId,
+        Guid? changedByUserId,
+        TicketHistoryAction action,
+        string description,
+        DateTime occurredAtUtc,
+        string? oldValue = null,
+        string? newValue = null) => new()
     {
         Id = Guid.NewGuid(),
         TicketId = ticketId,
-        ChangedByUserId = createdByUserId,
-        Action = TicketHistoryAction.Created,
-        Description = TicketHistoryDescriptions.Created,
-        OldValue = null,
-        NewValue = TicketStatus.Open.ToString(),
+        ChangedByUserId = changedByUserId,
+        Action = action,
+        Description = description,
+        OldValue = oldValue,
+        NewValue = newValue,
         OccurredAtUtc = occurredAtUtc
     };
+
+    /// <summary>
+    /// Abertura do chamado, que sempre nasce com o status Aberto.
+    /// </summary>
+    public static TicketHistory Created(Guid ticketId, Guid createdByUserId, DateTime occurredAtUtc) =>
+        Create(
+            ticketId,
+            createdByUserId,
+            TicketHistoryAction.Created,
+            TicketHistoryDescriptions.Created,
+            occurredAtUtc,
+            newValue: TicketStatus.Open.ToString());
 
     public static TicketHistory StatusChanged(
         Guid ticketId,
         Guid? changedByUserId,
         TicketStatus oldStatus,
         TicketStatus newStatus,
-        DateTime occurredAtUtc) => new()
-    {
-        Id = Guid.NewGuid(),
-        TicketId = ticketId,
-        ChangedByUserId = changedByUserId,
-        Action = TicketHistoryAction.StatusChanged,
-        Description = TicketHistoryDescriptions.StatusChanged(oldStatus, newStatus),
-        OldValue = oldStatus.ToString(),
-        NewValue = newStatus.ToString(),
-        OccurredAtUtc = occurredAtUtc
-    };
+        DateTime occurredAtUtc) =>
+        Create(
+            ticketId,
+            changedByUserId,
+            TicketHistoryAction.StatusChanged,
+            TicketHistoryDescriptions.StatusChanged(oldStatus, newStatus),
+            occurredAtUtc,
+            oldStatus.ToString(),
+            newStatus.ToString());
 }

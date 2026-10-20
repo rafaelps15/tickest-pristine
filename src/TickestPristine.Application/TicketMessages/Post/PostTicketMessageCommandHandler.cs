@@ -38,7 +38,7 @@ internal sealed class PostTicketMessageCommandHandler(
             CreatedAtUtc = dateTimeProvider.UtcNow
         };
 
-        message.Raise(new TicketMessagePostedDomainEvent(message.Id, message.TicketId));
+        message.Raise(new TicketMessagePostedDomainEvent(message.Id, message.TicketId, message.AuthorUserId));
 
         context.TicketMessages.Add(message);
 

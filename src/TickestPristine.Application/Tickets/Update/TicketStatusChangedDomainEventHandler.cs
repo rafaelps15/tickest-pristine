@@ -11,16 +11,12 @@ internal sealed class TicketStatusChangedDomainEventHandler(
 {
     public async Task Handle(TicketStatusChangedDomainEvent domainEvent, CancellationToken cancellationToken)
     {
-        TicketHistory history = TicketHistoryEntries.StatusChanged(
+        context.TicketHistories.Add(TicketHistoryEntries.StatusChanged(
             domainEvent.TicketId,
             domainEvent.ChangedByUserId,
             domainEvent.OldStatus,
             domainEvent.NewStatus,
-            dateTimeProvider.UtcNow);
-
-        history.Raise(new TicketHistoryRecordedDomainEvent(history.Id, history.TicketId));
-
-        context.TicketHistories.Add(history);
+            dateTimeProvider.UtcNow));
 
         await context.SaveChangesAsync(cancellationToken);
     }

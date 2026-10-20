@@ -34,11 +34,7 @@ internal sealed class ChangeUserPasswordCommandHandler(
         credential.Raise(new UserPasswordChangedDomainEvent(credential.UserId));
 
         // Revoga todas as sessões ativas do usuário.
-        List<RefreshToken> refreshTokens = await context.RefreshTokens
-            .Where(r => r.UserId == userContext.UserId)
-            .ToListAsync(cancellationToken);
-
-        context.RefreshTokens.RemoveRange(refreshTokens);
+        await UserSessions.RevokeAllAsync(context, credential.UserId, cancellationToken);
 
         await context.SaveChangesAsync(cancellationToken);
 

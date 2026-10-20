@@ -1,11 +1,11 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 
 namespace TickestPristine.Infrastructure.Authentication;
 
 internal static class ClaimsPrincipalExtensions
 {
     public static Guid GetUserId(this ClaimsPrincipal? principal) =>
-        principal.FindUserId() ?? throw new ApplicationException("User id is unavailable");
+        principal.FindUserId() ?? throw new UserContextUnavailableException();
 
     public static Guid? FindUserId(this ClaimsPrincipal? principal)
     {
