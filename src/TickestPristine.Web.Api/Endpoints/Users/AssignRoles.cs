@@ -8,10 +8,7 @@ namespace TickestPristine.Web.Api.Endpoints.Users;
 
 internal sealed class AssignRoles : IEndpoint
 {
-    public sealed class Request
-    {
-        public List<string> RoleNames { get; set; } = [];
-    }
+    public sealed record Request(List<string> RoleNames);
 
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
@@ -21,11 +18,7 @@ internal sealed class AssignRoles : IEndpoint
             ICommandHandler<AssignUserRolesCommand> handler,
             CancellationToken cancellationToken) =>
         {
-            var command = new AssignUserRolesCommand
-            {
-                UserId = userId,
-                RoleNames = request.RoleNames
-            };
+            var command = new AssignUserRolesCommand(userId, request.RoleNames);
 
             Result result = await handler.Handle(command, cancellationToken);
 

@@ -35,9 +35,9 @@ internal sealed class GetUsersQueryHandler(IApplicationDbContext context)
                 IsActive = u.IsActive,
                 CreatedAtUtc = u.CreatedAtUtc,
                 DeactivatedAtUtc = u.DeactivatedAtUtc,
-                Roles = context.Roles
-                    .Where(r => context.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleName == r.Name))
-                    .Select(r => new RoleSummaryResponse { Name = r.Name })
+                Roles = context.UserRoles
+                    .Where(ur => ur.UserId == u.Id)
+                    .Select(ur => new RoleSummaryResponse { Name = ur.RoleName })
                     .ToList()
             })
             .ToPagedListAsync(query.Paging, cancellationToken);

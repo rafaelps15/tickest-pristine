@@ -43,14 +43,7 @@ internal sealed class ChangeRequiredUserPasswordCommandHandler(
             return Result.Failure<AccessTokensResponse>(UserErrors.PasswordChangeNotRequired);
         }
 
-        credential.PasswordHash = passwordHasher.Hash(command.NewPassword);
-        credential.MustChangePassword = false;
-        credential.SecurityStamp = Guid.NewGuid();
-
-        credential.Raise(new UserPasswordChangedDomainEvent(credential.UserId));
-
-        // Como na troca de senha comum, nenhuma sessão aberta com a senha anterior continua valendo.
-        await UserSessions.RevokeAllAsync(context, user.Id, cancellationToken);
+        await UserPasswords.ReplaceAsync(context, passwordHasher, credential, command.NewPassword, cancellationToken);
 
         AccessTokensResponse tokens = await UserSessions.StartAsync(
             context,

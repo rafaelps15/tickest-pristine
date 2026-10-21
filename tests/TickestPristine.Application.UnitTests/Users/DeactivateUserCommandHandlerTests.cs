@@ -75,6 +75,30 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
+    public async Task Handle_Should_RevokeOnlyUserRefreshTokens_WhenUserIsDeactivated()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid userId = await SeedUserAsync(context, isActive: true);
+        var otherUserId = Guid.NewGuid();
+        context.RefreshTokens.Add(new RefreshToken { Id = Guid.NewGuid(), TokenHash = "hash-1", UserId = userId, ExpiresOnUtc = DateTime.UtcNow.AddDays(7) });
+        context.RefreshTokens.Add(new RefreshToken { Id = Guid.NewGuid(), TokenHash = "hash-2", UserId = userId, ExpiresOnUtc = DateTime.UtcNow.AddDays(7) });
+        context.RefreshTokens.Add(new RefreshToken { Id = Guid.NewGuid(), TokenHash = "other-hash", UserId = otherUserId, ExpiresOnUtc = DateTime.UtcNow.AddDays(7) });
+        await context.SaveChangesAsync();
+
+        var handler = new DeactivateUserCommandHandler(context, CallerContext(), Substitute.For<IPermissionProvider>(), Substitute.For<IDateTimeProvider>());
+
+        // Act
+        Result result = await handler.Handle(new DeactivateUserCommand(userId), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        List<RefreshToken> remaining = await context.RefreshTokens.ToListAsync();
+        remaining.ShouldHaveSingleItem().UserId.ShouldBe(otherUserId);
+    }
+
+    [Fact]
     public async Task Handle_Should_ReturnCannotDeactivateSelf_WhenCallerDeactivatesOwnAccount()
     {
         // Arrange

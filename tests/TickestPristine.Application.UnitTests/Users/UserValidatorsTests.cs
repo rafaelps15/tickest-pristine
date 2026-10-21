@@ -368,7 +368,7 @@ public sealed class UserValidatorsTests
     public void AssignUserRolesValidator_Should_HaveError_WhenUserIdIsEmpty()
     {
         // Arrange
-        var command = new AssignUserRolesCommand { UserId = Guid.Empty, RoleNames = ["Gestor"] };
+        var command = new AssignUserRolesCommand(Guid.Empty, ["Gestor"]);
 
         // Act
         TestValidationResult<AssignUserRolesCommand> result = _assignUserRolesValidator.TestValidate(command);
@@ -381,7 +381,7 @@ public sealed class UserValidatorsTests
     public void AssignUserRolesValidator_Should_HaveError_WhenRoleNamesIsNull()
     {
         // Arrange
-        var command = new AssignUserRolesCommand { UserId = Guid.NewGuid(), RoleNames = null! };
+        var command = new AssignUserRolesCommand(Guid.NewGuid(), null!);
 
         // Act
         TestValidationResult<AssignUserRolesCommand> result = _assignUserRolesValidator.TestValidate(command);
@@ -394,7 +394,7 @@ public sealed class UserValidatorsTests
     public void AssignUserRolesValidator_Should_NotHaveErrors_WhenCommandIsValid()
     {
         // Arrange
-        var command = new AssignUserRolesCommand { UserId = Guid.NewGuid(), RoleNames = ["Gestor"] };
+        var command = new AssignUserRolesCommand(Guid.NewGuid(), ["Gestor"]);
 
         // Act
         TestValidationResult<AssignUserRolesCommand> result = _assignUserRolesValidator.TestValidate(command);

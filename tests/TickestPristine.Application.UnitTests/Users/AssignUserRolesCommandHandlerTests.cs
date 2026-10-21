@@ -20,7 +20,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         permissionProvider.GetForUserIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns([]);
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
 
-        var command = new AssignUserRolesCommand { UserId = Guid.NewGuid(), RoleNames = ["Gestor"] };
+        var command = new AssignUserRolesCommand(Guid.NewGuid(), ["Gestor"]);
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -51,7 +51,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         permissionProvider.GetForUserIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns([]);
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
 
-        var command = new AssignUserRolesCommand { UserId = user.Id, RoleNames = ["Gestor"] };
+        var command = new AssignUserRolesCommand(user.Id, ["Gestor"]);
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -89,7 +89,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         permissionProvider.GetForUserIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns([]);
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
 
-        var command = new AssignUserRolesCommand { UserId = user.Id, RoleNames = [newRole.Name] };
+        var command = new AssignUserRolesCommand(user.Id, [newRole.Name]);
 
         using var requestCancellation = new CancellationTokenSource();
 
@@ -141,7 +141,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             .Returns([PermissionCodes.Users.Read, PermissionCodes.Users.AssignRoles]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
-        var command = new AssignUserRolesCommand { UserId = user.Id, RoleNames = [gestorRole.Name] };
+        var command = new AssignUserRolesCommand(user.Id, [gestorRole.Name]);
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -183,7 +183,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             .Returns([PermissionCodes.Users.AssignRoles]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
-        var command = new AssignUserRolesCommand { UserId = user.Id, RoleNames = [agentRole.Name] };
+        var command = new AssignUserRolesCommand(user.Id, [agentRole.Name]);
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -223,7 +223,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             .Returns([PermissionCodes.Users.AssignRoles]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
-        var command = new AssignUserRolesCommand { UserId = admin.Id, RoleNames = [] };
+        var command = new AssignUserRolesCommand(admin.Id, []);
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -272,7 +272,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             .Returns([PermissionCodes.Users.AssignRoles]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
-        var command = new AssignUserRolesCommand { UserId = user.Id, RoleNames = [gestorRole.Name, agentRole.Name] };
+        var command = new AssignUserRolesCommand(user.Id, [gestorRole.Name, agentRole.Name]);
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -308,7 +308,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             .Returns([.. Permission.All.Select(p => p.Code)]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
-        var command = new AssignUserRolesCommand { UserId = admin.Id, RoleNames = [] };
+        var command = new AssignUserRolesCommand(admin.Id, []);
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -357,7 +357,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             .Returns([.. Permission.All.Select(p => p.Code)]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
-        var command = new AssignUserRolesCommand { UserId = admin.Id, RoleNames = [] };
+        var command = new AssignUserRolesCommand(admin.Id, []);
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -392,7 +392,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             .Returns([.. Permission.All.Select(p => p.Code)]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
-        var command = new AssignUserRolesCommand { UserId = admin.Id, RoleNames = [] };
+        var command = new AssignUserRolesCommand(admin.Id, []);
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);

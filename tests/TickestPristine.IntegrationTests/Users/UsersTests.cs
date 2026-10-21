@@ -766,6 +766,31 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
+    public async Task AssignRoles_Should_ReturnBadRequestAndKeepRoles_WhenRoleNamesIsMissing()
+    {
+        // Arrange
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+
+        string roleName = await CreateTestRoleAsync();
+
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
+        (await HttpClient.PutAsJsonAsync($"users/{userId}/roles", new { roleNames = new[] { roleName } }))
+            .EnsureSuccessStatusCode();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"users/{userId}/roles", new { });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        PagedDto<UserSummaryDto>? users = await HttpClient.GetFromJsonAsync<PagedDto<UserSummaryDto>>($"users?search={email}");
+        UserSummaryDto user = users!.Items.Single(u => u.Id == userId);
+        user.Roles.ShouldHaveSingleItem().Name.ShouldBe(roleName);
+    }
+
+    [Fact]
     public async Task AssignRoles_Should_ReturnProblem_WhenRoleDoesNotExist()
     {
         // Arrange
@@ -881,6 +906,28 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
             "users/refresh-token",
             new { refreshToken = userTokens.RefreshToken });
         refreshResponse.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Deactivate_Should_KeepPreviousRefreshTokensInvalid_WhenUserIsReactivated()
+    {
+        // Arrange
+        (Guid userId, AccessTokens userTokens) = await RegisterAndLoginAsync();
+
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+        (await HttpClient.PutAsync($"users/{userId}/deactivate", null)).EnsureSuccessStatusCode();
+        (await HttpClient.PutAsync($"users/{userId}/activate", null)).EnsureSuccessStatusCode();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
+            "users/refresh-token",
+            new { refreshToken = userTokens.RefreshToken });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.InvalidRefreshToken");
     }
 
     [Fact]

@@ -11,16 +11,22 @@ namespace TickestPristine.Infrastructure.Authentication;
 
 internal sealed class TokenProvider(
     IOptions<JwtOptions> jwtOptions,
-    IClaimsProvider claimsProvider,
     IDateTimeProvider dateTimeProvider) : ITokenProvider
 {
-    public async Task<string> CreateAsync(User user, CancellationToken cancellationToken = default)
+    public Task<string> CreateAsync(User user, CancellationToken cancellationToken = default)
     {
         JwtOptions jwt = jwtOptions.Value;
 
         var credentials = new SigningCredentials(jwt.CreateSigningKey(), SecurityAlgorithms.HmacSha256);
 
-        Claim[] claims = await claimsProvider.GetClaimsAsync(user, cancellationToken);
+        // Só a identidade vai no token: as permissões são resolvidas no servidor a cada requisição e os clientes as
+        // leem em GET /users/me.
+        Claim[] claims =
+        [
+            new(TokenClaimTypes.UserId, user.Id.ToString()),
+            new(TokenClaimTypes.Email, user.Email),
+            new(TokenClaimTypes.Name, $"{user.FirstName} {user.LastName}")
+        ];
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {
@@ -33,9 +39,7 @@ internal sealed class TokenProvider(
 
         var handler = new JsonWebTokenHandler();
 
-        string token = handler.CreateToken(tokenDescriptor);
-
-        return token;
+        return Task.FromResult(handler.CreateToken(tokenDescriptor));
     }
 
     public GeneratedRefreshToken GenerateRefreshToken()

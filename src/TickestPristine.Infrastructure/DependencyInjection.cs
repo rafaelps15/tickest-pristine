@@ -138,7 +138,6 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddScoped<IUserContext, UserContext>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
-        services.AddScoped<IClaimsProvider, ClaimsProvider>();
         services.AddScoped<ITokenProvider, TokenProvider>();
 
         return services;

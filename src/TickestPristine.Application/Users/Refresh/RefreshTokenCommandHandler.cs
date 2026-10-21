@@ -34,13 +34,22 @@ internal sealed class RefreshTokenCommandHandler(
             return Result.Failure<AccessTokensResponse>(UserErrors.InvalidRefreshToken);
         }
 
-        Guid? currentSecurityStamp = await context.UserCredentials
-            .Where(c => c.UserId == refreshToken.UserId)
-            .Select(c => (Guid?)c.SecurityStamp)
-            .SingleOrDefaultAsync(cancellationToken);
+        // Usuário e security stamp atual numa consulta só.
+        var owner = await context.Users
+            .AsNoTracking()
+            .Where(u => u.Id == refreshToken.UserId)
+            .Select(u => new
+            {
+                User = u,
+                SecurityStamp = context.UserCredentials
+                    .Where(c => c.UserId == u.Id)
+                    .Select(c => (Guid?)c.SecurityStamp)
+                    .FirstOrDefault()
+            })
+            .SingleAsync(cancellationToken);
 
         // Sessão aberta antes da última troca de senha (ex.: um login com a senha antiga que terminou depois da troca).
-        if (currentSecurityStamp != refreshToken.SecurityStamp)
+        if (owner.SecurityStamp != refreshToken.SecurityStamp)
         {
             context.RefreshTokens.Remove(refreshToken);
 
@@ -49,9 +58,7 @@ internal sealed class RefreshTokenCommandHandler(
             return Result.Failure<AccessTokensResponse>(UserErrors.InvalidRefreshToken);
         }
 
-        User user = await context.Users
-            .AsNoTracking()
-            .SingleAsync(u => u.Id == refreshToken.UserId, cancellationToken);
+        User user = owner.User;
 
         if (!user.IsActive)
         {

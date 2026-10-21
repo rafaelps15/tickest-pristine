@@ -62,6 +62,9 @@ internal sealed class DeactivateUserCommandHandler(
 
         user.Raise(new UserDeactivatedDomainEvent(user.Id));
 
+        // Encerra as sessões abertas: sem isso, uma reativação faria os refresh tokens anteriores voltarem a valer.
+        await UserSessions.RevokeAllAsync(context, user.Id, cancellationToken);
+
         await context.SaveChangesAsync(cancellationToken);
 
         // Sem as permissões e a situação do usuário em cache, o access token que ele ainda tem deixa de valer na próxima
