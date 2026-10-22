@@ -43,10 +43,39 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         };
 
         // Act
-        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users/register", request);
+        HttpResponseMessage response = await PostRegisterAsAdminAsync(request);
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Register_Should_ReturnUnauthorized_WhenNoTokenProvided()
+    {
+        // Arrange
+        HttpClient.DefaultRequestHeaders.Authorization = null;
+        var request = new { email = UniqueEmail(), firstName = "Test", lastName = "User", password = "Password123!" };
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users/register", request);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Register_Should_ReturnForbidden_WhenCallerLacksUsersCreatePermission()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        var request = new { email = UniqueEmail(), firstName = "Test", lastName = "User", password = "Password123!" };
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users/register", request);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 
     [Fact]
@@ -399,7 +428,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         var request = new { email = email.ToUpperInvariant(), firstName = "Test", lastName = "User", password = "Password123!" };
 
         // Act
-        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users/register", request);
+        HttpResponseMessage response = await PostRegisterAsAdminAsync(request);
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);

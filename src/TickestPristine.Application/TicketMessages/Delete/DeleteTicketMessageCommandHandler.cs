@@ -52,7 +52,6 @@ internal sealed class DeleteTicketMessageCommandHandler(
             message.TicketId,
             userContext.UserId,
             TicketHistoryAction.MessageRemoved,
-            TicketHistoryDescriptions.MessageRemoved,
             nowUtc));
 
         await context.SaveChangesAsync(cancellationToken);

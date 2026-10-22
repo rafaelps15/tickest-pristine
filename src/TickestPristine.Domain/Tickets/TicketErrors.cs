@@ -19,4 +19,8 @@ public static class TicketErrors
     public static Error InvalidStatusTransition(TicketStatus from, TicketStatus to) => Error.Problem(
         "Tickets.InvalidStatusTransition",
         $"Não é possível alterar o status do chamado de '{TicketStatusNames.GetDisplayName(from)}' para '{TicketStatusNames.GetDisplayName(to)}'");
+
+    public static Error AssigneeCannotManageTickets(Guid userId) => Error.Problem(
+        "Tickets.AssigneeCannotManageTickets",
+        $"O usuário com o Id = '{userId}' não atende chamados e não pode ser o responsável");
 }

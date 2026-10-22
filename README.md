@@ -7,14 +7,16 @@ TickestPristine é um backend de sistema de chamados (helpdesk/ticketing) constr
 ## Funcionalidades Principais
 
 - Abertura, atualização, reabertura e exclusão (soft-delete) de chamados (tickets)
-- Máquina de estados do chamado (`Open → InProgress → Resolved → Closed`, com cancelamento)
-- Atribuição de chamados a responsáveis, organizados por departamento e setor
-- Autenticação via JWT com rotação de refresh tokens
-- Autorização por permissão atribuída diretamente a cada usuário (sem papéis fixos — flexível e auditável)
-- Usuário `AdminMaster` provisionado automaticamente no primeiro start, com todas as permissões
-- Gestão de usuários (registro, exclusão, consulta) com permissões mínimas concedidas por padrão
+- Máquina de estados do chamado (`Open → InProgress → Resolved → Closed`, com cancelamento); quem atende a fila fecha os chamados resolvidos (`POST /tickets/{id}/close`)
+- Atribuição de responsável na abertura e depois dela (`PUT /tickets/{id}/assignee`), sempre a um usuário ativo que atende chamados, com registro no histórico
+- Chamados organizados por departamento e setor, com mensagens, anexos, histórico e SLA de resolução por prioridade
+- Autenticação via JWT com rotação de refresh tokens, bloqueio temporário por senhas erradas e troca obrigatória da senha provisória
+- Autorização por permissões agrupadas em funções (roles) fixas — Administrador, Atendente e Colaborador —, com as permissões de Atendente e Colaborador editáveis pela API
+- Primeiro administrador criado automaticamente a partir da configuração `Admin` (com senha provisória), quando o banco não tem nenhum administrador ativo
+- Gestão de usuários (cadastro por quem tem `users:create`, consulta, edição de perfil, desativação e reativação, atribuição de funções); novos usuários recebem a função Colaborador
 - Catálogo de permissões consultável via API (`GET /permissions`)
 - Departamentos e setores como dados de apoio para categorização dos chamados
+- Log de auditoria das alterações (`GET /audit-logs/{entityName}/{entityId}`)
 
 ## Tecnologias Utilizadas
 

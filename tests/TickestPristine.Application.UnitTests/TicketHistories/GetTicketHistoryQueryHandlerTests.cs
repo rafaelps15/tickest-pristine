@@ -79,7 +79,9 @@ public sealed class GetTicketHistoryQueryHandlerTests : BaseHandlerTest
         result.IsSuccess.ShouldBeTrue();
         result.Value.Items.Count.ShouldBe(2);
         result.Value.Items[0].Action.ShouldBe(TicketHistoryAction.MessageAdded);
+        result.Value.Items[0].Description.ShouldBe("Nova mensagem adicionada ao chamado");
         result.Value.Items[1].Action.ShouldBe(TicketHistoryAction.Created);
+        result.Value.Items[1].Description.ShouldBe("Chamado criado");
     }
 
     [Fact]
@@ -129,7 +131,6 @@ public sealed class GetTicketHistoryQueryHandlerTests : BaseHandlerTest
             TicketId = ticket.Id,
             ChangedByUserId = CreatorId,
             Action = TicketHistoryAction.Created,
-            Description = "Chamado criado",
             OldValue = null,
             NewValue = null,
             OccurredAtUtc = DateTime.UtcNow
@@ -140,7 +141,6 @@ public sealed class GetTicketHistoryQueryHandlerTests : BaseHandlerTest
             TicketId = ticket.Id,
             ChangedByUserId = CreatorId,
             Action = TicketHistoryAction.MessageAdded,
-            Description = "Nova mensagem adicionada ao chamado",
             OldValue = null,
             NewValue = null,
             OccurredAtUtc = DateTime.UtcNow.AddMinutes(1)

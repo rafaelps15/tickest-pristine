@@ -60,8 +60,8 @@ internal sealed class UploadTicketAttachmentCommandHandler(
             attachment.TicketId,
             attachment.UploadedByUserId,
             TicketHistoryAction.AttachmentAdded,
-            TicketHistoryDescriptions.AttachmentAdded(attachment.FileName),
-            nowUtc));
+            nowUtc,
+            newValue: attachment.FileName));
 
         try
         {

@@ -44,7 +44,6 @@ internal sealed class EditTicketMessageCommandHandler(
             message.TicketId,
             message.AuthorUserId,
             TicketHistoryAction.MessageEdited,
-            TicketHistoryDescriptions.MessageEdited,
             nowUtc));
 
         await context.SaveChangesAsync(cancellationToken);

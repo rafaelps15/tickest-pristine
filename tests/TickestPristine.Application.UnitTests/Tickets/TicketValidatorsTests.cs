@@ -1,3 +1,5 @@
+using TickestPristine.Application.Tickets.Assign;
+using TickestPristine.Application.Tickets.Close;
 using TickestPristine.Application.Tickets.Create;
 using TickestPristine.Application.Tickets.Delete;
 using TickestPristine.Application.Tickets.Reopen;
@@ -13,6 +15,8 @@ public sealed class TicketValidatorsTests
     private readonly UpdateTicketCommandValidator _updateValidator = new();
     private readonly DeleteTicketCommandValidator _deleteValidator = new();
     private readonly ReopenTicketCommandValidator _reopenValidator = new();
+    private readonly CloseTicketCommandValidator _closeValidator = new();
+    private readonly AssignTicketCommandValidator _assignValidator = new();
 
     [Fact]
     public void CreateValidator_Should_HaveError_WhenTitleIsEmpty()
@@ -294,5 +298,45 @@ public sealed class TicketValidatorsTests
 
         // Assert
         result.ShouldHaveValidationErrorFor(c => c.Status);
+    }
+
+    [Fact]
+    public void CloseValidator_Should_HaveError_WhenTicketIdIsEmpty()
+    {
+        // Arrange
+        var command = new CloseTicketCommand(Guid.Empty);
+
+        // Act
+        TestValidationResult<CloseTicketCommand> result = _closeValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.TicketId);
+    }
+
+    [Fact]
+    public void AssignValidator_Should_HaveErrors_WhenIdsAreEmpty()
+    {
+        // Arrange
+        var command = new AssignTicketCommand(Guid.Empty, Guid.Empty);
+
+        // Act
+        TestValidationResult<AssignTicketCommand> result = _assignValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.TicketId);
+        result.ShouldHaveValidationErrorFor(c => c.AssignedToUserId);
+    }
+
+    [Fact]
+    public void AssignValidator_Should_NotHaveErrors_WhenCommandIsValid()
+    {
+        // Arrange
+        var command = new AssignTicketCommand(Guid.NewGuid(), Guid.NewGuid());
+
+        // Act
+        TestValidationResult<AssignTicketCommand> result = _assignValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
     }
 }

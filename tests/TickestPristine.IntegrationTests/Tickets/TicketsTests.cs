@@ -1051,6 +1051,152 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task Close_Should_ReturnNoContent_WhenTicketIsResolvedAndCallerHasManagePermission()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        await ResolveTicketAsync(ticketId);
+
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsync($"tickets/{ticketId}/close", null);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        TicketDetailDto? ticket = await HttpClient.GetFromJsonAsync<TicketDetailDto>($"tickets/{ticketId}");
+        ticket!.Status.ShouldBe(4); // Closed
+    }
+
+    [Fact]
+    public async Task Close_Should_ReturnBadRequest_WhenTicketIsNotResolved()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsync($"tickets/{ticketId}/close", null);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Close_Should_ReturnForbidden_WhenCallerLacksManagePermission()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        await ResolveTicketAsync(ticketId);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsync($"tickets/{ticketId}/close", null);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Assign_Should_SetAssigneeAndRecordHistory_WhenAssigneeManagesTickets()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+        Guid adminId = GetUserId(adminTokens);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}/assignee", new
+        {
+            assignedToUserId = adminId
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        TicketDetailDto? ticket = await HttpClient.GetFromJsonAsync<TicketDetailDto>($"tickets/{ticketId}");
+        ticket!.AssignedToUserId.ShouldBe(adminId);
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        TicketHistory history = context.TicketHistories
+            .Single(h => h.TicketId == ticketId && h.Action == TicketHistoryAction.Reassigned);
+        history.OldValue.ShouldBeNull();
+        history.NewValue.ShouldBe(adminId.ToString());
+    }
+
+    [Fact]
+    public async Task Assign_Should_ReturnBadRequest_WhenAssigneeDoesNotManageTickets()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (Guid requesterId, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}/assignee", new
+        {
+            assignedToUserId = requesterId
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Assign_Should_ReturnForbidden_WhenCallerLacksManagePermission()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (Guid requesterId, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}/assignee", new
+        {
+            assignedToUserId = requesterId
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    /// <summary>
+    /// Leva o chamado de Aberto a Resolvido pela API, com o token já configurado (dono ou quem gerencia chamados).
+    /// </summary>
+    private async Task ResolveTicketAsync(Guid ticketId)
+    {
+        HttpResponseMessage inProgressResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = "Looking into the printer",
+            status = 2 // InProgress
+        });
+        inProgressResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        HttpResponseMessage resolveResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = "Fixed the printer",
+            status = 3 // Resolved
+        });
+        resolveResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+    }
+
     private static readonly TimeZoneInfo BrasiliaTimeZone = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
 
     private static DateOnly BrasiliaToday() =>
@@ -1113,6 +1259,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         string Title,
         string Description,
         Guid OpenedByUserId,
+        Guid? AssignedToUserId,
         Guid SectorId,
         int Status,
         int SlaStatus);

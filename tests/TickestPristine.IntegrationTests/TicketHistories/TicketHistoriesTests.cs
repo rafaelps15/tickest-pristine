@@ -191,7 +191,10 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
         // Assert
         response.EnsureSuccessStatusCode();
         List<TicketHistoryDto>? history = (await response.Content.ReadFromJsonAsync<CursorPageDto<TicketHistoryDto>>())?.Items;
-        history!.ShouldContain(h => h.TicketId == ticketId && h.Action == 2 /* StatusChanged */);
+        history!.ShouldContain(h =>
+            h.TicketId == ticketId &&
+            h.Action == 2 /* StatusChanged */ &&
+            h.Description == "Status alterado de Aberto para Em andamento");
     }
 
     [Fact]
@@ -278,7 +281,9 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
         List<TicketHistoryDto> history = await GetHistoryAsync(ticketId);
 
         // Assert
-        history.ShouldContain(h => h.Action == (int)TicketHistoryAction.AttachmentAdded);
+        history.ShouldContain(h =>
+            h.Action == (int)TicketHistoryAction.AttachmentAdded &&
+            h.Description == "Anexo 'report.pdf' adicionado");
     }
 
     [Fact]

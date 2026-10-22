@@ -21,7 +21,6 @@ public sealed class TicketHistoryEntriesTests
         history.TicketId.ShouldBe(ticketId);
         history.ChangedByUserId.ShouldBe(creatorId);
         history.Action.ShouldBe(TicketHistoryAction.Created);
-        history.Description.ShouldBe(TicketHistoryDescriptions.Created);
         history.OldValue.ShouldBeNull();
         history.NewValue.ShouldBe(nameof(TicketStatus.Open));
         history.OccurredAtUtc.ShouldBe(OccurredAtUtc);
@@ -46,7 +45,6 @@ public sealed class TicketHistoryEntriesTests
         history.TicketId.ShouldBe(ticketId);
         history.ChangedByUserId.ShouldBe(agentId);
         history.Action.ShouldBe(TicketHistoryAction.StatusChanged);
-        history.Description.ShouldBe(TicketHistoryDescriptions.StatusChanged(TicketStatus.Open, TicketStatus.InProgress));
         history.OldValue.ShouldBe(nameof(TicketStatus.Open));
         history.NewValue.ShouldBe(nameof(TicketStatus.InProgress));
         history.OccurredAtUtc.ShouldBe(OccurredAtUtc);

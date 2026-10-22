@@ -15,7 +15,6 @@ public static class TicketHistoryEntries
         Guid ticketId,
         Guid? changedByUserId,
         TicketHistoryAction action,
-        string description,
         DateTime occurredAtUtc,
         string? oldValue = null,
         string? newValue = null) => new()
@@ -24,7 +23,6 @@ public static class TicketHistoryEntries
         TicketId = ticketId,
         ChangedByUserId = changedByUserId,
         Action = action,
-        Description = description,
         OldValue = oldValue,
         NewValue = newValue,
         OccurredAtUtc = occurredAtUtc
@@ -38,7 +36,6 @@ public static class TicketHistoryEntries
             ticketId,
             createdByUserId,
             TicketHistoryAction.Created,
-            TicketHistoryDescriptions.Created,
             occurredAtUtc,
             newValue: TicketStatus.Open.ToString());
 
@@ -52,8 +49,24 @@ public static class TicketHistoryEntries
             ticketId,
             changedByUserId,
             TicketHistoryAction.StatusChanged,
-            TicketHistoryDescriptions.StatusChanged(oldStatus, newStatus),
             occurredAtUtc,
             oldStatus.ToString(),
             newStatus.ToString());
+
+    /// <summary>
+    /// Troca de responsável: guarda os ids do anterior (nulo quando o chamado estava sem responsável) e do novo.
+    /// </summary>
+    public static TicketHistory Reassigned(
+        Guid ticketId,
+        Guid? changedByUserId,
+        Guid? oldAssignedToUserId,
+        Guid newAssignedToUserId,
+        DateTime occurredAtUtc) =>
+        Create(
+            ticketId,
+            changedByUserId,
+            TicketHistoryAction.Reassigned,
+            occurredAtUtc,
+            oldAssignedToUserId?.ToString(),
+            newAssignedToUserId.ToString());
 }

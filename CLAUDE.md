@@ -13,7 +13,7 @@ O TickestPristine é uma base pragmática de Clean Architecture para .NET 10 (do
 docker compose up -d
 
 # Roda a API
-dotnet run --project src/Web.Api
+dotnet run --project src/TickestPristine.Web.Api
 
 # Build / restore
 dotnet restore TickestPristine.slnx
@@ -24,23 +24,23 @@ dotnet build TickestPristine.slnx
 dotnet test TickestPristine.slnx
 
 # Roda um projeto de teste
-dotnet test tests/Application.UnitTests
-dotnet test tests/IntegrationTests
-dotnet test tests/ArchitectureTests
+dotnet test tests/TickestPristine.Application.UnitTests
+dotnet test tests/TickestPristine.IntegrationTests
+dotnet test tests/TickestPristine.ArchitectureTests
 
 # Roda um teste pelo nome (qualquer projeto)
 dotnet test --filter "FullyQualifiedName~CreateTodoCommandHandlerTests"
 ```
 
-O Seq (visualizador de logs estruturados) fica disponível em http://localhost:8081 depois do `docker compose up -d`.
+O Seq (visualizador de logs estruturados) fica disponível em http://localhost:8090 depois do `docker compose up -d`.
 
-Para usar .NET 8 ou .NET 9 em vez de .NET 10, veja as notas no `Directory.Build.props` (também é preciso atualizar o Dockerfile em `src/Web.Api`).
+Para usar .NET 8 ou .NET 9 em vez de .NET 10, veja as notas no `Directory.Build.props` (também é preciso atualizar o Dockerfile em `src/TickestPristine.Web.Api`).
 
 Avisos são tratados como erros (`TreatWarningsAsErrors`, `AnalysisMode=All`), então o `dotnet build` é uma verificação de qualidade de verdade, e não só uma compilação.
 
 ## Arquitetura
 
-Cinco projetos, com dependências sempre apontando para dentro. Isso é garantido por `tests/ArchitectureTests/Layers/LayerTests.cs` (via NetArchTest) — Domain e Application nunca podem referenciar Infrastructure ou Web.Api.
+Cinco projetos, com dependências sempre apontando para dentro. Isso é garantido por `tests/TickestPristine.ArchitectureTests/Layers/LayerTests.cs` (via NetArchTest) — Domain e Application nunca podem referenciar Infrastructure ou Web.Api.
 
 ```
 SharedKernel  <-- Domain <-- Application <-- Infrastructure
@@ -62,7 +62,7 @@ Cada caso de uso fica em `Application/{Aggregate}/{UseCase}/` como um slice inde
 
 O endpoint correspondente fica em `Web.Api/Endpoints/{Aggregate}/{Verb}.cs`, como uma `internal sealed class : IEndpoint` com um DTO `Request` aninhado. Ele mapeia a requisição para o command/query, chama o handler e converte o `Result` em HTTP com `result.Match(Results.Ok, CustomResults.Problem)`.
 
-Os testes seguem a mesma estrutura: `tests/Application.UnitTests/{Aggregate}/{UseCase}HandlerTests.cs` para os testes unitários dos handlers, mais os testes de validator, e `tests/IntegrationTests/{Aggregate}/{Aggregate}Tests.cs` para os testes de ponta a ponta por HTTP contra uma instância de PostgreSQL do Testcontainers.
+Os testes seguem a mesma estrutura: `tests/TickestPristine.Application.UnitTests/{Aggregate}/{UseCase}HandlerTests.cs` para os testes unitários dos handlers, mais os testes de validator, e `tests/TickestPristine.IntegrationTests/{Aggregate}/{Aggregate}Tests.cs` para os testes de ponta a ponta por HTTP contra uma instância de PostgreSQL do Testcontainers.
 
 ### Comportamentos transversais com decorators
 

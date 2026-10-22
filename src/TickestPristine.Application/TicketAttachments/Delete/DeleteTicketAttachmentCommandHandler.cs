@@ -52,7 +52,6 @@ internal sealed class DeleteTicketAttachmentCommandHandler(
             attachment.TicketId,
             userContext.UserId,
             TicketHistoryAction.AttachmentRemoved,
-            TicketHistoryDescriptions.AttachmentRemoved,
             nowUtc));
 
         await context.SaveChangesAsync(cancellationToken);

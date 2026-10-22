@@ -24,10 +24,9 @@ internal sealed class GetOwnTicketSummaryQueryHandler(IApplicationDbContext cont
                 Status = g.Key.Status,
                 Count = g.Count()
             })
-            .OrderBy(c => c.Priority)
-            .ThenBy(c => c.Status)
             .ToListAsync(cancellationToken);
 
-        return counts;
+        // Ordenado em memória: no banco os enums são texto e a ordem seria alfabética, não a de gravidade.
+        return counts.OrderBy(c => c.Priority).ThenBy(c => c.Status).ToList();
     }
 }

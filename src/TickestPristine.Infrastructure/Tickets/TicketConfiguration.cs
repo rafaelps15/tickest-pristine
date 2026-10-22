@@ -17,6 +17,11 @@ internal sealed class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 
         builder.Property(t => t.Description).HasMaxLength(500);
 
+        // Enums gravados pelo nome (ex.: "InProgress"), legíveis no banco; a API continua recebendo e devolvendo o número.
+        builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(20);
+
+        builder.Property(t => t.Priority).HasConversion<string>().HasMaxLength(20);
+
         builder.HasQueryFilter(t => t.DeletedAtUtc == null);
 
         // Token de concorrência sombra mapeado no xmin do PostgreSQL: de duas mudanças simultâneas no mesmo chamado

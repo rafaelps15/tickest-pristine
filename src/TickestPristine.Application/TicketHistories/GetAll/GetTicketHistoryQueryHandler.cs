@@ -39,7 +39,7 @@ internal sealed class GetTicketHistoryQueryHandler(
                 TicketId = h.TicketId,
                 ChangedByUserId = h.ChangedByUserId,
                 Action = h.Action,
-                Description = h.Description,
+                Description = TicketHistoryDescriptions.For(h.Action, h.OldValue, h.NewValue),
                 OldValue = h.OldValue,
                 NewValue = h.NewValue,
                 OccurredAtUtc = h.OccurredAtUtc

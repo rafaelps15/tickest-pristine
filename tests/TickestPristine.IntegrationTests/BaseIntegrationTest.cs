@@ -11,6 +11,8 @@ namespace TickestPristine.IntegrationTests;
 [Collection(nameof(IntegrationTestCollection))]
 public abstract class BaseIntegrationTest
 {
+    private string? _adminAccessToken;
+
     protected BaseIntegrationTest(IntegrationTestWebAppFactory factory)
     {
         HttpClient = factory.CreateClient();
@@ -43,10 +45,27 @@ public abstract class BaseIntegrationTest
             password = "Password123!"
         };
 
-        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users/register", request);
+        HttpResponseMessage response = await PostRegisterAsAdminAsync(request);
         response.EnsureSuccessStatusCode();
 
         return await response.Content.ReadFromJsonAsync<Guid>();
+    }
+
+    /// <summary>
+    /// Envia o cadastro como o administrador, que tem <c>users:create</c>. O token vai só nesta requisição, sem trocar
+    /// o token que o teste configurou no <see cref="HttpClient"/>.
+    /// </summary>
+    protected async Task<HttpResponseMessage> PostRegisterAsAdminAsync(object request)
+    {
+        _adminAccessToken ??= (await LoginAsync(AdminEmail, AdminPassword)).AccessToken;
+
+        using var message = new HttpRequestMessage(HttpMethod.Post, "users/register")
+        {
+            Content = JsonContent.Create(request)
+        };
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _adminAccessToken);
+
+        return await HttpClient.SendAsync(message);
     }
 
     protected Task<AccessTokens> LoginAsync(string email) => LoginAsync(email, "Password123!");

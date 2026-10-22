@@ -59,7 +59,6 @@ internal sealed class ReopenTicketCommandHandler(
             ticket.Id,
             userContext.UserId,
             TicketHistoryAction.Reopened,
-            TicketHistoryDescriptions.Reopened,
             dateTimeProvider.UtcNow,
             oldValue: previousStatus.ToString(),
             newValue: TicketStatus.Open.ToString()));

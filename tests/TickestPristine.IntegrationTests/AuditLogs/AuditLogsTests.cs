@@ -137,14 +137,14 @@ public sealed class AuditLogsTests(IntegrationTestWebAppFactory factory) : BaseI
             .Select(c => c.Id)
             .SingleAsync();
 
-        await AuthenticateAsAdminAsync();
+        Guid adminId = await AuthenticateAsAdminAsync();
 
         // Act
         List<AuditLogDto> history = await GetHistoryAsync("UserCredential", credentialId);
 
-        // Assert
+        // Assert: o cadastro é feito pelo administrador, que fica registrado como autor da inclusão.
         AuditLogDto added = history.ShouldHaveSingleItem();
-        added.UserId.ShouldBeNull();
+        added.UserId.ShouldBe(adminId);
         ReadValue(added.NewValues, "UserId").ShouldBe(userId.ToString());
         ReadValue(added.NewValues, "PasswordHash").ShouldBeNull();
     }
