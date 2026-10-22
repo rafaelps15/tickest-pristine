@@ -1,5 +1,7 @@
 # Modelos de slice de query
 
+> Exemplos ilustrativos do modelo de referência (Todos). Use os caminhos, namespaces e referências vivas do `CLAUDE.md` do projeto.
+
 Os arquivos ficam em `src/Application/{Feature}/{UseCase}/`. Queries são leituras: sem validator, sem eventos de domínio, sem `SaveChangesAsync`.
 
 ## Query
@@ -83,7 +85,7 @@ internal sealed class GetOverdueTodosQueryHandler(
 
 Para queries de um único item, retorne `Result.Failure<TodoResponse>(TodoItemErrors.NotFound(id))` quando nada for encontrado.
 
-## Cache (opcional, só para leituras frequentes)
+## Cache (opcional, só para leituras frequentes e quando o projeto usar cache em leituras)
 
 Envolva a consulta ao banco em `HybridCache.GetOrCreateAsync`, com uma chave da classe de chaves de cache da feature (veja o `GetTodoByIdQueryHandler` como exemplo real):
 

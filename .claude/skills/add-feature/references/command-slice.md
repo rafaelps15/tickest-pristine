@@ -1,5 +1,7 @@
 # Modelos de slice de command
 
+> Exemplos ilustrativos do modelo de referência (Todos). Use os caminhos, namespaces e referências vivas do `CLAUDE.md` do projeto.
+
 Os arquivos ficam em `src/Application/{Feature}/{UseCase}/`. Troque `{Feature}` (no plural, ex.: `Todos`), `{Entity}` (ex.: `TodoItem`) e os nomes do caso de uso em todo o texto.
 
 ## Command
@@ -106,9 +108,9 @@ internal sealed class ArchiveTodoCommandHandler(
 ```
 
 Observações:
-- Dono do dado: filtre por `userContext.UserId` na consulta (preferível) ou compare explicitamente e retorne `Result.Failure(UserErrors.Unauthorized())`.
+- Dono do dado: filtre por `userContext.UserId` na consulta (preferível) ou compare explicitamente e retorne `Result.Failure(UserErrors.Unauthorized())`. Se o projeto declarar outras formas de autorização (permissão na rota, guards por recurso), siga o `CLAUDE.md`.
 - `IDateTimeProvider` (do `SharedKernel`) para datas e horas — nunca `DateTime.UtcNow` direto.
-- Se o command invalida dados de query em cache, injete `HybridCache` e chame `cache.RemoveAsync({Feature}CacheKeys.X(...), cancellationToken)` depois de salvar.
+- Se o projeto usar cache em leituras e o command invalidar dados de query em cache, injete `HybridCache` e chame `cache.RemoveAsync({Feature}CacheKeys.X(...), cancellationToken)` depois de salvar.
 - Para um command com retorno (`ICommand<Guid>`), retorne o valor direto — `Result<T>` tem conversão implícita: `return todoItem.Id;`.
 
 ## Acréscimos no Domain (se necessário)

@@ -1,5 +1,7 @@
 # Modelos de teste
 
+> Exemplos ilustrativos do modelo de referência (Todos). Use os caminhos, namespaces e referências vivas do `CLAUDE.md` do projeto.
+
 Stack: xUnit + Shouldly + NSubstitute (unitários), FluentValidation.TestHelper (validators), WebApplicationFactory + Testcontainers (integração). Todo caso de uso novo ganha os três.
 
 ## Testes unitários de handler

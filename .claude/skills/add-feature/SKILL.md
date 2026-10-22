@@ -1,12 +1,18 @@
 ---
 name: add-feature
-description: Cria um slice vertical completo no TickestPristine — command ou query, handler próprio, validator do FluentValidation, endpoint de minimal API e testes (unitário, de validator e de integração). Use quando o usuário pedir para adicionar uma feature, caso de uso, command, query ou endpoint ao TickestPristine.
+description: Cria um slice vertical completo num projeto .NET de Clean Architecture com handlers próprios de command/query — command ou query, handler próprio, validator do FluentValidation, endpoint de minimal API e testes (unitário, de validator e de integração). Use quando o usuário pedir para adicionar uma feature, caso de uso, command, query ou endpoint ao projeto.
 argument-hint: <descrição da feature, ex.: "archive a todo item" ou "get todos due this week">
 ---
 
 # Adicionar uma feature (slice vertical)
 
-Crie um caso de uso completo seguindo as convenções do TickestPristine: um caso de uso na camada Application com um handler próprio de command/query, um endpoint de minimal API na Web.Api e testes. Sem MediatR — este código usa as suas próprias abstrações `ICommand`/`IQuery`, com handlers e decorators registrados pelo Scrutor.
+> **Contexto do projeto primeiro.** Antes de agir, leia a seção "Contexto do projeto" do `CLAUDE.md` do
+> repositório. Os caminhos, namespaces, nomes e exemplos desta skill vêm do modelo de referência (Todos) e
+> são ilustrativos. Quando o contexto do projeto declarar caminhos, referências vivas ou desvios, eles
+> prevalecem. Se essa seção não existir, inspecione o repositório, siga o slice real mais parecido e
+> pergunte antes de assumir uma convenção.
+
+Crie um caso de uso completo seguindo as convenções do projeto: um caso de uso na camada Application com um handler próprio de command/query, um endpoint de minimal API na Web.Api e testes. Sem MediatR — este código usa as suas próprias abstrações `ICommand`/`IQuery`, com handlers e decorators registrados pelo Scrutor.
 
 ## Fluxo de trabalho
 
@@ -25,10 +31,10 @@ Crie um caso de uso completo seguindo as convenções do TickestPristine: um cas
 - **Retorne `Result` / `Result<T>`, nunca lance exceção** para falhas esperadas. Os erros vêm dos métodos de fábrica estáticos de `{Entity}Errors` na camada Domain, com códigos como `"Todos.NotFound"`.
 - **A validação fica num `{Command}Validator`** (FluentValidation). Ela roda automaticamente pelo `ValidationDecorator` — o handler nunca valida o formato da entrada. Queries não têm validator (o decorator só envolve commands).
 - **Acesso a dados via `IApplicationDbContext`** (de `Application.Abstractions.Data`) — nunca referencie a Infrastructure a partir da Application.
-- **Conferência de autorização** nos handlers que agem sobre dados de um usuário: compare `IUserContext.UserId` e retorne `UserErrors.Unauthorized()` se não bater, ou filtre as queries por `userContext.UserId`.
-- **Queries projetam direto num DTO `{X}Response`** com `.Select(...)` — nunca retorne entidades de domínio. Coloque em cache as leituras frequentes com `HybridCache`, usando uma classe estática `{Feature}CacheKeys`; invalide nos commands que alteram os dados em cache.
+- **Conferência de autorização** nos handlers que agem sobre dados de um usuário: compare `IUserContext.UserId` e retorne `UserErrors.Unauthorized()` se não bater, ou filtre as queries por `userContext.UserId`. Se o projeto declarar outras formas de autorização (permissão na rota, guards por recurso), siga o `CLAUDE.md`.
+- **Queries projetam direto num DTO `{X}Response`** com `.Select(...)` — nunca retorne entidades de domínio. Quando o projeto usar cache em leituras, coloque em cache as leituras frequentes com `HybridCache`, usando uma classe estática `{Feature}CacheKeys`; invalide nos commands que alteram os dados em cache.
 - **Pagine as coleções sem limite** com `PageRequest` (offset) ou `CursorPageRequest` (cursor) e os helpers de `PaginationExtensions`. Veja [references/pagination.md](references/pagination.md).
-- **Endpoints** implementam `IEndpoint`, resolvem a interface do handler direto da DI, usam `result.Match(Results.Ok, CustomResults.Problem)` (ou `Results.NoContent` para commands sem retorno), recebem a tag da classe `Tags` e chamam `.RequireAuthorization()`.
+- **Endpoints** implementam `IEndpoint`, resolvem a interface do handler direto da DI, usam `result.Match(Results.Ok, CustomResults.Problem)` (ou `Results.NoContent` para commands sem retorno), recebem a tag da classe `Tags` e chamam `.RequireAuthorization()` (ou `.HasPermission(Permissions.X)` quando existir uma constante de permissão).
 
 ## Referência de nomes
 

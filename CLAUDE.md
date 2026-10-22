@@ -4,7 +4,9 @@ Este arquivo orienta o Claude Code (claude.ai/code) ao trabalhar com o código d
 
 ## O que é
 
-O TickestPristine é uma base pragmática de Clean Architecture para .NET 10 (domínio de exemplo com Todos + Users), usando PostgreSQL, com autenticação JWT, autorização por permissões, cache, logs estruturados e OpenTelemetry já configurados. É um *template* — o código de Todos/Users é conteúdo de exemplo, feito para ser ampliado ou substituído.
+O TickestPristine é o backend de um sistema de chamados internos (helpdesk) em .NET 10 e PostgreSQL, construído sobre uma base pragmática de Clean Architecture: chamados (abertura, atendimento, atribuição, fechamento, reabertura e SLA de resolução), mensagens, anexos, histórico, usuários com roles e permissões, departamentos, setores e auditoria. Autenticação JWT, autorização por permissões, logs estruturados e OpenTelemetry já vêm configurados. Não há front-end neste repositório.
+
+Os exemplos de Todos que aparecem neste arquivo e nas skills vêm do modelo de referência e são ilustrativos; o contexto real deste repositório está na seção [Contexto do projeto](#contexto-do-projeto).
 
 ## Comandos
 
@@ -74,7 +76,7 @@ O `Application/DependencyInjection.cs` envolve todos os handlers de command/quer
 
 ### Eventos de domínio
 
-As entidades herdam de `Entity` e chamam `Raise(new SomeDomainEvent(...))` nos seus próprios métodos que mudam estado, ou nos handlers no momento da criação. O `DomainEventsDispatcher` (Infrastructure) despacha os eventos disparados depois do `SaveChangesAsync`; os handlers de evento implementam `IDomainEventHandler<T>` e são registrados automaticamente pela varredura de assembly.
+As entidades herdam de `Entity` e não têm métodos (domínio anêmico): são os handlers da Application que chamam `entity.Raise(new SomeDomainEvent(...))` ao mudar o estado, antes do `SaveChangesAsync`. O `DomainEventsDispatcher` (Infrastructure) despacha os eventos disparados depois do `SaveChangesAsync`; os handlers de evento implementam `IDomainEventHandler<T>` e são registrados automaticamente pela varredura de assembly.
 
 ## Convenções a manter ao ampliar
 
@@ -82,4 +84,76 @@ As entidades herdam de `Entity` e chamam `Raise(new SomeDomainEvent(...))` nos s
 - Entidades novas ganham a sua própria classe estática `{Entity}Errors` no Domain, em vez de lançar exceções cruas ou reaproveitar os erros de outro agregado.
 - As configurações do EF Core (`IEntityTypeConfiguration<T>`) ficam em `Infrastructure/{Aggregate}/{Entity}Configuration.cs` e precisam ser adicionadas ao `ApplicationDbContext`.
 - Endpoints são uma classe por rota em `Web.Api/Endpoints/{Aggregate}/`, com tag via `Web.Api/Endpoints/Tags.cs`, e registrados automaticamente — não há tabela de rotas para atualizar.
-- Este repositório tem `.claude/skills/` (`add-entity`, `add-feature`, `add-tests`, `ca-review`) com essas convenções em forma de roteiro executável — prefira usá-las a escrever à mão, para que o código novo fique exatamente igual aos slices existentes.
+- Este repositório tem `.claude/skills/` (`add-entity`, `add-feature`, `add-tests`, `ca-review`) com essas convenções em forma de roteiro executável — prefira usá-las a escrever à mão, para que o código novo fique exatamente igual aos slices existentes. Ao usá-las, os caminhos, nomes e desvios da seção [Contexto do projeto](#contexto-do-projeto) prevalecem sobre os exemplos delas.
+
+## Contexto do projeto
+
+### Stack
+
+.NET 10 (minimal APIs), EF Core 10 com Npgsql e PostgreSQL 17, FluentValidation, Scrutor, Dapper (só em consultas de relatório), JWT, `HybridCache` (Redis opcional), Serilog + Seq, OpenTelemetry. Testes: xUnit, NSubstitute, Shouldly, Testcontainers e NetArchTest. Versões dos pacotes em `Directory.Packages.props`.
+
+### Mapa do repositório
+
+| O quê | Onde (namespace = caminho, com prefixo `TickestPristine.`) |
+|---|---|
+| Slices de caso de uso | `src/TickestPristine.Application/{Aggregate}/{UseCase}/` |
+| Abstrações transversais | `src/TickestPristine.Application/Abstractions/` (`Authentication`, `Authorization`, `Behaviors`, `Data`, `Messaging`, `Pagination`, `Storage`) |
+| Guards de autorização | `src/TickestPristine.Application/Authorization/` (`TicketAccessGuard`, `PrivilegeEscalationGuard`, `AdministratorGuard`) |
+| Catálogo de permissões | `src/TickestPristine.Application/Permissions/` (`PermissionCodes`, `PermissionCatalog`) |
+| Entidades, erros e eventos | `src/TickestPristine.Domain/{Aggregate}/` |
+| Configurações EF | `src/TickestPristine.Infrastructure/{Aggregate}/{Entity}Configuration.cs` |
+| Migrations e seed | `src/TickestPristine.Infrastructure/Database/Migrations/` e `Database/Seeding/` |
+| Endpoints | `src/TickestPristine.Web.Api/Endpoints/{Aggregate}/{UseCase}.cs`, com as constantes de permissão em `Endpoints/{Aggregate}/Permissions.cs` |
+| Testes | `tests/TickestPristine.Application.UnitTests/{Aggregate}/`, `tests/TickestPristine.IntegrationTests/{Aggregate}/`, `tests/TickestPristine.ArchitectureTests/` |
+
+Validação de uma mudança: `dotnet build TickestPristine.slnx` (0 avisos) e `dotnet test TickestPristine.slnx` (Docker ligado). Migration nova:
+
+```bash
+dotnet ef migrations add Nome_Da_Migration --project src/TickestPristine.Infrastructure --startup-project src/TickestPristine.Web.Api --output-dir Database/Migrations
+```
+
+### Referências vivas
+
+Antes de criar algo, siga o slice real mais parecido (caminhos a partir de `src/TickestPristine.Application/` e `tests/`):
+
+- Command com retorno: `Tickets/Create/` · sem retorno, com permissão na rota: `Tickets/Close/` · com guard por recurso: `Tickets/Reopen/`
+- Query com guard: `Tickets/GetById/` · dados do próprio usuário, paginada por offset: `Tickets/GetOwn/` · paginada por cursor: `TicketMessages/GetAll/` · relatório em SQL (Dapper): `Tickets/GetVolume/`
+- Entidade e configuração EF: `Domain/Departments/Department.cs` e `Infrastructure/Departments/DepartmentConfiguration.cs`
+- Testes: `Tickets/CloseTicketCommandHandlerTests.cs`, `Tickets/TicketValidatorsTests.cs` (unitários) e `Tickets/TicketsTests.cs` (integração)
+
+### Desvios em relação aos exemplos das skills
+
+- **Caminhos e namespaces** têm o prefixo `TickestPristine.` (ex.: `src/TickestPristine.Application`, não `src/Application`).
+- **Autorização** tem três formas, conforme o caso:
+  1. permissão na rota com `.HasPermission(Permissions.X)`, que recebe uma única permissão;
+  2. `.RequireAuthorization()` na rota e um guard no handler para regras por recurso (dono, participante, privilégio);
+  3. filtro por `IUserContext.UserId` só nas consultas de dados do próprio usuário (`Tickets/GetOwn`, `Tickets/GetOwnSummary`).
+  Permissão nova entra em `PermissionCodes` e em `PermissionCatalog`.
+- **Cache:** nenhuma query da Application usa cache; o único uso de `HybridCache` é o `PermissionProvider` (Infrastructure), invalidado com `IPermissionProvider.InvalidateAsync` depois do commit. O padrão de cache dos exemplos de Todo não se aplica aqui sem uma decisão explícita.
+- **Histórico de chamados:** todo command que altera um chamado, uma mensagem ou um anexo grava o registro com `TicketHistoryEntries` no mesmo `SaveChangesAsync`.
+- **Exclusão lógica** (`DeletedAtUtc` + filtro global) em `Ticket`, `TicketMessage` e `TicketAttachment`.
+- **Textos em pt-BR:** mensagens de `{Entity}Errors`, `.WithMessage(...)` dos validators e textos escritos à mão nos `ProblemDetails` (`GlobalExceptionHandler`, `CustomResults`). Os nomes exibidos das propriedades validadas ficam em `Abstractions/Behaviors/ValidationDisplayNames.cs`.
+- **Testes de integração:** o cadastro de usuários exige `users:create`, então os testes cadastram pelo administrador (`BaseIntegrationTest.RegisterUserAsync` / `PostRegisterAsAdminAsync`).
+
+### Regras permanentes
+
+- Sem MediatR (ver [Convenções a manter ao ampliar](#convenções-a-manter-ao-ampliar)); domínio anêmico, com regras nos handlers ou em classes estáticas da pasta do agregado na Application (ex.: `Tickets/TicketStatusTransitions.cs`).
+- Datas e horas pelo `IDateTimeProvider`, nunca `DateTime.UtcNow` na Application.
+- Identificadores de código em inglês; comentários e textos ao usuário em pt-BR.
+- Mensagens de commit em pt-BR, no formato `tipo: descrição` (`feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `chore`).
+
+### Documentos de estado
+
+`SYSTEM_SPECIFICATION.md` descreve o que o sistema faz hoje: capacidades (2.7), regras de negócio (2.6), rotas (4.3.1), lacunas (7) e decisões em aberto (9.5). É extenso: leia só as seções de que a tarefa precisa e atualize as que a mudança afetar.
+
+## Política de autonomia
+
+| Pode fazer sem perguntar | Precisa perguntar antes | Precisa de plano aprovado | Precisa de autorização explícita no chat |
+|---|---|---|---|
+| Ler código e documentos, buscar, rodar build e testes, verificações não destrutivas | Regra de negócio sem fonte no código ou nos documentos; mais de uma opção viável; conflito entre o pedido e este arquivo; teste que falha por defeito fora do escopo | Mudança funcional não trivial em `src/` ou `tests/` | Stage, commit, push e PR; excluir ou mover arquivos; aplicar migration em banco; alterar este arquivo, as skills ou configurações; qualquer ação fora do repositório |
+
+A autorização vale só para a ação pedida, no escopo pedido. Correção realmente trivial (texto, typo) dispensa o plano somente quando autorizada explicitamente no chat.
+
+## Fluxo de desenvolvimento (em implantação)
+
+O projeto está adotando Spec-Driven Development. Enquanto o modelo de spec e as skills correspondentes não existirem no repositório, mudança funcional não trivial segue estes passos: (1) requisitos, critérios de aceitação verificáveis e decisões em aberto apresentados no chat; (2) aprovação explícita do responsável pelo produto; (3) implementação no escopo aprovado; (4) verificação com build, testes, cada critério ligado a pelo menos um teste e atualização das seções afetadas do `SYSTEM_SPECIFICATION.md`; (5) relatório com resultados, limitações e pendências.

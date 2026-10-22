@@ -1,12 +1,18 @@
 ---
 name: ca-review
-description: Revisa as mudanças pendentes contra as convenções do TickestPristine — limites entre camadas, tratamento de erro com Result, estrutura dos slices, validação, endpoints e cobertura de testes. Use quando o usuário pedir para revisar mudanças, conferir convenções ou auditar uma feature antes do commit.
+description: Revisa as mudanças pendentes contra as convenções do projeto — limites entre camadas, tratamento de erro com Result, estrutura dos slices, validação, endpoints e cobertura de testes. Use quando o usuário pedir para revisar mudanças, conferir convenções ou auditar uma feature antes do commit.
 argument-hint: [opcional: arquivos ou feature específicos para revisar; o padrão é o diff da árvore de trabalho]
 ---
 
-# Revisão das convenções do TickestPristine
+# Revisão das convenções do projeto
 
-Revise o escopo informado (padrão: `git diff` + arquivos não versionados) contra as convenções do TickestPristine. Relate os achados com referências arquivo:linha, ordenados por gravidade. Não corrija nada, a menos que peçam.
+> **Contexto do projeto primeiro.** Antes de agir, leia a seção "Contexto do projeto" do `CLAUDE.md` do
+> repositório. Os caminhos, namespaces, nomes e exemplos desta skill vêm do modelo de referência (Todos) e
+> são ilustrativos. Quando o contexto do projeto declarar caminhos, referências vivas ou desvios, eles
+> prevalecem. Se essa seção não existir, inspecione o repositório, siga o slice real mais parecido e
+> pergunte antes de assumir uma convenção.
+
+Revise o escopo informado (padrão: `git diff` + arquivos não versionados) contra as convenções do projeto. Relate os achados com referências arquivo:linha, ordenados por gravidade. Não corrija nada, a menos que peçam.
 
 ## Checklist
 
@@ -29,13 +35,13 @@ Revise o escopo informado (padrão: `git diff` + arquivos não versionados) cont
 
 ### Validação e segurança
 - Todo command tem um `{Command}Validator` do FluentValidation; os handlers não reconferem o formato da entrada (mas aplicam as regras de negócio).
-- Handlers que agem sobre dados de um usuário garantem a posse: filtram por `IUserContext.UserId` ou retornam `UserErrors.Unauthorized()`.
+- Handlers que agem sobre dados de um usuário garantem a posse: filtram por `IUserContext.UserId` ou retornam `UserErrors.Unauthorized()`. Se o projeto declarar outras formas de autorização (permissão na rota, guards por recurso), siga o `CLAUDE.md`.
 - Endpoints novos chamam `.RequireAuthorization()` (ou `.HasPermission(...)`) e `.WithTags(Tags.X)`.
 - Nada de `DateTime.UtcNow`/`DateTime.Now` na Application — use `IDateTimeProvider`.
 
 ### Mudanças de estado e cache
 - Commands que mudam estado disparam um evento de domínio com `entity.Raise(new XDomainEvent(id))` antes do `SaveChangesAsync`.
-- Toda leitura em cache no `HybridCache` tem a invalidação correspondente (`cache.RemoveAsync`) em todo command que altera aqueles dados; as chaves vêm da classe `{Feature}CacheKeys`.
+- Quando o projeto usar cache em leituras, toda leitura em cache no `HybridCache` tem a invalidação correspondente (`cache.RemoveAsync`) em todo command que altera aqueles dados; as chaves vêm da classe `{Feature}CacheKeys`.
 
 ### Testes
 - Handlers novos ou alterados têm testes unitários cobrindo cada caminho de `Result.Failure`, mais o caminho feliz (estado salvo + eventos de domínio).

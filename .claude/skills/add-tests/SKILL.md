@@ -1,10 +1,16 @@
 ---
 name: add-tests
-description: Completa os testes que faltam em casos de uso existentes do TickestPristine — testes unitários de handler, testes de validator do FluentValidation e testes de integração por HTTP. Use quando o usuário pedir para adicionar, melhorar ou completar a cobertura de testes.
+description: Completa os testes que faltam em casos de uso existentes do projeto — testes unitários de handler, testes de validator do FluentValidation e testes de integração por HTTP. Use quando o usuário pedir para adicionar, melhorar ou completar a cobertura de testes.
 argument-hint: <caso de uso ou feature a cobrir, ex.: "CopyTodoCommand" ou "a feature Users">
 ---
 
 # Adicionar testes a um caso de uso existente
+
+> **Contexto do projeto primeiro.** Antes de agir, leia a seção "Contexto do projeto" do `CLAUDE.md` do
+> repositório. Os caminhos, namespaces, nomes e exemplos desta skill vêm do modelo de referência (Todos) e
+> são ilustrativos. Quando o contexto do projeto declarar caminhos, referências vivas ou desvios, eles
+> prevalecem. Se essa seção não existir, inspecione o repositório, siga o slice real mais parecido e
+> pergunte antes de assumir uma convenção.
 
 Completa os três tipos de teste que este projeto espera em todo slice. Leia primeiro o handler/validator/endpoint alvo e depois siga a estrutura da classe de teste existente mais parecida.
 

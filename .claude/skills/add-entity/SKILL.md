@@ -1,10 +1,16 @@
 ---
 name: add-entity
-description: Adiciona uma nova entidade de domínio ao TickestPristine — classe da entidade, catálogo de erros, eventos de domínio, configuração do EF Core, ligação no DbContext e migration. Use quando o usuário pedir para adicionar uma entidade, agregado, modelo de domínio ou tabela.
+description: Adiciona uma nova entidade de domínio ao projeto — classe da entidade, catálogo de erros, eventos de domínio, configuração do EF Core, ligação no DbContext e migration. Use quando o usuário pedir para adicionar uma entidade, agregado, modelo de domínio ou tabela.
 argument-hint: <descrição da entidade, ex.: "Project with a name, owner, and list of todos">
 ---
 
 # Adicionar uma entidade de domínio
+
+> **Contexto do projeto primeiro.** Antes de agir, leia a seção "Contexto do projeto" do `CLAUDE.md` do
+> repositório. Os caminhos, namespaces, nomes e exemplos desta skill vêm do modelo de referência (Todos) e
+> são ilustrativos. Quando o contexto do projeto declarar caminhos, referências vivas ou desvios, eles
+> prevalecem. Se essa seção não existir, inspecione o repositório, siga o slice real mais parecido e
+> pergunte antes de assumir uma convenção.
 
 Crie uma entidade nova e ligue-a em todas as camadas, seguindo o padrão de `TodoItem`.
 

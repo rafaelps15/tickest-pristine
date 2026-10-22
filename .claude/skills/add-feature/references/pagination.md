@@ -1,5 +1,7 @@
 # Modelos de paginação
 
+> Exemplos ilustrativos do modelo de referência (Todos). Use os caminhos, namespaces e referências vivas do `CLAUDE.md` do projeto.
+
 Toda coleção que cresce sem limite é paginada. Só os catálogos de tamanho fixo ou administrado (roles, permissões, pequenas tabelas de apoio) devolvem lista. As peças ficam em `src/Application/Abstractions/Pagination/`: `PageRequest`/`PagedResponse<T>` (offset), `CursorPageRequest`/`CursorPagedResponse<T>` (cursor) e `PaginationExtensions`.
 
 ## Query paginada por offset
