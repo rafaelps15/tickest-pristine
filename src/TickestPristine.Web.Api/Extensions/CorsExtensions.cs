@@ -30,13 +30,15 @@ internal static class CorsExtensions
                     {
                         policy.SetIsOriginAllowed(origin => IsLoopbackOrigin(origin) || allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase))
                             .AllowAnyHeader()
-                            .AllowAnyMethod();
+                            .AllowAnyMethod()
+                            .WithExposedHeaders("Correlation-Id");
                     }
                     else if (allowedOrigins.Length > 0)
                     {
                         policy.WithOrigins(allowedOrigins)
                             .AllowAnyHeader()
-                            .AllowAnyMethod();
+                            .AllowAnyMethod()
+                            .WithExposedHeaders("Correlation-Id");
                     }
                 });
             });

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Serilog;
 using TickestPristine.Web.Api;
 using TickestPristine.Web.Api.Extensions;
+using TickestPristine.Web.Api.Middleware;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -48,8 +49,11 @@ if (app.Environment.IsDevelopment())
 
 app.MapHealthChecks("health", healthCheckOptions);
 
+// Antes do UseExceptionHandler, para que o log da exceção também saia com o CorrelationId.
 app.UseRequestContextLogging();
 
+// Por fora do UseExceptionHandler, para registrar o status que o GlobalExceptionHandler devolveu (ex.: 409) em vez de
+// ver a exceção passar e registrar 500.
 app.UseSerilogRequestLogging();
 
 app.UseExceptionHandler();
