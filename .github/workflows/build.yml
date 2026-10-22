@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 env:
   DOTNET_VERSION: "10.x"
@@ -31,4 +34,5 @@ jobs:
         run: dotnet test TickestPristine.slnx --configuration Release --no-restore --no-build
 
       - name: Publish
+        if: github.event_name != 'pull_request'
         run: dotnet publish TickestPristine.slnx --configuration Release --no-restore --no-build
