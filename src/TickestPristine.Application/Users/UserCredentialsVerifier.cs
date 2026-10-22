@@ -70,8 +70,15 @@ internal static class UserCredentialsVerifier
                 credential.LockoutEndsAtUtc > nowUtc ? UserErrors.LockedOut : UserErrors.InvalidCredentials);
         }
 
-        credential.FailedLoginAttempts = 0;
-        credential.LockoutEndsAtUtc = null;
+        // Gravado na hora, como a senha errada: quem chama pode recusar o login (conta desativada, troca de senha
+        // pendente) sem salvar, e o contador seguiria contando as tentativas anteriores.
+        if (credential.FailedLoginAttempts > 0 || credential.LockoutEndsAtUtc is not null)
+        {
+            credential.FailedLoginAttempts = 0;
+            credential.LockoutEndsAtUtc = null;
+
+            await context.SaveChangesAsync(cancellationToken);
+        }
 
         return new VerifiedCredentials(user, credential);
     }

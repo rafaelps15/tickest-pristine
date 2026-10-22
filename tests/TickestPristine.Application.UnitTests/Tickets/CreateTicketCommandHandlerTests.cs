@@ -128,6 +128,8 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
         Result<Guid> result = await handler.Handle(command, CancellationToken.None);
 
         // Assert
+        result.IsSuccess.ShouldBeTrue();
+
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == result.Value);
         ticket.CreatedAtUtc.ShouldBe(nowUtc);
         ticket.DueAtUtc.ShouldBe(nowUtc.AddHours(24));
@@ -270,11 +272,41 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
         result.IsSuccess.ShouldBeTrue();
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == result.Value);
         ticket.AssignedToUserId.ShouldBe(assigneeId);
+        ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketCreatedDomainEvent);
     }
 
-    private static async Task<Guid> SeedUserAsync(TestDbContext context)
+    [Fact]
+    public async Task Handle_Should_ReturnNotFound_WhenAssignedUserIsDeactivated()
     {
-        User user = CreateUser();
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid sectorId = await SeedSectorAsync(context);
+        // Usuário desativado conta como inexistente para receber o chamado.
+        Guid assigneeId = await SeedUserAsync(context, isActive: false);
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(UserId);
+
+        var handler = new CreateTicketCommandHandler(
+            context,
+            userContext,
+            Substitute.For<IPermissionProvider>(),
+            Substitute.For<IDateTimeProvider>());
+        CreateTicketCommand command = Command;
+        command.SectorId = sectorId;
+        command.AssignedToUserId = assigneeId;
+
+        // Act
+        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.NotFound(assigneeId));
+        (await context.Tickets.AnyAsync()).ShouldBeFalse();
+    }
+
+    private static async Task<Guid> SeedUserAsync(TestDbContext context, bool isActive = true)
+    {
+        User user = CreateUser(isActive);
         context.Users.Add(user);
         await context.SaveChangesAsync();
 

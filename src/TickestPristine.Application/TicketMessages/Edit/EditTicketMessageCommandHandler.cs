@@ -16,8 +16,11 @@ internal sealed class EditTicketMessageCommandHandler(
 {
     public async Task<Result> Handle(EditTicketMessageCommand command, CancellationToken cancellationToken)
     {
+        // O filtro global do chamado exclui os excluídos: mensagem ou anexo de chamado excluído não é mais alterado.
         TicketMessage? message = await context.TicketMessages
-            .SingleOrDefaultAsync(m => m.Id == command.MessageId, cancellationToken);
+            .SingleOrDefaultAsync(
+                m => m.Id == command.MessageId && context.Tickets.Any(t => t.Id == m.TicketId),
+                cancellationToken);
 
         if (message is null)
         {
@@ -29,8 +32,10 @@ internal sealed class EditTicketMessageCommandHandler(
             return Result.Failure(UserErrors.Unauthorized());
         }
 
+        DateTime nowUtc = dateTimeProvider.UtcNow;
+
         message.Content = command.Content;
-        message.EditedAtUtc = dateTimeProvider.UtcNow;
+        message.EditedAtUtc = nowUtc;
 
         message.Raise(new TicketMessageEditedDomainEvent(message.Id, message.TicketId, message.AuthorUserId));
 
@@ -39,7 +44,7 @@ internal sealed class EditTicketMessageCommandHandler(
             message.AuthorUserId,
             TicketHistoryAction.MessageEdited,
             TicketHistoryDescriptions.MessageEdited,
-            dateTimeProvider.UtcNow));
+            nowUtc));
 
         await context.SaveChangesAsync(cancellationToken);
 

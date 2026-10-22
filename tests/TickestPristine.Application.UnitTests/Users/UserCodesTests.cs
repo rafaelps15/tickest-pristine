@@ -1,4 +1,5 @@
 using TickestPristine.Domain.Users;
+using TickestPristine.Application.Users;
 
 namespace TickestPristine.Application.UnitTests.Users;
 

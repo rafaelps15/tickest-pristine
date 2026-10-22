@@ -106,7 +106,7 @@ public sealed class TicketAttachmentsTests(IntegrationTestWebAppFactory factory)
     }
 
     [Fact]
-    public async Task Upload_Should_ReturnProblem_WhenContentTypeIsNotAllowed()
+    public async Task Upload_Should_ReturnBadRequest_WhenContentTypeIsNotAllowed()
     {
         // Arrange
         Guid sectorId = await CreateSectorAsAdminAsync();
@@ -254,6 +254,97 @@ public sealed class TicketAttachmentsTests(IntegrationTestWebAppFactory factory)
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
+
+    [Fact]
+    public async Task Upload_Should_ReturnForbidden_WhenCallerIsNotParticipantAndLacksManagePermission()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens ownerTokens) = await RegisterAndLoginAsync();
+        Authenticate(ownerTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        (_, AccessTokens outsiderTokens) = await RegisterAndLoginAsync();
+        Authenticate(outsiderTokens.AccessToken);
+
+        // Act
+        using MultipartFormDataContent content = BuildFileContent();
+        HttpResponseMessage response = await HttpClient.PostAsync($"tickets/{ticketId}/attachments", content);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Upload_Should_RejectBodyBeforeValidation_WhenBodyExceedsLimit()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        // Act: 12 MB passam do limite de 11 MB do corpo da requisição
+        using MultipartFormDataContent content = BuildFileContent(fileText: new string('a', 12 * 1024 * 1024));
+        HttpResponseMessage response = await HttpClient.PostAsync($"tickets/{ticketId}/attachments", content);
+
+        // Assert
+        // O TestServer não aplica o limite do Kestrel (que responderia 413); aqui quem recusa é o limite do multipart, ao
+        // ler o formulário. Nos dois casos o corpo para antes do validator, que responderia com o erro de validação.
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Requisição inválida");
+    }
+
+    [Fact]
+    public async Task Download_Should_ReturnNotFound_WhenAttachmentDoesNotExist()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"ticket-attachments/{Guid.NewGuid()}/download");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnNotFound_WhenTicketDoesNotExist()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/{Guid.NewGuid()}/attachments");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Delete_Should_ReturnForbidden_WhenCallerIsNotUploaderAndLacksManagePermission()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens ownerTokens) = await RegisterAndLoginAsync();
+        Authenticate(ownerTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        Guid attachmentId = await UploadAttachmentAsync(ticketId);
+
+        (_, AccessTokens outsiderTokens) = await RegisterAndLoginAsync();
+        Authenticate(outsiderTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"ticket-attachments/{attachmentId}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    private sealed record ProblemDto(int Status, string Title, string Detail);
 
     private sealed record TicketAttachmentDto(
         Guid Id,

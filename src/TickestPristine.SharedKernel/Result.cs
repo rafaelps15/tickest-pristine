@@ -9,7 +9,7 @@ public class Result
         if (isSuccess && error != Error.None ||
             !isSuccess && error == Error.None)
         {
-            throw new ArgumentException("Invalid error", nameof(error));
+            throw new ArgumentException("Erro inválido para o estado do resultado.", nameof(error));
         }
 
         IsSuccess = isSuccess;
@@ -46,7 +46,7 @@ public class Result<TValue> : Result
     [NotNull]
     public TValue Value => IsSuccess
         ? _value!
-        : throw new InvalidOperationException("The value of a failure result can't be accessed.");
+        : throw new InvalidOperationException("O valor de um resultado com falha não pode ser lido.");
 
     public static implicit operator Result<TValue>(TValue? value) =>
         value is not null ? Success(value) : Failure<TValue>(Error.NullValue);

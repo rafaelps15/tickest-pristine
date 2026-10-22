@@ -19,7 +19,7 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
         if (exception is DbUpdateConcurrencyException)
         {
             // Os dados foram alterados por outra requisição ao mesmo tempo; nada foi salvo e a operação pode ser repetida.
-            logger.LogWarning(exception, "Concurrency conflict while saving changes");
+            logger.LogWarning(exception, "Conflito de concorrência ao salvar as mudanças");
 
             problemDetails = new ProblemDetails
             {
@@ -32,7 +32,7 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
         else if (exception is DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } })
         {
             // Duas requisições simultâneas passaram pela checagem de duplicidade do handler; o índice único barrou a segunda.
-            logger.LogWarning(exception, "Unique constraint violation while saving changes");
+            logger.LogWarning(exception, "Violação de restrição de unicidade ao salvar as mudanças");
 
             problemDetails = new ProblemDetails
             {
@@ -45,7 +45,7 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
         else if (exception is BadHttpRequestException badRequest)
         {
             // Corpo ou parâmetros que não puderam ser lidos (ex.: JSON malformado) são erro do cliente, não do servidor.
-            logger.LogWarning(exception, "Unreadable request");
+            logger.LogWarning(exception, "Requisição que não pôde ser lida");
 
             problemDetails = new ProblemDetails
             {
@@ -58,7 +58,7 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
         else if (exception is UserContextUnavailableException)
         {
             // Token válido, mas sem o id do usuário: a identidade não pôde ser lida, o que é 401 e não falha do servidor.
-            logger.LogWarning(exception, "Authenticated request without a user id");
+            logger.LogWarning(exception, "Requisição autenticada sem o id do usuário");
 
             problemDetails = new ProblemDetails
             {
@@ -70,7 +70,7 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
         }
         else
         {
-            logger.LogError(exception, "Unhandled exception occurred");
+            logger.LogError(exception, "Exceção não tratada");
 
             problemDetails = new ProblemDetails
             {

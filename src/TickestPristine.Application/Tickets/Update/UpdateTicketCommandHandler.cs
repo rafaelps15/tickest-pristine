@@ -49,6 +49,7 @@ internal sealed class UpdateTicketCommandHandler(
         }
 
         TicketStatus previousStatus = ticket.Status;
+        DateTime nowUtc = dateTimeProvider.UtcNow;
 
         ticket.Description = command.Description;
         ticket.Status = command.Status;
@@ -56,7 +57,7 @@ internal sealed class UpdateTicketCommandHandler(
         // O SLA é medido até a primeira resolução; reaberturas não mudam o resultado.
         if (command.Status == TicketStatus.Resolved && ticket.ResolvedAtUtc is null)
         {
-            ticket.ResolvedAtUtc = dateTimeProvider.UtcNow;
+            ticket.ResolvedAtUtc = nowUtc;
         }
 
         ticket.Raise(new TicketUpdatedDomainEvent(ticket.Id));
@@ -70,7 +71,7 @@ internal sealed class UpdateTicketCommandHandler(
                 userContext.UserId,
                 previousStatus,
                 command.Status,
-                dateTimeProvider.UtcNow));
+                nowUtc));
         }
 
         await context.SaveChangesAsync(cancellationToken);

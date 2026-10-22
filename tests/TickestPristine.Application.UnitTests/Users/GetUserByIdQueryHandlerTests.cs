@@ -4,13 +4,14 @@ using TickestPristine.Domain.Roles;
 using TickestPristine.Application.Users.GetById;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Users;
+using TickestPristine.Application.Users;
 
 namespace TickestPristine.Application.UnitTests.Users;
 
 public sealed class GetUserByIdQueryHandlerTests : BaseHandlerTest
 {
     [Fact]
-    public async Task Handle_Should_ReturnUnauthorized_WhenCallerIsNotSelfAndLacksManagePermission()
+    public async Task Handle_Should_ReturnUnauthorized_WhenCallerIsNotSelfAndLacksReadPermission()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -97,7 +98,7 @@ public sealed class GetUserByIdQueryHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnUser_WhenCallerHasManagePermission()
+    public async Task Handle_Should_ReturnUser_WhenCallerHasReadPermission()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();

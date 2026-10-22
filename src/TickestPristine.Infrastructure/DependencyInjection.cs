@@ -29,7 +29,7 @@ public static class DependencyInjection
         IConfiguration configuration)
     {
         string connectionString = configuration.GetConnectionString("Database")
-            ?? throw new InvalidOperationException("The 'Database' connection string is required.");
+            ?? throw new InvalidOperationException("A connection string 'Database' é obrigatória.");
 
         return services
             .AddServices()

@@ -581,6 +581,19 @@ public sealed class UserValidatorsTests
     }
 
     [Fact]
+    public void ChangeRequiredPasswordValidator_Should_HaveError_WhenEmailIsEmpty()
+    {
+        // Arrange
+        var command = new ChangeRequiredUserPasswordCommand(string.Empty, "Current123!", "NewPassword123!");
+
+        // Act
+        TestValidationResult<ChangeRequiredUserPasswordCommand> result = _changeRequiredPasswordValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.Email);
+    }
+
+    [Fact]
     public void ChangeRequiredPasswordValidator_Should_HaveError_WhenEmailIsInvalid()
     {
         // Arrange

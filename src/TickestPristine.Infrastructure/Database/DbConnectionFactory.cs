@@ -6,6 +6,6 @@ namespace TickestPristine.Infrastructure.Database;
 
 internal sealed class DbConnectionFactory(NpgsqlDataSource dataSource) : IDbConnectionFactory
 {
-    public async ValueTask<DbConnection> OpenConnectionAsync() =>
-        await dataSource.OpenConnectionAsync();
+    public async ValueTask<DbConnection> OpenConnectionAsync(CancellationToken cancellationToken = default) =>
+        await dataSource.OpenConnectionAsync(cancellationToken);
 }

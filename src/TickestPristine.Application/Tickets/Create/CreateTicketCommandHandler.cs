@@ -35,7 +35,8 @@ internal sealed class CreateTicketCommandHandler(
             return Result.Failure<Guid>(access.Error);
         }
 
-        // Solicitante e responsável informados são conferidos numa única consulta; o usuário logado já é válido.
+        // Solicitante e responsável informados são conferidos numa única consulta; o usuário logado já é válido. Usuário
+        // desativado conta como inexistente, como o setor inativo logo abaixo.
         Guid[] referencedUserIds = new[] { command.RequesterId, command.AssignedToUserId }
             .OfType<Guid>()
             .Where(id => id != userContext.UserId)
@@ -45,7 +46,7 @@ internal sealed class CreateTicketCommandHandler(
         if (referencedUserIds.Length > 0)
         {
             List<Guid> existingUserIds = await context.Users
-                .Where(u => referencedUserIds.Contains(u.Id))
+                .Where(u => referencedUserIds.Contains(u.Id) && u.IsActive)
                 .Select(u => u.Id)
                 .ToListAsync(cancellationToken);
 

@@ -108,5 +108,10 @@ public sealed class CreateSectorCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
+
+        Sector sector = await context.Sectors.SingleAsync(s => s.Id == result.Value);
+        sector.Name.ShouldBe("Helpdesk");
+        sector.DepartmentId.ShouldBe(department.Id);
+        sector.IsActive.ShouldBeTrue();
     }
 }

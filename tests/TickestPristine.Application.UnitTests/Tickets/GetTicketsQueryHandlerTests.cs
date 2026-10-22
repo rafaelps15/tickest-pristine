@@ -48,6 +48,7 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
             CancellationToken.None);
 
         // Assert
+        result.IsSuccess.ShouldBeTrue();
         result.Value.Items.Select(t => t.Id).ShouldBe([breached.Id, later.Id]);
     }
 
@@ -69,6 +70,7 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
             CancellationToken.None);
 
         // Assert
+        result.IsSuccess.ShouldBeTrue();
         result.Value.Items.ShouldHaveSingleItem().Id.ShouldBe(own.Id);
     }
 
@@ -91,6 +93,7 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
             CancellationToken.None);
 
         // Assert
+        result.IsSuccess.ShouldBeTrue();
         result.Value.Items.ShouldHaveSingleItem().Id.ShouldBe(assigned.Id);
     }
 
@@ -111,6 +114,7 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
             CancellationToken.None);
 
         // Assert
+        result.IsSuccess.ShouldBeTrue();
         result.Value.Items.ShouldHaveSingleItem().Id.ShouldBe(unassigned.Id);
     }
 
@@ -132,6 +136,7 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
             CancellationToken.None);
 
         // Assert
+        result.IsSuccess.ShouldBeTrue();
         result.Value.Items.ShouldHaveSingleItem().Id.ShouldBe(unassigned.Id);
     }
 
@@ -149,6 +154,7 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
         Result<PagedResponse<TicketSummaryResponse>> result = await handler.Handle(CreateQuery(), CancellationToken.None);
 
         // Assert
+        result.IsSuccess.ShouldBeTrue();
         TicketSummaryResponse item = result.Value.Items.ShouldHaveSingleItem();
         item.Id.ShouldBe(ticket.Id);
         item.RequesterName.ShouldBe($"{requester.FirstName} {requester.LastName}");
@@ -176,6 +182,7 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
             CancellationToken.None);
 
         // Assert
+        result.IsSuccess.ShouldBeTrue();
         TicketSummaryResponse item = result.Value.Items.ShouldHaveSingleItem();
         item.Id.ShouldBe(closed.Id);
         item.SlaStatus.ShouldBe(TicketSlaStatus.Met);
@@ -209,6 +216,7 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
             CancellationToken.None);
 
         // Assert
+        result.IsSuccess.ShouldBeTrue();
         TicketSummaryResponse item = result.Value.Items.ShouldHaveSingleItem();
         item.SlaStatus.ShouldBe(slaStatus);
     }
@@ -232,7 +240,31 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
             CancellationToken.None);
 
         // Assert
+        result.IsSuccess.ShouldBeTrue();
         result.Value.Items.ShouldHaveSingleItem().Id.ShouldBe(printer.Id);
+    }
+
+    [Fact]
+    public async Task Handle_Should_FilterByPriority_WhenPriorityIsInformed()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        (User requester, Sector sector) = await SeedRequesterAndSectorAsync(context);
+        Ticket low = await SeedTicketAsync(context, requester, sector, TicketStatus.Open, NowUtc.AddHours(-1), priority: TicketPriority.Low);
+        await SeedTicketAsync(context, requester, sector, TicketStatus.Open, NowUtc.AddHours(-1));
+
+        GetTicketsQueryHandler handler = CreateHandler(context);
+
+        // Act
+        Result<PagedResponse<TicketSummaryResponse>> result = await handler.Handle(
+            CreateQuery(priority: TicketPriority.Low),
+            CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        TicketSummaryResponse item = result.Value.Items.ShouldHaveSingleItem();
+        item.Id.ShouldBe(low.Id);
+        item.Priority.ShouldBe(TicketPriority.Low);
     }
 
     private static GetTicketsQueryHandler CreateHandler(TestDbContext context)
@@ -251,8 +283,9 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
         Guid? requesterId = null,
         Guid? assignedToUserId = null,
         bool unassignedOnly = false,
-        TicketSortOrder sort = TicketSortOrder.Newest) =>
-        new(statuses ?? [], null, sectorId, requesterId, assignedToUserId, unassignedOnly, slaStatus, search, sort, new PageRequest(1, 20));
+        TicketSortOrder sort = TicketSortOrder.Newest,
+        TicketPriority? priority = null) =>
+        new(statuses ?? [], priority, sectorId, requesterId, assignedToUserId, unassignedOnly, slaStatus, search, sort, new PageRequest(1, 20));
 
     private static async Task<(User Requester, Sector Sector)> SeedRequesterAndSectorAsync(TestDbContext context)
     {
@@ -273,7 +306,7 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
     }
 
     /// <summary>
-    /// Chamado de prioridade Urgente (4 h de SLA, alerta em 3 h) aberto no instante informado.
+    /// Chamado aberto no instante informado, por padrão de prioridade Urgente (4 h de SLA, alerta em 3 h).
     /// </summary>
     private static async Task<Ticket> SeedTicketAsync(
         TestDbContext context,
@@ -283,21 +316,22 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
         DateTime createdAtUtc,
         DateTime? resolvedAtUtc = null,
         string title = "Printer is broken",
-        Guid? assignedToUserId = null)
+        Guid? assignedToUserId = null,
+        TicketPriority priority = TicketPriority.Urgent)
     {
         var ticket = new Ticket
         {
             Id = Guid.NewGuid(),
             Title = title,
             Description = "Original description",
-            Priority = TicketPriority.Urgent,
+            Priority = priority,
             Status = status,
             CreatedByUserId = requester.Id,
             AssignedToUserId = assignedToUserId,
             SectorId = sector.Id,
             CreatedAtUtc = createdAtUtc,
-            DueAtUtc = TicketSla.DueAt(createdAtUtc, TicketPriority.Urgent),
-            SlaWarningAtUtc = TicketSla.WarningAt(createdAtUtc, TicketPriority.Urgent),
+            DueAtUtc = TicketSla.DueAt(createdAtUtc, priority),
+            SlaWarningAtUtc = TicketSla.WarningAt(createdAtUtc, priority),
             ResolvedAtUtc = resolvedAtUtc
         };
 

@@ -77,6 +77,11 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         // Assert
         ticketId.ShouldNotBe(Guid.Empty);
+
+        TicketDetailDto? ticket = await HttpClient.GetFromJsonAsync<TicketDetailDto>($"tickets/{ticketId}");
+        ticket!.Title.ShouldBe("Printer is broken");
+        ticket.Status.ShouldBe(1); // Open
+        ticket.SectorId.ShouldBe(sectorId);
     }
 
     [Fact]
@@ -148,6 +153,10 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        TicketDetailDto? ticket = await HttpClient.GetFromJsonAsync<TicketDetailDto>($"tickets/{ticketId}");
+        ticket!.Description.ShouldBe("Updated description");
+        ticket.Status.ShouldBe(2); // InProgress
     }
 
     [Fact]
@@ -230,6 +239,9 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        TicketDetailDto? ticket = await HttpClient.GetFromJsonAsync<TicketDetailDto>($"tickets/{ticketId}");
+        ticket!.Status.ShouldBe(1); // Open
     }
 
     [Fact]
@@ -248,6 +260,9 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        HttpResponseMessage getResponse = await HttpClient.GetAsync($"tickets/{ticketId}");
+        getResponse.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact]
@@ -584,7 +599,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
-    public async Task GetAll_Should_ReturnOnlyUnassignedTickets_WhenUnassignedOnlyIsTrue()
+    public async Task GetAll_Should_IgnoreAssignee_WhenUnassignedOnlyIsTrue()
     {
         // Arrange
         Guid sectorId = await CreateSectorAsAdminAsync();
@@ -794,6 +809,226 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
+    [Fact]
+    public async Task Create_Should_ReturnForbidden_WhenOpeningOnBehalfOfAnotherUserWithoutManagePermission()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        Guid otherUserId = await RegisterUserAsync(UniqueEmail());
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("tickets", new
+        {
+            title = "Printer is broken",
+            description = "The printer on the 3rd floor is not working",
+            priority = 2,
+            sectorId,
+            requesterId = otherUserId
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.Unauthorized");
+    }
+
+    [Fact]
+    public async Task Create_Should_ReturnNotFound_WhenResponsibleDoesNotExist()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("tickets", new
+        {
+            title = "Printer is broken",
+            description = "The printer on the 3rd floor is not working",
+            priority = 2,
+            sectorId,
+            responsibleId = Guid.NewGuid()
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.NotFound");
+    }
+
+    [Fact]
+    public async Task Create_Should_ReturnBadRequest_WhenTitleIsEmpty()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("tickets", new
+        {
+            title = string.Empty,
+            description = "The printer on the 3rd floor is not working",
+            priority = 2,
+            sectorId
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Update_Should_ReturnForbidden_WhenCallerIsNotOwnerAndLacksManagePermission()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens ownerTokens) = await RegisterAndLoginAsync();
+        Authenticate(ownerTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        (_, AccessTokens outsiderTokens) = await RegisterAndLoginAsync();
+        Authenticate(outsiderTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = "Updated description",
+            status = 2 // InProgress
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Update_Should_ReturnBadRequest_WhenTicketIsNotActive()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        HttpResponseMessage cancelResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = "The printer is working again",
+            status = 5 // Canceled
+        });
+        cancelResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = "Updated description",
+            status = 5 // Canceled
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Tickets.NotActive");
+    }
+
+    [Fact]
+    public async Task Update_Should_ReturnBadRequest_WhenStatusTransitionIsNotAllowed()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        // Act: de Aberto não se vai direto para Resolvido
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = "Fixed the printer",
+            status = 3 // Resolved
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Tickets.InvalidStatusTransition");
+    }
+
+    [Fact]
+    public async Task Delete_Should_ReturnForbidden_WhenCallerIsNotOwnerAndLacksManagePermission()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens ownerTokens) = await RegisterAndLoginAsync();
+        Authenticate(ownerTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        (_, AccessTokens outsiderTokens) = await RegisterAndLoginAsync();
+        Authenticate(outsiderTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"tickets/{ticketId}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Delete_Should_ReturnBadRequest_WhenTicketIsNotActive()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        HttpResponseMessage cancelResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = "The printer is working again",
+            status = 5 // Canceled
+        });
+        cancelResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"tickets/{ticketId}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Tickets.NotActive");
+    }
+
+    [Fact]
+    public async Task Reopen_Should_ReturnBadRequest_WhenTicketIsAlreadyActive()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsync($"tickets/{ticketId}/reopen", null);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Tickets.AlreadyActive");
+    }
+
+    [Fact]
+    public async Task GetById_Should_ReturnNotFound_WhenTicketDoesNotExist()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/{Guid.NewGuid()}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
     private static readonly TimeZoneInfo BrasiliaTimeZone = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
 
     private static DateOnly BrasiliaToday() =>
@@ -849,7 +1084,16 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
     private sealed record PagedOwnTicketsDto(List<TicketDto> Items, int TotalCount);
 
-    private sealed record TicketDetailDto(Guid Id, Guid OpenedByUserId, Guid SectorId, int Status, int SlaStatus);
+    private sealed record TicketDetailDto(
+        Guid Id,
+        string Title,
+        string Description,
+        Guid OpenedByUserId,
+        Guid SectorId,
+        int Status,
+        int SlaStatus);
+
+    private sealed record ProblemDto(int Status, string Title, string Detail);
 
     private sealed record TicketCountDto(int Priority, int Status, int Count);
 

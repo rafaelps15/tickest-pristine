@@ -4,6 +4,7 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
+using TickestPristine.Application.Users;
 
 namespace TickestPristine.Infrastructure.Database.Seeding;
 
@@ -30,8 +31,8 @@ internal sealed class AdminUserSeeder(
         if (await context.Users.AnyAsync(u => u.Email == settings.Email, cancellationToken))
         {
             throw new InvalidOperationException(
-                $"There is no active administrator and the '{AdminUserOptions.SectionName}:Email' account already exists. " +
-                "Grant the Administrator role to an account manually or configure another e-mail.");
+                $"Não há administrador ativo e a conta de '{AdminUserOptions.SectionName}:Email' já existe. " +
+                "Atribua a função de administrador a uma conta manualmente ou configure outro e-mail.");
         }
 
         var admin = new User

@@ -55,10 +55,9 @@ internal static class ValidationDecorator
             return [];
         }
 
-        var context = new ValidationContext<TCommand>(command);
-
+        // Um contexto por validator: o contexto acumula as falhas e não pode ser compartilhado entre execuções paralelas.
         ValidationResult[] validationResults = await Task.WhenAll(
-            validators.Select(validator => validator.ValidateAsync(context, cancellationToken)));
+            validators.Select(validator => validator.ValidateAsync(new ValidationContext<TCommand>(command), cancellationToken)));
 
         ValidationFailure[] validationFailures = validationResults
             .Where(validationResult => !validationResult.IsValid)

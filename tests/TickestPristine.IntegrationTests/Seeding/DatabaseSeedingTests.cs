@@ -39,7 +39,7 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
     }
 
     [Fact]
-    public async Task Migrations_Should_GrantEveryCatalogPermissionToAdministrator()
+    public async Task Seeding_Should_GrantEveryCatalogPermissionToAdministrator()
     {
         // Arrange
         AccessTokens tokens = await LoginAsync(AdminEmail, AdminPassword);

@@ -10,6 +10,7 @@ public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseInteg
     private static readonly string[] RoleManagerPermissionCodes = ["roles:manage", "roles:read"];
     private static readonly string[] EscalationPermissionCodes = ["users:assign-roles"];
     private static readonly string[] TicketOnlyPermissionCodes = ["tickets:manage"];
+    private static readonly string[] UnknownPermissionCodes = ["unknown:permission"];
 
     private async Task AuthenticateAsAdminAsync()
     {
@@ -106,7 +107,95 @@ public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseInteg
     [Fact]
     public async Task AssignPermissions_Should_ReturnForbidden_WhenGrantingAdministrativePermissionCallerLacks()
     {
-        // Arrange: role que só gerencia funções, atribuída a um colaborador
+        // Arrange
+        string targetRoleName = await CreateTargetRoleAndAuthenticateAsRoleManagerAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
+            $"roles/{targetRoleName}/permissions",
+            new { permissionCodes = EscalationPermissionCodes });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Roles.PrivilegeEscalation");
+    }
+
+    [Fact]
+    public async Task AssignPermissions_Should_Succeed_WhenChangingOnlyNonAdministrativePermissions()
+    {
+        // Arrange
+        string targetRoleName = await CreateTargetRoleAndAuthenticateAsRoleManagerAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
+            $"roles/{targetRoleName}/permissions",
+            new { permissionCodes = TicketOnlyPermissionCodes });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        List<RoleDto>? roles = await HttpClient.GetFromJsonAsync<List<RoleDto>>("roles");
+        roles!.Single(r => r.Name == targetRoleName).PermissionCodes.ShouldBe(TicketOnlyPermissionCodes, ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task AssignPermissions_Should_ReturnBadRequest_WhenPermissionCodeIsUnknown()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string roleName = await CreateTestRoleAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
+            $"roles/{roleName}/permissions",
+            new { permissionCodes = UnknownPermissionCodes });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        List<RoleDto>? roles = await HttpClient.GetFromJsonAsync<List<RoleDto>>("roles");
+        roles!.Single(r => r.Name == roleName).PermissionCodes.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task AssignPermissions_Should_ReturnForbidden_WhenCallerLacksRolesManagePermission()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string roleName = await CreateTestRoleAsync();
+
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
+            $"roles/{roleName}/permissions",
+            new { permissionCodes = AssignedPermissionCodes });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnForbidden_WhenCallerLacksRolesReadPermission()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("roles");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    /// <summary>
+    /// Cria uma role de teste vazia e autentica como um colaborador cuja role só gerencia e lê funções.
+    /// </summary>
+    private async Task<string> CreateTargetRoleAndAuthenticateAsRoleManagerAsync()
+    {
         await AuthenticateAsAdminAsync();
 
         string roleManagerRoleName = await CreateTestRoleAsync();
@@ -125,19 +214,10 @@ public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseInteg
         AccessTokens roleManagerTokens = await LoginAsync(roleManagerEmail);
         Authenticate(roleManagerTokens.AccessToken);
 
-        // Act
-        HttpResponseMessage escalation = await HttpClient.PutAsJsonAsync(
-            $"roles/{targetRoleName}/permissions",
-            new { permissionCodes = EscalationPermissionCodes });
-
-        HttpResponseMessage ticketOnly = await HttpClient.PutAsJsonAsync(
-            $"roles/{targetRoleName}/permissions",
-            new { permissionCodes = TicketOnlyPermissionCodes });
-
-        // Assert
-        escalation.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
-        ticketOnly.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        return targetRoleName;
     }
 
     private sealed record RoleDto(string Name, bool IsDefault, bool IsAdministrator, List<string> PermissionCodes);
+
+    private sealed record ProblemDto(int Status, string Title, string Detail);
 }

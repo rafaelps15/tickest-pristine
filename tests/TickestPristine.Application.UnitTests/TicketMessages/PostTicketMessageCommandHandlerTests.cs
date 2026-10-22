@@ -112,6 +112,11 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
+
+        TicketMessage message = await context.TicketMessages.SingleAsync(m => m.Id == result.Value);
+        message.TicketId.ShouldBe(ticketId);
+        message.AuthorUserId.ShouldBe(AssignedId);
+        message.Content.ShouldBe("On it");
     }
 
     [Fact]
@@ -138,6 +143,11 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
+
+        TicketMessage message = await context.TicketMessages.SingleAsync(m => m.Id == result.Value);
+        message.TicketId.ShouldBe(ticketId);
+        message.AuthorUserId.ShouldBe(managerId);
+        message.Content.ShouldBe("Escalating this");
     }
 
     private static async Task<Guid> SeedTicketAsync(TestDbContext context)

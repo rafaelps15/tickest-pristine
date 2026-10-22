@@ -34,6 +34,69 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
+    public async Task Handle_Should_ReturnInvalidCredentials_WhenCredentialDoesNotExist()
+    {
+        // Arrange: o usuário existe, mas não tem linha de credencial
+        await using TestDbContext context = CreateDbContext();
+        User user = CreateUser();
+        user.Email = Email;
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+
+        IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
+        ITokenProvider tokenProvider = Substitute.For<ITokenProvider>();
+
+        var handler = new LoginUserCommandHandler(
+            context,
+            passwordHasher,
+            tokenProvider,
+            Substitute.For<IDateTimeProvider>());
+
+        // Act
+        Result<AccessTokensResponse> result = await handler.Handle(
+            new LoginUserCommand(Email, Password),
+            CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.InvalidCredentials);
+        passwordHasher.DidNotReceive().Verify(Arg.Any<string>(), Arg.Any<string>());
+        await tokenProvider.DidNotReceive().CreateAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Should_ResetFailedAttempts_WhenPasswordIsCorrectButPasswordChangeIsRequired()
+    {
+        // Arrange: quatro senhas erradas seguidas e a senha ainda provisória
+        await using TestDbContext context = CreateDbContext();
+        await SeedUserAsync(context, mustChangePassword: true);
+        UserCredential credential = await context.UserCredentials.SingleAsync();
+        credential.FailedLoginAttempts = 4;
+        await context.SaveChangesAsync();
+
+        IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
+        passwordHasher.Verify(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(new DateTime(2026, 10, 1, 9, 0, 0, DateTimeKind.Utc));
+
+        var handler = new LoginUserCommandHandler(context, passwordHasher, Substitute.For<ITokenProvider>(), dateTimeProvider);
+
+        // Act
+        Result<AccessTokensResponse> result = await handler.Handle(
+            new LoginUserCommand(Email, Password),
+            CancellationToken.None);
+
+        // Assert: o login é recusado, mas o zeramento do contador já foi gravado no banco
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.PasswordChangeRequired);
+
+        context.ChangeTracker.Clear();
+        UserCredential stored = await context.UserCredentials.AsNoTracking().SingleAsync();
+        stored.FailedLoginAttempts.ShouldBe(0);
+        stored.LockoutEndsAtUtc.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task Handle_Should_ReturnInvalidCredentials_WhenPasswordIsInvalid()
     {
         // Arrange

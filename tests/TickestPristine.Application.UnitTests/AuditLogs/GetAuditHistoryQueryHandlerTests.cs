@@ -26,7 +26,7 @@ public sealed class GetAuditHistoryQueryHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnOnlyEntityHistoryNewestFirst()
+    public async Task Handle_Should_ReturnOnlyEntityHistoryNewestFirst_WhenOtherEntitiesHaveHistory()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();

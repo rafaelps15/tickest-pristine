@@ -18,8 +18,11 @@ internal sealed class DeleteTicketAttachmentCommandHandler(
 {
     public async Task<Result> Handle(DeleteTicketAttachmentCommand command, CancellationToken cancellationToken)
     {
+        // O filtro global do chamado exclui os excluídos: mensagem ou anexo de chamado excluído não é mais alterado.
         TicketAttachment? attachment = await context.TicketAttachments
-            .SingleOrDefaultAsync(a => a.Id == command.AttachmentId, cancellationToken);
+            .SingleOrDefaultAsync(
+                a => a.Id == command.AttachmentId && context.Tickets.Any(t => t.Id == a.TicketId),
+                cancellationToken);
 
         if (attachment is null)
         {
@@ -38,7 +41,9 @@ internal sealed class DeleteTicketAttachmentCommandHandler(
             return access;
         }
 
-        attachment.DeletedAtUtc = dateTimeProvider.UtcNow;
+        DateTime nowUtc = dateTimeProvider.UtcNow;
+
+        attachment.DeletedAtUtc = nowUtc;
 
         attachment.Raise(new TicketAttachmentDeletedDomainEvent(attachment.Id, attachment.TicketId));
 
@@ -47,7 +52,7 @@ internal sealed class DeleteTicketAttachmentCommandHandler(
             userContext.UserId,
             TicketHistoryAction.AttachmentRemoved,
             TicketHistoryDescriptions.AttachmentRemoved,
-            dateTimeProvider.UtcNow));
+            nowUtc));
 
         await context.SaveChangesAsync(cancellationToken);
 

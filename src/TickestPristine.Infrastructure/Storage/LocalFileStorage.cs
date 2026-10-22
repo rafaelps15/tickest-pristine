@@ -10,7 +10,8 @@ internal sealed class LocalFileStorage(IOptions<FileStorageOptions> options) : I
 {
     private const int BufferSize = 81920;
 
-    private readonly string _rootPath = Path.GetFullPath(options.Value.RootPath);
+    // Sem o separador no fim: com "C:\anexos\\" configurado, a checagem de caminho contido recusaria todos os arquivos.
+    private readonly string _rootPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(options.Value.RootPath));
 
     public async Task<string> SaveAsync(Stream content, string fileName, CancellationToken cancellationToken)
     {
@@ -18,15 +19,27 @@ internal sealed class LocalFileStorage(IOptions<FileStorageOptions> options) : I
 
         string storageKey = $"{Guid.NewGuid():N}{SanitizeExtension(Path.GetExtension(fileName))}";
 
-        await using var fileStream = new FileStream(
-            ResolveContainedPath(storageKey),
-            FileMode.CreateNew,
-            FileAccess.Write,
-            FileShare.None,
-            BufferSize,
-            FileOptions.Asynchronous);
+        string path = ResolveContainedPath(storageKey);
 
-        await content.CopyToAsync(fileStream, cancellationToken);
+        try
+        {
+            await using var fileStream = new FileStream(
+                path,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                BufferSize,
+                FileOptions.Asynchronous);
+
+            await content.CopyToAsync(fileStream, cancellationToken);
+        }
+        catch
+        {
+            // Cópia interrompida (ex.: requisição cancelada): o arquivo pela metade não fica órfão na pasta.
+            File.Delete(path);
+
+            throw;
+        }
 
         return storageKey;
     }

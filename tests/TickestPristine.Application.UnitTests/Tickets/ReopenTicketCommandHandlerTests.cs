@@ -83,6 +83,31 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
+    public async Task Handle_Should_ReturnUnauthorized_WhenOwnerLacksReopenOwnPermission()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Closed);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(OwnerId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.ReopenOwn, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
+        var command = new ReopenTicketCommand(ticketId);
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.Unauthorized());
+        (await context.Tickets.SingleAsync(t => t.Id == ticketId)).Status.ShouldBe(TicketStatus.Closed);
+    }
+
+    [Fact]
     public async Task Handle_Should_ReturnUnauthorized_WhenNonOwnerLacksManagePermission()
     {
         // Arrange
@@ -134,7 +159,12 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == ticketId);
         ticket.Status.ShouldBe(TicketStatus.Open);
         ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketReopenedDomainEvent);
-        (await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id)).Action.ShouldBe(TicketHistoryAction.Reopened);
+
+        // O histórico guarda o status anterior e o novo.
+        TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id);
+        history.Action.ShouldBe(TicketHistoryAction.Reopened);
+        history.OldValue.ShouldBe(status.ToString());
+        history.NewValue.ShouldBe(TicketStatus.Open.ToString());
     }
 
     [Fact]
@@ -161,6 +191,11 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
 
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == ticketId);
         ticket.Status.ShouldBe(TicketStatus.Open);
+        ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketReopenedDomainEvent);
+
+        TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id);
+        history.OldValue.ShouldBe(nameof(TicketStatus.Closed));
+        history.NewValue.ShouldBe(nameof(TicketStatus.Open));
     }
 
     private static async Task<Guid> SeedTicketAsync(TestDbContext context, Guid createdByUserId, TicketStatus status)

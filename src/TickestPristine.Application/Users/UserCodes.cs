@@ -1,4 +1,4 @@
-namespace TickestPristine.Domain.Users;
+namespace TickestPristine.Application.Users;
 
 /// <summary>
 /// Código público do usuário, gerado num lugar só: o cadastro pela API e o seed do primeiro administrador usam o

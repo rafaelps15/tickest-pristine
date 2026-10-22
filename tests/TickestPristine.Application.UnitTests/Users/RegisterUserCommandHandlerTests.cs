@@ -4,6 +4,7 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
+using TickestPristine.Application.Users;
 
 namespace TickestPristine.Application.UnitTests.Users;
 
@@ -13,7 +14,7 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         new("test@example.com", "Test", "User", "Password123!");
 
     [Fact]
-    public async Task Handle_Should_ReturnConflict_WhenEmailIsNotUnique()
+    public async Task Handle_Should_ReturnEmailNotUnique_WhenEmailIsNotUnique()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();

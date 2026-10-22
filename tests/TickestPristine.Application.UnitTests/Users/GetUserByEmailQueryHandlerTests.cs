@@ -1,6 +1,7 @@
 using TickestPristine.Application.Users.GetByEmail;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Users;
+using TickestPristine.Application.Users;
 
 namespace TickestPristine.Application.UnitTests.Users;
 

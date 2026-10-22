@@ -48,6 +48,14 @@ public sealed class TicketMessagesTests(IntegrationTestWebAppFactory factory) : 
         return await response.Content.ReadFromJsonAsync<Guid>();
     }
 
+    private async Task<Guid> PostMessageAsync(Guid ticketId, string content)
+    {
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync($"tickets/{ticketId}/messages", new { content });
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<Guid>();
+    }
+
     [Fact]
     public async Task Post_Should_ReturnUnauthorized_WhenNoTokenProvided()
     {
@@ -254,5 +262,113 @@ public sealed class TicketMessagesTests(IntegrationTestWebAppFactory factory) : 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task Post_Should_ReturnForbidden_WhenCallerIsNotParticipantAndLacksManagePermission()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens ownerTokens) = await RegisterAndLoginAsync();
+        Authenticate(ownerTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        (_, AccessTokens outsiderTokens) = await RegisterAndLoginAsync();
+        Authenticate(outsiderTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
+            $"tickets/{ticketId}/messages",
+            new { content = "Any update on this?" });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnForbidden_WhenCallerIsNotParticipantAndLacksManagePermission()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens ownerTokens) = await RegisterAndLoginAsync();
+        Authenticate(ownerTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        (_, AccessTokens outsiderTokens) = await RegisterAndLoginAsync();
+        Authenticate(outsiderTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/{ticketId}/messages");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Edit_Should_ReturnForbidden_WhenCallerIsNotAuthor()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens authorTokens) = await RegisterAndLoginAsync();
+        Authenticate(authorTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        Guid messageId = await PostMessageAsync(ticketId, "Original content");
+
+        // Nem quem gerencia chamados edita a mensagem de outra pessoa.
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
+            $"ticket-messages/{messageId}",
+            new { content = "Edited content" });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Edit_Should_ReturnNotFound_WhenTicketIsDeleted()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        Guid messageId = await PostMessageAsync(ticketId, "Original content");
+
+        HttpResponseMessage deleteTicketResponse = await HttpClient.DeleteAsync($"tickets/{ticketId}");
+        deleteTicketResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
+            $"ticket-messages/{messageId}",
+            new { content = "Edited content" });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("TicketMessages.NotFound");
+    }
+
+    [Fact]
+    public async Task Delete_Should_ReturnForbidden_WhenCallerIsNotAuthorAndLacksManagePermission()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens authorTokens) = await RegisterAndLoginAsync();
+        Authenticate(authorTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        Guid messageId = await PostMessageAsync(ticketId, "To be deleted");
+
+        (_, AccessTokens outsiderTokens) = await RegisterAndLoginAsync();
+        Authenticate(outsiderTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"ticket-messages/{messageId}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
     private sealed record TicketMessageDto(Guid Id, Guid TicketId, Guid AuthorUserId, string Content);
+
+    private sealed record ProblemDto(int Status, string Title, string Detail);
 }

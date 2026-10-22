@@ -35,6 +35,30 @@ public sealed class DeleteTicketAttachmentCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
+    public async Task Handle_Should_ReturnNotFound_WhenTicketIsDeleted()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        // O anexo continua ativo, mas o chamado dele foi excluído logicamente.
+        Guid attachmentId = await SeedAttachmentAsync(context, ticketDeleted: true);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(UploaderId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+
+        var handler = new DeleteTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        var command = new DeleteTicketAttachmentCommand(attachmentId);
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketAttachmentErrors.NotFound(attachmentId));
+    }
+
+    [Fact]
     public async Task Handle_Should_ReturnUnauthorized_WhenCallerIsNotUploaderAndLacksManagePermission()
     {
         // Arrange
@@ -90,7 +114,39 @@ public sealed class DeleteTicketAttachmentCommandHandlerTests : BaseHandlerTest
         (await context.TicketHistories.SingleAsync(h => h.TicketId == attachment.TicketId)).Action.ShouldBe(TicketHistoryAction.AttachmentRemoved);
     }
 
-    private static async Task<Guid> SeedAttachmentAsync(TestDbContext context)
+    [Fact]
+    public async Task Handle_Should_SoftDeleteAttachment_WhenCallerHasManagePermission()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid attachmentId = await SeedAttachmentAsync(context);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        var managerId = Guid.NewGuid();
+        userContext.UserId.Returns(managerId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(managerId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+            .Returns(true);
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
+
+        var handler = new DeleteTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        var command = new DeleteTicketAttachmentCommand(attachmentId);
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        TicketAttachment attachment = await context.TicketAttachments
+            .IgnoreQueryFilters()
+            .SingleAsync(a => a.Id == attachmentId);
+        attachment.DeletedAtUtc.ShouldNotBeNull();
+        attachment.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketAttachmentDeletedDomainEvent);
+    }
+
+    private static async Task<Guid> SeedAttachmentAsync(TestDbContext context, bool ticketDeleted = false)
     {
         var ticket = new Ticket
         {
@@ -102,7 +158,8 @@ public sealed class DeleteTicketAttachmentCommandHandlerTests : BaseHandlerTest
             CreatedByUserId = UploaderId,
             AssignedToUserId = null,
             SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = DateTime.UtcNow,
+            DeletedAtUtc = ticketDeleted ? DateTime.UtcNow : null
         };
         context.Tickets.Add(ticket);
 

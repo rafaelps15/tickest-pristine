@@ -43,7 +43,9 @@ internal sealed class DeleteTicketCommandHandler(
             return Result.Failure(TicketErrors.NotActive(ticket.Id));
         }
 
-        ticket.DeletedAtUtc = dateTimeProvider.UtcNow;
+        DateTime nowUtc = dateTimeProvider.UtcNow;
+
+        ticket.DeletedAtUtc = nowUtc;
 
         ticket.Raise(new TicketDeletedDomainEvent(ticket.Id));
 
@@ -52,7 +54,7 @@ internal sealed class DeleteTicketCommandHandler(
             userContext.UserId,
             TicketHistoryAction.Deleted,
             TicketHistoryDescriptions.Deleted,
-            dateTimeProvider.UtcNow));
+            nowUtc));
 
         await context.SaveChangesAsync(cancellationToken);
 

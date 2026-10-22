@@ -48,6 +48,8 @@ internal sealed class ReopenTicketCommandHandler(
             return Result.Failure(TicketErrors.InvalidStatusTransition(ticket.Status, TicketStatus.Open));
         }
 
+        TicketStatus previousStatus = ticket.Status;
+
         ticket.Status = TicketStatus.Open;
 
         ticket.Raise(new TicketReopenedDomainEvent(ticket.Id, userContext.UserId));
@@ -57,7 +59,9 @@ internal sealed class ReopenTicketCommandHandler(
             userContext.UserId,
             TicketHistoryAction.Reopened,
             TicketHistoryDescriptions.Reopened,
-            dateTimeProvider.UtcNow));
+            dateTimeProvider.UtcNow,
+            oldValue: previousStatus.ToString(),
+            newValue: TicketStatus.Open.ToString()));
 
         await context.SaveChangesAsync(cancellationToken);
 

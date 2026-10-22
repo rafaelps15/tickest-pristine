@@ -2,7 +2,7 @@
 
 public sealed class UserContextUnavailableException : Exception
 {
-    public UserContextUnavailableException() : base("User context is unavailable")
+    public UserContextUnavailableException() : base("O contexto do usuário não está disponível.")
     {
     }
 }

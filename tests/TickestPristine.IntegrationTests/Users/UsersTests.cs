@@ -21,6 +21,12 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         // Assert
         userId.ShouldNotBe(Guid.Empty);
+
+        AccessTokens tokens = await LoginAsync(email);
+        Authenticate(tokens.AccessToken);
+        UserByEmailDto? user = await HttpClient.GetFromJsonAsync<UserByEmailDto>($"users/{userId}");
+        user!.Id.ShouldBe(userId);
+        user.Email.ShouldBe(email);
     }
 
     [Fact]
@@ -267,6 +273,30 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
+    public async Task ChangeRequiredPassword_Should_ReturnBadRequest_WhenUserIsDeactivated()
+    {
+        // Arrange
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
+        await MarkPasswordAsProvisionalAsync(userId);
+
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+        (await HttpClient.PutAsync($"users/{userId}/deactivate", null)).EnsureSuccessStatusCode();
+
+        var request = new { email, currentPassword = "Password123!", newPassword = "NewPassword123!" };
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users/login/new-password", request);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.Deactivated");
+    }
+
+    [Fact]
     public async Task Login_Should_ReturnSameGenericError_WhenEmailDoesNotExistOrPasswordIsWrong()
     {
         // Arrange
@@ -330,7 +360,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
-    public async Task RefreshToken_Should_ReturnProblem_WhenTokenIsInvalid()
+    public async Task RefreshToken_Should_ReturnBadRequest_WhenTokenIsInvalid()
     {
         // Arrange
         var request = new { refreshToken = "this-token-does-not-exist" };
@@ -397,7 +427,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
-    public async Task GetAll_Should_ReturnForbidden_WhenCallerLacksUsersManagePermission()
+    public async Task GetAll_Should_ReturnForbidden_WhenCallerLacksUsersReadPermission()
     {
         // Arrange
         (_, AccessTokens tokens) = await RegisterAndLoginAsync();
@@ -437,7 +467,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
-    public async Task GetByEmail_Should_ReturnForbidden_WhenCallerLacksUsersManagePermission()
+    public async Task GetByEmail_Should_ReturnForbidden_WhenCallerLacksUsersReadPermission()
     {
         // Arrange
         string email = UniqueEmail();
@@ -471,6 +501,22 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
+    public async Task GetByEmail_Should_ReturnNotFound_WhenNoUserHasThatEmail()
+    {
+        // Arrange
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"users/by-email?email={Uri.EscapeDataString(UniqueEmail())}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.NotFoundByEmail");
+    }
+
+    [Fact]
     public async Task UpdateProfile_Should_UpdateOwnProfile()
     {
         // Arrange
@@ -491,7 +537,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
-    public async Task UpdateProfile_Should_ReturnForbidden_WhenUpdatingAnotherUserWithoutManagePermission()
+    public async Task UpdateProfile_Should_ReturnForbidden_WhenUpdatingAnotherUserWithoutUpdatePermission()
     {
         // Arrange
         Guid otherUserId = await RegisterUserAsync(UniqueEmail());
@@ -521,6 +567,24 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task UpdateProfile_Should_ReturnNotFound_WhenUserDoesNotExist()
+    {
+        // Arrange
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
+            $"users/{Guid.NewGuid()}/profile",
+            new { firstName = "Novo", lastName = "Nome" });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.NotFound");
     }
 
     [Fact]
@@ -754,7 +818,8 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         string roleName = await CreateTestRoleAsync();
 
-        Guid userId = await RegisterUserAsync(UniqueEmail());
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
 
         // Act
         HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
@@ -763,6 +828,10 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        PagedDto<UserSummaryDto>? users = await HttpClient.GetFromJsonAsync<PagedDto<UserSummaryDto>>($"users?search={email}");
+        UserSummaryDto user = users!.Items.Single(u => u.Id == userId);
+        user.Roles.ShouldHaveSingleItem().Name.ShouldBe(roleName);
     }
 
     [Fact]
@@ -791,7 +860,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
-    public async Task AssignRoles_Should_ReturnProblem_WhenRoleDoesNotExist()
+    public async Task AssignRoles_Should_ReturnNotFound_WhenRoleDoesNotExist()
     {
         // Arrange
         AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
@@ -805,7 +874,29 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
             new { roleNames = new[] { $"Role-{Guid.NewGuid():N}" } });
 
         // Assert
-        response.IsSuccessStatusCode.ShouldBeFalse();
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Roles.NotFound");
+    }
+
+    [Fact]
+    public async Task AssignRoles_Should_ReturnNotFound_WhenUserDoesNotExist()
+    {
+        // Arrange
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+
+        string roleName = await CreateTestRoleAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
+            $"users/{Guid.NewGuid()}/roles",
+            new { roleNames = new[] { roleName } });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.NotFound");
     }
 
     [Fact]
@@ -844,7 +935,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
-    public async Task AssignRoles_Should_ReturnForbidden_WhenCallerLacksManageRolesPermission()
+    public async Task AssignRoles_Should_ReturnForbidden_WhenCallerLacksAssignRolesPermission()
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
@@ -1049,6 +1140,47 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
+    public async Task Deactivate_Should_ReturnConflict_WhenUserIsLastActiveAdministrator()
+    {
+        // Arrange
+        // Quem chama tem todas as permissões por uma role de teste, sem ser administrador: o administrador do seed não
+        // pode desativar a si mesmo, e os testes rodam em sequência sem deixar outro administrador no banco.
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+        Guid adminUserId = GetUserId(adminTokens);
+
+        string everyPermissionRole = await CreateRoleWithPermissionsAsync([.. Permission.All.Select(p => p.Code)]);
+
+        string callerEmail = UniqueEmail();
+        Guid callerId = await RegisterUserAsync(callerEmail);
+        (await HttpClient.PutAsJsonAsync($"users/{callerId}/roles", new { roleNames = new[] { everyPermissionRole } }))
+            .EnsureSuccessStatusCode();
+
+        Authenticate((await LoginAsync(callerEmail)).AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsync($"users/{adminUserId}/deactivate", null);
+
+        try
+        {
+            // Assert
+            response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+            ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+            problem!.Title.ShouldBe("Roles.LastAdministrator");
+
+            (await LoginAsync(AdminEmail, AdminPassword)).AccessToken.ShouldNotBeNullOrWhiteSpace();
+        }
+        finally
+        {
+            // Se a desativação passar por engano, reativa o administrador do seed, de que os outros testes dependem.
+            if (response.IsSuccessStatusCode)
+            {
+                await HttpClient.PutAsync($"users/{adminUserId}/activate", null);
+            }
+        }
+    }
+
+    [Fact]
     public async Task Deactivate_Should_ReturnForbidden_WhenCallerLacksDeactivatePermission()
     {
         // Arrange
@@ -1241,6 +1373,36 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
+    public async Task Activate_Should_ReturnForbidden_WhenTargetHasAdministrativePermissionsCallerLacks()
+    {
+        // Arrange
+        // Quem chama só pode reativar colaboradores; o alvo, desativado pelo administrador, também gerencia funções.
+        Authenticate((await LoginAsync(AdminEmail, AdminPassword)).AccessToken);
+        string activatorRole = await CreateRoleWithPermissionsAsync(PermissionCodes.Users.Deactivate);
+        string rolesManagerRole = await CreateRoleWithPermissionsAsync(PermissionCodes.Roles.Manage);
+
+        string callerEmail = UniqueEmail();
+        Guid callerId = await RegisterUserAsync(callerEmail);
+        (await HttpClient.PutAsJsonAsync($"users/{callerId}/roles", new { roleNames = new[] { activatorRole } }))
+            .EnsureSuccessStatusCode();
+
+        Guid targetId = await RegisterUserAsync(UniqueEmail());
+        (await HttpClient.PutAsJsonAsync($"users/{targetId}/roles", new { roleNames = new[] { rolesManagerRole } }))
+            .EnsureSuccessStatusCode();
+        (await HttpClient.PutAsync($"users/{targetId}/deactivate", null)).EnsureSuccessStatusCode();
+
+        Authenticate((await LoginAsync(callerEmail)).AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsync($"users/{targetId}/activate", null);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.CannotManagePrivilegedUser");
+    }
+
+    [Fact]
     public async Task Activate_Should_ReturnUnauthorized_WhenNotAuthenticated()
     {
         // Arrange
@@ -1266,6 +1428,41 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetById_Should_ReturnUser_WhenCallerIsSelf()
+    {
+        // Arrange
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
+        AccessTokens tokens = await LoginAsync(email);
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"users/{userId}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        UserByEmailDto? user = await response.Content.ReadFromJsonAsync<UserByEmailDto>();
+        user!.Id.ShouldBe(userId);
+        user.Email.ShouldBe(email);
+    }
+
+    [Fact]
+    public async Task GetById_Should_ReturnNotFound_WhenUserDoesNotExist()
+    {
+        // Arrange
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"users/{Guid.NewGuid()}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.NotFound");
     }
 
     private async Task<string> CreateRoleWithPermissionsAsync(params string[] permissionCodes)

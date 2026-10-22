@@ -87,6 +87,39 @@ public sealed class ChangeRequiredUserPasswordCommandHandlerTests : BaseHandlerT
     }
 
     [Fact]
+    public async Task Handle_Should_ReturnLockedOut_WhenAccountIsLocked()
+    {
+        // Arrange: conta bloqueada até daqui a 5 minutos, mesmo com a senha atual correta
+        await using TestDbContext context = CreateDbContext();
+        await SeedUserAsync(context);
+        var nowUtc = new DateTime(2026, 10, 1, 9, 0, 0, DateTimeKind.Utc);
+        UserCredential credential = await context.UserCredentials.SingleAsync();
+        credential.LockoutEndsAtUtc = nowUtc.AddMinutes(5);
+        await context.SaveChangesAsync();
+
+        IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
+        passwordHasher.Verify(CurrentPassword, "old-hash").Returns(true);
+        ITokenProvider tokenProvider = Substitute.For<ITokenProvider>();
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(nowUtc);
+
+        var handler = new ChangeRequiredUserPasswordCommandHandler(context, passwordHasher, tokenProvider, dateTimeProvider);
+
+        // Act
+        Result<AccessTokensResponse> result = await handler.Handle(Command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.LockedOut);
+        passwordHasher.DidNotReceive().Verify(Arg.Any<string>(), Arg.Any<string>());
+        await tokenProvider.DidNotReceive().CreateAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+
+        UserCredential unchanged = await context.UserCredentials.SingleAsync();
+        unchanged.PasswordHash.ShouldBe("old-hash");
+        unchanged.MustChangePassword.ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task Handle_Should_ReturnPasswordChangeNotRequired_WhenPasswordIsNotProvisional()
     {
         // Arrange

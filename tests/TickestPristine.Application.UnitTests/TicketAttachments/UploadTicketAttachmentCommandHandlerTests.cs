@@ -2,6 +2,7 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Storage;
 using TickestPristine.Domain.Roles;
+using TickestPristine.Domain.Sectors;
 using TickestPristine.Application.TicketAttachments.Upload;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
@@ -127,6 +128,48 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         TicketAttachment attachment = await context.TicketAttachments.SingleAsync(a => a.Id == result.Value);
         attachment.UploadedByUserId.ShouldBe(managerId);
         attachment.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketAttachmentUploadedDomainEvent);
+    }
+
+    [Fact]
+    public async Task Handle_Should_DeleteStoredFile_WhenSaveChangesFails()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context);
+        var existingSector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = Guid.NewGuid(), IsActive = true };
+        context.Sectors.Add(existingSector);
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(CreatorId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
+        IFileStorage fileStorage = Substitute.For<IFileStorage>();
+        // Depois de gravar o arquivo, um setor com chave repetida entra no contexto e faz o SaveChanges falhar.
+        fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                context.Sectors.Add(new Sector
+                {
+                    Id = existingSector.Id,
+                    Name = "Duplicated",
+                    DepartmentId = existingSector.DepartmentId,
+                    IsActive = true
+                });
+
+                return Task.FromResult("generated-storage-key.pdf");
+            });
+
+        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage);
+
+        // Act
+        Exception? exception = await Record.ExceptionAsync(() => handler.Handle(ValidCommand(ticketId), CancellationToken.None));
+
+        // Assert
+        exception.ShouldNotBeNull();
+        await fileStorage.Received(1).DeleteAsync("generated-storage-key.pdf", Arg.Any<CancellationToken>());
     }
 
     private static UploadTicketAttachmentCommand ValidCommand(Guid ticketId) => new()

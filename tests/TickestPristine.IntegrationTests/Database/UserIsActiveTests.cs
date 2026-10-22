@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Domain.Users;
 using TickestPristine.Infrastructure.Database;
+using TickestPristine.Application.Users;
 
 namespace TickestPristine.IntegrationTests.Database;
 

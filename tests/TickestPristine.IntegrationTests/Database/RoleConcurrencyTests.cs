@@ -11,9 +11,10 @@ namespace TickestPristine.IntegrationTests.Database;
 public sealed class RoleConcurrencyTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
     [Fact]
-    public async Task SaveChanges_Should_RejectSecondAdministratorRemoval_WhenBothReadTheSameVersion()
+    public async Task SaveChanges_Should_ThrowConcurrencyException_WhenBothContextsReadTheSameRoleVersion()
     {
-        // Arrange: dois contextos leem a role de administrador na mesma versão
+        // Arrange
+        // Dois contextos leem a role de administrador na mesma versão.
         using IServiceScope firstScope = Services.CreateScope();
         using IServiceScope secondScope = Services.CreateScope();
         ApplicationDbContext firstContext = firstScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();

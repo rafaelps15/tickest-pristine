@@ -5,6 +5,7 @@ using TickestPristine.Application.Users.AssignRoles;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
+using TickestPristine.Application.Users;
 
 namespace TickestPristine.Application.UnitTests.Users;
 
@@ -126,10 +127,10 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         };
         context.Users.Add(user);
 
-        Role gestorRole = CreateRole("Gestor");
-        context.Roles.Add(gestorRole);
-        context.RolePermissions.Add(new RolePermission { RoleName = gestorRole.Name, PermissionCode = PermissionCodes.Users.Read });
-        context.RolePermissions.Add(new RolePermission { RoleName = gestorRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
+        Role managerRole = CreateRole("Gestor");
+        context.Roles.Add(managerRole);
+        context.RolePermissions.Add(new RolePermission { RoleName = managerRole.Name, PermissionCode = PermissionCodes.Users.Read });
+        context.RolePermissions.Add(new RolePermission { RoleName = managerRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
 
         await context.SaveChangesAsync();
 
@@ -141,7 +142,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             .Returns([PermissionCodes.Users.Read, PermissionCodes.Users.AssignRoles]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
-        var command = new AssignUserRolesCommand(user.Id, [gestorRole.Name]);
+        var command = new AssignUserRolesCommand(user.Id, [managerRole.Name]);
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -254,13 +255,13 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         };
         context.Users.Add(user);
 
-        Role gestorRole = CreateRole("Gestor");
+        Role managerRole = CreateRole("Gestor");
         Role agentRole = CreateRole("Agente");
-        context.Roles.Add(gestorRole);
+        context.Roles.Add(managerRole);
         context.Roles.Add(agentRole);
-        context.RolePermissions.Add(new RolePermission { RoleName = gestorRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
+        context.RolePermissions.Add(new RolePermission { RoleName = managerRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
         context.RolePermissions.Add(new RolePermission { RoleName = agentRole.Name, PermissionCode = PermissionCodes.Tickets.Manage });
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = gestorRole.Name });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = managerRole.Name });
 
         await context.SaveChangesAsync();
 
@@ -272,7 +273,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             .Returns([PermissionCodes.Users.AssignRoles]);
 
         var handler = new AssignUserRolesCommandHandler(context, userContext, permissionProvider);
-        var command = new AssignUserRolesCommand(user.Id, [gestorRole.Name, agentRole.Name]);
+        var command = new AssignUserRolesCommand(user.Id, [managerRole.Name, agentRole.Name]);
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);

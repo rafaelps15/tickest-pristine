@@ -12,7 +12,7 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
     private static readonly Guid CredentialSecurityStamp = Guid.NewGuid();
 
     [Fact]
-    public async Task Handle_Should_ReturnFailure_WhenRefreshTokenDoesNotExist()
+    public async Task Handle_Should_ReturnInvalidRefreshToken_WhenRefreshTokenDoesNotExist()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -32,7 +32,7 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnFailure_WhenRefreshTokenIsExpired()
+    public async Task Handle_Should_ReturnInvalidRefreshToken_WhenRefreshTokenIsExpired()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();

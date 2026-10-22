@@ -51,8 +51,32 @@ public sealed class GetTicketSlaSummaryQueryHandlerTests : BaseHandlerTest
         Result<TicketSlaSummaryResponse> result = await handler.Handle(new GetTicketSlaSummaryQuery(sectorId), CancellationToken.None);
 
         // Assert
+        result.IsSuccess.ShouldBeTrue();
         result.Value.ActiveCount.ShouldBe(1);
         result.Value.BreachedCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnZeroedSummary_WhenThereAreNoActiveTickets()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        // Só chamados encerrados: nenhum entra na contagem dos ativos.
+        await SeedTicketAsync(context, Guid.NewGuid(), TicketStatus.Closed, NowUtc.AddHours(-30), NowUtc.AddHours(-20));
+        await SeedTicketAsync(context, Guid.NewGuid(), TicketStatus.Canceled, NowUtc.AddHours(-30));
+
+        GetTicketSlaSummaryQueryHandler handler = CreateHandler(context);
+
+        // Act
+        Result<TicketSlaSummaryResponse> result = await handler.Handle(new GetTicketSlaSummaryQuery(null), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.ActiveCount.ShouldBe(0);
+        result.Value.OnTimeCount.ShouldBe(0);
+        result.Value.AtRiskCount.ShouldBe(0);
+        result.Value.BreachedCount.ShouldBe(0);
+        result.Value.ServerNowUtc.ShouldBe(NowUtc);
     }
 
     private static GetTicketSlaSummaryQueryHandler CreateHandler(TestDbContext context)

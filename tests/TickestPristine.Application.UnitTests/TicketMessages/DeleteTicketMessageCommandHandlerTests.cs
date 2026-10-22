@@ -35,6 +35,30 @@ public sealed class DeleteTicketMessageCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
+    public async Task Handle_Should_ReturnNotFound_WhenTicketIsDeleted()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        // A mensagem continua ativa, mas o chamado dela foi excluído logicamente.
+        Guid messageId = await SeedMessageAsync(context, ticketDeleted: true);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(AuthorId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+
+        var handler = new DeleteTicketMessageCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        var command = new DeleteTicketMessageCommand(messageId);
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketMessageErrors.NotFound(messageId));
+    }
+
+    [Fact]
     public async Task Handle_Should_ReturnUnauthorized_WhenCallerIsNotAuthorAndLacksManagePermission()
     {
         // Arrange
@@ -117,7 +141,7 @@ public sealed class DeleteTicketMessageCommandHandlerTests : BaseHandlerTest
         message.DeletedAtUtc.ShouldNotBeNull();
     }
 
-    private static async Task<Guid> SeedMessageAsync(TestDbContext context)
+    private static async Task<Guid> SeedMessageAsync(TestDbContext context, bool ticketDeleted = false)
     {
         var ticket = new Ticket
         {
@@ -129,7 +153,8 @@ public sealed class DeleteTicketMessageCommandHandlerTests : BaseHandlerTest
             CreatedByUserId = AuthorId,
             AssignedToUserId = null,
             SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = DateTime.UtcNow,
+            DeletedAtUtc = ticketDeleted ? DateTime.UtcNow : null
         };
         context.Tickets.Add(ticket);
 

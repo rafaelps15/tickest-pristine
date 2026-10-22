@@ -14,7 +14,8 @@ public sealed class TicketConcurrencyTests(IntegrationTestWebAppFactory factory)
     [Fact]
     public async Task SaveChanges_Should_RejectSecondStatusChange_WhenBothReadTheSameVersion()
     {
-        // Arrange: dois contextos leem o mesmo chamado antes de qualquer um gravar
+        // Arrange
+        // Dois contextos leem o mesmo chamado antes de qualquer um gravar.
         Guid ticketId = await CreateTicketAsync();
 
         using IServiceScope firstScope = Services.CreateScope();

@@ -29,13 +29,15 @@ internal sealed class PostTicketMessageCommandHandler(
             return Result.Failure<Guid>(access.Error);
         }
 
+        DateTime nowUtc = dateTimeProvider.UtcNow;
+
         var message = new TicketMessage
         {
             Id = Guid.NewGuid(),
             TicketId = command.TicketId,
             AuthorUserId = userContext.UserId,
             Content = command.Content,
-            CreatedAtUtc = dateTimeProvider.UtcNow
+            CreatedAtUtc = nowUtc
         };
 
         message.Raise(new TicketMessagePostedDomainEvent(message.Id, message.TicketId, message.AuthorUserId));
@@ -47,7 +49,7 @@ internal sealed class PostTicketMessageCommandHandler(
             message.AuthorUserId,
             TicketHistoryAction.MessageAdded,
             TicketHistoryDescriptions.MessagePosted,
-            dateTimeProvider.UtcNow));
+            nowUtc));
 
         await context.SaveChangesAsync(cancellationToken);
 

@@ -3,6 +3,7 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
+using TickestPristine.Application.Users;
 
 namespace TickestPristine.Application.UnitTests.Departments;
 
@@ -103,7 +104,8 @@ public sealed class CreateDepartmentCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        context.Departments.Add(new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Old", IsActive = false });
+        var inactive = new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Old", IsActive = false };
+        context.Departments.Add(inactive);
         await context.SaveChangesAsync();
 
         var handler = new CreateDepartmentCommandHandler(context);
@@ -113,5 +115,13 @@ public sealed class CreateDepartmentCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
+        result.Value.ShouldNotBe(inactive.Id);
+
+        // Um departamento novo e ativo é criado, sem reativar o antigo.
+        Department department = await context.Departments.SingleAsync(d => d.Id == result.Value);
+        department.Name.ShouldBe(Command.Name);
+        department.Description.ShouldBe(Command.Description);
+        department.IsActive.ShouldBeTrue();
+        (await context.Departments.SingleAsync(d => d.Id == inactive.Id)).IsActive.ShouldBeFalse();
     }
 }

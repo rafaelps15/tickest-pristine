@@ -49,7 +49,7 @@ internal sealed class DomainEventsDispatcher(
                 {
                     logger.LogError(
                         exception,
-                        "Domain event handler {Handler} failed for {DomainEvent}",
+                        "O handler {Handler} do evento de domínio {DomainEvent} falhou",
                         handler.GetType().Name,
                         domainEventType.Name);
                 }

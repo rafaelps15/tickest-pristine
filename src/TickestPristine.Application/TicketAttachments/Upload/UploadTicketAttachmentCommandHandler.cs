@@ -33,6 +33,8 @@ internal sealed class UploadTicketAttachmentCommandHandler(
 
         string storageKey = await fileStorage.SaveAsync(command.Content, command.FileName, cancellationToken);
 
+        DateTime nowUtc = dateTimeProvider.UtcNow;
+
         var attachment = new TicketAttachment
         {
             Id = Guid.NewGuid(),
@@ -42,7 +44,7 @@ internal sealed class UploadTicketAttachmentCommandHandler(
             ContentType = command.ContentType,
             FileSizeBytes = command.FileSizeBytes,
             StorageKey = storageKey,
-            UploadedAtUtc = dateTimeProvider.UtcNow
+            UploadedAtUtc = nowUtc
         };
 
         attachment.Raise(new TicketAttachmentUploadedDomainEvent(
@@ -58,7 +60,7 @@ internal sealed class UploadTicketAttachmentCommandHandler(
             attachment.UploadedByUserId,
             TicketHistoryAction.AttachmentAdded,
             TicketHistoryDescriptions.AttachmentAdded(attachment.FileName),
-            dateTimeProvider.UtcNow));
+            nowUtc));
 
         try
         {

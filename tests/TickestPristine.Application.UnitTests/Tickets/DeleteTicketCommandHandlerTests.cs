@@ -170,9 +170,10 @@ public sealed class DeleteTicketCommandHandlerTests : BaseHandlerTest
         Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open);
 
         IUserContext userContext = Substitute.For<IUserContext>();
-        userContext.UserId.Returns(Guid.NewGuid());
+        var managerId = Guid.NewGuid();
+        userContext.UserId.Returns(managerId);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+        permissionProvider.HasPermissionAsync(managerId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(true);
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
@@ -188,6 +189,12 @@ public sealed class DeleteTicketCommandHandlerTests : BaseHandlerTest
 
         Ticket ticket = await context.Tickets.IgnoreQueryFilters().SingleAsync(t => t.Id == ticketId);
         ticket.DeletedAtUtc.ShouldNotBeNull();
+        ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketDeletedDomainEvent);
+
+        // O histórico registra quem gerencia o chamado, não o dono.
+        TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id);
+        history.Action.ShouldBe(TicketHistoryAction.Deleted);
+        history.ChangedByUserId.ShouldBe(managerId);
     }
 
     private static async Task<Guid> SeedTicketAsync(TestDbContext context, Guid createdByUserId, TicketStatus status)

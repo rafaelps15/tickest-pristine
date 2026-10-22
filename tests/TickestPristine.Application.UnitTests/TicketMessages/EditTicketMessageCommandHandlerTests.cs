@@ -32,6 +32,29 @@ public sealed class EditTicketMessageCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
+    public async Task Handle_Should_ReturnNotFound_WhenTicketIsDeleted()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        // A mensagem continua ativa, mas o chamado dela foi excluído logicamente.
+        Guid messageId = await SeedMessageAsync(context, ticketDeleted: true);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(AuthorId);
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+
+        var handler = new EditTicketMessageCommandHandler(context, userContext, dateTimeProvider);
+        var command = new EditTicketMessageCommand { MessageId = messageId, Content = "Updated" };
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketMessageErrors.NotFound(messageId));
+    }
+
+    [Fact]
     public async Task Handle_Should_ReturnUnauthorized_WhenCallerIsNotAuthor()
     {
         // Arrange
@@ -81,7 +104,7 @@ public sealed class EditTicketMessageCommandHandlerTests : BaseHandlerTest
         (await context.TicketHistories.SingleAsync(h => h.TicketId == message.TicketId)).Action.ShouldBe(TicketHistoryAction.MessageEdited);
     }
 
-    private static async Task<Guid> SeedMessageAsync(TestDbContext context)
+    private static async Task<Guid> SeedMessageAsync(TestDbContext context, bool ticketDeleted = false)
     {
         var ticket = new Ticket
         {
@@ -93,7 +116,8 @@ public sealed class EditTicketMessageCommandHandlerTests : BaseHandlerTest
             CreatedByUserId = AuthorId,
             AssignedToUserId = null,
             SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = DateTime.UtcNow,
+            DeletedAtUtc = ticketDeleted ? DateTime.UtcNow : null
         };
         context.Tickets.Add(ticket);
 

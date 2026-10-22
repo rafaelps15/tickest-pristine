@@ -9,9 +9,9 @@ namespace TickestPristine.Application.Tickets.GetVolume;
 internal sealed class GetTicketVolumeQueryHandler(IDbConnectionFactory dbConnectionFactory)
     : IQueryHandler<GetTicketVolumeQuery, List<TicketVolumeResponse>>
 {
-    public async Task<Result<List<TicketVolumeResponse>>> Handle(GetTicketVolumeQuery request, CancellationToken cancellationToken)
+    public async Task<Result<List<TicketVolumeResponse>>> Handle(GetTicketVolumeQuery query, CancellationToken cancellationToken)
     {
-        await using DbConnection connection = await dbConnectionFactory.OpenConnectionAsync();
+        await using DbConnection connection = await dbConnectionFactory.OpenConnectionAsync(cancellationToken);
 
         // @GroupBy chega como o número do TicketVolumeGrouping (0 = dia, 1 = semana, 2 = mês). Os períodos seguem o
         // horário de Brasília e a semana do date_trunc começa na segunda-feira. Chamados excluídos ficam de fora, como
@@ -48,7 +48,8 @@ internal sealed class GetTicketVolumeQueryHandler(IDbConnectionFactory dbConnect
              ORDER BY p.period_start
              """;
 
-        IEnumerable<TicketVolumeResponse> volume = await connection.QueryAsync<TicketVolumeResponse>(sql, request);
+        IEnumerable<TicketVolumeResponse> volume = await connection.QueryAsync<TicketVolumeResponse>(
+            new CommandDefinition(sql, query, cancellationToken: cancellationToken));
 
         return volume.AsList();
     }

@@ -6,6 +6,7 @@ using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
+using TickestPristine.Application.Users;
 
 namespace TickestPristine.Infrastructure.Database.Seeding;
 
@@ -99,8 +100,8 @@ internal sealed class SampleDataSeeder(
         string password = seedingOptions.Value.SampleUserPassword is { Length: > 0 } configuredPassword
             ? configuredPassword
             : throw new InvalidOperationException(
-                $"'{SeedingOptions.SectionName}:{nameof(SeedingOptions.SampleUserPassword)}' is required when " +
-                $"'{SeedingOptions.SectionName}:{nameof(SeedingOptions.SampleData)}' is enabled. Set it with dotnet user-secrets.");
+                $"'{SeedingOptions.SectionName}:{nameof(SeedingOptions.SampleUserPassword)}' é obrigatório quando " +
+                $"'{SeedingOptions.SectionName}:{nameof(SeedingOptions.SampleData)}' está ligado. Defina-o com dotnet user-secrets.");
 
         string[] emails = [.. SampleUserGroups.SelectMany(group =>
             Enumerable.Range(1, group.Count).Select(number => SampleEmail(group.EmailPrefix, number)))];
@@ -216,7 +217,7 @@ internal sealed class SampleDataSeeder(
             if (!TicketStatusTransitions.CanTransition(oldStatus, newStatus))
             {
                 throw new InvalidOperationException(
-                    $"Sample status path is not allowed by TicketStatusTransitions: {oldStatus} -> {newStatus}.");
+                    $"O caminho de status dos dados de exemplo não é permitido por TicketStatusTransitions: {oldStatus} -> {newStatus}.");
             }
 
             // A resolução cai na data gravada no chamado; o que vem antes dela fica entre a abertura e a resolução.

@@ -18,8 +18,11 @@ internal sealed class DeleteTicketMessageCommandHandler(
 {
     public async Task<Result> Handle(DeleteTicketMessageCommand command, CancellationToken cancellationToken)
     {
+        // O filtro global do chamado exclui os excluídos: mensagem ou anexo de chamado excluído não é mais alterado.
         TicketMessage? message = await context.TicketMessages
-            .SingleOrDefaultAsync(m => m.Id == command.MessageId, cancellationToken);
+            .SingleOrDefaultAsync(
+                m => m.Id == command.MessageId && context.Tickets.Any(t => t.Id == m.TicketId),
+                cancellationToken);
 
         if (message is null)
         {
@@ -38,7 +41,9 @@ internal sealed class DeleteTicketMessageCommandHandler(
             return access;
         }
 
-        message.DeletedAtUtc = dateTimeProvider.UtcNow;
+        DateTime nowUtc = dateTimeProvider.UtcNow;
+
+        message.DeletedAtUtc = nowUtc;
 
         message.Raise(new TicketMessageDeletedDomainEvent(message.Id, message.TicketId));
 
@@ -47,7 +52,7 @@ internal sealed class DeleteTicketMessageCommandHandler(
             userContext.UserId,
             TicketHistoryAction.MessageRemoved,
             TicketHistoryDescriptions.MessageRemoved,
-            dateTimeProvider.UtcNow));
+            nowUtc));
 
         await context.SaveChangesAsync(cancellationToken);
 
