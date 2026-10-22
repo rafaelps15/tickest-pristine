@@ -1,16 +1,15 @@
 # SYSTEM_SPECIFICATION — TickestPristine
 
-> **Natureza deste documento.** Fotografia técnica do estado do repositório em **22/10/2026**, na branch `refactor/users-handlers` (último commit `54c68b1`), **incluindo as alterações ainda não commitadas** do working tree (19 arquivos modificados e 2 migrations novas, listados na seção 9.1). Foi produzido por leitura do código, da configuração, dos testes e da documentação existente, mais a execução de `dotnet build` e `dotnet test` (resultados na seção 6.1).
->
-> **Revisão de 22/10/2026 (mesmo dia).** Depois da primeira versão, o responsável decidiu três pontos, e eles foram implementados: (1) quem atende a fila (`tickets:manage`) fecha os chamados resolvidos; (2) quem atende a fila atribui o responsável a um usuário ativo que também atende chamados; (3) o cadastro de usuários passa a exigir `users:create`. O `README.md`, os caminhos e a porta do `CLAUDE.md` e a stack citada no `prompt-sla-tickest.md` também foram corrigidos. O responsável confirmou ainda que o MediatR não será adotado por enquanto. As seções abaixo já refletem essas mudanças; os itens resolvidos aparecem marcados como **[Resolvido]**.
+> **Estado documentado:** branch `feat/spec-driven-development`, commit `8660490`. O código de `src/` e `tests/` é o do commit `b2028ae` (nenhuma alteração depois dele). Produzido por leitura do código, da configuração, dos testes e da documentação, mais a execução de `dotnet build` e `dotnet test` (seção 6.1). O histórico das mudanças está no Git.
 >
 > **Convenções de leitura:**
 > - **[Fato]** está no código ou na configuração e tem referência verificável.
 > - **[Inferência]** é uma conclusão tirada de fatos, mas não declarada em nenhuma fonte.
 > - **[Recomendação]** é uma sugestão do analista e não um requisito.
 > - **[Decisão humana]** é um ponto que depende de definição do produto ou da arquitetura.
+> - **[Resolvido]** marca um problema da análise original que já foi corrigido, com a data ou o commit da correção.
 >
-> As referências usam `caminho:linha` relativas à raiz do repositório. Os números de linha valem para o snapshot acima.
+> As referências usam `caminho:linha` relativas à raiz do repositório. Os números de linha valem para o estado documentado acima.
 
 ---
 
@@ -151,7 +150,7 @@ Fonte: `src/TickestPristine.Infrastructure/*/*Configuration.cs`. Pontos relevant
 - **[Fato]** Roles e permissões têm `Id` (Guid determinístico), mas os vínculos usam **chaves alternativas por nome/código** (`RoleConfiguration.cs:16`, `PermissionConfiguration.cs:16`, `RolePermissionConfiguration.cs:20-28`, `UserRoleConfiguration.cs:20-23`).
 - **[Fato]** `User` tem `Code` público único no formato `usr_<ULID>` (`UserCodes.cs:9-11`, `UserConfiguration.cs:20-22`).
 - **[Fato]** A role Administrador tem o token de concorrência sombra `Version` (`RoleConfiguration.cs:21`). `Ticket` tem token sombra mapeado em `xmin` (`TicketConfiguration.cs:29`). `RefreshToken.TokenHash` é token de concorrência (`RefreshTokenConfiguration.cs:19`).
-- **[Fato]** Os enums `TicketStatus`, `TicketPriority` e `TicketHistoryAction` são gravados **pelo nome** (texto), conforme alteração ainda não commitada (`TicketConfiguration.cs:21-23`, `TicketHistoryConfiguration.cs:15`, migration `20261022023422_Store_Ticket_Enums_As_Names.cs`). A API continua expondo os valores numéricos.
+- **[Fato]** Os enums `TicketStatus`, `TicketPriority` e `TicketHistoryAction` são gravados **pelo nome** (texto), conforme alteração registrada no commit `b2028ae` (`TicketConfiguration.cs:21-23`, `TicketHistoryConfiguration.cs:15`, migration `20261022023422_Store_Ticket_Enums_As_Names.cs`). A API continua expondo os valores numéricos.
 
 ### 2.5 Estados e transições do chamado
 
@@ -413,7 +412,7 @@ Fonte: `ApplicationDbContext.cs:57-108`, `DomainEventsDispatcher.cs:19-59`. **[F
 ### 3.8 Persistência e estado
 
 - **[Fato]** O banco é um **PostgreSQL** único, schema `public`, com nomes em snake_case (`Infrastructure/DependencyInjection.cs:101-110`) e a extensão `citext` (`ApplicationDbContext.cs:50`). Um único `NpgsqlDataSource` é compartilhado pelo EF e pelo Dapper (`DependencyInjection.cs:96-98`).
-- **[Fato]** Há **18 migrations** (de `20261002014106_Initial` a `20261022023422_Store_Ticket_Enums_As_Names`). As 2 últimas não estão versionadas.
+- **[Fato]** Há **18 migrations** (de `20261002014106_Initial` a `20261022023422_Store_Ticket_Enums_As_Names`). As 2 últimas estavam fora do Git no momento da análise e foram registradas no commit `b2028ae`.
 - **[Fato]** As migrations são aplicadas **automaticamente só em Development** (`Program.cs:34-39`). O seed roda acoplado ao `Migrate` (`UseSeeding`/`UseAsyncSeeding`, `DependencyInjection.cs:107-110`).
 - **[Fato]** O estado em memória se limita ao cache de permissões e de "usuário ativo" (HybridCache: expira em 5 min, cópia local por 1 min), com invalidação explícita (`DependencyInjection.cs:56-60`, `PermissionProvider.cs:44-48`).
 - **[Fato]** Os arquivos de anexo ficam em disco local, com chave `Guid + extensão` (`LocalFileStorage.cs:16-45`).
@@ -427,7 +426,7 @@ Fonte: `ApplicationDbContext.cs:57-108`, `DomainEventsDispatcher.cs:19-59`. **[F
 | Permissões resolvidas no servidor a cada requisição, não carregadas no JWT | `TokenProvider.cs:22-29` | Permite revogação imediata, ao custo de consulta ou cache por requisição. |
 | Concorrência otimista (`xmin` em Ticket, `Version` na role Administrador, `TokenHash` em RefreshToken) | Configurações EF citadas em 2.4; `TicketConcurrencyTests.cs` | Os conflitos viram 409 no `GlobalExceptionHandler`. |
 | Prazos de SLA materializados na abertura | `TicketSla.cs:5-10` | Mudar a política não afeta chamados existentes. |
-| Texto do histórico derivado na leitura (não gravado) | `TicketHistoryDescriptions.cs:5-8`, migration `20261022022728` | Alteração ainda não commitada. |
+| Texto do histórico derivado na leitura (não gravado) | `TicketHistoryDescriptions.cs:5-8`, migration `20261022022728` | Alteração registrada no commit `b2028ae`. |
 | Paginação por offset (listagens) e por cursor composto (data + id) para os subrecursos do chamado e a auditoria | `PaginationExtensions.cs` | Tamanho máximo de página: 100. |
 
 ### 3.10 Inconsistências e desvios observados
@@ -694,6 +693,7 @@ Descrito no diagrama 3.6.
 | `dotnet build TickestPristine.slnx` | **Sucesso, 0 avisos, 0 erros** (com `TreatWarningsAsErrors`) |
 | `dotnet test TickestPristine.slnx --no-build` (análise inicial) | **Todos aprovados, 0 falhas, 0 ignorados**: ArchitectureTests 10/10 (0,8 s); Application.UnitTests 424/424 (1 s); IntegrationTests 240/240 (1 min 52 s, PostgreSQL 17 via Testcontainers) |
 | `dotnet build` + `dotnet test` (depois da revisão de 22/10) | Build com 0 avisos e 0 erros. **Todos aprovados, 0 falhas**: ArchitectureTests 10/10; Application.UnitTests 441/441; IntegrationTests 248/248 (2 min 44 s) |
+| Linha de base antes da spec 001 (22/10/2026, commit `8660490`): `docker version`, `docker compose ps`, `dotnet build TickestPristine.slnx` e `dotnet test TickestPristine.slnx --no-build` | Docker 29.6.1 disponível, com os três serviços do `docker compose` em execução (`tickestpristine-postgres`, `tickestpristine-seq`, `tickestpristine-web-api`); os testes de integração usam um PostgreSQL próprio via Testcontainers. Build com **0 avisos e 0 erros**. **699 aprovados, 0 falhas, 0 ignorados**: ArchitectureTests 10/10; Application.UnitTests 441/441; IntegrationTests 248/248 (2 min 49 s) |
 
 - **[Fato]** O `WebApplicationFactory` sobe a API no ambiente padrão dele (Development), então a configuração de `appsettings.Development.json`, inclusive os enrichers sem pacote (6.3), **não impediu a inicialização**. Isso não prova que os enrichers funcionem.
 - **[Fato]** Testes aprovados mostram que o comportamento coberto funciona nesse ambiente controlado. **Não** são evidência de funcionamento em produção.
@@ -748,9 +748,27 @@ Pontos de atenção (detalhados na seção 7):
 
 ### 6.8 CI/CD e deploy
 
-- **[Fato]** `.github/workflows/build.yml` faz restore, build (Release), test e publish **só em push para `main` ou manualmente**. Não roda em pull requests nem publica artefatos ou imagens. Não há etapa de deploy.
+- **[Fato]** `.github/workflows/build.yml` roda em três eventos: push na `main`, pull request para a `main` e disparo manual (`workflow_dispatch`) (`build.yml:3-10`). Os passos são restore, build (Release) e test (Release). O passo `Publish` tem a condição `if: github.event_name != 'pull_request'` (`build.yml:36-38`): roda em push e no disparo manual, e não roda em pull request. O workflow não publica artefatos nem imagens, e não há etapa de deploy.
+- **[Fato]** O modelo de PR (`.github/pull_request_template.md`) pede o caminho da spec, o status `Verificada`, os critérios de aceitação cobertos, as evidências de verificação (build, testes, revisão de convenções), a informação de migration e um checklist; uma mudança trivial sem spec só vale com autorização explícita do responsável no chat e precisa ser descrita no PR. O modelo só aparece no GitHub depois de chegar à branch padrão.
+- **Validação:**
+  - **[Fato]** Validado localmente em 22/10/2026 (Windows): o YAML do workflow foi lido sem erro, e os quatro comandos do workflow em Release terminaram com 0 avisos, 0 erros, 699 de 699 testes aprovados e publish concluído.
+  - **[Fato]** No GitHub, as 5 últimas execuções registradas do workflow foram em push na `main` e tiveram sucesso, a última em 04/10/2026 (`gh run list`). O gatilho de pull request **ainda não rodou no GitHub**: a branch `feat/spec-driven-development` não foi enviada e nenhum PR foi aberto.
+  - **[Inferência]** O CI em pull request só bloqueia o merge se a branch `main` exigir o check "Build" nas regras de proteção do GitHub; essa configuração fica fora do repositório e não foi verificada.
 - **[Fato]** O Dependabot está configurado para NuGet, com frequência diária (`.github/dependabot.yml`).
 - **[Fato]** O Dockerfile tem 4 estágios e roda com usuário não root (`USER $APP_UID`) (`src/TickestPristine.Web.Api/Dockerfile`).
+
+### 6.9 Processo de desenvolvimento (Spec-Driven Development)
+
+- **[Fato]** O `CLAUDE.md` define o fluxo nas seções "Política de autonomia" e "Fluxo de desenvolvimento (SDD)": mudança funcional não trivial passa por spec, aprovação explícita do responsável no chat, implementação, verificação e entrega (commit e PR) só com autorização explícita. `Verificada` não significa `Entregue`.
+- **[Fato]** Três skills de projeto implementam as etapas:
+  - `spec-new` (`.claude/skills/spec-new/`): escreve só em `specs/`, a partir do modelo `references/spec-template.md`, e para à espera da aprovação;
+  - `spec-implement` (`.claude/skills/spec-implement/`): tem `disable-model-invocation: true` (só roda por `/spec-implement`), recusa spec que não esteja `Aprovada`, define a retomada de uma spec `Bloqueada` e usa as skills `add-entity`, `add-feature` e `add-tests`;
+  - `spec-verify` (`.claude/skills/spec-verify/`): roda build e testes, exige que cada critério seja coberto por um teste que exercita o comportamento e passou na execução feita por ela, chama a `ca-review` e atualiza as seções afetadas deste documento.
+- **[Fato]** Os estados (`Rascunho`, `Bloqueada`, `Aprovada`, `Em implementação`, `Verificada`, `Entregue`, `Cancelada`) e as transições permitidas ficam numa tabela única, `.claude/skills/spec-new/references/spec-status.md`; toda transição acrescenta uma linha no histórico da spec.
+- **[Fato]** Cada spec é um arquivo único em `specs/NNN-slug/spec.md`, com requisitos (REQ), critérios de aceitação (AC, no formato dado/quando/então), decisões (DEC, com quem decidiu e quando), fora do escopo, plano técnico, tarefas (T, ligadas a ACs e à skill que as executa), rastreabilidade (AC → teste → como o teste cobre o critério → resultado), evidências de verificação e histórico.
+- **[Fato]** Specs existentes: `specs/001-remover-responsavel/spec.md`, status `Aprovada` em 2026-10-22, commit `8660490`; a implementação dela não foi iniciada.
+- **[Fato]** Não há hook nem outro mecanismo que bloqueie alterações em `src/` sem spec aprovada: as regras do `CLAUDE.md` orientam o agente, mas não impedem a ação.
+- **Validação:** a `spec-new` foi executada uma vez, gerando a spec 001. A `spec-implement` e a `spec-verify` ainda não foram executadas, e o efeito de `disable-model-invocation` não foi testado; a primeira execução real será a implementação da spec 001.
 
 ---
 
@@ -776,7 +794,7 @@ Pontos de atenção (detalhados na seção 7):
 | GAP-09 | Segurança / escalabilidade | `LocalFileStorage.cs`; `TicketAttachmentLimits.cs` confia em `ContentType` e extensão | Não escala para várias instâncias. Um arquivo malicioso com extensão permitida é aceito. | **P2**: depende do modelo de implantação, que é desconhecido. | Definir o armazenamento alvo (ex.: blob) e a política de inspeção de arquivos. |
 | GAP-10 | Operação | Migrations e seed automáticos só em Development (`Program.cs:34-39`); não há pipeline de deploy | Implantação manual e propensa a erro; o primeiro administrador depende de rodar a ferramenta EF com a seção `Admin`. | **P2** | Documentar ou automatizar o procedimento de migração em produção. |
 | GAP-11 | Segurança / operação | Não há `ForwardedHeaders`, HTTPS redirection nem HSTS; rate limit por `RemoteIpAddress` (`RateLimitingExtensions.cs:50-56`) | Atrás de um proxy reverso, todos os anônimos podem cair na mesma partição (bloqueio coletivo do login). | **P2**: condicionado à topologia de rede, que é desconhecida. | Confirmar a topologia e configurar os forwarded headers, se aplicável. |
-| GAP-12 | CI | `build.yml` sem gatilho `pull_request`; testes de integração só rodam depois do merge | Regressões detectadas tarde | **P2** | Adicionar o gatilho de PR. |
+| GAP-12 | CI | **[Resolvido no repositório em 22/10, commit `d9d1f50`; validação no GitHub pendente]** Antes: `build.yml` sem gatilho `pull_request`, com testes de integração só depois do merge. Agora: gatilho `pull_request` para a `main` e `Publish` só fora de PR (seção 6.8) | Até rodar num PR real, não há prova de que os 699 testes passam no runner Linux do GitHub | **P2** | Abrir um PR para a `main` e conferir a execução do workflow; avaliar exigir o check "Build" na proteção da `main`. |
 | GAP-13 | Observabilidade | Seq em `http://seq:5341` (só na rede do compose); enrichers sem pacote | Logs estruturados ausentes ao rodar a API no host | **P3** | Ajustar a URL por ambiente e adicionar ou remover os enrichers. |
 | GAP-14 | Segurança | Access token sem revogação (`TokenProvider.cs`); logout e troca de senha só revogam o refresh | Um token vazado vale até expirar (60 min em Development, até 1440 permitido) | **P3**: compensado pela checagem de usuário ativo a cada requisição. | Manter o prazo curto em produção. Avaliar uma denylist só se houver requisito. |
 | GAP-15 | Arquitetura | SQL cru do PostgreSQL na Application (`GetTicketVolumeQueryHandler.cs`) | Acoplamento ao esquema físico; renomear uma coluna quebra só em execução (mitigado pelos testes de integração) | **P3** | Aceitar como decisão consciente ou mover para a Infrastructure. |
@@ -795,7 +813,7 @@ As perguntas Q-01 a Q-12 estão na seção 9.5 (Q-01 e Q-02 foram respondidas e 
 
 ### 7.5 Etapas evolutivas sugeridas (não obrigatórias)
 
-1. **Etapa 1, coerência do fluxo atual**: GAP-01, GAP-02, GAP-03 e GAP-07 foram concluídos em 22/10, e o GAP-06 em parte. Falta adicionar o gatilho de PR ao CI (GAP-12) e decidir Q-05.
+1. **Etapa 1, coerência do fluxo atual**: GAP-01, GAP-02, GAP-03 e GAP-07 foram concluídos em 22/10, e o GAP-06 em parte. O gatilho de PR foi adicionado ao CI (GAP-12, commit `d9d1f50`), mas ainda não foi validado num PR real; falta também decidir Q-05.
 2. **Etapa 2, prontidão operacional**: definir a topologia de implantação e então tratar GAP-09, GAP-10, GAP-11 e GAP-13.
 3. **Etapa 3, SLA avançado** (se confirmado): o `prompt-sla-tickest.md` já cita a stack real (PostgreSQL, handlers próprios, `BackgroundService` no lugar do Quartz). Antes de começar, resolver a regra dele que proíbe construtores primários, que diverge do código atual (ver 9.3). Introduzir o outbox (GAP-05) e o serviço em segundo plano antes das fases de escalonamento.
 
@@ -828,7 +846,7 @@ As perguntas Q-01 a Q-12 estão na seção 9.5 (Q-01 e Q-02 foram respondidas e 
 | E-21 | Acesso ao chamado por participante ou `tickets:manage` | `src/TickestPristine.Application/Authorization/TicketAccessGuard.cs:18-72` | `EnsureCanViewAsync`, `EnsureOwnerOrManagerAsync` | `TicketAccessGuardTests.cs` |
 | E-22 | Escalada de privilégio e último administrador | `src/TickestPristine.Application/Authorization/PrivilegeEscalationGuard.cs`; `AdministratorGuard.cs:24-58` | — | `AdministratorGuardTests.cs`, `RoleConcurrencyTests.cs` |
 | E-23 | Concorrência `xmin` em Ticket | `src/TickestPristine.Infrastructure/Tickets/TicketConfiguration.cs:27-29` | — | `TicketConcurrencyTests.cs` |
-| E-24 | Enums gravados como texto (não commitado) | `src/TickestPristine.Infrastructure/Tickets/TicketConfiguration.cs:20-23`; migration `20261022023422_Store_Ticket_Enums_As_Names.cs` | — | `MigrationsTests.cs` |
+| E-24 | Enums gravados como texto (commit `b2028ae`) | `src/TickestPristine.Infrastructure/Tickets/TicketConfiguration.cs:20-23`; migration `20261022023422_Store_Ticket_Enums_As_Names.cs` | — | `MigrationsTests.cs` |
 | E-25 | Volume com SQL e fuso fixo | `src/TickestPristine.Application/Tickets/GetVolume/GetTicketVolumeQueryHandler.cs:19-49` | — | `TicketsTests.cs:709-833` |
 | E-26 | Upload com compensação e arquivo antes da transação | `src/TickestPristine.Application/TicketAttachments/Upload/UploadTicketAttachmentCommandHandler.cs:35-75` | — | `UploadTicketAttachmentCommandHandlerTests.cs` |
 | E-27 | Exclusão de anexo só lógica | `src/TickestPristine.Application/TicketAttachments/Delete/DeleteTicketAttachmentCommandHandler.cs:45-57` | — | `DeleteTicketAttachmentCommandHandlerTests.cs` |
@@ -838,20 +856,25 @@ As perguntas Q-01 a Q-12 estão na seção 9.5 (Q-01 e Q-02 foram respondidas e 
 | E-31 | Seed de administrador, organização e exemplos | `src/TickestPristine.Infrastructure/Database/Seeding/*.cs` | — | `DatabaseSeedingTests.cs` |
 | E-32 | Roles fixas e permissões padrão | `src/TickestPristine.Infrastructure/Roles/RoleConfiguration.cs:23-26`; `RolePermissionConfiguration.cs:33-51` | — | `DatabaseSeedingTests.cs:20,44` |
 | E-33 | Regras de camadas | `tests/TickestPristine.ArchitectureTests/Layers/LayerTests.cs` | `LayerTests` | (o próprio) |
-| E-34 | CI só em `main` | `.github/workflows/build.yml:3-7` | — | — |
+| E-34 | Gatilhos do CI (push e pull request para a `main`, disparo manual) e `Publish` só fora de PR | `.github/workflows/build.yml:3-10`, `:36-38` | — | — (validado localmente; no GitHub, pendente) |
 | E-35 | Seq e enrichers em Development | `src/TickestPristine.Web.Api/appsettings.Development.json:16-23` | — | — |
 | E-36 | Fechamento de chamado | `src/TickestPristine.Application/Tickets/Close/CloseTicketCommandHandler.cs`; `src/TickestPristine.Web.Api/Endpoints/Tickets/Close.cs` | `CloseTicketCommandHandler` | `CloseTicketCommandHandlerTests.cs`, `TicketsTests.cs` |
 | E-37 | Atribuição de responsável | `src/TickestPristine.Application/Tickets/Assign/AssignTicketCommandHandler.cs`; `src/TickestPristine.Web.Api/Endpoints/Tickets/Assign.cs`; `TicketErrors.AssigneeCannotManageTickets`; `TicketReassignedDomainEvent`; `TicketHistoryEntries.Reassigned` | `AssignTicketCommandHandler` | `AssignTicketCommandHandlerTests.cs`, `TicketsTests.cs` |
+| E-38 | Modelo de PR alinhado ao fluxo SDD | `.github/pull_request_template.md` | — | — |
+| E-39 | Fluxo SDD, estados e skills | `CLAUDE.md` ("Política de autonomia", "Fluxo de desenvolvimento (SDD)"); `.claude/skills/spec-new/SKILL.md`, `references/spec-template.md`, `references/spec-status.md`; `.claude/skills/spec-implement/SKILL.md` (`disable-model-invocation: true`); `.claude/skills/spec-verify/SKILL.md` | — | — (só a `spec-new` foi executada) |
+| E-40 | Primeira spec, aprovada | `specs/001-remover-responsavel/spec.md` (commit `8660490`) | — | — (implementação não iniciada) |
 
 ---
 
 ## 9. Limitações, pendências e perguntas em aberto
 
-### 9.1 Estado do working tree analisado (não commitado)
+### 9.1 Estado do working tree analisado
 
-Arquivos modificados (19): handlers de `TicketAttachments`, `TicketHistories`, `TicketMessages` e `Tickets` (Delete, GetOwnSummary, Reopen), `Domain/Tickets/TicketHistory.cs`, `TicketConfiguration.cs`, `TicketHistoryConfiguration.cs`, o snapshot do modelo e 4 arquivos de teste. Arquivos novos: as migrations `20261022022728_Derive_Ticket_History_Description` e `20261022023422_Store_Ticket_Enums_As_Names`, `TicketHistoryDescriptionsTests.cs` e `prompt-sla-tickest.md`. **[Fato]** Essas mudanças retiram a coluna `description` do histórico e passam a gravar os enums como texto. Este documento descreve o estado **com** essas mudanças aplicadas.
+**[Fato]** No momento da análise, as mudanças abaixo ainda não estavam commitadas. Todas foram registradas depois no commit `b2028ae` (22/10/2026), exceto o `prompt-sla-tickest.md`, que continua fora do Git.
 
-**Revisão de 22/10 (também não commitada):** arquivos novos `Application/Tickets/Close/*`, `Application/Tickets/Assign/*`, `Domain/Tickets/TicketReassignedDomainEvent.cs`, `Web.Api/Endpoints/Tickets/Close.cs` e `Assign.cs`, `CloseTicketCommandHandlerTests.cs` e `AssignTicketCommandHandlerTests.cs`. Arquivos alterados: `TicketErrors.cs`, `TicketHistoryEntries.cs`, `Endpoints/Users/Register.cs` e `Permissions.cs`, `TicketValidatorsTests.cs`, `BaseIntegrationTest.cs` (o cadastro passa pelo administrador), `UsersTests.cs`, `AuditLogsTests.cs`, `TicketsTests.cs`, `README.md`, `CLAUDE.md` e `prompt-sla-tickest.md`. Nenhuma migration nova: as mudanças não alteram o modelo do banco.
+Arquivos modificados (19): handlers de `TicketAttachments`, `TicketHistories`, `TicketMessages` e `Tickets` (Delete, GetOwnSummary, Reopen), `Domain/Tickets/TicketHistory.cs`, `TicketConfiguration.cs`, `TicketHistoryConfiguration.cs`, o snapshot do modelo e 4 arquivos de teste. Arquivos novos: as migrations `20261022022728_Derive_Ticket_History_Description` e `20261022023422_Store_Ticket_Enums_As_Names`, `TicketHistoryDescriptionsTests.cs` e `prompt-sla-tickest.md` (este continua fora do Git). **[Fato]** Essas mudanças retiram a coluna `description` do histórico e passam a gravar os enums como texto. Este documento descreve o estado **com** essas mudanças aplicadas.
+
+**Revisão de 22/10 (registrada no mesmo commit `b2028ae`):** arquivos novos `Application/Tickets/Close/*`, `Application/Tickets/Assign/*`, `Domain/Tickets/TicketReassignedDomainEvent.cs`, `Web.Api/Endpoints/Tickets/Close.cs` e `Assign.cs`, `CloseTicketCommandHandlerTests.cs` e `AssignTicketCommandHandlerTests.cs`. Arquivos alterados: `TicketErrors.cs`, `TicketHistoryEntries.cs`, `Endpoints/Users/Register.cs` e `Permissions.cs`, `TicketValidatorsTests.cs`, `BaseIntegrationTest.cs` (o cadastro passa pelo administrador), `UsersTests.cs`, `AuditLogsTests.cs`, `TicketsTests.cs`, `README.md`, `CLAUDE.md` e `prompt-sla-tickest.md` (este continua fora do Git). Nenhuma migration nova: as mudanças não alteram o modelo do banco.
 
 ### 9.2 Áreas não inspecionadas ou inspecionadas parcialmente
 
@@ -864,7 +887,7 @@ Arquivos modificados (19): handlers de `TicketAttachments`, `TicketHistories`, `
 
 | Fonte | O que afirma | O que o código mostra |
 |---|---|---|
-| `CLAUDE.md` | Domínio de exemplo "Todos + Users" | Domínio de chamados, sem nenhuma classe Todo. Mantido de propósito como guia do template; **os caminhos e a porta do Seq foram corrigidos em 22/10** |
+| `CLAUDE.md` | Antes de 22/10: domínio de exemplo "Todos + Users" | **Resolvido em 22/10:** os caminhos e a porta do Seq foram corrigidos no commit `b2028ae`, e a seção "O que é" passou a descrever o domínio de chamados no commit `13de660`; os exemplos de Todos continuam no arquivo e nas skills, identificados como ilustrativos |
 | `README.md` | Antes de 22/10: permissões por usuário "sem papéis fixos", `AdminMaster`, "exclusão" de usuários, ciclo até `Closed` e atribuição | **Resolvido em 22/10**: o README foi alinhado ao código |
 | `prompt-sla-tickest.md` (não versionado) | Antes de 22/10: SQL Server, MediatR, Quartz, `PublishDomainEventsInterceptor`, `AuditableEntity` e `RowVersion` | **Corrigido em 22/10**: cita PostgreSQL, handlers próprios, `BackgroundService` e advisory lock, `IAuditable` e `Version`/`xmin`. **Divergências que continuam:** a regra 4 proíbe construtores primários, mas o código usa construtores primários em todos os handlers; o prompt também cita entidades que não existem (categorias, multi-tenancy) e já instrui o agente a avisar se faltarem |
 | `SampleDataSeeder.cs:206` (comentário) | Histórico gravado por "handlers de evento de domínio" | Histórico gravado pelos handlers de command |
@@ -878,6 +901,8 @@ Arquivos modificados (19): handlers de `TicketAttachments`, `TicketHistories`, `
 - Comportamento do Serilog com enrichers sem pacote.
 - Comportamento atrás de proxy reverso (IP do rate limit, esquema HTTPS).
 - Execução da imagem Docker (o Dockerfile não foi construído nesta análise).
+- Execução do workflow de CI disparado por pull request no GitHub (seção 6.8).
+- Execução da `spec-implement` e da `spec-verify`, e o efeito de `disable-model-invocation` na `spec-implement` (seção 6.9).
 
 ### 9.5 Perguntas em aberto (decisão humana)
 
