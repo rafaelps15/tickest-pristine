@@ -12,8 +12,14 @@ public partial class RequestContextLoggingMiddleware(RequestDelegate next)
     {
         string correlationId = GetCorrelationId(context);
 
-        // Devolvido na resposta para que o cliente consiga relacionar a chamada com os logs do servidor.
-        context.Response.Headers[CorrelationIdHeaderName] = correlationId;
+        // Devolvido na resposta para que o cliente consiga relacionar a chamada com os logs do servidor. Gravado no
+        // OnStarting porque o UseExceptionHandler limpa os headers antes de escrever o ProblemDetails.
+        context.Response.OnStarting(() =>
+        {
+            context.Response.Headers[CorrelationIdHeaderName] = correlationId;
+
+            return Task.CompletedTask;
+        });
 
         // O await mantém a propriedade no contexto de log até o fim da requisição, e não só até o primeiro await.
         using (LogContext.PushProperty("CorrelationId", correlationId))

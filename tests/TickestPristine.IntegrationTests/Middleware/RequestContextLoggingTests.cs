@@ -1,3 +1,6 @@
+using System.Net;
+using System.Text;
+
 namespace TickestPristine.IntegrationTests.Middleware;
 
 /// <summary>
@@ -53,6 +56,24 @@ public sealed class RequestContextLoggingTests(IntegrationTestWebAppFactory fact
 
         // Assert
         response.Headers.GetValues(CorrelationIdHeaderName).ShouldHaveSingleItem().ShouldNotBe(correlationId);
+    }
+
+    [Fact]
+    public async Task Request_Should_EchoCorrelationId_WhenExceptionHandlerWritesResponse()
+    {
+        // Arrange: JSON quebrado faz o GlobalExceptionHandler responder, e o UseExceptionHandler limpa os headers antes
+        using var request = new HttpRequestMessage(HttpMethod.Post, "users/login")
+        {
+            Content = new StringContent("{\"email\": ", Encoding.UTF8, "application/json")
+        };
+        request.Headers.Add(CorrelationIdHeaderName, "front-erro-123");
+
+        // Act
+        HttpResponseMessage response = await HttpClient.SendAsync(request);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        response.Headers.GetValues(CorrelationIdHeaderName).ShouldBe(["front-erro-123"]);
     }
 
     [Fact]
