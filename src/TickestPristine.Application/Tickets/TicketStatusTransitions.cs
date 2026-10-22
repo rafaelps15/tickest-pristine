@@ -1,4 +1,6 @@
-namespace TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Tickets;
+
+namespace TickestPristine.Application.Tickets;
 
 public static class TicketStatusTransitions
 {

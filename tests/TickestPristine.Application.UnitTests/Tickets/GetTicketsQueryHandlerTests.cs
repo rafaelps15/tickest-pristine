@@ -1,6 +1,7 @@
 using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Application.Tickets.GetAll;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Application.Tickets;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;

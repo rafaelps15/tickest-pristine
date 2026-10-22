@@ -1,4 +1,6 @@
-namespace TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Tickets;
+
+namespace TickestPristine.Application.TicketHistories;
 
 /// <summary>
 /// Monta os registros do histórico de chamados num lugar só: os handlers dos commands gravam com a data atual, no mesmo

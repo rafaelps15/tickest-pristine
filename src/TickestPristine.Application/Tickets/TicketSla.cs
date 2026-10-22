@@ -1,4 +1,6 @@
-namespace TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Tickets;
+
+namespace TickestPristine.Application.Tickets;
 
 /// <summary>
 /// Política de SLA de resolução: prazo em horas corridas por prioridade, contado da abertura. O chamado entra em

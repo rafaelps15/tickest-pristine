@@ -3,6 +3,7 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Authorization;
+using TickestPristine.Application.TicketHistories;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.SharedKernel;
 

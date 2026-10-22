@@ -1,3 +1,4 @@
+using TickestPristine.Application.TicketHistories;
 using TickestPristine.Domain.Tickets;
 
 namespace TickestPristine.Application.UnitTests.TicketHistories;

@@ -2,6 +2,8 @@ using Bogus;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Application.Tickets;
+using TickestPristine.Application.TicketHistories;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;

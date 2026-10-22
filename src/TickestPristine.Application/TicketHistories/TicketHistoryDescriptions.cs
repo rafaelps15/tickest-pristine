@@ -1,4 +1,6 @@
-namespace TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Tickets;
+
+namespace TickestPristine.Application.TicketHistories;
 
 /// <summary>
 /// Textos do histórico de chamados exibidos ao usuário, num lugar só: a API e os dados de exemplo gravam o mesmo texto.
