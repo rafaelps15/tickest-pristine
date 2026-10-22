@@ -154,6 +154,14 @@ Antes de criar algo, siga o slice real mais parecido (caminhos a partir de `src/
 
 A autorização vale só para a ação pedida, no escopo pedido. Correção realmente trivial (texto, typo) dispensa o plano somente quando autorizada explicitamente no chat.
 
-## Fluxo de desenvolvimento (em implantação)
+## Fluxo de desenvolvimento (SDD)
 
-O projeto está adotando Spec-Driven Development. Enquanto o modelo de spec e as skills correspondentes não existirem no repositório, mudança funcional não trivial segue estes passos: (1) requisitos, critérios de aceitação verificáveis e decisões em aberto apresentados no chat; (2) aprovação explícita do responsável pelo produto; (3) implementação no escopo aprovado; (4) verificação com build, testes, cada critério ligado a pelo menos um teste e atualização das seções afetadas do `SYSTEM_SPECIFICATION.md`; (5) relatório com resultados, limitações e pendências.
+Mudança funcional não trivial segue Spec-Driven Development, com uma spec por mudança em `specs/NNN-slug/spec.md`:
+
+1. **`spec-new`** escreve a spec (requisitos, critérios de aceitação, decisões, plano e tarefas) e pergunta o que não tiver fonte.
+2. **Aprovação explícita** do responsável pelo produto no chat; sem ela, nenhum código de `src/` ou `tests/` é escrito.
+3. **`/spec-implement NNN`** (só por comando) executa as tarefas com as skills de implementação.
+4. **`spec-verify`** comprova cada critério com testes aprovados na execução atual, roda a revisão e atualiza as seções afetadas do `SYSTEM_SPECIFICATION.md`.
+5. **Entrega** (commit e PR) só com autorização explícita: `Verificada` não significa `Entregue`.
+
+Estados e transições da spec: `.claude/skills/spec-new/references/spec-status.md`.
