@@ -1,7 +1,7 @@
 using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Domain.Roles;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Application.TicketAttachments.GetAll;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;

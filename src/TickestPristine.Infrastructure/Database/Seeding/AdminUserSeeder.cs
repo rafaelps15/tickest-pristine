@@ -1,7 +1,7 @@
+using TickestPristine.Application.Roles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TickestPristine.Application.Abstractions.Authentication;
-using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
 using TickestPristine.Application.Users;
@@ -54,7 +54,7 @@ internal sealed class AdminUserSeeder(
             PasswordHash = passwordHasher.Hash(settings.Password),
             MustChangePassword = true
         });
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleName = Role.Administrator.Name });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleName = RoleNames.Administrator });
 
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -62,7 +62,7 @@ internal sealed class AdminUserSeeder(
     private static Task<bool> ActiveAdministratorExistsAsync(ApplicationDbContext context, CancellationToken cancellationToken)
     {
         return context.UserRoles.AnyAsync(
-            userRole => userRole.RoleName == Role.Administrator.Name &&
+            userRole => userRole.RoleName == RoleNames.Administrator &&
                         context.Users.Any(user => user.Id == userRole.UserId && user.IsActive),
             cancellationToken);
     }

@@ -1,6 +1,6 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Domain.Roles;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Application.Tickets.Reopen;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
@@ -55,6 +55,31 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(TicketErrors.AlreadyActive(ticketId));
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnInvalidStatusTransition_WhenStatusCannotGoBackToOpen()
+    {
+        // Arrange: status fora do enum, que nenhuma transição aceita
+        const TicketStatus unknownStatus = (TicketStatus)99;
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, unknownStatus);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(OwnerId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.ReopenOwn, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
+        var command = new ReopenTicketCommand(ticketId);
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketErrors.InvalidStatusTransition(unknownStatus, TicketStatus.Open));
     }
 
     [Fact]

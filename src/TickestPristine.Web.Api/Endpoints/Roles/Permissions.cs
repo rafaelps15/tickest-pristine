@@ -1,4 +1,4 @@
-using TickestPristine.Domain.Roles;
+using TickestPristine.Application.Permissions;
 
 namespace TickestPristine.Web.Api.Endpoints.Roles;
 

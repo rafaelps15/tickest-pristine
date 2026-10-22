@@ -1,10 +1,10 @@
 using Bogus;
+using TickestPristine.Application.Roles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Application.TicketHistories;
-using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
@@ -34,10 +34,10 @@ internal sealed class SampleDataSeeder(
     /// Usuários fictícios por role, com o prefixo do e-mail e a quantidade. O Administrador fica de fora: o primeiro
     /// administrador já vem do <see cref="AdminUserSeeder"/>.
     /// </summary>
-    private static readonly (Role Role, string EmailPrefix, int Count)[] SampleUserGroups =
+    private static readonly (string RoleName, string EmailPrefix, int Count)[] SampleUserGroups =
     [
-        (Role.Agent, "atendente", 3),
-        (Role.Collaborator, "colaborador", 6)
+        (RoleNames.Agent, "atendente", 3),
+        (RoleNames.Collaborator, "colaborador", 6)
     ];
 
     /// <summary>
@@ -66,10 +66,10 @@ internal sealed class SampleDataSeeder(
         var faker = new Faker("pt_BR") { Random = new Randomizer(RandomSeed) };
         DateTime now = dateTimeProvider.UtcNow;
 
-        Dictionary<Role, Guid[]> userIdsByRole = await EnsureSampleUsersAsync(context, faker, now, cancellationToken);
+        Dictionary<string, Guid[]> userIdsByRole = await EnsureSampleUsersAsync(context, faker, now, cancellationToken);
         // Colaboradores abrem os chamados; atendentes atendem e resolvem.
-        Guid[] requesterIds = userIdsByRole[Role.Collaborator];
-        Guid[] agentIds = userIdsByRole[Role.Agent];
+        Guid[] requesterIds = userIdsByRole[RoleNames.Collaborator];
+        Guid[] agentIds = userIdsByRole[RoleNames.Agent];
 
         // Setores renomeados ou desativados pelo administrador ficam sem chamados de exemplo.
         foreach (SampleTicket sampleTicket in SampleTicketCatalog.Tickets)
@@ -93,7 +93,7 @@ internal sealed class SampleDataSeeder(
     /// com o mesmo e-mail é reaproveitado (o banco pode ter perdido só os chamados). O nome é sorteado mesmo para quem
     /// já existe, para a sequência da semente não depender do estado do banco.
     /// </summary>
-    private async Task<Dictionary<Role, Guid[]>> EnsureSampleUsersAsync(
+    private async Task<Dictionary<string, Guid[]>> EnsureSampleUsersAsync(
         ApplicationDbContext context,
         Faker faker,
         DateTime now,
@@ -112,9 +112,9 @@ internal sealed class SampleDataSeeder(
             .Where(u => emails.Contains(u.Email))
             .ToDictionaryAsync(u => u.Email, u => u.Id, cancellationToken);
 
-        var userIdsByRole = new Dictionary<Role, Guid[]>();
+        var userIdsByRole = new Dictionary<string, Guid[]>();
 
-        foreach ((Role role, string emailPrefix, int count) in SampleUserGroups)
+        foreach ((string roleName, string emailPrefix, int count) in SampleUserGroups)
         {
             var userIds = new List<Guid>();
 
@@ -149,12 +149,12 @@ internal sealed class SampleDataSeeder(
                     PasswordHash = passwordHasher.Hash(password),
                     MustChangePassword = false
                 });
-                context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = role.Name });
+                context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = roleName });
 
                 userIds.Add(user.Id);
             }
 
-            userIdsByRole[role] = [.. userIds];
+            userIdsByRole[roleName] = [.. userIds];
         }
 
         return userIdsByRole;

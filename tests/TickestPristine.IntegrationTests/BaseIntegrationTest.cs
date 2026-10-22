@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Json;
+using TickestPristine.Domain.Roles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Infrastructure.Database;
@@ -83,8 +84,8 @@ public abstract class BaseIntegrationTest
         Guid.Parse(new JwtSecurityTokenHandler().ReadJwtToken(tokens.AccessToken).Subject);
 
     /// <summary>
-    /// Cria uma role isolada para o teste: as roles do código são compartilhadas por todos os testes e não devem ser
-    /// alteradas. A API não cria roles, então ela entra direto no banco.
+    /// Cria uma role isolada para o teste: as roles fixas são compartilhadas por todos os testes e não devem ser
+    /// alteradas. A API não cria roles, então ela entra direto pelo contexto.
     /// </summary>
     protected async Task<string> CreateTestRoleAsync()
     {
@@ -92,7 +93,8 @@ public abstract class BaseIntegrationTest
 
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        await context.Database.ExecuteSqlAsync($"INSERT INTO public.roles (name) VALUES ({name})");
+        context.Roles.Add(new Role { Id = Guid.NewGuid(), Name = name });
+        await context.SaveChangesAsync();
 
         return name;
     }

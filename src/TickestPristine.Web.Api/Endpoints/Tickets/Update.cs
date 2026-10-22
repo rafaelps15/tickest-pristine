@@ -12,7 +12,7 @@ internal sealed class Update : IEndpoint
     public sealed class Request
     {
         public string Description { get; set; }
-        public TicketStatus Status { get; set; }
+        public int Status { get; set; }
     }
 
     public void MapEndpoint(IEndpointRouteBuilder app)
@@ -27,7 +27,7 @@ internal sealed class Update : IEndpoint
             {
                 TicketId = ticketId,
                 Description = request.Description,
-                Status = request.Status
+                Status = (TicketStatus)request.Status
             };
 
             Result result = await handler.Handle(command, cancellationToken);

@@ -2,6 +2,8 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Roles.AssignPermissions;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Application.Permissions;
+using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -35,7 +37,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_ReplacePermissionsAndInvalidateCache_WhenPermissionsAreValid()
+    public async Task Handle_Should_ReplacePermissionsRaiseDomainEventAndInvalidateCache_WhenPermissionsAreValid()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -75,6 +77,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
             .Select(p => p.PermissionCode)
             .ToListAsync();
         permissionCodes.ShouldBe([PermissionCodes.Tickets.Create, PermissionCodes.Tickets.ViewOwn], ignoreOrder: true);
+        role.DomainEvents.ShouldContain(e => e is RolePermissionsAssignedDomainEvent);
 
         await permissionProvider.Received(1).InvalidateAsync(firstUserId, CancellationToken.None);
         await permissionProvider.Received(1).InvalidateAsync(secondUserId, CancellationToken.None);
@@ -110,7 +113,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(RoleErrors.PrivilegeEscalation([Permission.GetDisplayName(PermissionCodes.Users.AssignRoles)]));
+        result.Error.ShouldBe(RoleErrors.PrivilegeEscalation([PermissionCatalog.GetDisplayName(PermissionCodes.Users.AssignRoles)]));
 
         List<string> permissionCodes = await context.RolePermissions
             .Where(p => p.RoleName == role.Name)
@@ -150,7 +153,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(RoleErrors.PrivilegeEscalation([Permission.GetDisplayName(PermissionCodes.Users.AssignRoles)]));
+        result.Error.ShouldBe(RoleErrors.PrivilegeEscalation([PermissionCatalog.GetDisplayName(PermissionCodes.Users.AssignRoles)]));
 
         List<string> permissionCodes = await context.RolePermissions
             .Where(p => p.RoleName == managerRole.Name)
@@ -165,7 +168,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
 
-        Role adminRole = CreateRole(Role.Administrator.Name);
+        Role adminRole = CreateRole(RoleNames.Administrator);
         context.Roles.Add(adminRole);
         context.RolePermissions.Add(new RolePermission { RoleName = adminRole.Name, PermissionCode = PermissionCodes.Users.Read });
         await context.SaveChangesAsync();
@@ -173,7 +176,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
         IUserContext userContext = Substitute.For<IUserContext>();
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         permissionProvider.GetForUserIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns([.. Permission.All.Select(p => p.Code)]);
+            .Returns([.. PermissionCatalog.All.Select(p => p.Code)]);
 
         var handler = new AssignRolePermissionsCommandHandler(context, userContext, permissionProvider);
         var command = new AssignRolePermissionsCommand { RoleName = adminRole.Name, PermissionCodes = [] };

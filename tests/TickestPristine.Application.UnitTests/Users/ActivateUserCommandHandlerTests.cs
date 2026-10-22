@@ -2,6 +2,7 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Users.Activate;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -92,7 +93,7 @@ public sealed class ActivateUserCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(UserErrors.CannotManagePrivilegedUser([Permission.GetDisplayName(PermissionCodes.Roles.Manage)]));
+        result.Error.ShouldBe(UserErrors.CannotManagePrivilegedUser([PermissionCatalog.GetDisplayName(PermissionCodes.Roles.Manage)]));
         (await context.Users.SingleAsync(u => u.Id == userId)).IsActive.ShouldBeFalse();
         await permissionProvider.DidNotReceive().InvalidateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }

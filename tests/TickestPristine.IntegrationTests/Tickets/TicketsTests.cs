@@ -613,7 +613,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             description = "The printer on the 3rd floor is not working",
             priority = 2,
             sectorId,
-            responsibleId = assigneeId
+            assignedToUserId = assigneeId
         });
         assignedResponse.EnsureSuccessStatusCode();
 
@@ -643,20 +643,32 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
-    public async Task GetStatusCounts_Should_CountOtherUsersTickets_WhenCallerHasNoManagePermission()
+    public async Task GetStatusCounts_Should_ReturnForbidden_WhenCallerLacksManagePermission()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/status");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetStatusCounts_Should_CountOtherUsersTickets_WhenCallerHasManagePermission()
     {
         // Arrange
         Guid sectorId = await CreateSectorAsAdminAsync();
         (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
-        (_, AccessTokens callerTokens) = await RegisterAndLoginAsync();
 
-        Authenticate(callerTokens.AccessToken);
         StatusCountsDto? before = await HttpClient.GetFromJsonAsync<StatusCountsDto>("tickets/stats/status");
 
         Authenticate(requesterTokens.AccessToken);
         await CreateTicketAsync(sectorId);
 
-        Authenticate(callerTokens.AccessToken);
+        await AuthenticateAsAdminAsync();
 
         // Act
         StatusCountsDto? after = await HttpClient.GetFromJsonAsync<StatusCountsDto>("tickets/stats/status");
@@ -680,20 +692,32 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
+    public async Task GetVolume_Should_ReturnForbidden_WhenCallerLacksManagePermission()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/volume");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public async Task GetVolume_Should_CountNewTicketInCurrentDay_WhenGroupedByDay()
     {
         // Arrange
         Guid sectorId = await CreateSectorAsAdminAsync();
         (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
-        (_, AccessTokens callerTokens) = await RegisterAndLoginAsync();
 
-        Authenticate(callerTokens.AccessToken);
         List<VolumePointDto>? before = await HttpClient.GetFromJsonAsync<List<VolumePointDto>>("tickets/stats/volume?groupBy=Day");
 
         Authenticate(requesterTokens.AccessToken);
         await CreateTicketAsync(sectorId);
 
-        Authenticate(callerTokens.AccessToken);
+        await AuthenticateAsAdminAsync();
 
         // Act
         List<VolumePointDto>? after = await HttpClient.GetFromJsonAsync<List<VolumePointDto>>("tickets/stats/volume?groupBy=Day");
@@ -784,8 +808,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     public async Task GetVolume_Should_Return12Weeks_WhenGroupedByWeek()
     {
         // Arrange
-        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
-        Authenticate(tokens.AccessToken);
+        await AuthenticateAsAdminAsync();
 
         // Act
         List<VolumePointDto>? volume = await HttpClient.GetFromJsonAsync<List<VolumePointDto>>("tickets/stats/volume?groupBy=Week");
@@ -799,8 +822,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     public async Task GetVolume_Should_ReturnBadRequest_WhenGroupByIsInvalid()
     {
         // Arrange
-        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
-        Authenticate(tokens.AccessToken);
+        await AuthenticateAsAdminAsync();
 
         // Act
         HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/volume?groupBy=Year");
@@ -849,7 +871,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             description = "The printer on the 3rd floor is not working",
             priority = 2,
             sectorId,
-            responsibleId = Guid.NewGuid()
+            assignedToUserId = Guid.NewGuid()
         });
 
         // Assert
@@ -998,7 +1020,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
-    public async Task Reopen_Should_ReturnBadRequest_WhenTicketIsAlreadyActive()
+    public async Task Reopen_Should_ReturnConflict_WhenTicketIsAlreadyActive()
     {
         // Arrange
         Guid sectorId = await CreateSectorAsAdminAsync();
@@ -1010,7 +1032,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         HttpResponseMessage response = await HttpClient.PostAsync($"tickets/{ticketId}/reopen", null);
 
         // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
         problem!.Title.ShouldBe("Tickets.AlreadyActive");
     }
@@ -1048,6 +1070,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
     private async Task<Dictionary<DateOnly, int>> GetVolumeAsync(string groupBy)
     {
+        await AuthenticateAsAdminAsync();
+
         List<VolumePointDto>? volume = await HttpClient.GetFromJsonAsync<List<VolumePointDto>>($"tickets/stats/volume?groupBy={groupBy}");
 
         return volume!.ToDictionary(p => p.PeriodStart, p => p.Count);

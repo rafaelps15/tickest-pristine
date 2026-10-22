@@ -33,7 +33,7 @@ internal sealed class Create : IEndpoint
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })
-        .HasPermission(Permissions.SectorsManage)
-        .WithTags(Tags.Sectors);
+        .WithTags(Tags.Sectors)
+        .HasPermission(Permissions.SectorsManage);
     }
 }

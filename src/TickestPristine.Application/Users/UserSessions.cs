@@ -64,6 +64,11 @@ internal static class UserSessions
             .Where(r => r.UserId == userId)
             .ToListAsync(cancellationToken);
 
+        foreach (RefreshToken refreshToken in refreshTokens)
+        {
+            refreshToken.Raise(new RefreshTokenRevokedDomainEvent(refreshToken.Id, refreshToken.UserId));
+        }
+
         context.RefreshTokens.RemoveRange(refreshTokens);
     }
 

@@ -1,5 +1,6 @@
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -27,7 +28,7 @@ internal static class PrivilegeEscalationGuard
 
         return missing.Count == 0
             ? Result.Success()
-            : Result.Failure(RoleErrors.PrivilegeEscalation(missing.Select(Permission.GetDisplayName)));
+            : Result.Failure(RoleErrors.PrivilegeEscalation(missing.Select(PermissionCatalog.GetDisplayName)));
     }
 
     /// <summary>
@@ -57,7 +58,7 @@ internal static class PrivilegeEscalationGuard
 
         return missing.Count == 0
             ? Result.Success()
-            : Result.Failure(UserErrors.CannotManagePrivilegedUser(missing.Select(Permission.GetDisplayName)));
+            : Result.Failure(UserErrors.CannotManagePrivilegedUser(missing.Select(PermissionCatalog.GetDisplayName)));
     }
 
     /// <summary>
@@ -71,7 +72,7 @@ internal static class PrivilegeEscalationGuard
         CancellationToken cancellationToken)
     {
         var administrative = permissions
-            .Where(code => Permission.Find(code)?.IsAdministrative == true)
+            .Where(code => PermissionCatalog.Find(code)?.IsAdministrative == true)
             .Distinct()
             .ToList();
 

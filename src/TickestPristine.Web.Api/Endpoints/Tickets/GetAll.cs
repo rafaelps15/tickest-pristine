@@ -43,7 +43,7 @@ internal sealed class GetAll : IEndpoint
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })
-        .HasPermission(Permissions.TicketsManage)
-        .WithTags(Tags.Tickets);
+        .WithTags(Tags.Tickets)
+        .HasPermission(Permissions.TicketsManage);
     }
 }

@@ -21,7 +21,7 @@ internal sealed class GetSlaSummary : IEndpoint
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })
-        .HasPermission(Permissions.TicketsManage)
-        .WithTags(Tags.Tickets);
+        .WithTags(Tags.Tickets)
+        .HasPermission(Permissions.TicketsManage);
     }
 }

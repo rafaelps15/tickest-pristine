@@ -22,6 +22,6 @@ internal sealed class GetVolume : IEndpoint
             return result.Match(Results.Ok, CustomResults.Problem);
         })
         .WithTags(Tags.Tickets)
-        .RequireAuthorization();
+        .HasPermission(Permissions.TicketsManage);
     }
 }

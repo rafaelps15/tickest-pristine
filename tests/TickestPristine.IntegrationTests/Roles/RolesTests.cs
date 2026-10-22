@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using TickestPristine.Application.Permissions;
+using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Roles;
 
 namespace TickestPristine.IntegrationTests.Roles;
@@ -79,10 +81,10 @@ public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseInteg
         response.EnsureSuccessStatusCode();
         List<RoleDto>? roles = await response.Content.ReadFromJsonAsync<List<RoleDto>>();
 
-        roles!.Where(r => r.IsDefault).ShouldHaveSingleItem().Name.ShouldBe(Role.Collaborator.Name);
+        roles!.Where(r => r.IsDefault).ShouldHaveSingleItem().Name.ShouldBe(RoleNames.Collaborator);
 
         RoleDto administrator = roles!.Where(r => r.IsAdministrator).ShouldHaveSingleItem();
-        administrator.Name.ShouldBe(Role.Administrator.Name);
+        administrator.Name.ShouldBe(RoleNames.Administrator);
         administrator.PermissionCodes.ShouldContain("users:assign-roles");
     }
 
@@ -94,7 +96,7 @@ public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         // Act
         HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
-            $"roles/{Role.Administrator.Name}/permissions",
+            $"roles/{RoleNames.Administrator}/permissions",
             new { permissionCodes = AssignedPermissionCodes });
 
         // Assert

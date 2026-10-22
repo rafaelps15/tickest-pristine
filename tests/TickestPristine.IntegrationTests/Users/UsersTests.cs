@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Infrastructure.Database;
 
@@ -273,7 +274,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
-    public async Task ChangeRequiredPassword_Should_ReturnBadRequest_WhenUserIsDeactivated()
+    public async Task ChangeRequiredPassword_Should_ReturnForbidden_WhenUserIsDeactivated()
     {
         // Arrange
         string email = UniqueEmail();
@@ -290,7 +291,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users/login/new-password", request);
 
         // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
 
         ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
         problem!.Title.ShouldBe("Users.Deactivated");
@@ -714,11 +715,11 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         // Assert
         response.EnsureSuccessStatusCode();
         CurrentUserDto? me = await response.Content.ReadFromJsonAsync<CurrentUserDto>();
-        me!.Permissions.ShouldBe(Permission.All.Select(p => p.Code), ignoreOrder: true);
+        me!.Permissions.ShouldBe(PermissionCatalog.All.Select(p => p.Code), ignoreOrder: true);
     }
 
     [Fact]
-    public async Task GetCurrent_Should_ReturnBadRequest_WhenUserWasDeactivatedAfterLogin()
+    public async Task GetCurrent_Should_ReturnForbidden_WhenUserWasDeactivatedAfterLogin()
     {
         // Arrange
         (Guid userId, AccessTokens userTokens) = await RegisterAndLoginAsync();
@@ -733,7 +734,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         HttpResponseMessage response = await HttpClient.GetAsync("users/me");
 
         // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
         ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
         problem!.Title.ShouldBe("Users.Deactivated");
     }
@@ -989,7 +990,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
         HttpResponseMessage loginResponse = await HttpClient.PostAsJsonAsync("users/login", new { email, password = "Password123!" });
-        loginResponse.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        loginResponse.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
         ProblemDto? loginProblem = await loginResponse.Content.ReadFromJsonAsync<ProblemDto>();
         loginProblem!.Title.ShouldBe("Users.Deactivated");
 
@@ -1149,7 +1150,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         Authenticate(adminTokens.AccessToken);
         Guid adminUserId = GetUserId(adminTokens);
 
-        string everyPermissionRole = await CreateRoleWithPermissionsAsync([.. Permission.All.Select(p => p.Code)]);
+        string everyPermissionRole = await CreateRoleWithPermissionsAsync([.. PermissionCatalog.All.Select(p => p.Code)]);
 
         string callerEmail = UniqueEmail();
         Guid callerId = await RegisterUserAsync(callerEmail);

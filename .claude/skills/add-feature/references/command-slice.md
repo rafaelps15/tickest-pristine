@@ -37,14 +37,14 @@ public sealed class CreateTodoCommand : ICommand<Guid>
 
 ## Validator
 
-Classe pública, na mesma pasta. Registrado automaticamente e executado pelo `ValidationDecorator` antes de o handler rodar.
+`internal sealed`, na mesma pasta. Registrado automaticamente (o `AddValidatorsFromAssembly` inclui os tipos internos) e executado pelo `ValidationDecorator` antes de o handler rodar.
 
 ```csharp
 using FluentValidation;
 
 namespace Application.Todos.Create;
 
-public class CreateTodoCommandValidator : AbstractValidator<CreateTodoCommand>
+internal sealed class CreateTodoCommandValidator : AbstractValidator<CreateTodoCommand>
 {
     public CreateTodoCommandValidator()
     {

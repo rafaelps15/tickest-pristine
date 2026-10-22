@@ -18,7 +18,7 @@ internal sealed class GetAll : IEndpoint
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })
-        .HasPermission(Permissions.RolesRead)
-        .WithTags(Tags.Roles);
+        .WithTags(Tags.Roles)
+        .HasPermission(Permissions.RolesRead);
     }
 }

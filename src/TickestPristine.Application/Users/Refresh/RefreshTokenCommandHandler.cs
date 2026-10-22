@@ -51,6 +51,8 @@ internal sealed class RefreshTokenCommandHandler(
         // Sessão aberta antes da última troca de senha (ex.: um login com a senha antiga que terminou depois da troca).
         if (owner.SecurityStamp != refreshToken.SecurityStamp)
         {
+            refreshToken.Raise(new RefreshTokenRevokedDomainEvent(refreshToken.Id, refreshToken.UserId));
+
             context.RefreshTokens.Remove(refreshToken);
 
             await context.SaveChangesAsync(cancellationToken);

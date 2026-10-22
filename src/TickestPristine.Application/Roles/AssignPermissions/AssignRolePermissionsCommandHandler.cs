@@ -3,6 +3,7 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Authorization;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Roles;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -25,7 +26,7 @@ internal sealed class AssignRolePermissionsCommandHandler(
         }
 
         // A role de administrador sempre recebe todas as permissões, por isso não pode ser editada.
-        if (role.Name == Role.Administrator.Name)
+        if (role.Name == RoleNames.Administrator)
         {
             return Result.Failure(RoleErrors.AdministratorRoleIsManaged);
         }
@@ -52,13 +53,20 @@ internal sealed class AssignRolePermissionsCommandHandler(
             return escalationCheck;
         }
 
-        // A chave é (RoleName, PermissionCode): remove só as que saíram e inclui só as que entraram.
+        // O par (RoleName, PermissionCode) é único: remove só as que saíram e inclui só as que entraram.
         context.RolePermissions.RemoveRange(existingPermissions.Where(p => !requestedCodes.Contains(p.PermissionCode)));
 
         foreach (string permissionCode in requestedCodes.Except(currentCodes))
         {
-            context.RolePermissions.Add(new RolePermission { RoleName = role.Name, PermissionCode = permissionCode });
+            context.RolePermissions.Add(new RolePermission
+            {
+                Id = Guid.NewGuid(),
+                RoleName = role.Name,
+                PermissionCode = permissionCode
+            });
         }
+
+        role.Raise(new RolePermissionsAssignedDomainEvent(role.Id));
 
         List<Guid> affectedUserIds = await context.UserRoles
             .Where(userRole => userRole.RoleName == role.Name)

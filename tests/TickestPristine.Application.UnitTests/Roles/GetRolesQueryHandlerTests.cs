@@ -1,5 +1,7 @@
 using TickestPristine.Application.Roles.GetAll;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Application.Permissions;
+using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Roles;
 
 namespace TickestPristine.Application.UnitTests.Roles;
@@ -40,8 +42,8 @@ public sealed class GetRolesQueryHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
 
-        Role administrator = CreateRole(Role.Administrator.Name);
-        Role collaborator = CreateRole(Role.Collaborator.Name);
+        Role administrator = CreateRole(RoleNames.Administrator);
+        Role collaborator = CreateRole(RoleNames.Collaborator);
         Role agent = CreateRole("Atendente");
         context.Roles.AddRange(administrator, collaborator, agent);
         await context.SaveChangesAsync();

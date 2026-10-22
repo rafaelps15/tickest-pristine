@@ -1,7 +1,7 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Storage;
-using TickestPristine.Domain.Roles;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Application.TicketAttachments.Upload;
 using TickestPristine.Application.UnitTests.Abstractions;

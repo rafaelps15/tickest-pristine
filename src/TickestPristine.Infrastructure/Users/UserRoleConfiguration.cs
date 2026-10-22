@@ -19,6 +19,7 @@ internal sealed class UserRoleConfiguration : IEntityTypeConfiguration<UserRole>
 
         builder.HasOne<Role>()
             .WithMany()
-            .HasForeignKey(userRole => userRole.RoleName);
+            .HasForeignKey(userRole => userRole.RoleName)
+            .HasPrincipalKey(role => role.Name);
     }
 }

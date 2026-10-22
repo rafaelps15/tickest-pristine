@@ -1,7 +1,7 @@
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Authorization;
 using TickestPristine.Application.UnitTests.Abstractions;
-using TickestPristine.Domain.Roles;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 

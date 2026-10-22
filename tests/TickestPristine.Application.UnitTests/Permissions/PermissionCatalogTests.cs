@@ -1,15 +1,15 @@
 using System.Reflection;
-using TickestPristine.Domain.Roles;
+using TickestPristine.Application.Permissions;
 
-namespace TickestPristine.Application.UnitTests.Authorization;
+namespace TickestPristine.Application.UnitTests.Permissions;
 
-public sealed class PermissionTests
+public sealed class PermissionCatalogTests
 {
     [Fact]
     public void All_Should_HaveUniqueCodes()
     {
         // Arrange
-        IReadOnlyList<Permission> catalog = Permission.All;
+        IReadOnlyList<PermissionCatalogEntry> catalog = PermissionCatalog.All;
 
         // Act
         var codes = catalog.Select(p => p.Code).ToList();
@@ -30,7 +30,7 @@ public sealed class PermissionTests
             .ToList();
 
         // Act
-        var codes = Permission.All.Select(p => p.Code).ToList();
+        var codes = PermissionCatalog.All.Select(p => p.Code).ToList();
 
         // Assert
         codes.ShouldBe(constants, ignoreOrder: true);
@@ -42,10 +42,10 @@ public sealed class PermissionTests
     public void Find_Should_ReturnAdministrativeFlagFromCatalog(string code, bool expected)
     {
         // Arrange
-        Permission catalogPermission = Permission.All.Single(p => p.Code == code);
+        PermissionCatalogEntry catalogPermission = PermissionCatalog.All.Single(p => p.Code == code);
 
         // Act
-        var permission = Permission.Find(code);
+        PermissionCatalogEntry? permission = PermissionCatalog.Find(code);
 
         // Assert
         permission.ShouldNotBeNull();
@@ -60,7 +60,7 @@ public sealed class PermissionTests
         const string unknownCode = "legacy:unknown";
 
         // Act
-        string displayName = Permission.GetDisplayName(unknownCode);
+        string displayName = PermissionCatalog.GetDisplayName(unknownCode);
 
         // Assert
         displayName.ShouldBe(unknownCode);

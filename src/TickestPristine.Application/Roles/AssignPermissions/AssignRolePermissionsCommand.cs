@@ -1,5 +1,7 @@
 using TickestPristine.Application.Abstractions.Messaging;
 
+using TickestPristine.Application.Permissions;
+
 namespace TickestPristine.Application.Roles.AssignPermissions;
 
 public sealed class AssignRolePermissionsCommand : ICommand

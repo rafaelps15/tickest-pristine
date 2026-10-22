@@ -1,5 +1,6 @@
 using TickestPristine.Application.Authorization;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -18,7 +19,7 @@ public sealed class AdministratorGuardTests : BaseHandlerTest
 
         await using (TestDbContext seedContext = CreateDbContext(databaseName))
         {
-            Role administratorRole = CreateRole(Role.Administrator.Name);
+            Role administratorRole = CreateRole(RoleNames.Administrator);
             seedContext.Roles.Add(administratorRole);
             firstAdministratorId = SeedAdministrator(seedContext, administratorRole);
             secondAdministratorId = SeedAdministrator(seedContext, administratorRole);

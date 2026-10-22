@@ -22,7 +22,7 @@ internal sealed class GetOwn : IEndpoint
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })
-        .HasPermission(Permissions.TicketsViewOwn)
-        .WithTags(Tags.Tickets);
+        .WithTags(Tags.Tickets)
+        .HasPermission(Permissions.TicketsViewOwn);
     }
 }

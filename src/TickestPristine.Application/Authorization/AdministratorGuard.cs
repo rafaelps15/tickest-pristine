@@ -1,4 +1,5 @@
 using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Roles;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -25,7 +26,7 @@ internal static class AdministratorGuard
         Guid leavingUserId,
         CancellationToken cancellationToken)
     {
-        string administratorRoleName = Role.Administrator.Name;
+        string administratorRoleName = RoleNames.Administrator;
 
         bool isAdministrator = await context.UserRoles.AnyAsync(
             userRole => userRole.UserId == leavingUserId && userRole.RoleName == administratorRoleName,

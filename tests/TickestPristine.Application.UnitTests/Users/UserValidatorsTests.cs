@@ -10,6 +10,8 @@ using TickestPristine.Application.Users.Register;
 using TickestPristine.Application.Users.UpdateProfile;
 using FluentValidation.TestHelper;
 
+using TickestPristine.Application.Roles;
+
 namespace TickestPristine.Application.UnitTests.Users;
 
 public sealed class UserValidatorsTests

@@ -1,6 +1,8 @@
 using System.Net.Http.Json;
+using TickestPristine.Application.Roles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
@@ -25,7 +27,7 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
         List<RoleDto>? roles = await HttpClient.GetFromJsonAsync<List<RoleDto>>("roles");
 
         // Assert
-        RoleDto administrator = roles!.Single(r => r.Name == Role.Administrator.Name);
+        RoleDto administrator = roles!.Single(r => r.Name == RoleNames.Administrator);
         administrator.IsAdministrator.ShouldBeTrue();
 
         RoleDto agent = roles!.Single(r => r.Name == "Atendente");
@@ -49,8 +51,8 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
         List<RoleDto>? roles = await HttpClient.GetFromJsonAsync<List<RoleDto>>("roles");
 
         // Assert: falha quando um código entra ou sai do catálogo de Permission sem a migration correspondente
-        RoleDto administrator = roles!.Single(r => r.Name == Role.Administrator.Name);
-        administrator.PermissionCodes.ShouldBe(Permission.All.Select(p => p.Code), ignoreOrder: true);
+        RoleDto administrator = roles!.Single(r => r.Name == RoleNames.Administrator);
+        administrator.PermissionCodes.ShouldBe(PermissionCatalog.All.Select(p => p.Code), ignoreOrder: true);
     }
 
     [Fact]
@@ -67,7 +69,7 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
         User administrator = await context.Users.SingleAsync(u => u.Email == AdminEmail);
         administrator.IsActive.ShouldBeTrue();
 
-        string administratorRoleName = Role.Administrator.Name;
+        string administratorRoleName = RoleNames.Administrator;
         int administratorRoleLinks = await context.UserRoles
             .CountAsync(ur => ur.UserId == administrator.Id && ur.RoleName == administratorRoleName);
         administratorRoleLinks.ShouldBe(1);
@@ -77,7 +79,7 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
     public async Task Seeding_Should_NotRestoreAdministratorRole_WhenAnotherActiveAdministratorExists()
     {
         // Arrange
-        string administratorRoleName = Role.Administrator.Name;
+        string administratorRoleName = RoleNames.Administrator;
         Guid anotherAdministratorId = await RegisterUserAsync(UniqueEmail());
 
         using IServiceScope scope = Services.CreateScope();

@@ -1,7 +1,7 @@
 ﻿using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Users.Register;
 using TickestPristine.Application.UnitTests.Abstractions;
-using TickestPristine.Domain.Roles;
+using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.Application.Users;
@@ -69,6 +69,6 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         credential.PasswordHash.ShouldBe("hashed-password");
 
         UserRole userRole = await context.UserRoles.SingleAsync(ur => ur.UserId == user.Id);
-        userRole.RoleName.ShouldBe(Role.Collaborator.Name);
+        userRole.RoleName.ShouldBe(RoleNames.Collaborator);
     }
 }

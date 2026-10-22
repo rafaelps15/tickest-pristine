@@ -2,6 +2,8 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Users.Deactivate;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Application.Permissions;
+using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -195,7 +197,7 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(UserErrors.CannotManagePrivilegedUser([Permission.GetDisplayName(PermissionCodes.Roles.Manage)]));
+        result.Error.ShouldBe(UserErrors.CannotManagePrivilegedUser([PermissionCatalog.GetDisplayName(PermissionCodes.Roles.Manage)]));
         (await context.Users.SingleAsync(u => u.Id == userId)).IsActive.ShouldBeTrue();
         await permissionProvider.DidNotReceive().InvalidateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
@@ -245,7 +247,7 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
 
     private static async Task<Role> SeedAdministratorRoleAsync(TestDbContext context)
     {
-        Role role = CreateRole(Role.Administrator.Name);
+        Role role = CreateRole(RoleNames.Administrator);
         context.Roles.Add(role);
         await context.SaveChangesAsync();
 

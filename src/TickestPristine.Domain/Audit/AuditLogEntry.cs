@@ -1,6 +1,8 @@
+using TickestPristine.SharedKernel;
+
 namespace TickestPristine.Domain.Audit;
 
-public sealed class AuditLogEntry
+public sealed class AuditLogEntry : Entity
 {
     public Guid Id { get; set; }
     public string EntityName { get; set; }

@@ -25,7 +25,7 @@ internal sealed class GetHistory : IEndpoint
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })
-        .HasPermission(Permissions.AuditRead)
-        .WithTags(Tags.AuditLogs);
+        .WithTags(Tags.AuditLogs)
+        .HasPermission(Permissions.AuditRead);
     }
 }

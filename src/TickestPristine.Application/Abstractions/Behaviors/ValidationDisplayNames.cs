@@ -1,6 +1,10 @@
 using System.Linq.Expressions;
 using System.Reflection;
 
+using TickestPristine.Application.Permissions;
+
+using TickestPristine.Application.Roles;
+
 namespace TickestPristine.Application.Abstractions.Behaviors;
 
 /// <summary>

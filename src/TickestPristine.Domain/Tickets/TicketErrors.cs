@@ -12,7 +12,7 @@ public static class TicketErrors
         "Tickets.NotActive",
         $"O chamado com o Id = '{ticketId}' não está ativo");
 
-    public static Error AlreadyActive(Guid ticketId) => Error.Problem(
+    public static Error AlreadyActive(Guid ticketId) => Error.Conflict(
         "Tickets.AlreadyActive",
         $"O chamado com o Id = '{ticketId}' já está ativo");
 

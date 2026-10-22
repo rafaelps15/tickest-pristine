@@ -3,6 +3,7 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Authorization;
+using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -65,7 +66,7 @@ internal sealed class AssignUserRolesCommandHandler(
             return escalationCheck;
         }
 
-        if (currentRoleNames.Contains(Role.Administrator.Name) && !requestedRoleNames.Contains(Role.Administrator.Name))
+        if (currentRoleNames.Contains(RoleNames.Administrator) && !requestedRoleNames.Contains(RoleNames.Administrator))
         {
             Result administratorCheck = await AdministratorGuard.EnsureNotLastAdministratorAsync(
                 context,

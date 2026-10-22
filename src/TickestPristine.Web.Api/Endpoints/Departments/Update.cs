@@ -35,7 +35,7 @@ internal sealed class Update : IEndpoint
 
             return result.Match(Results.NoContent, CustomResults.Problem);
         })
-        .HasPermission(Permissions.DepartmentsManage)
-        .WithTags(Tags.Departments);
+        .WithTags(Tags.Departments)
+        .HasPermission(Permissions.DepartmentsManage);
     }
 }

@@ -5,7 +5,7 @@ namespace TickestPristine.Application.TicketHistories;
 /// <summary>
 /// Textos do histórico de chamados exibidos ao usuário, num lugar só: a API e os dados de exemplo gravam o mesmo texto.
 /// </summary>
-public static class TicketHistoryDescriptions
+internal static class TicketHistoryDescriptions
 {
     public const string Created = "Chamado criado";
 

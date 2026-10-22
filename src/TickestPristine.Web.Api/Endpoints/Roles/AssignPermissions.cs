@@ -1,5 +1,6 @@
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Roles.AssignPermissions;
+using TickestPristine.Application.Permissions;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
 using TickestPristine.Web.Api.Infrastructure;
@@ -31,7 +32,7 @@ internal sealed class AssignPermissions : IEndpoint
 
             return result.Match(Results.NoContent, CustomResults.Problem);
         })
-        .HasPermission(Permissions.RolesManage)
-        .WithTags(Tags.Roles);
+        .WithTags(Tags.Roles)
+        .HasPermission(Permissions.RolesManage);
     }
 }

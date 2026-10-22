@@ -1,4 +1,7 @@
+using TickestPristine.Application.Permissions;
+using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Roles;
+using TickestPristine.Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -8,44 +11,52 @@ internal sealed class RolePermissionConfiguration : IEntityTypeConfiguration<Rol
 {
     public void Configure(EntityTypeBuilder<RolePermission> builder)
     {
-        builder.HasKey(rolePermission => new { rolePermission.RoleName, rolePermission.PermissionCode });
+        builder.HasKey(rolePermission => rolePermission.Id);
+
+        builder.HasIndex(rolePermission => new { rolePermission.RoleName, rolePermission.PermissionCode }).IsUnique();
 
         builder.Property(rolePermission => rolePermission.PermissionCode).HasMaxLength(100);
 
         builder.HasOne<Role>()
             .WithMany()
-            .HasForeignKey(rolePermission => rolePermission.RoleName);
+            .HasForeignKey(rolePermission => rolePermission.RoleName)
+            .HasPrincipalKey(role => role.Name);
 
         builder.HasOne<Permission>()
             .WithMany()
-            .HasForeignKey(rolePermission => rolePermission.PermissionCode);
+            .HasForeignKey(rolePermission => rolePermission.PermissionCode)
+            .HasPrincipalKey(permission => permission.Code);
 
         // Permissões padrão de cada role. Depois da migration o administrador pode mudar as das outras roles pela API,
         // por isso uma migration que acrescente um vínculo aqui precisa trocar o InsertData gerado por um INSERT com
         // ON CONFLICT DO NOTHING (o vínculo pode já ter sido concedido à mão).
         RolePermission[] defaultRolePermissions =
             [
-                .. Permission.All.Select(permission => Create(Role.Administrator, permission)),
+                .. PermissionCatalog.All.Select(permission => Create(RoleNames.Administrator, permission)),
 
                 // Atendente
-                Create(Role.Agent, Permission.TicketsCreate),
-                Create(Role.Agent, Permission.TicketsViewOwn),
-                Create(Role.Agent, Permission.TicketsUpdateOwn),
-                Create(Role.Agent, Permission.TicketsDeleteOwn),
-                Create(Role.Agent, Permission.TicketsReopenOwn),
-                Create(Role.Agent, Permission.TicketsManage),
+                Create(RoleNames.Agent, PermissionCatalog.TicketsCreate),
+                Create(RoleNames.Agent, PermissionCatalog.TicketsViewOwn),
+                Create(RoleNames.Agent, PermissionCatalog.TicketsUpdateOwn),
+                Create(RoleNames.Agent, PermissionCatalog.TicketsDeleteOwn),
+                Create(RoleNames.Agent, PermissionCatalog.TicketsReopenOwn),
+                Create(RoleNames.Agent, PermissionCatalog.TicketsManage),
 
                 // Colaborador
-                Create(Role.Collaborator, Permission.TicketsCreate),
-                Create(Role.Collaborator, Permission.TicketsViewOwn),
-                Create(Role.Collaborator, Permission.TicketsUpdateOwn),
-                Create(Role.Collaborator, Permission.TicketsDeleteOwn),
-                Create(Role.Collaborator, Permission.TicketsReopenOwn)
+                Create(RoleNames.Collaborator, PermissionCatalog.TicketsCreate),
+                Create(RoleNames.Collaborator, PermissionCatalog.TicketsViewOwn),
+                Create(RoleNames.Collaborator, PermissionCatalog.TicketsUpdateOwn),
+                Create(RoleNames.Collaborator, PermissionCatalog.TicketsDeleteOwn),
+                Create(RoleNames.Collaborator, PermissionCatalog.TicketsReopenOwn)
             ];
 
         builder.HasData(defaultRolePermissions);
     }
 
-    private static RolePermission Create(Role role, Permission permission) =>
-        new() { RoleName = role.Name, PermissionCode = permission.Code };
+    private static RolePermission Create(string roleName, PermissionCatalogEntry permission) => new()
+    {
+        Id = DeterministicGuid.Create($"role-permission:{roleName}:{permission.Code}"),
+        RoleName = roleName,
+        PermissionCode = permission.Code
+    };
 }

@@ -52,7 +52,7 @@ public static class UserErrors
         "Users.AlreadyActive",
         "O usuário já está ativo.");
 
-    public static readonly Error Deactivated = Error.Problem(
+    public static readonly Error Deactivated = Error.Forbidden(
         "Users.Deactivated",
         "O usuário está desativado.");
 

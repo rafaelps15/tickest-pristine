@@ -1,3 +1,5 @@
+using TickestPristine.Application.Permissions;
+
 namespace TickestPristine.Application.Roles.GetAll;
 
 public sealed class RoleResponse

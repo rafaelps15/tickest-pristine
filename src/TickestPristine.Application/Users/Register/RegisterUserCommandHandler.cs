@@ -1,7 +1,7 @@
 ﻿using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Domain.Roles;
+using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -36,7 +36,7 @@ internal sealed class RegisterUserCommandHandler(
 
         context.Users.Add(user);
         context.UserCredentials.Add(new UserCredential { Id = Guid.NewGuid(), UserId = user.Id, PasswordHash = passwordHasher.Hash(command.Password) });
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = Role.Collaborator.Name });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = RoleNames.Collaborator });
 
         await context.SaveChangesAsync(cancellationToken);
 

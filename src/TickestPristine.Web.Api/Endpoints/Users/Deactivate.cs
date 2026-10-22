@@ -21,7 +21,7 @@ internal sealed class Deactivate : IEndpoint
 
             return result.Match(Results.NoContent, CustomResults.Problem);
         })
-        .HasPermission(Permissions.UsersDeactivate)
-        .WithTags(Tags.Users);
+        .WithTags(Tags.Users)
+        .HasPermission(Permissions.UsersDeactivate);
     }
 }

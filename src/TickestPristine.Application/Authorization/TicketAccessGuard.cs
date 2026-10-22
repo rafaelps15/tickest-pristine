@@ -1,7 +1,7 @@
+using TickestPristine.Application.Permissions;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
-using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
