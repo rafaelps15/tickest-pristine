@@ -398,3 +398,8 @@ FodyWeavers.xsd
 *.sln.iml
 
 .containers/
+
+# Variáveis de ambiente e segredos locais
+.env
+.env.*
+!.env.example
