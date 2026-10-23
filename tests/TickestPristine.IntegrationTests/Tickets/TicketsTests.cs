@@ -976,6 +976,229 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
+    public async Task Update_Should_RecordDescriptionChanged_WhenOwnerChangesOnlyDescription()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (Guid ownerId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = ChangedDescription,
+            status = 1 // Open
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        List<TicketHistory> newEntries = GetHistoryAfterCreation(ticketId);
+        TicketHistory history = newEntries.ShouldHaveSingleItem();
+        history.Action.ShouldBe(TicketHistoryAction.DescriptionChanged);
+        history.OldValue.ShouldBe(OriginalDescription);
+        history.NewValue.ShouldBe(ChangedDescription);
+        history.ChangedByUserId.ShouldBe(ownerId);
+    }
+
+    [Fact]
+    public async Task Update_Should_RecordStatusAndDescriptionChanges_WhenManagerChangesBoth()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = ChangedDescription,
+            status = 2 // InProgress
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        List<TicketHistory> newEntries = GetHistoryAfterCreation(ticketId);
+        newEntries.Count.ShouldBe(2);
+
+        TicketHistory statusChanged = newEntries.Single(h => h.Action == TicketHistoryAction.StatusChanged);
+        statusChanged.OldValue.ShouldBe(nameof(TicketStatus.Open));
+        statusChanged.NewValue.ShouldBe(nameof(TicketStatus.InProgress));
+
+        TicketHistory descriptionChanged = newEntries.Single(h => h.Action == TicketHistoryAction.DescriptionChanged);
+        descriptionChanged.OldValue.ShouldBe(OriginalDescription);
+        descriptionChanged.NewValue.ShouldBe(ChangedDescription);
+    }
+
+    [Fact]
+    public async Task Update_Should_RecordOnlyStatusChanged_WhenDescriptionIsUnchanged()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = OriginalDescription,
+            status = 2 // InProgress
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        GetHistoryAfterCreation(ticketId).ShouldHaveSingleItem().Action.ShouldBe(TicketHistoryAction.StatusChanged);
+    }
+
+    [Fact]
+    public async Task Update_Should_NotRecordHistory_WhenNothingChanges()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = OriginalDescription,
+            status = 1 // Open
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        GetHistoryAfterCreation(ticketId).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Update_Should_ShowDescriptionChangeInHistory()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        HttpResponseMessage updateResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = ChangedDescription,
+            status = 1 // Open
+        });
+        updateResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/{ticketId}/history");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        List<TicketHistoryDto>? history = (await response.Content.ReadFromJsonAsync<CursorPageDto<TicketHistoryDto>>())?.Items;
+        history.ShouldNotBeNull();
+        history.ShouldContain(h => h.Action == 12 && h.Description == "Descrição alterada");
+    }
+
+    [Fact]
+    public async Task Update_Should_NotRecordHistory_WhenTicketIsNotActive()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        HttpResponseMessage cancelResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = OriginalDescription,
+            status = 5 // Canceled
+        });
+        cancelResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        int entriesBefore = GetHistoryAfterCreation(ticketId).Count;
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = ChangedDescription,
+            status = 5 // Canceled
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Tickets.NotActive");
+        GetHistoryAfterCreation(ticketId).Count.ShouldBe(entriesBefore);
+    }
+
+    [Fact]
+    public async Task Update_Should_NotRecordHistory_WhenCallerLacksPermission()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens ownerTokens) = await RegisterAndLoginAsync();
+        Authenticate(ownerTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        (_, AccessTokens outsiderTokens) = await RegisterAndLoginAsync();
+        Authenticate(outsiderTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = ChangedDescription,
+            status = 1 // Open
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        GetHistoryAfterCreation(ticketId).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Update_Should_NotRecordHistory_WhenManagerSendsInvalidStatusTransition()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = ChangedDescription,
+            status = 4 // Closed
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Tickets.InvalidStatusTransition");
+        GetHistoryAfterCreation(ticketId).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Update_Should_ReturnNotFound_WhenManagerUpdatesMissingTicket()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        var ticketId = Guid.NewGuid();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = ChangedDescription,
+            status = 2 // InProgress
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Tickets.NotFound");
+        GetHistoryAfterCreation(ticketId).ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task Delete_Should_ReturnForbidden_WhenCallerIsNotOwnerAndLacksManagePermission()
     {
         // Arrange
@@ -1454,6 +1677,23 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         assignResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
         return (ticketId, adminId);
+    }
+
+    private const string OriginalDescription = "The printer on the 3rd floor is not working";
+
+    private const string ChangedDescription = "The printer on the 3rd floor is not working after the toner change";
+
+    /// <summary>
+    /// Registros do histórico do chamado, menos o da abertura (que todo chamado criado pela API tem).
+    /// </summary>
+    private List<TicketHistory> GetHistoryAfterCreation(Guid ticketId)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return context.TicketHistories
+            .Where(h => h.TicketId == ticketId && h.Action != TicketHistoryAction.Created)
+            .ToList();
     }
 
     private List<TicketHistory> GetUnassignedHistory(Guid ticketId)

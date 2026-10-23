@@ -16,6 +16,7 @@ internal static class TicketHistoryDescriptions
                 $"Status alterado de {GetStatusDisplayName(oldValue)} para {GetStatusDisplayName(newValue)}",
             TicketHistoryAction.Reassigned => "Responsável alterado",
             TicketHistoryAction.Unassigned => "Responsável removido",
+            TicketHistoryAction.DescriptionChanged => "Descrição alterada",
             TicketHistoryAction.Reopened => "Chamado reaberto",
             TicketHistoryAction.Deleted => "Chamado excluído",
             TicketHistoryAction.MessageAdded => "Nova mensagem adicionada ao chamado",

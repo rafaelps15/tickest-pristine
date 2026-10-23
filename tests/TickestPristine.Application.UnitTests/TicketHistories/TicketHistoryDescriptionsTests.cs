@@ -9,6 +9,7 @@ public sealed class TicketHistoryDescriptionsTests
     [InlineData(TicketHistoryAction.Created, "Chamado criado")]
     [InlineData(TicketHistoryAction.Reassigned, "Responsável alterado")]
     [InlineData(TicketHistoryAction.Unassigned, "Responsável removido")]
+    [InlineData(TicketHistoryAction.DescriptionChanged, "Descrição alterada")]
     [InlineData(TicketHistoryAction.Reopened, "Chamado reaberto")]
     [InlineData(TicketHistoryAction.Deleted, "Chamado excluído")]
     [InlineData(TicketHistoryAction.MessageAdded, "Nova mensagem adicionada ao chamado")]

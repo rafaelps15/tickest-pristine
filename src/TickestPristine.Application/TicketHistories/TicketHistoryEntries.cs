@@ -84,4 +84,21 @@ public static class TicketHistoryEntries
             TicketHistoryAction.Unassigned,
             occurredAtUtc,
             oldAssignedToUserId.ToString());
+
+    /// <summary>
+    /// Alteração da descrição: guarda o texto anterior e o novo (os dois cabem nas colunas, como a descrição).
+    /// </summary>
+    public static TicketHistory DescriptionChanged(
+        Guid ticketId,
+        Guid? changedByUserId,
+        string oldDescription,
+        string newDescription,
+        DateTime occurredAtUtc) =>
+        Create(
+            ticketId,
+            changedByUserId,
+            TicketHistoryAction.DescriptionChanged,
+            occurredAtUtc,
+            oldDescription,
+            newDescription);
 }

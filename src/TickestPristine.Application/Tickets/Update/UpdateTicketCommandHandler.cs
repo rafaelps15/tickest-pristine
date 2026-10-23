@@ -50,6 +50,7 @@ internal sealed class UpdateTicketCommandHandler(
         }
 
         TicketStatus previousStatus = ticket.Status;
+        string previousDescription = ticket.Description;
         DateTime nowUtc = dateTimeProvider.UtcNow;
 
         ticket.Description = command.Description;
@@ -72,6 +73,16 @@ internal sealed class UpdateTicketCommandHandler(
                 userContext.UserId,
                 previousStatus,
                 command.Status,
+                nowUtc));
+        }
+
+        if (!string.Equals(previousDescription, command.Description, StringComparison.Ordinal))
+        {
+            context.TicketHistories.Add(TicketHistoryEntries.DescriptionChanged(
+                ticket.Id,
+                userContext.UserId,
+                previousDescription,
+                command.Description,
                 nowUtc));
         }
 

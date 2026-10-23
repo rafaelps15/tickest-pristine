@@ -69,4 +69,28 @@ public sealed class TicketHistoryEntriesTests
         history.NewValue.ShouldBeNull();
         history.OccurredAtUtc.ShouldBe(OccurredAtUtc);
     }
+
+    [Fact]
+    public void DescriptionChanged_Should_RecordOldAndNewDescription()
+    {
+        // Arrange
+        var ticketId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+
+        // Act
+        TicketHistory history = TicketHistoryEntries.DescriptionChanged(
+            ticketId,
+            ownerId,
+            "Original description",
+            "Updated description",
+            OccurredAtUtc);
+
+        // Assert
+        history.TicketId.ShouldBe(ticketId);
+        history.ChangedByUserId.ShouldBe(ownerId);
+        history.Action.ShouldBe(TicketHistoryAction.DescriptionChanged);
+        history.OldValue.ShouldBe("Original description");
+        history.NewValue.ShouldBe("Updated description");
+        history.OccurredAtUtc.ShouldBe(OccurredAtUtc);
+    }
 }

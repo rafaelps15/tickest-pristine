@@ -12,5 +12,6 @@ public enum TicketHistoryAction
     AttachmentRemoved = 8,
     MessageEdited = 9,
     MessageRemoved = 10,
-    Unassigned = 11
+    Unassigned = 11,
+    DescriptionChanged = 12
 }
