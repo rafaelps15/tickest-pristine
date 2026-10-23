@@ -1,7 +1,7 @@
 ---
 id: 001
 titulo: Remover o responsável de um chamado
-status: Verificada        # Rascunho | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Cancelada (transições: spec-status.md da skill spec-new)
+status: Entregue        # Rascunho | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Cancelada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos  # responsável pelo produto e pelo desenvolvimento
 aprovada-em: 2026-10-22
 branch: feat/spec-driven-development
@@ -110,7 +110,7 @@ branch: feat/spec-driven-development
 - **Revisão:** `ca-review` sobre os arquivos do plano técnico: nenhum achado bloqueante, nenhuma violação de convenção, nenhuma lacuna de teste. Veredito: pronto para commit. Mudanças pendentes fora do escopo (documentos de backlog e SDD, spec 004, `prompt-sla-tickest.md`) não foram revisadas.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md`, em 2026-10-23: cabeçalho (estado documentado), 2.2, 2.3, 2.6 (RN-23), 2.7 (C-10, C-18), 4.3.1, 4.4 (enum 1–11), 5.10 ("Remover responsável"), 6.1 (execução da verificação), 6.9 (specs existentes e primeira execução das skills), 7.2 (GAP-18, lacuna da DEC-4), 8 (E-40, E-43) e 9.4. Previsto na spec: 2.2 (o responsável "sempre" vê o chamado: deixa de valer para quem foi removido, AC-9), 2.3 (casos de uso de Tickets), 2.6 (nova RN-23), 2.7 (C-10 e C-18), 4.3.1 (rota nova), 5.10 (fluxo "Remover responsável"), 7 (lacuna: chamado Em andamento pode ficar sem responsável, conforme a DEC-4), 8 (evidência nova).
 - **CI:** não executado (a branch não foi enviada ao GitHub).
-- **Entrega:** <commit ou PR, e a autorização>
+- **Entrega:** commit `b0e78b0` na branch `feat/spec-driven-development`, em 2026-10-23, autorizado por Rafael Santos no chat ("faça commit de tudo que tem no git Changes"). Sem push nem PR.
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -126,3 +126,4 @@ branch: feat/spec-driven-development
 | 2026-10-23 | Em implementação | Início da implementação por `/spec-implement 001`, digitado por Rafael Santos no chat. Linha de base no mesmo dia: build com 0 avisos e 0 erros; 699 testes aprovados (10 de arquitetura, 441 unitários, 248 de integração). |
 | 2026-10-23 | Em implementação | T-1 a T-5 concluídas, com as skills `add-feature` e `add-tests`, só nos arquivos do plano técnico; build e testes rodados ao fim de cada tarefa. Última execução: 0 avisos e 0 erros; 726 testes aprovados (10 de arquitetura, 455 unitários, 261 de integração), sem falhas. Rastreabilidade preenchida (coluna "Resultado" fica para a `spec-verify`). Aguardando verificação. |
 | 2026-10-23 | Verificada | Verificação aprovada pela `spec-verify`: build com 0 avisos e 0 erros; 726 testes aprovados e 0 com falha na execução de 2026-10-23 16:55; os 12 ACs cobertos por testes lidos e conferidos contra Dado, Quando e Então; `ca-review` sem achados. Documentação de estado atualizada (ver "Evidências de verificação"). Ainda não entregue: commit e PR dependem de autorização explícita. |
+| 2026-10-23 | Entregue | Commit `b0e78b0` feito com autorização explícita de Rafael Santos no chat ("faça commit de tudo que tem no git Changes"). Registro feito num commit posterior, coberto pela mesma autorização. Sem push nem PR. |
