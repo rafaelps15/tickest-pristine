@@ -175,4 +175,6 @@ Estados e transições da spec: `.claude/skills/spec-new/references/spec-status.
 
 ### Portão determinístico
 
+**Estado:** instalado em 23/10/2026 (até essa data só existia na worktree de teste). O `.claude/settings.json` também nega, em `permissions.deny`, a leitura de `.env` e `.env.*` e o `git push` pelo agente: o push é feito pelo responsável (`! git push`).
+
 O hook `.claude/hooks/sdd_gate.py` (registrado em `.claude/settings.json`) bloqueia escrita em `src/` e `tests/`, por ferramenta de edição ou comando de shell, fora de um `/spec-implement NNN` cuja spec esteja `Em implementação` e com `aprovada-em` preenchido. Para uma mudança trivial, inclua `[sdd:autorizo]` na sua mensagem: a liberação vale só para ela e termina na sua próxima mensagem, mesmo que ela chegue no meio de uma resposta. O próprio hook e os settings também exigem o marcador. O hook evita erros do agente; não resiste a quem queira burlá-lo de propósito. Os caminhos bloqueados e os limites conhecidos estão no `SYSTEM_SPECIFICATION.md` (6.9). Testes: `python -m unittest discover -s .claude/hooks -p "test_*.py"` (também configurados como passo do CI em `.github/workflows/build.yml`).
