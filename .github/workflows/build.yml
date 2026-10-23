@@ -18,6 +18,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Histórico completo: a auditoria de conformidade avalia os últimos commits (RAS-02/RAS-03).
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -31,6 +34,9 @@ jobs:
 
       - name: Test SDD gate hook
         run: python -m unittest discover -s .claude/hooks -p "test_*.py"
+
+      - name: SDD compliance audit
+        run: python auditoria_sdd.py . --min-score 70
 
       - name: Restore
         run: dotnet restore TickestPristine.slnx

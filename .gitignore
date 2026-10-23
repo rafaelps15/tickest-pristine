@@ -403,3 +403,6 @@ FodyWeavers.xsd
 .env
 .env.*
 !.env.example
+
+# Relatório local da auditoria de conformidade (auditoria_sdd.py)
+auditoria.md
