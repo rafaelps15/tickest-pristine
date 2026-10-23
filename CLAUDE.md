@@ -49,6 +49,8 @@ SharedKernel  <-- Domain <-- Application <-- Infrastructure
                                   ^--------------- Web.Api
 ```
 
+A Web.Api referencia diretamente só a Infrastructure e chega à Application de forma transitiva.
+
 - **SharedKernel** — peças básicas de DDD, sem dependência de nenhum outro projeto da solução: `Entity` (classe base que guarda os eventos de domínio disparados), `Result`/`Result<T>` (a convenção de tratamento de erro — veja abaixo), `Error`/`ErrorType`, `IDomainEvent`, `IDateTimeProvider`.
 - **Domain** — entidades, eventos de domínio e uma classe estática `*Errors` por agregado (ex.: `TodoItemErrors`, `UserErrors`). Sem dependência de frameworks. Organizado por pasta de agregado (`Todos/`, `Users/`), e não por tipo técnico.
 - **Application** — casos de uso, um por pasta de slice vertical (ex.: `Todos/Create/`, `Todos/Complete/`), mais `Abstractions/` com as interfaces transversais (`Messaging`, `Behaviors`, `Data`, `Authentication`). Sem MediatR — commands e queries são tratados por interfaces próprias `ICommandHandler`/`IQueryHandler`, resolvidas pela DI com varredura de assembly do `Scrutor`.
@@ -68,7 +70,7 @@ Os testes seguem a mesma estrutura: `tests/TickestPristine.Application.UnitTests
 
 ### Comportamentos transversais com decorators
 
-O `Application/DependencyInjection.cs` envolve todos os handlers de command/query com decorators (pelo `.Decorate` do `Scrutor`), aplicados nesta ordem: **Validation → Logging → handler**. A validação interrompe em caso de falha e retorna `Result.Failure` com um `ValidationError` antes de o handler rodar — os próprios handlers não precisam validar a entrada.
+O `Application/DependencyInjection.cs` envolve todos os handlers de command/query com decorators (pelo `.Decorate` do `Scrutor`), aplicados nesta ordem: **Validation → Logging → handler** (a Validation envolve só os commands; as queries passam só pelo Logging). A validação interrompe em caso de falha e retorna `Result.Failure` com um `ValidationError` antes de o handler rodar — os próprios handlers não precisam validar a entrada.
 
 ### Padrão Result (sem exceções para falhas esperadas)
 
@@ -84,7 +86,7 @@ As entidades herdam de `Entity` e não têm métodos (domínio anêmico): são o
 - Entidades novas ganham a sua própria classe estática `{Entity}Errors` no Domain, em vez de lançar exceções cruas ou reaproveitar os erros de outro agregado.
 - As configurações do EF Core (`IEntityTypeConfiguration<T>`) ficam em `Infrastructure/{Aggregate}/{Entity}Configuration.cs` e precisam ser adicionadas ao `ApplicationDbContext`.
 - Endpoints são uma classe por rota em `Web.Api/Endpoints/{Aggregate}/`, com tag via `Web.Api/Endpoints/Tags.cs`, e registrados automaticamente — não há tabela de rotas para atualizar.
-- Este repositório tem `.claude/skills/` (`add-entity`, `add-feature`, `add-tests`, `ca-review`) com essas convenções em forma de roteiro executável — prefira usá-las a escrever à mão, para que o código novo fique exatamente igual aos slices existentes. Ao usá-las, os caminhos, nomes e desvios da seção [Contexto do projeto](#contexto-do-projeto) prevalecem sobre os exemplos delas.
+- Este repositório tem `.claude/skills/` (`add-entity`, `add-feature`, `add-tests`, `ca-review`) com essas convenções em forma de roteiro executável — prefira usá-las a escrever à mão, para que o código novo fique exatamente igual aos slices existentes. Ao usá-las, os caminhos, nomes e desvios da seção [Contexto do projeto](#contexto-do-projeto) prevalecem sobre os exemplos delas. As skills `spec-new`, `spec-implement` e `spec-verify` conduzem o fluxo SDD; `add-entity`, `add-feature` e `add-tests` só escrevem código dentro dele.
 
 ## Contexto do projeto
 
@@ -154,6 +156,8 @@ Antes de criar algo, siga o slice real mais parecido (caminhos a partir de `src/
 
 A autorização vale só para a ação pedida, no escopo pedido. Correção realmente trivial (texto, typo) dispensa o plano somente quando autorizada explicitamente no chat.
 
+**Mudança trivial:** corrige texto, typo, comentário ou formatação sem mudar comportamento observável, contrato, banco ou regra; qualquer outra é não trivial. Escrever a spec em `specs/` (pela `spec-new`) e atualizar o `SYSTEM_SPECIFICATION.md` (pela `spec-verify`) fazem parte do fluxo SDD e não exigem autorização à parte.
+
 ## Fluxo de desenvolvimento (SDD)
 
 Mudança funcional não trivial segue Spec-Driven Development, com uma spec por mudança em `specs/NNN-slug/spec.md`:
@@ -165,3 +169,7 @@ Mudança funcional não trivial segue Spec-Driven Development, com uma spec por 
 5. **Entrega** (commit e PR) só com autorização explícita: `Verificada` não significa `Entregue`.
 
 Estados e transições da spec: `.claude/skills/spec-new/references/spec-status.md`.
+
+### Portão determinístico
+
+O hook `.claude/hooks/sdd_gate.py` (registrado em `.claude/settings.json`) bloqueia escrita em `src/` e `tests/`, por ferramenta de edição ou comando de shell, fora de um `/spec-implement NNN` cuja spec esteja `Em implementação` e com `aprovada-em` preenchido. Para uma mudança trivial, inclua `[sdd:autorizo]` na sua mensagem: a liberação vale só para ela e termina na sua próxima mensagem, mesmo que ela chegue no meio de uma resposta. O próprio hook e os settings também exigem o marcador. O hook evita erros do agente; não resiste a quem queira burlá-lo de propósito. Os caminhos bloqueados e os limites conhecidos estão no `SYSTEM_SPECIFICATION.md` (6.9). Testes: `python -m unittest discover -s .claude/hooks -p "test_*.py"` (também configurados como passo do CI em `.github/workflows/build.yml`).

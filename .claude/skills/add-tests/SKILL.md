@@ -12,6 +12,14 @@ argument-hint: '<caso de uso ou feature a cobrir, ex.: "CopyTodoCommand" ou "a f
 > prevalecem. Se essa seção não existir, inspecione o repositório, siga o slice real mais parecido e
 > pergunte antes de assumir uma convenção.
 
+> **Portão de especificação.** Se o `CLAUDE.md` do repositório adotar um fluxo de especificação antes do
+> código (por exemplo, Spec-Driven Development), esta skill só escreve código de produção ou testes dentro
+> desse fluxo: chamada pela skill de implementação para uma tarefa de spec aprovada, ou numa mudança
+> trivial autorizada explicitamente pelo responsável no chat (quando o `CLAUDE.md` declarar um marcador de
+> autorização, como `[sdd:autorizo]`, ele precisa estar na mensagem do responsável). Num pedido direto fora desse fluxo, não
+> escreva código: procure em `specs/` uma spec que cubra o pedido e indique o comando de implementação
+> dela; se não houver, use a skill de especificação.
+
 Completa os três tipos de teste que este projeto espera em todo slice. Leia primeiro o handler/validator/endpoint alvo e depois siga a estrutura da classe de teste existente mais parecida.
 
 ## Fluxo
@@ -21,7 +29,7 @@ Completa os três tipos de teste que este projeto espera em todo slice. Leia pri
 3. **Escreva os testes unitários do handler** — um teste por caminho de falha, mais um caminho feliz que confere o estado salvo e os eventos de domínio disparados.
 4. **Escreva os testes do validator** (só commands) — um teste com falha por regra, mais um command totalmente válido.
 5. **Escreva os testes de integração** — caminho feliz por HTTP de verdade, com o estado conferido por um GET em seguida; conversão de erros (404/409/400) quando o handler tem caminhos de falha; 401 sem token se a família de rotas for nova.
-6. **Rode** `dotnet test` (o Docker precisa estar rodando para os testes de integração) e corrija as falhas antes de terminar.
+6. **Rode** `dotnet test` (o Docker precisa estar rodando para os testes de integração) e corrija as falhas antes de terminar. Se uma falha vier de um defeito fora do escopo dos testes pedidos, não corrija o código de produção: pare e pergunte.
 
 ## Convenções
 

@@ -29,6 +29,12 @@ Esta skill só escreve dentro de `specs/`. Ela nunca altera código, testes, con
 6. **Confira a completude** com o checklist abaixo. Se faltar algo, a spec fica em `Rascunho`, ou passa para `Bloqueada` se depender de uma decisão externa, com a linha correspondente no histórico.
 7. **Peça a aprovação** e pare. Só marque `status: Aprovada`, preenchendo `responsavel` e `aprovada-em` e acrescentando a linha no histórico, quando o responsável aprovar explicitamente no chat. A aprovação de um plano anterior ou de outra spec não vale.
 
+## Revisão de uma spec existente
+
+1. Se a revisão mudar requisito, critério ou decisão de uma spec `Aprovada`, `Em implementação` ou `Bloqueada`, registre no histórico a transição para `Rascunho`, com o motivo e quem pediu. Uma spec `Verificada` passa antes por `Em implementação`, pela `spec-implement`, como manda a tabela de transições.
+2. Altere preservando o histórico, as tarefas feitas e a rastreabilidade; registre no histórico o que mudou.
+3. Rode de novo o checklist de completude e peça nova aprovação explícita.
+
 ## Checklist de completude
 
 - [ ] Todo REQ tem pelo menos um AC.

@@ -27,7 +27,7 @@ Fonte única dos estados de uma spec. O modelo (`spec-template.md`) e as skills 
 | `Em implementação` | `Verificada` | Verificação aprovada | `spec-verify` |
 | `Bloqueada` | estado de origem (`Rascunho` ou `Em implementação`) | Pendência resolvida e registrada, sem alterar requisito, critério ou decisão aprovados | `spec-new` (origem `Rascunho`) ou `spec-implement` (origem `Em implementação`) |
 | `Bloqueada` | `Rascunho` | A resolução da pendência alterou requisito, critério ou decisão aprovados | `spec-new` |
-| `Verificada` | `Em implementação` | Código alterado depois da verificação; exige nova verificação | `spec-implement` |
+| `Verificada` | `Em implementação` | Código alterado depois da verificação, pela `spec-implement` ou fora dela (outra skill, edição à mão ou mudança trivial autorizada); exige nova verificação | `spec-implement`, ou quem alterou o código fora dela |
 | `Verificada` | `Entregue` | Commit ou PR feitos com autorização explícita do responsável | Quem executou a entrega autorizada |
 | qualquer estado não final | `Cancelada` | Decisão explícita do responsável | Quem recebeu a decisão |
 
@@ -39,3 +39,7 @@ Fonte única dos estados de uma spec. O modelo (`spec-template.md`) e as skills 
 - Tarefas marcadas como feitas, rastreabilidade e evidências já registradas são preservadas em qualquer transição; só são revistas se a mudança as invalidar, com a revisão anotada no histórico.
 - `Verificada` não é `Entregue`. A entrega depende de autorização explícita e registra o commit ou o PR na seção "Evidências de verificação" da spec.
 - `Entregue` e `Cancelada` são finais. Uma spec cancelada continua no repositório, com o motivo no histórico.
+- Quando a `spec-implement` ou a `spec-verify` encontrarem algo que exija mudar requisito, critério ou decisão aprovados, elas não fazem a transição para `Rascunho`: param, informam e indicam a `spec-new`, que registra a transição.
+- Uma linha de histórico pode repetir o status atual para registrar uma revisão sem transição.
+- Código coberto por uma spec `Verificada` alterado depois da verificação, por qualquer skill ou à mão, invalida a verificação: antes da entrega, a spec volta para `Em implementação` e passa de novo pela `spec-verify`.
+- A transição para `Entregue` é registrada logo depois do commit ou do PR, numa edição da spec que cita o hash ou o link; ela faz parte da mesma autorização de entrega. Essa edição vai num commit posterior ao da entrega, coberto pela mesma autorização; registrar `Entregue` não autoriza nenhum commit por conta própria.

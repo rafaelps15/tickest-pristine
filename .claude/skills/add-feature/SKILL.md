@@ -12,6 +12,14 @@ argument-hint: '<descrição da feature, ex.: "archive a todo item" ou "get todo
 > prevalecem. Se essa seção não existir, inspecione o repositório, siga o slice real mais parecido e
 > pergunte antes de assumir uma convenção.
 
+> **Portão de especificação.** Se o `CLAUDE.md` do repositório adotar um fluxo de especificação antes do
+> código (por exemplo, Spec-Driven Development), esta skill só escreve código de produção ou testes dentro
+> desse fluxo: chamada pela skill de implementação para uma tarefa de spec aprovada, ou numa mudança
+> trivial autorizada explicitamente pelo responsável no chat (quando o `CLAUDE.md` declarar um marcador de
+> autorização, como `[sdd:autorizo]`, ele precisa estar na mensagem do responsável). Num pedido direto fora desse fluxo, não
+> escreva código: procure em `specs/` uma spec que cubra o pedido e indique o comando de implementação
+> dela; se não houver, use a skill de especificação.
+
 Crie um caso de uso completo seguindo as convenções do projeto: um caso de uso na camada Application com um handler próprio de command/query, um endpoint de minimal API na Web.Api e testes. Sem MediatR — este código usa as suas próprias abstrações `ICommand`/`IQuery`, com handlers e decorators registrados pelo Scrutor.
 
 ## Fluxo de trabalho

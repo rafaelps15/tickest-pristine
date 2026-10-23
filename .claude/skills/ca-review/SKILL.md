@@ -30,7 +30,7 @@ Revise o escopo informado (padrão: `git diff` + arquivos não versionados) cont
 
 ### Tratamento de erro
 - Falhas esperadas retornam `Result`/`Result<T>` — sem exceções para controle de fluxo, sem try/catch em volta de regras de negócio.
-- Os erros vêm das fábricas estáticas de `{Entity}Errors`, com códigos `"{Feature}.{Reason}"` e o tipo semanticamente correto (`NotFound`/`Conflict`/`Problem`/`Failure`).
+- Os erros vêm das fábricas estáticas de `{Entity}Errors`, com códigos `"{Feature}.{Reason}"` e o tipo semanticamente correto (`NotFound`/`Conflict`/`Problem`/`Forbidden`/`Failure`).
 - Os endpoints convertem falhas só por `result.Match(Results.Ok|NoContent, CustomResults.Problem)`.
 
 ### Validação e segurança
@@ -48,6 +48,10 @@ Revise o escopo informado (padrão: `git diff` + arquivos não versionados) cont
 - Validators novos ou alterados têm testes com `TestValidate` por regra.
 - Endpoints novos ou alterados têm testes de integração por HTTP de verdade.
 - Os nomes dos testes e a estrutura Arrange/Act/Assert seguem os testes existentes.
+
+### Desvios e regras do projeto
+- Confira cada desvio e cada regra permanente da seção "Contexto do projeto" do `CLAUDE.md` (por exemplo: registro de histórico no mesmo `SaveChangesAsync`, exclusão lógica, idioma dos textos ao usuário, permissão nova no catálogo, migration para mudança de modelo). Violação de regra permanente é **Violação de convenção**; se for de segurança ou autorização, é **Bloqueante**. Um desvio declarado que a convenção exige seguir e que não foi seguido também é **Violação de convenção**.
+- Quando a revisão for de uma spec, o escopo são os arquivos do plano técnico e das tarefas dela; liste à parte as mudanças pendentes fora desse escopo, sem revisá-las.
 
 ## Formato da saída
 

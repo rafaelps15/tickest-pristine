@@ -12,6 +12,14 @@ argument-hint: '<descrição da entidade, ex.: "Project with a name, owner, and 
 > prevalecem. Se essa seção não existir, inspecione o repositório, siga o slice real mais parecido e
 > pergunte antes de assumir uma convenção.
 
+> **Portão de especificação.** Se o `CLAUDE.md` do repositório adotar um fluxo de especificação antes do
+> código (por exemplo, Spec-Driven Development), esta skill só escreve código de produção ou testes dentro
+> desse fluxo: chamada pela skill de implementação para uma tarefa de spec aprovada, ou numa mudança
+> trivial autorizada explicitamente pelo responsável no chat (quando o `CLAUDE.md` declarar um marcador de
+> autorização, como `[sdd:autorizo]`, ele precisa estar na mensagem do responsável). Num pedido direto fora desse fluxo, não
+> escreva código: procure em `specs/` uma spec que cubra o pedido e indique o comando de implementação
+> dela; se não houver, use a skill de especificação.
+
 Crie uma entidade nova e ligue-a em todas as camadas, seguindo o padrão de `TodoItem`.
 
 ## Arquivos a criar/alterar

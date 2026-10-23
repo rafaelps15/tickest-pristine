@@ -26,7 +26,7 @@ Esta skill não altera código de produção nem testes. Ela só atualiza a spec
 
    Preencha "Como o teste cobre o critério" com o que o teste afirma e "Resultado" com o resultado e a data dessa execução.
 4. **Revisão:** execute a skill de revisão de convenções do projeto (por exemplo, `ca-review`) sobre as mudanças da spec e registre o veredito e os achados bloqueantes.
-5. **Documentação:** atualize só as seções do documento de estado do sistema que a mudança afetou, citando a spec, e registre quais foram.
+5. **Documentação:** atualize só as seções do documento de estado do sistema que a mudança afetou, citando a spec, e registre quais foram. Faça este passo só se o veredito do passo 6 for aprovar; se for reprovar, não altere o documento de estado e registre no histórico que a documentação fica para a próxima verificação.
 6. **Veredito:**
    - build e testes verdes, todo AC coberto conforme o passo 3 e nenhum achado bloqueante → status `Verificada`, com a linha no histórico;
    - caso contrário → o status continua `Em implementação`; registre no histórico a verificação reprovada e o que falta.

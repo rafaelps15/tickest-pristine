@@ -10,8 +10,13 @@ Um pacote de skills que ensina ao Claude Code as convenções do TickestPristine
 | **add-entity** | `/add-entity Project with a name and owner` | Adiciona uma entidade de domínio de ponta a ponta: entidade, catálogo de erros, eventos de domínio, configuração do EF, ligação no DbContext e migration. |
 | **add-tests** | `/add-tests CopyTodoCommand` | Completa os testes de handler, de validator e de integração de casos de uso existentes. |
 | **ca-review** | `/ca-review` | Revisa as mudanças pendentes contra as convenções do TickestPristine: limites entre camadas, tratamento de erro, segurança, cache e cobertura de testes. |
+| **spec-new** | `/spec-new permitir remover o responsável de um chamado` | Escreve a spec de uma mudança (requisitos, critérios de aceitação, decisões, plano e tarefas) e para à espera da aprovação. |
+| **spec-implement** | `/spec-implement 001` | Implementa uma spec aprovada, tarefa por tarefa, com as skills acima. Só roda pelo comando. |
+| **spec-verify** | `/spec-verify 001` | Comprova cada critério de aceitação com testes aprovados na execução atual e atualiza a documentação de estado. |
 
 Não é preciso chamá-las explicitamente — depois de instaladas, o Claude Code escolhe a skill certa sozinho quando você diz algo como "add an endpoint to snooze a todo".
+
+> Neste repositório, as skills de código só escrevem durante o `/spec-implement` de uma spec aprovada com status `Em implementação`, ou numa mudança trivial autorizada com o marcador `[sdd:autorizo]` na mensagem do responsável; um hook de projeto bloqueia escrita em `src/` e `tests/` fora desses dois casos.
 
 ## Instalação
 
@@ -26,7 +31,10 @@ your-project/
         ├── add-feature/
         ├── add-entity/
         ├── add-tests/
-        └── ca-review/
+        ├── ca-review/
+        ├── spec-new/
+        ├── spec-implement/
+        └── spec-verify/
 ```
 
 ## Experimente
@@ -35,7 +43,7 @@ your-project/
 /add-feature snooze a todo until a given date
 ```
 
-O Claude vai criar o command, o validator, o handler (com conferência de dono, evento de domínio e invalidação de cache), o endpoint e os três tipos de teste — e depois rodar o build e os testes.
+O Claude vai criar o command, o validator, o handler (com conferência de dono, evento de domínio e invalidação de cache (quando o projeto usa cache nas leituras)), o endpoint e os três tipos de teste — e depois rodar o build e os testes.
 
 ## Personalizando
 
