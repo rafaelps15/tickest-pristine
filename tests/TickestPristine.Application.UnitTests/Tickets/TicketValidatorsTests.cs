@@ -3,6 +3,7 @@ using TickestPristine.Application.Tickets.Close;
 using TickestPristine.Application.Tickets.Create;
 using TickestPristine.Application.Tickets.Delete;
 using TickestPristine.Application.Tickets.Reopen;
+using TickestPristine.Application.Tickets.Unassign;
 using TickestPristine.Application.Tickets.Update;
 using TickestPristine.Domain.Tickets;
 using FluentValidation.TestHelper;
@@ -17,6 +18,7 @@ public sealed class TicketValidatorsTests
     private readonly ReopenTicketCommandValidator _reopenValidator = new();
     private readonly CloseTicketCommandValidator _closeValidator = new();
     private readonly AssignTicketCommandValidator _assignValidator = new();
+    private readonly UnassignTicketCommandValidator _unassignValidator = new();
 
     [Fact]
     public void CreateValidator_Should_HaveError_WhenTitleIsEmpty()
@@ -335,6 +337,32 @@ public sealed class TicketValidatorsTests
 
         // Act
         TestValidationResult<AssignTicketCommand> result = _assignValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void UnassignValidator_Should_HaveError_WhenTicketIdIsEmpty()
+    {
+        // Arrange
+        var command = new UnassignTicketCommand(Guid.Empty);
+
+        // Act
+        TestValidationResult<UnassignTicketCommand> result = _unassignValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.TicketId);
+    }
+
+    [Fact]
+    public void UnassignValidator_Should_NotHaveErrors_WhenCommandIsValid()
+    {
+        // Arrange
+        var command = new UnassignTicketCommand(Guid.NewGuid());
+
+        // Act
+        TestValidationResult<UnassignTicketCommand> result = _unassignValidator.TestValidate(command);
 
         // Assert
         result.ShouldNotHaveAnyValidationErrors();

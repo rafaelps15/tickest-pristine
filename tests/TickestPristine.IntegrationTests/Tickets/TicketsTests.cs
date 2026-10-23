@@ -1177,6 +1177,295 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 
+    [Fact]
+    public async Task Unassign_Should_RemoveAssigneeAndRecordHistory_WhenCallerManagesTickets()
+    {
+        // Arrange
+        (Guid ticketId, Guid adminId) = await CreateTicketAssignedToAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"tickets/{ticketId}/assignee");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        TicketDetailDto? ticket = await HttpClient.GetFromJsonAsync<TicketDetailDto>($"tickets/{ticketId}");
+        ticket!.AssignedToUserId.ShouldBeNull();
+
+        TicketHistory history = GetUnassignedHistory(ticketId).ShouldHaveSingleItem();
+        history.OldValue.ShouldBe(adminId.ToString());
+        history.NewValue.ShouldBeNull();
+        history.ChangedByUserId.ShouldBe(adminId);
+    }
+
+    [Fact]
+    public async Task Unassign_Should_ReturnForbidden_WhenCallerLacksManagePermission()
+    {
+        // Arrange
+        (Guid ticketId, Guid adminId) = await CreateTicketAssignedToAdminAsync();
+        (_, AccessTokens outsiderTokens) = await RegisterAndLoginAsync();
+        Authenticate(outsiderTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"tickets/{ticketId}/assignee");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+
+        await AuthenticateAsAdminAsync();
+        TicketDetailDto? ticket = await HttpClient.GetFromJsonAsync<TicketDetailDto>($"tickets/{ticketId}");
+        ticket!.AssignedToUserId.ShouldBe(adminId);
+    }
+
+    [Fact]
+    public async Task Unassign_Should_ReturnNotFound_WhenTicketDoesNotExist()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"tickets/{Guid.NewGuid()}/assignee");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Tickets.NotFound");
+    }
+
+    [Fact]
+    public async Task Unassign_Should_ReturnNotFound_WhenTicketWasDeleted()
+    {
+        // Arrange
+        (Guid ticketId, _) = await CreateTicketAssignedToAdminAsync();
+        HttpResponseMessage deleteResponse = await HttpClient.DeleteAsync($"tickets/{ticketId}");
+        deleteResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"tickets/{ticketId}/assignee");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Tickets.NotFound");
+    }
+
+    [Fact]
+    public async Task Unassign_Should_ReturnBadRequest_WhenTicketIsNotActive()
+    {
+        // Arrange
+        (Guid ticketId, Guid adminId) = await CreateTicketAssignedToAdminAsync();
+        await ResolveTicketAsync(ticketId);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"tickets/{ticketId}/assignee");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Tickets.NotActive");
+
+        TicketDetailDto? ticket = await HttpClient.GetFromJsonAsync<TicketDetailDto>($"tickets/{ticketId}");
+        ticket!.AssignedToUserId.ShouldBe(adminId);
+        GetUnassignedHistory(ticketId).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Unassign_Should_ReturnBadRequest_WhenTicketIsNotActiveAndHasNoAssignee()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        await ResolveTicketAsync(ticketId);
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"tickets/{ticketId}/assignee");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Tickets.NotActive");
+        GetUnassignedHistory(ticketId).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Unassign_Should_ReturnNoContentWithoutHistory_WhenTicketHasNoAssignee()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"tickets/{ticketId}/assignee");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        GetUnassignedHistory(ticketId).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Unassign_Should_KeepStatus_WhenTicketIsInProgress()
+    {
+        // Arrange
+        (Guid ticketId, _) = await CreateTicketAssignedToAdminAsync();
+        HttpResponseMessage inProgressResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = "Looking into the printer",
+            status = 2 // InProgress
+        });
+        inProgressResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"tickets/{ticketId}/assignee");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        TicketDetailDto? ticket = await HttpClient.GetFromJsonAsync<TicketDetailDto>($"tickets/{ticketId}");
+        ticket!.Status.ShouldBe(2); // InProgress
+        ticket.AssignedToUserId.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Unassign_Should_ShowRemovalInHistory()
+    {
+        // Arrange
+        (Guid ticketId, _) = await CreateTicketAssignedToAdminAsync();
+        HttpResponseMessage unassignResponse = await HttpClient.DeleteAsync($"tickets/{ticketId}/assignee");
+        unassignResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/{ticketId}/history");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        List<TicketHistoryDto>? history = (await response.Content.ReadFromJsonAsync<CursorPageDto<TicketHistoryDto>>())?.Items;
+        history.ShouldNotBeNull();
+        history.ShouldContain(h =>
+            h.Action == (int)TicketHistoryAction.Unassigned &&
+            h.Description == "Responsável removido");
+    }
+
+    [Fact]
+    public async Task Unassign_Should_RevokeParticipantAccess_WhenFormerAssigneeIsNotRequesterNorManager()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (Guid assigneeId, AccessTokens assigneeTokens) = await RegisterAndLoginAsync();
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        HttpResponseMessage createResponse = await HttpClient.PostAsJsonAsync("tickets", new
+        {
+            title = "Printer is broken",
+            description = "The printer on the 3rd floor is not working",
+            priority = 2,
+            sectorId,
+            assignedToUserId = assigneeId
+        });
+        createResponse.EnsureSuccessStatusCode();
+        Guid ticketId = await createResponse.Content.ReadFromJsonAsync<Guid>();
+
+        Authenticate(assigneeTokens.AccessToken);
+        (await HttpClient.GetAsync($"tickets/{ticketId}")).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        await AuthenticateAsAdminAsync();
+        HttpResponseMessage unassignResponse = await HttpClient.DeleteAsync($"tickets/{ticketId}/assignee");
+
+        // Act
+        Authenticate(assigneeTokens.AccessToken);
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/{ticketId}");
+
+        // Assert
+        unassignResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Unassign_Should_NotRecordHistoryAgain_WhenAssigneeWasAlreadyRemoved()
+    {
+        // Arrange
+        (Guid ticketId, _) = await CreateTicketAssignedToAdminAsync();
+        HttpResponseMessage firstResponse = await HttpClient.DeleteAsync($"tickets/{ticketId}/assignee");
+        firstResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"tickets/{ticketId}/assignee");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        GetUnassignedHistory(ticketId).ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public async Task Unassign_Should_ReturnValidationError_WhenTicketIdIsEmpty()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"tickets/{Guid.Empty}/assignee");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Validation.General");
+    }
+
+    [Fact]
+    public async Task Unassign_Should_ReturnUnauthorized_WhenNoTokenProvided()
+    {
+        // Arrange
+        (Guid ticketId, Guid adminId) = await CreateTicketAssignedToAdminAsync();
+        HttpClient.DefaultRequestHeaders.Authorization = null;
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"tickets/{ticketId}/assignee");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+
+        await AuthenticateAsAdminAsync();
+        TicketDetailDto? ticket = await HttpClient.GetFromJsonAsync<TicketDetailDto>($"tickets/{ticketId}");
+        ticket!.AssignedToUserId.ShouldBe(adminId);
+    }
+
+    /// <summary>
+    /// Abre um chamado como um solicitante novo e o atribui ao administrador, que fica com o token configurado.
+    /// </summary>
+    private async Task<(Guid TicketId, Guid AdminId)> CreateTicketAssignedToAdminAsync()
+    {
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+        Guid adminId = GetUserId(adminTokens);
+
+        HttpResponseMessage assignResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}/assignee", new
+        {
+            assignedToUserId = adminId
+        });
+        assignResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        return (ticketId, adminId);
+    }
+
+    private List<TicketHistory> GetUnassignedHistory(Guid ticketId)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return context.TicketHistories
+            .Where(h => h.TicketId == ticketId && h.Action == TicketHistoryAction.Unassigned)
+            .ToList();
+    }
+
     /// <summary>
     /// Leva o chamado de Aberto a Resolvido pela API, com o token já configurado (dono ou quem gerencia chamados).
     /// </summary>
@@ -1284,4 +1573,6 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     private sealed record StatusCountsDto(int TotalCount, int OpenCount, int InProgressCount, int ResolvedCount);
 
     private sealed record VolumePointDto(DateOnly PeriodStart, int Count);
+
+    private sealed record TicketHistoryDto(Guid Id, Guid TicketId, Guid? ChangedByUserId, int Action, string Description);
 }

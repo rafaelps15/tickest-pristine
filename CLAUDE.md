@@ -148,6 +148,8 @@ Antes de criar algo, siga o slice real mais parecido (caminhos a partir de `src/
 
 `SYSTEM_SPECIFICATION.md` descreve o que o sistema faz hoje: capacidades (2.7), regras de negócio (2.6), rotas (4.3.1), lacunas (7) e decisões em aberto (9.5). É extenso: leia só as seções de que a tarefa precisa e atualize as que a mudança afetar.
 
+`specs/BACKLOG.md` guarda as demandas futuras e a prioridade (regras no próprio arquivo); o andamento de cada demanda fica na spec dela.
+
 ## Política de autonomia
 
 | Pode fazer sem perguntar | Precisa perguntar antes | Precisa de plano aprovado | Precisa de autorização explícita no chat |

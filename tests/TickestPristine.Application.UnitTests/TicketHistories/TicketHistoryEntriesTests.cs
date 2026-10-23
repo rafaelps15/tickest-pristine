@@ -49,4 +49,24 @@ public sealed class TicketHistoryEntriesTests
         history.NewValue.ShouldBe(nameof(TicketStatus.InProgress));
         history.OccurredAtUtc.ShouldBe(OccurredAtUtc);
     }
+
+    [Fact]
+    public void Unassigned_Should_RecordPreviousAssigneeWithoutNewValue()
+    {
+        // Arrange
+        var ticketId = Guid.NewGuid();
+        var agentId = Guid.NewGuid();
+        var previousAssigneeId = Guid.NewGuid();
+
+        // Act
+        TicketHistory history = TicketHistoryEntries.Unassigned(ticketId, agentId, previousAssigneeId, OccurredAtUtc);
+
+        // Assert
+        history.TicketId.ShouldBe(ticketId);
+        history.ChangedByUserId.ShouldBe(agentId);
+        history.Action.ShouldBe(TicketHistoryAction.Unassigned);
+        history.OldValue.ShouldBe(previousAssigneeId.ToString());
+        history.NewValue.ShouldBeNull();
+        history.OccurredAtUtc.ShouldBe(OccurredAtUtc);
+    }
 }

@@ -12,13 +12,13 @@ argument-hint: '<pedido, ex.: "permitir remover o responsável de um chamado">'
 > prevalecem. Se essa seção não existir, inspecione o repositório, siga o slice real mais parecido e
 > pergunte antes de assumir uma convenção.
 
-Esta skill só escreve dentro de `specs/`. Ela nunca altera código, testes, configurações nem a documentação do projeto. Os estados e as transições da spec seguem [references/spec-status.md](references/spec-status.md).
+Esta skill só escreve dentro de `specs/`. Ela nunca altera código, testes, configurações nem a documentação do projeto. Os estados e as transições da spec seguem [references/spec-status.md](references/spec-status.md). As demandas futuras ficam em `specs/BACKLOG.md`, com as regras no próprio arquivo.
 
 ## Fluxo
 
-1. **Registre o pedido** com as palavras do solicitante.
+1. **Registre o pedido** com as palavras do solicitante. Se o pedido for um item de `specs/BACKLOG.md` (`BL-n`), preencha `backlog:` no frontmatter e cite o item no pedido original.
 2. **Leia o contexto:** o `CLAUDE.md` (contexto do projeto e política de autonomia) e só as seções relevantes do documento de estado do sistema indicado nele. Localize no código os slices, entidades e testes afetados.
-3. **Crie a pasta** `specs/NNN-slug/`, com o próximo número livre e o slug em minúsculas com hífens.
+3. **Crie a pasta** `specs/NNN-slug/`, com o próximo número livre e o slug em minúsculas com hífens. Se a spec vier de um item do backlog, marque o item como `Especificada` e acrescente `NNN` na coluna Specs; não mude a faixa nem a ordem.
 4. **Escreva a spec** a partir de [references/spec-template.md](references/spec-template.md):
    - requisitos (REQ-n), cada um com a sua fonte;
    - critérios de aceitação (AC-n) verificáveis, no formato dado/quando/então, com resultado observável (status HTTP, estado gravado, registro produzido);
@@ -49,4 +49,5 @@ Esta skill só escreve dentro de `specs/`. Ela nunca altera código, testes, con
 - Não escreva código nem testes, nem como rascunho fora de `specs/`.
 - Não invente requisitos para preencher o modelo: seção sem conteúdo fica com "Não se aplica".
 - Spec aprovada que precise mudar volta para `Rascunho` e exige nova aprovação.
+- No backlog, a skill só faz duas coisas: a transição do item para `Especificada`, ao criar a primeira spec dele; e, num item já `Especificada`, o acréscimo à coluna Specs de uma spec posterior da mesma demanda, sem alterar as demais colunas nem remover ou trocar números já registrados. O andamento da spec nunca é copiado para o backlog, e item do backlog nunca substitui a aprovação explícita da spec.
 - Spec `Bloqueada` durante a escrita volta para `Rascunho` quando a pendência for resolvida; registre a resolução no histórico.

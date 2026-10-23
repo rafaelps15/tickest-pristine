@@ -5,6 +5,7 @@ status: Rascunho        # Rascunho | Bloqueada | Aprovada | Em implementação |
 responsavel: <quem aprova>
 aprovada-em:
 branch:
+backlog:                # BL-n de specs/BACKLOG.md que originou a spec; vazio se o pedido não veio do backlog
 ---
 
 # NNN — <título>

@@ -1,6 +1,6 @@
 # SYSTEM_SPECIFICATION — TickestPristine
 
-> **Estado documentado:** branch `feat/spec-driven-development`, commit `8660490`. O código de `src/` e `tests/` é o do commit `b2028ae` (nenhuma alteração depois dele). Produzido por leitura do código, da configuração, dos testes e da documentação, mais a execução de `dotnet build` e `dotnet test` (seção 6.1). O histórico das mudanças está no Git.
+> **Estado documentado:** branch `feat/spec-driven-development`, commit `8660490`. O código de `src/` e `tests/` é o do commit `b2028ae`, mais as mudanças ainda não commitadas da spec 001 (remover o responsável), `Verificada` em 23/10/2026 (seções 2.6, 5.10 e 6.1). Produzido por leitura do código, da configuração, dos testes e da documentação, mais a execução de `dotnet build` e `dotnet test` (seção 6.1). O histórico das mudanças está no Git.
 >
 > **Convenções de leitura:**
 > - **[Fato]** está no código ou na configuração e tem referência verificável.
@@ -95,7 +95,7 @@ Os perfis são **roles fixas criadas por migration** (`src/TickestPristine.Infra
 | **Colaborador** | `tickets:create`, `tickets:view-own`, `tickets:update-own`, `tickets:delete-own`, `tickets:reopen-own` | É a role atribuída automaticamente no cadastro (`RegisterUserCommandHandler.cs:39`) e marcada como `IsDefault` na listagem de roles (`GetRolesQueryHandler.cs:19`). |
 | **Atendente** | As do Colaborador mais `tickets:manage` | Vê e trata os chamados de todos. **Não** tem permissões de usuários, roles ou estrutura. |
 | **Administrador** | Todas as permissões do catálogo (16) | As permissões da role são gerenciadas pelo sistema e não podem ser editadas (`AssignRolePermissionsCommandHandler.cs:29-32`). O sistema impede ficar sem nenhum administrador ativo (`AdministratorGuard.cs:24-58`). |
-| **Participantes do chamado** (papel contextual) | — | O solicitante (`CreatedByUserId`) e o responsável (`AssignedToUserId`) sempre podem **ver** o chamado e os itens dele (`TicketAccessGuard.cs:35-38`). |
+| **Participantes do chamado** (papel contextual) | — | O solicitante (`CreatedByUserId`) e o responsável atual (`AssignedToUserId`) sempre podem **ver** o chamado e os itens dele (`TicketAccessGuard.cs:35-38`). Quem deixa de ser o responsável (remoção, spec 001) perde esse acesso, salvo se for o solicitante ou tiver `tickets:manage` (RN-23). |
 
 **Catálogo de permissões** (`src/TickestPristine.Application/Permissions/PermissionCatalog.cs:16-44`, códigos em `PermissionCodes.cs`):
 
@@ -117,7 +117,7 @@ Os perfis são **roles fixas criadas por migration** (`src/TickestPristine.Infra
 | `Users` | Register, Login, Refresh, Logout, ChangePassword, ChangeRequiredPassword, UpdateProfile, Activate, Deactivate, AssignRoles, GetAll, GetById, GetByEmail, GetCurrent |
 | `Roles` / `Permissions` | Roles: GetAll, AssignPermissions · Permissions: GetAll |
 | `Departments` / `Sectors` | Create, Update, Deactivate, GetAll, GetById (em cada um) |
-| `Tickets` | Create, Update, Assign, Close, Reopen, Delete, GetAll, GetById, GetOwn, GetOwnSummary, GetSlaSummary, GetStatusCounts, GetVolume |
+| `Tickets` | Create, Update, Assign, Unassign, Close, Reopen, Delete, GetAll, GetById, GetOwn, GetOwnSummary, GetSlaSummary, GetStatusCounts, GetVolume |
 | `TicketMessages` | Post, Edit, Delete, GetAll |
 | `TicketAttachments` | Upload, Download, Delete, GetAll |
 | `TicketHistories` | GetAll (o histórico é gravado pelos handlers dos outros módulos) |
@@ -199,6 +199,7 @@ stateDiagram-v2
 | RN-20 | O perfil (nome e sobrenome) pode ser editado pelo próprio usuário ou por quem tem `users:update`. | `UpdateUserProfileCommandHandler.cs:20-29` | `UpdateUserProfileCommandHandlerTests.cs` |
 | RN-21 | Só quem tem `tickets:manage` fecha um chamado, e só se ele estiver Resolvido. O fechamento grava o histórico `StatusChanged` e não altera `ResolvedAtUtc`. | `Tickets/Close/CloseTicketCommandHandler.cs`, `Endpoints/Tickets/Close.cs` | `CloseTicketCommandHandlerTests.cs`, `TicketsTests.cs` (Close_*) |
 | RN-22 | Só quem tem `tickets:manage` atribui o responsável, e só em chamado ativo. O responsável precisa estar ativo e ter `tickets:manage`. Atribuir a quem já é o responsável não muda nada. | `Tickets/Assign/AssignTicketCommandHandler.cs`, `Endpoints/Tickets/Assign.cs` | `AssignTicketCommandHandlerTests.cs`, `TicketsTests.cs` (Assign_*) |
+| RN-23 | Só quem tem `tickets:manage` remove o responsável (deixa o chamado sem ninguém), e só em chamado ativo; a inatividade é conferida antes do responsável, então chamado inativo sem responsável também recebe `400 Tickets.NotActive`. Remover de chamado já sem responsável responde `204` sem gravar nada. O status não muda (um chamado Em andamento pode ficar sem responsável). A remoção grava o histórico `Unassigned` (responsável anterior em `oldValue`) e dispara `TicketUnassignedDomainEvent`; quem foi removido perde o acesso de participante. (Spec 001, 23/10/2026) | `Tickets/Unassign/UnassignTicketCommandHandler.cs`, `Endpoints/Tickets/Unassign.cs` | `UnassignTicketCommandHandlerTests.cs`, `TicketsTests.cs` (Unassign_*) |
 
 ### 2.7 Matriz de capacidades
 
@@ -215,15 +216,15 @@ Legenda de estado: **IE** = Implementada e evidenciada · **PI** = Parcialmente 
 | C-07 | Departamentos e setores | IE | `Departments/*`, `Sectors/*`, testes | — | Não há reativação. O responsável pelo departamento pode ser um usuário inativo (`DepartmentResponsibleUser.cs:26`). |
 | C-08 | Abertura de chamado | IE | `Tickets/Create/*`, `TicketsTests.cs` | Setor ativo | Na abertura, qualquer pessoa com `tickets:create` ainda pode indicar qualquer usuário ativo como responsável, sem a exigência de `tickets:manage` aplicada na atribuição posterior (Q-05). |
 | C-09 | Edição de chamado (descrição e status) | IE | `Tickets/Update/*` | — | Título, prioridade e setor não são editáveis (Q-06). O responsável muda por C-10, e o fechamento por C-25. |
-| C-10 | Atribuição ou reatribuição de responsável | IE | `Tickets/Assign/*`, `Endpoints/Tickets/Assign.cs`, `AssignTicketCommandHandlerTests.cs`, `TicketsTests.cs` (Assign_*) | `tickets:manage` do autor e do responsável | **[Resolvido]** (GAP-02). Não é possível remover o responsável (deixar sem ninguém). |
+| C-10 | Atribuição ou reatribuição de responsável | IE | `Tickets/Assign/*`, `Endpoints/Tickets/Assign.cs`, `AssignTicketCommandHandlerTests.cs`, `TicketsTests.cs` (Assign_*) | `tickets:manage` do autor e do responsável | **[Resolvido]** (GAP-02). **[Resolvido em 23/10, spec 001]** O responsável pode ser removido por `DELETE tickets/{id}/assignee` (`Tickets/Unassign/*`, RN-23). |
 | C-11 | Reabertura | IE | `Tickets/Reopen/*`, testes | — | O SLA não é reiniciado (comportamento declarado). |
 | C-12 | Exclusão lógica de chamado | IE | `Tickets/Delete/*`, testes | — | Só funciona para chamados ativos. |
 | C-13 | Listagens e painéis (todos, meus, resumo, SLA, status, volume) | IE | `Tickets/Get*/*`, `TicketsTests.cs` | Dapper (volume) | O fuso fixo é `America/Sao_Paulo`. |
 | C-14 | SLA de resolução (modelo simples) | IE | `TicketSla.cs`, `TicketSlaFilters.cs`, testes | — | Não há horário útil, pausa nem notificação. |
-| C-15 | SLA completo (calendário, pausas, 1ª resposta, escalonamento, matriz, relatórios) | PNI | Só no arquivo não versionado `prompt-sla-tickest.md` | Outbox, job agendado | A stack descrita no prompt diverge da real (ver 9.3). |
+| C-15 | SLA completo (calendário, pausas, 1ª resposta, escalonamento, matriz, relatórios) | PNI | Plano em `specs/_fontes/prompt-sla.md` (cópia, em 23/10, do `prompt-sla-tickest.md`, não versionado); no backlog, BL-004 e BL-012 a BL-018 | Outbox, job agendado | A stack descrita no prompt diverge da real (ver 9.3). |
 | C-16 | Mensagens do chamado | IE | `TicketMessages/*`, testes | — | Não há distinção entre mensagem pública e nota interna. Aceita mensagens em chamados encerrados (Q-07). |
 | C-17 | Anexos | IE | `TicketAttachments/*`, `LocalFileStorage.cs`, testes | Disco local | O arquivo de um anexo excluído continua no disco. O armazenamento local não serve para várias instâncias (GAP-09). |
-| C-18 | Histórico do chamado | IE | `TicketHistories/*`, testes | — | `Reassigned` passou a ser gravado com os ids do responsável anterior e do novo; a descrição exibida não traz os nomes. |
+| C-18 | Histórico do chamado | IE | `TicketHistories/*`, testes | — | `Reassigned` passou a ser gravado com os ids do responsável anterior e do novo; a descrição exibida não traz os nomes. A remoção do responsável grava `Unassigned` ("Responsável removido", spec 001). |
 | C-19 | Auditoria de entidades | IE | `AuditLoggingInterceptor.cs`, `AuditLogsTests.cs` | — | `TicketHistory`, `RefreshToken`, `Role` e `Permission` não implementam `IAuditable` (escolha não documentada). |
 | C-20 | Eventos de domínio | INV | 28 tipos de evento declarados, 27 disparados em 31 pontos de `Raise(...)`; 1 handler vazio (`UserRegisteredDomainEventHandler.cs:8-12`) | — | Os eventos não têm efeito observável. `TicketHistoryRecordedDomainEvent` nunca é disparado (GAP-04). |
 | C-21 | Notificações (e-mail, push) | IND | Só um comentário "ponto para enviar e-mail" (`UserRegisteredDomainEventHandler.cs:10`) | — | Não há mecanismo de envio. |
@@ -507,7 +508,7 @@ Fonte: `ApplicationDbContext.cs:57-108`, `DomainEventsDispatcher.cs:19-59`. **[F
 | `GET tickets/{id}` | Usuário ativo, e no handler: participante ou `tickets:manage` | — |
 | `PUT tickets/{id}`, `DELETE tickets/{id}`, `POST tickets/{id}/reopen` | Usuário ativo, e no handler: dono com `*-own` ou `tickets:manage` | — |
 | `POST tickets/{id}/close` | `tickets:manage` | — |
-| `PUT tickets/{id}/assignee` | `tickets:manage` | — |
+| `PUT tickets/{id}/assignee`, `DELETE tickets/{id}/assignee` | `tickets:manage` | — |
 | `GET/POST tickets/{id}/messages` | Usuário ativo, e no handler: participante ou `tickets:manage` | — |
 | `PUT/DELETE ticket-messages/{id}` | Usuário ativo, e no handler: autor (editar) ou autor/`tickets:manage` (excluir) | — |
 | `GET/POST tickets/{id}/attachments` | Usuário ativo, e no handler: participante ou `tickets:manage` | — |
@@ -523,7 +524,7 @@ Fonte: `src/TickestPristine.Web.Api/Endpoints/**`. O limite global (100 req/60 s
 
 - **Entidades**: `User`, `UserCredential`, `RefreshToken`, `UserRole`, `Role`, `Permission`, `RolePermission`, `Department`, `Sector`, `Ticket`, `TicketMessage`, `TicketAttachment`, `TicketHistory`, `AuditLogEntry` (`src/TickestPristine.Domain/**`).
 - **Objetos de valor**: **[Fato]** nenhum foi identificado. Valores como e-mail, prazos e nomes são tipos primitivos.
-- **Enums de negócio**: `TicketStatus` (1–5), `TicketPriority` (1–4), `TicketSlaStatus` (1–6), `TicketHistoryAction` (1–10).
+- **Enums de negócio**: `TicketStatus` (1–5), `TicketPriority` (1–4), `TicketSlaStatus` (1–6), `TicketHistoryAction` (1–11; `Unassigned = 11` desde a spec 001).
 - **DTOs**: um `*Response` por slice (ex.: `TicketSummaryResponse`, `TicketResponse`, `CurrentUserResponse`), mais `PagedResponse<T>` e `CursorPagedResponse<T>`.
 
 ### 4.5 Validação, erros e resultados
@@ -654,7 +655,7 @@ Descrito no diagrama 3.6.
 - **Lacunas**: não há consulta por usuário ou período nem política de retenção. Os valores ficam em `jsonb`, e o crescimento da tabela não é tratado. **[Inferência]**
 
 
-### 5.10 Fechar chamado e atribuir responsável (adicionados em 22/10/2026)
+### 5.10 Fechar chamado, atribuir e remover responsável (adicionados em 22 e 23/10/2026)
 
 **Fechar**
 1. **Objetivo**: encerrar um chamado resolvido.
@@ -678,7 +679,19 @@ Descrito no diagrama 3.6.
 7. **Resposta**: `204`, inclusive quando o responsável já era o informado (nada é gravado).
 8. **Erros**: 400 (validação, chamado inativo, responsável sem `tickets:manage`), 403, 404 (chamado ou usuário inexistente/inativo), 409.
 9. **Evidências**: `AssignTicketCommandHandlerTests.cs`, `TicketsTests.cs` (Assign_*).
-10. **Lacunas**: não é possível deixar o chamado sem responsável. A abertura (`POST tickets`) ainda aceita como responsável qualquer usuário ativo (Q-05). A descrição do histórico ("Responsável alterado") não mostra nomes.
+10. **Lacunas**: **[Resolvido em 23/10]** o chamado pode ficar sem responsável (ver "Remover responsável"). A abertura (`POST tickets`) ainda aceita como responsável qualquer usuário ativo (Q-05). A descrição do histórico ("Responsável alterado") não mostra nomes.
+
+**Remover responsável** (spec 001, 23/10/2026)
+1. **Objetivo**: deixar um chamado ativo sem responsável.
+2. **Gatilho**: `DELETE tickets/{id}/assignee`, sem corpo.
+3. **Componentes**: endpoint (`HasPermission(tickets:manage)`) → Validation → Logging → `UnassignTicketCommandHandler`.
+4. **Regras**: RN-23.
+5. **Domínio**: `TicketUnassignedDomainEvent(TicketId, PreviousAssignedToUserId, ChangedByUserId)` (sem handlers).
+6. **Persistência**: `tickets` (com `xmin`), `ticket_histories` (`Unassigned`, com o id do anterior em `oldValue` e `newValue` nulo), auditoria. Sem migration: a ação é gravada como texto.
+7. **Resposta**: `204`, inclusive quando o chamado já estava sem responsável (nada é gravado).
+8. **Erros**: 400 (id vazio, `Validation.General`; chamado inativo, `Tickets.NotActive`), 401, 403 (sem `tickets:manage`), 404 (inexistente ou excluído), 409 (concorrência).
+9. **Evidências**: `UnassignTicketCommandHandlerTests.cs`, `TicketValidatorsTests.cs` (UnassignValidator_*), `TicketHistoryEntriesTests.cs`, `TicketHistoryDescriptionsTests.cs`, `TicketsTests.cs` (Unassign_*); rastreabilidade completa na spec 001.
+10. **Lacunas**: o responsável removido não é notificado (C-21). Um chamado Em andamento pode ficar sem responsável (GAP-18). A reversão da migration `20261022023422_Store_Ticket_Enums_As_Names` falha se houver registros `Unassigned` (R-1 da spec 001).
 
 ---
 
@@ -693,6 +706,7 @@ Descrito no diagrama 3.6.
 | `dotnet build TickestPristine.slnx` | **Sucesso, 0 avisos, 0 erros** (com `TreatWarningsAsErrors`) |
 | `dotnet test TickestPristine.slnx --no-build` (análise inicial) | **Todos aprovados, 0 falhas, 0 ignorados**: ArchitectureTests 10/10 (0,8 s); Application.UnitTests 424/424 (1 s); IntegrationTests 240/240 (1 min 52 s, PostgreSQL 17 via Testcontainers) |
 | `dotnet build` + `dotnet test` (depois da revisão de 22/10) | Build com 0 avisos e 0 erros. **Todos aprovados, 0 falhas**: ArchitectureTests 10/10; Application.UnitTests 441/441; IntegrationTests 248/248 (2 min 44 s) |
+| Verificação da spec 001 (23/10/2026 16:55, `spec-verify`): `dotnet build TickestPristine.slnx` e `dotnet test TickestPristine.slnx --no-build --logger trx` | Build com **0 avisos e 0 erros**. **726 aprovados, 0 falhas, 0 ignorados**: ArchitectureTests 10/10; Application.UnitTests 455/455; IntegrationTests 261/261 (3 min 5 s) |
 | Linha de base antes da spec 001 (22/10/2026, commit `8660490`): `docker version`, `docker compose ps`, `dotnet build TickestPristine.slnx` e `dotnet test TickestPristine.slnx --no-build` | Docker 29.6.1 disponível, com os três serviços do `docker compose` em execução (`tickestpristine-postgres`, `tickestpristine-seq`, `tickestpristine-web-api`); os testes de integração usam um PostgreSQL próprio via Testcontainers. Build com **0 avisos e 0 erros**. **699 aprovados, 0 falhas, 0 ignorados**: ArchitectureTests 10/10; Application.UnitTests 441/441; IntegrationTests 248/248 (2 min 49 s) |
 
 - **[Fato]** O `WebApplicationFactory` sobe a API no ambiente padrão dele (Development), então a configuração de `appsettings.Development.json`, inclusive os enrichers sem pacote (6.3), **não impediu a inicialização**. Isso não prova que os enrichers funcionem.
@@ -766,7 +780,8 @@ Pontos de atenção (detalhados na seção 7):
   - `spec-verify` (`.claude/skills/spec-verify/`): roda build e testes, exige que cada critério seja coberto por um teste que exercita o comportamento e passou na execução feita por ela, chama a `ca-review` e atualiza as seções afetadas deste documento.
 - **[Fato]** Os estados (`Rascunho`, `Bloqueada`, `Aprovada`, `Em implementação`, `Verificada`, `Entregue`, `Cancelada`) e as transições permitidas ficam numa tabela única, `.claude/skills/spec-new/references/spec-status.md`; toda transição acrescenta uma linha no histórico da spec.
 - **[Fato]** Cada spec é um arquivo único em `specs/NNN-slug/spec.md`, com requisitos (REQ), critérios de aceitação (AC, no formato dado/quando/então), decisões (DEC, com quem decidiu e quando), fora do escopo, plano técnico, tarefas (T, ligadas a ACs e à skill que as executa), rastreabilidade (AC → teste → como o teste cobre o critério → resultado), evidências de verificação e histórico.
-- **[Fato]** Specs existentes: `specs/001-remover-responsavel/spec.md`, aprovada em 2026-10-22 (commit `8660490`), revisada no mesmo dia a pedido do responsável e aprovada de novo na versão revisada; `specs/002-historico-descricao-chamado/spec.md`, `Aprovada` em 2026-10-22; `specs/003-testes-arquitetura-regras-permanentes/spec.md`, `Rascunho`, com DEC-1 a DEC-8 decididas pelo responsável e à espera da revisão e da aprovação formal do documento completo. Nenhuma implementação foi iniciada.
+- **[Fato]** Specs existentes: `specs/001-remover-responsavel/spec.md`, aprovada em 2026-10-22 (commit `8660490`), revisada no mesmo dia a pedido do responsável e aprovada de novo na versão revisada, implementada e `Verificada` em 2026-10-23 (ainda não entregue); `specs/002-historico-descricao-chamado/spec.md`, `Aprovada` em 2026-10-22; `specs/003-testes-arquitetura-regras-permanentes/spec.md`, `Rascunho`, com DEC-1 a DEC-8 decididas pelo responsável e à espera da revisão e da aprovação formal do documento completo. Das quatro specs, só a 001 foi implementada.
+- **[Fato]** Backlog (desde 23/10/2026): `specs/BACKLOG.md` lista as demandas futuras (`BL-n`) em três faixas (`Agora`, `Próxima` e `Depois`), com origem, dependências e os estados `Proposta`, `Pronta`, `Especificada` e `Descartada`, definidos no próprio arquivo. O item aponta para as specs e, depois de `Especificada`, não acompanha o andamento, que fica só no status da spec; a única mudança permitida nele é a `spec-new` acrescentar à coluna Specs uma spec posterior da mesma demanda, sem remover nem trocar números já registrados e sem alterar as demais colunas. A coluna Specs só traz specs existentes; as planejadas ficam numa nota. Mudanças nas regras, e de faixa, ordem ou estado fora da `spec-new`, são registradas na seção "Histórico" do próprio arquivo, sem editar linhas anteriores. A `spec-new` preenche o campo `backlog:` do frontmatter (novo no modelo) e marca o item como `Especificada`; as specs 001 a 004 estão nos itens BL-001 a BL-004; as 001 a 003, sem o campo, porque são anteriores a ele, e a 004 o recebeu na revisão de 23/10/2026. As fontes externas usadas no backlog ficam em `specs/_fontes/` (hoje, `prompt-sla.md`).
 - **[Fato]** Portão determinístico: o hook de projeto `.claude/hooks/sdd_gate.py`, registrado em `.claude/settings.json` (`UserPromptSubmit` e `PreToolUse` com matcher `Edit|Write|MultiEdit|NotebookEdit|Bash|PowerShell`), bloqueia escrita em `src/` e `tests/`, por ferramenta de edição ou comando de shell, fora de um `/spec-implement NNN` cuja spec esteja `Em implementação`, e também a alteração do próprio hook e dos settings. A mensagem do usuário com `[sdd:autorizo]` libera a escrita só naquela mensagem: a próxima mensagem do usuário, inclusive uma enviada no meio de uma resposta, encerra a liberação (observado em 22/10/2026). O hook também vale para subagentes (observado: bloqueou um subagente de revisão). O estado de cada sessão fica fora do repositório (pasta temporária do sistema).
   - **Estado da instalação (22/10/2026):** v2 completa no repositório: `sdd_gate.py`, `test_sdd_gate.py` e `.claude/settings.json` (com `|| exit 2` e timeout de 30 s), idênticos aos arquivos validados de ponta a ponta na worktree de teste; 33 testes aprovados no lugar.
   - **O que a v2 bloqueia, com teste executado** (33 testes automatizados; "e2e" = cenário de ponta a ponta com `claude -p`, E-41): Edit, Write, MultiEdit e NotebookEdit cujo alvo esteja em `src/` ou `tests/`, inclusive com maiúsculas e caminhos `/c/...` (Write: e2e); em comandos de shell, cada trecho (`;`, `&&`, `||`, `|`) é avaliado: redirecionamento `>` e `>>`, com ou sem espaço, alvo entre aspas, absoluto, com `./` ou `../` e em variável (`f=src/…; echo x > $f`: e2e), heredoc com redirecionamento; `cd src && sed -i`; `sed -Ei` e `sed --in-place`; `cp` (inclusive com destino em variável); `git checkout -- src/…`; código embutido em `python` (heredoc e `-c`) e em `pwsh -Command`; no PowerShell, `Set-Content` (e2e), `Out-File` em pipeline, `'x' > $p`, `ni`, `copy`, `[IO.File]::WriteAllText`, `-EncodedCommand` e `mklink /J`; comandos que mudam a árvore sem citar caminho (`git stash pop`, `git checkout main`, `git switch`, `git merge`, `git pull`, `git restore .`, `git clean -fd`, `git reset --hard`, `dotnet format`); escrita com o diretório atual dentro de `src/`. Protege `.claude/hooks`, `.claude/settings.json`, `.claude/settings.local.json` (Edit, Write e `Remove-Item`) e o estado da sessão. No modo `/spec-implement`, exige `status: Em implementação` e `aprovada-em` preenchido, e termina quando a spec sai de `Em implementação`; o `/spec-implement` no meio da mensagem não conta e não libera o próprio portão. A liberação por `[sdd:autorizo]` vale só na mensagem, expira em 60 minutos e é isolada por sessão. JSON inválido bloqueia; `python` ausente bloqueia com o `|| exit 2` (e2e).
@@ -777,7 +792,7 @@ Pontos de atenção (detalhados na seção 7):
   - **Proposta v4 (candidata, não instalada, no rascunho de trabalho):** mantém a regra da v2 como padrão e só abre uma exceção quando todas as variáveis da instrução que escreve têm valor literal (atribuição simples `d=…` ou `$d = '…'`, feita uma única vez, antes da escrita, sem religação por `+=`, `-OutVariable`, `Set-Variable`, `read`, laço, escopo `$script:` ou afins, e sem `eval`/`iex`/`source` no comando) e o caminho final, com os valores no lugar, fica fora de `src/`, `tests/` e do portão; na dúvida, vale a v2. As constantes `$null`, `$true` e `$false` (ex.: `2>$null`) contam como valor conhecido, que não é caminho, só se o comando não as atribuir em lugar nenhum (no Bash são variáveis comuns). Testes executados em 22/10/2026: 41 (os 33 da v2 mais 8 novos, com 72 comandos), aprovados em Windows e em Linux (`python:3.12-slim`); a mesma suíte contra a v2 falha só nos 11 casos de exceção, e os 28 casos de regressão da v3, as 14 tentativas de burlar a exceção, os 9 destinos literais dentro de `src/`, `tests/` ou do portão e os 9 casos negativos das constantes são bloqueados pelas duas versões. Dos quatro falsos positivos reais, três passam com a v4; o segundo continua bloqueado, porque o comando enviava ao `Out-File` um here-string e carregava, dentro do texto, escritas com variáveis sem valor literal (caso ambíguo). Os testes cobrem casos específicos: não provam ausência de outras brechas. A instalação depende de decisão e autorização explícitas do responsável, com `[sdd:autorizo]`.
   - **CI:** o passo "Test SDD gate hook" do `.github/workflows/build.yml` está configurado para rodar os testes do hook em cada push e pull request para a `main`; ainda não foi executado no GitHub (a branch não foi enviada).
 - **[Resolvido em 22/10/2026, commit `6dbe6a5`] Frontmatter das skills:** até 22/10, o YAML do frontmatter de 6 skills (`add-entity`, `add-feature`, `add-tests`, `spec-implement`, `spec-new` e `spec-verify`) não era lido, porque o valor sem aspas do `argument-hint` continha `ex.: ` (dois-pontos seguido de espaço). O `claude plugin validate .claude/skills` (Claude Code 2.1.309) acusava "YAML frontmatter failed to parse … all frontmatter fields silently dropped" nas seis. Com isso, a `description` era substituída pela primeira linha do conteúdo (o título) e o `disable-model-invocation: true` da `spec-implement` não tinha efeito: a skill aparecia entre as que o modelo podia acionar sozinho. Na `ca-review`, o mesmo campo começava com `[` e era lido como lista, não como texto. Correção: o valor do `argument-hint` das sete skills ficou entre aspas simples, sem mudar o texto, e o validador passou a aprovar todas.
-- **Validação:** a `spec-new` gerou a spec 001 e, em 22/10/2026, revisou a 001 e gerou a 002 e a 003. A `spec-implement` e a `spec-verify` ainda não foram executadas; a primeira execução real será a implementação da spec 001. Depois da correção do frontmatter, uma sessão nova mostrou as descrições completas e a `spec-implement` fora das skills que o modelo pode acionar sozinho. O comportamento diante de pedidos diretos foi testado (E-42) e o portão por hook, também (E-41).
+- **Validação:** a `spec-new` gerou a spec 001 e, em 22/10/2026, revisou a 001 e gerou a 002 e a 003. A primeira execução real da `spec-implement` e da `spec-verify` foi a da spec 001, em 23/10/2026: a `spec-implement` rodou por `/spec-implement 001` digitado pelo responsável, com o portão liberando a escrita em `src/` e `tests/` enquanto a spec estava `Em implementação`; a `spec-verify` levou a spec a `Verificada`. Depois da correção do frontmatter, uma sessão nova mostrou as descrições completas e a `spec-implement` fora das skills que o modelo pode acionar sozinho. O comportamento diante de pedidos diretos foi testado (E-42) e o portão por hook, também (E-41).
 
 ---
 
@@ -809,6 +824,7 @@ Pontos de atenção (detalhados na seção 7):
 | GAP-15 | Arquitetura | SQL cru do PostgreSQL na Application (`GetTicketVolumeQueryHandler.cs`) | Acoplamento ao esquema físico; renomear uma coluna quebra só em execução (mitigado pelos testes de integração) | **P3** | Aceitar como decisão consciente ou mover para a Infrastructure. |
 | GAP-16 | Dados | Fuso `America/Sao_Paulo` fixo no SQL | Organizações em outros fusos teriam gráficos deslocados | **P3** | Só tratar se houver requisito multifuso. |
 | GAP-17 | Observabilidade | `LoggingDecorator` registra falhas esperadas (404, 409, validação) como `LogError` | Ruído em alertas baseados em nível de log | **P3** | Avaliar `Warning` para erros de negócio. |
+| GAP-18 | Funcional / fluxo | Spec 001, DEC-4: remover o responsável não muda o status (`Tickets/Unassign/UnassignTicketCommandHandler.cs`; `TicketsTests.Unassign_Should_KeepStatus_WhenTicketIsInProgress`) | Um chamado pode ficar Em andamento sem ninguém atendendo, sem alerta | **P3**: decisão consciente da spec 001; nenhuma regra atual depende do responsável em Em andamento | Decidir se a fila deve destacar esses chamados ou se o status deve voltar a Aberto. |
 
 ### 7.3 Melhorias recomendadas (sem urgência)
 
@@ -822,9 +838,7 @@ As perguntas Q-01 a Q-12 estão na seção 9.5 (Q-01 e Q-02 foram respondidas e 
 
 ### 7.5 Etapas evolutivas sugeridas (não obrigatórias)
 
-1. **Etapa 1, coerência do fluxo atual**: GAP-01, GAP-02, GAP-03 e GAP-07 foram concluídos em 22/10, e o GAP-06 em parte. O gatilho de PR foi adicionado ao CI (GAP-12, commit `d9d1f50`), mas ainda não foi validado num PR real; falta também decidir Q-05.
-2. **Etapa 2, prontidão operacional**: definir a topologia de implantação e então tratar GAP-09, GAP-10, GAP-11 e GAP-13.
-3. **Etapa 3, SLA avançado** (se confirmado): o `prompt-sla-tickest.md` já cita a stack real (PostgreSQL, handlers próprios, `BackgroundService` no lugar do Quartz). Antes de começar, resolver a regra dele que proíbe construtores primários, que diverge do código atual (ver 9.3). Introduzir o outbox (GAP-05) e o serviço em segundo plano antes das fases de escalonamento.
+**[Fato]** Desde 23/10/2026, a ordem de execução fica em `specs/BACKLOG.md`, que cita os GAPs e as perguntas desta seção e da 9.5 pelo ID. As etapas que estavam aqui viraram itens do backlog: o que restava da Etapa 1 (Q-05 e a validação do GAP-12) está em BL-005 e BL-006; a Etapa 2 (GAP-09, GAP-10, GAP-11 e GAP-13), em BL-008 a BL-011; a Etapa 3 (SLA), em BL-004 (Fase 1, specs 004 a 006) e BL-012 a BL-018 (Fases 0 e 2 a 7). A divergência sobre construtores primários foi decidida na DEC-2 da spec 004, a favor do `CLAUDE.md`, e a ordem do outbox, na DEC-4 da mesma spec (pré-requisito da Fase 5).
 
 ---
 
@@ -871,7 +885,8 @@ As perguntas Q-01 a Q-12 estão na seção 9.5 (Q-01 e Q-02 foram respondidas e 
 | E-37 | Atribuição de responsável | `src/TickestPristine.Application/Tickets/Assign/AssignTicketCommandHandler.cs`; `src/TickestPristine.Web.Api/Endpoints/Tickets/Assign.cs`; `TicketErrors.AssigneeCannotManageTickets`; `TicketReassignedDomainEvent`; `TicketHistoryEntries.Reassigned` | `AssignTicketCommandHandler` | `AssignTicketCommandHandlerTests.cs`, `TicketsTests.cs` |
 | E-38 | Modelo de PR alinhado ao fluxo SDD | `.github/pull_request_template.md` | — | — |
 | E-39 | Fluxo SDD, estados e skills | `CLAUDE.md` ("Política de autonomia", "Fluxo de desenvolvimento (SDD)"); `.claude/skills/spec-new/SKILL.md`, `references/spec-template.md`, `references/spec-status.md`; `.claude/skills/spec-implement/SKILL.md` (`disable-model-invocation: true`); `.claude/skills/spec-verify/SKILL.md` | — | — (só a `spec-new` foi executada) |
-| E-40 | Primeira spec, aprovada | `specs/001-remover-responsavel/spec.md` (commit `8660490`) | — | — (implementação não iniciada) |
+| E-40 | Primeira spec, implementada e verificada | `specs/001-remover-responsavel/spec.md` (aprovada no commit `8660490`; `Verificada` em 23/10/2026, ainda não entregue) | — | Rastreabilidade AC → teste na seção 8 da spec |
+| E-43 | Remoção do responsável | `src/TickestPristine.Application/Tickets/Unassign/UnassignTicketCommandHandler.cs`; `src/TickestPristine.Web.Api/Endpoints/Tickets/Unassign.cs`; `src/TickestPristine.Domain/Tickets/TicketUnassignedDomainEvent.cs`; `TicketHistoryAction.cs` (`Unassigned = 11`) | `UnassignTicketCommandHandler` | `UnassignTicketCommandHandlerTests.cs`, `TicketsTests.cs` (Unassign_*) |
 | E-41 | Portão SDD por hook de projeto | `.claude/hooks/sdd_gate.py`; `.claude/settings.json` | — | v1: 27 testes e 4 cenários de ponta a ponta (Write em `src/` e `echo >` em `tests/` bloqueados com `acceptEdits`; `/spec-implement` registrado pelo `UserPromptSubmit`; escrita liberada com `[sdd:autorizo]`). v2: `.claude/hooks/test_sdd_gate.py` com 33 testes aprovados em Windows e em Linux (`python:3.12-slim`); 6 cenários de ponta a ponta numa worktree descartável, todos em 22/10/2026: Write em `src/`, `f=src/…; echo x > $f` no Bash e `Set-Content tests\…` no PowerShell bloqueados pelo hook; `git diff -- src tests > log` liberado; Write com `[sdd:autorizo]` liberado; com o interpretador inexistente, Write com `[sdd:autorizo]` bloqueado pelo `|| exit 2`. Também observado: o hook bloqueou um subagente e esta sessão; o build com 0 avisos e os 699 testes da solução aprovados na mesma data |
 | E-42 | Teste de contorno do portão (comportamento do modelo) | `claude -p` numa worktree descartável, antes do hook, em 22/10/2026 | — | Pedido com spec aprovada (1 execução): nenhuma escrita, encaminhado para `/spec-implement 001`. Pedido sem spec ("arquivar um chamado", 3 execuções): a `spec-new` acionada nas três, só escrita tentada em `specs/`, nenhuma skill `add-*`, nenhuma tentativa em `src/` ou `tests/` |
 
@@ -900,7 +915,7 @@ Arquivos modificados (19): handlers de `TicketAttachments`, `TicketHistories`, `
 |---|---|---|
 | `CLAUDE.md` | Antes de 22/10: domínio de exemplo "Todos + Users" | **Resolvido em 22/10:** os caminhos e a porta do Seq foram corrigidos no commit `b2028ae`, e a seção "O que é" passou a descrever o domínio de chamados no commit `13de660`; os exemplos de Todos continuam no arquivo e nas skills, identificados como ilustrativos |
 | `README.md` | Antes de 22/10: permissões por usuário "sem papéis fixos", `AdminMaster`, "exclusão" de usuários, ciclo até `Closed` e atribuição | **Resolvido em 22/10**: o README foi alinhado ao código |
-| `prompt-sla-tickest.md` (não versionado) | Antes de 22/10: SQL Server, MediatR, Quartz, `PublishDomainEventsInterceptor`, `AuditableEntity` e `RowVersion` | **Corrigido em 22/10**: cita PostgreSQL, handlers próprios, `BackgroundService` e advisory lock, `IAuditable` e `Version`/`xmin`. **Divergências que continuam:** a regra 4 proíbe construtores primários, mas o código usa construtores primários em todos os handlers; o prompt também cita entidades que não existem (categorias, multi-tenancy) e já instrui o agente a avisar se faltarem |
+| `prompt-sla-tickest.md` (não versionado; cópia em `specs/_fontes/prompt-sla.md` desde 23/10) | Antes de 22/10: SQL Server, MediatR, Quartz, `PublishDomainEventsInterceptor`, `AuditableEntity` e `RowVersion` | **Corrigido em 22/10**: cita PostgreSQL, handlers próprios, `BackgroundService` e advisory lock, `IAuditable` e `Version`/`xmin`. **Divergências que continuam:** a regra 4 proíbe construtores primários, mas o código usa construtores primários em todos os handlers; o prompt também cita entidades que não existem (categorias, multi-tenancy) e já instrui o agente a avisar se faltarem |
 | `SampleDataSeeder.cs:206` (comentário) | Histórico gravado por "handlers de evento de domínio" | Histórico gravado pelos handlers de command |
 | `GetTicketsQueryHandler.cs:66` (comentário) | Chama o cálculo de situação do SLA de "Regra do Domain" | A regra fica na Application (`TicketSla` está em `src/TickestPristine.Application/Tickets/TicketSla.cs`) |
 
@@ -913,7 +928,7 @@ Arquivos modificados (19): handlers de `TicketAttachments`, `TicketHistories`, `
 - Comportamento atrás de proxy reverso (IP do rate limit, esquema HTTPS).
 - Execução da imagem Docker (o Dockerfile não foi construído nesta análise).
 - Execução do workflow de CI disparado por pull request no GitHub (seção 6.8).
-- Execução da `spec-implement` e da `spec-verify` (seção 6.9). O efeito de `disable-model-invocation` na `spec-implement` já foi observado (seção 6.9).
+- **[Validado em 23/10/2026]** Execução da `spec-implement` e da `spec-verify`, com a spec 001 (seção 6.9). O efeito de `disable-model-invocation` na `spec-implement` já tinha sido observado (seção 6.9).
 
 ### 9.5 Perguntas em aberto (decisão humana)
 
@@ -928,7 +943,7 @@ Arquivos modificados (19): handlers de `TicketAttachments`, `TicketHistories`, `
 | Q-07 | Mensagens e anexos devem ser bloqueados em chamados Resolvidos, Fechados ou Cancelados? | 5.6 |
 | Q-08 | Qual é a política de retenção para anexos excluídos, logs de auditoria e chamados excluídos logicamente (inclusive por exigência da LGPD)? | GAP-08 |
 | Q-09 | O `CLAUDE.md` deve descrever o domínio real ou permanecer como guia genérico do template com exemplos de Todo? | GAP-06 |
-| Q-10 | O plano do `prompt-sla-tickest.md` é o roadmap oficial? Se sim, ele precisa ser reescrito para a stack real (PostgreSQL e sem Quartz; o uso de handlers próprios em vez do MediatR já está decidido), e as decisões sobre multi-instância (Q-11) e notificações precisam ser tomadas antes. | C-15 |
+| Q-10 | **Respondida em parte (23/10, Rafael Santos, no chat):** as fases do `prompt-sla-tickest.md` entraram no backlog (`specs/BACKLOG.md`, BL-004 e BL-012 a BL-018), e o prompt foi copiado como fonte para `specs/_fontes/prompt-sla.md`; a prioridade de cada fase fica no backlog e o escopo, em cada spec. Antes, já tinham sido resolvidas a stack (seção 9.3) e, na spec 004, os construtores primários (DEC-2) e a ordem do outbox (DEC-4). Faltam as decisões sobre multi-instância (Q-11) e notificações. | C-15 |
 | Q-11 | Qual é o modelo de implantação alvo: uma ou várias instâncias, proxy reverso, armazenamento de arquivos? | GAP-09, GAP-10, GAP-11 |
 | Q-12 | Departamentos e setores desativados devem poder ser reativados? O responsável pelo departamento deve ser um usuário ativo? | C-07 |
 

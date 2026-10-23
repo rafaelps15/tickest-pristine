@@ -1,7 +1,7 @@
 ---
 id: 001
 titulo: Remover o responsável de um chamado
-status: Aprovada        # Rascunho | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Cancelada (transições: spec-status.md da skill spec-new)
+status: Verificada        # Rascunho | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Cancelada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos  # responsável pelo produto e pelo desenvolvimento
 aprovada-em: 2026-10-22
 branch: feat/spec-driven-development
@@ -82,34 +82,34 @@ branch: feat/spec-driven-development
 ## 7. Tarefas
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
-| T-1 | Acréscimos no Domain: evento `TicketUnassignedDomainEvent` e ação de histórico `Unassigned = 11` | AC-1, AC-7 | add-feature | [ ] |
-| T-2 | Registro do histórico: fábrica `Unassigned` em `TicketHistoryEntries` e descrição "Responsável removido" em `TicketHistoryDescriptions` | AC-1, AC-7 | add-feature | [ ] |
-| T-3 | Slice `Tickets/Unassign`: command, validator e handler (busca; inatividade antes de responsável, DEC-6; remoção; evento; histórico) | AC-1, AC-3, AC-4, AC-5, AC-6, AC-8, AC-9, AC-10, AC-11 | add-feature | [ ] |
-| T-4 | Endpoint `DELETE tickets/{ticketId:guid}/assignee` com `.HasPermission(Permissions.TicketsManage)` | AC-1, AC-2, AC-12 | add-feature | [ ] |
-| T-5 | Testes unitários do handler, do validator, da fábrica `Unassigned` e da descrição do histórico; testes de integração por HTTP | AC-1 a AC-12 | add-tests | [ ] |
+| T-1 | Acréscimos no Domain: evento `TicketUnassignedDomainEvent` e ação de histórico `Unassigned = 11` | AC-1, AC-7 | add-feature | [x] |
+| T-2 | Registro do histórico: fábrica `Unassigned` em `TicketHistoryEntries` e descrição "Responsável removido" em `TicketHistoryDescriptions` | AC-1, AC-7 | add-feature | [x] |
+| T-3 | Slice `Tickets/Unassign`: command, validator e handler (busca; inatividade antes de responsável, DEC-6; remoção; evento; histórico) | AC-1, AC-3, AC-4, AC-5, AC-6, AC-8, AC-9, AC-10, AC-11 | add-feature | [x] |
+| T-4 | Endpoint `DELETE tickets/{ticketId:guid}/assignee` com `.HasPermission(Permissions.TicketsManage)` | AC-1, AC-2, AC-12 | add-feature | [x] |
+| T-5 | Testes unitários do handler, do validator, da fábrica `Unassigned` e da descrição do histórico; testes de integração por HTTP | AC-1 a AC-12 | add-tests | [x] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | | | |
-| AC-2 | | | |
-| AC-3 | | | |
-| AC-4 | | | |
-| AC-5 | | | |
-| AC-6 | | | |
-| AC-7 | | | |
-| AC-8 | | | |
-| AC-9 | | | |
-| AC-10 | | | |
-| AC-11 | | | |
-| AC-12 | | | |
+| AC-1 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Unassign_Should_RemoveAssigneeAndRecordHistory_WhenCallerManagesTickets`; `tests/TickestPristine.Application.UnitTests/Tickets/UnassignTicketCommandHandlerTests.cs` › `Handle_Should_RemoveAssigneeRecordHistoryAndRaiseDomainEvent_WhenTicketHasAssignee`; `TicketHistories/TicketHistoryEntriesTests.cs` › `Unassigned_Should_RecordPreviousAssigneeWithoutNewValue` | HTTP: `DELETE` com `tickets:manage` → 204, `GET` devolve `assignedToUserId` nulo, um registro `Unassigned` com o responsável anterior em `oldValue`, `newValue` nulo e o chamador em `changedByUserId`; unitário: o mesmo estado e um único `TicketUnassignedDomainEvent` com ticket, responsável anterior e chamador; fábrica: ação, valores e data | Aprovado em 2026-10-23 16:55 (execução da `spec-verify`, relatório TRX por teste) |
+| AC-2 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Unassign_Should_ReturnForbidden_WhenCallerLacksManagePermission` | usuário sem `tickets:manage` recebe 403; o `GET` do administrador mostra o mesmo responsável | Aprovado em 2026-10-23 16:55 (execução da `spec-verify`, relatório TRX por teste) |
+| AC-3 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Unassign_Should_ReturnNotFound_WhenTicketDoesNotExist` e `Unassign_Should_ReturnNotFound_WhenTicketWasDeleted`; `tests/TickestPristine.Application.UnitTests/Tickets/UnassignTicketCommandHandlerTests.cs` › `Handle_Should_ReturnNotFound_WhenTicketDoesNotExist` | id inexistente e chamado excluído logicamente → 404 com título `Tickets.NotFound`; unitário: erro `TicketErrors.NotFound` | Aprovado em 2026-10-23 16:55 (execução da `spec-verify`, relatório TRX por teste) |
+| AC-4 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Unassign_Should_ReturnBadRequest_WhenTicketIsNotActive`; `tests/TickestPristine.Application.UnitTests/Tickets/UnassignTicketCommandHandlerTests.cs` › `Handle_Should_ReturnNotActive_WhenTicketIsNotActive` (Resolvido, Fechado, Cancelado) | HTTP: chamado Resolvido com responsável → 400 `Tickets.NotActive`, responsável mantido e nenhum registro `Unassigned`; unitário: os três status, erro `NotActive`, responsável mantido e nenhum histórico | Aprovado em 2026-10-23 16:55 (execução da `spec-verify`, relatório TRX por teste) |
+| AC-5 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Unassign_Should_ReturnNoContentWithoutHistory_WhenTicketHasNoAssignee`; `tests/TickestPristine.Application.UnitTests/Tickets/UnassignTicketCommandHandlerTests.cs` › `Handle_Should_ChangeNothing_WhenTicketHasNoAssignee` | chamado ativo sem responsável → 204 sem registro `Unassigned`; unitário: sucesso, nenhum evento e nenhum histórico | Aprovado em 2026-10-23 16:55 (execução da `spec-verify`, relatório TRX por teste) |
+| AC-6 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Unassign_Should_KeepStatus_WhenTicketIsInProgress`; `tests/TickestPristine.Application.UnitTests/Tickets/UnassignTicketCommandHandlerTests.cs` › `Handle_Should_KeepStatus_WhenTicketIsInProgress` | chamado Em andamento com responsável → 204; o `GET` mostra status 2 (Em andamento) e responsável nulo | Aprovado em 2026-10-23 16:55 (execução da `spec-verify`, relatório TRX por teste) |
+| AC-7 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Unassign_Should_ShowRemovalInHistory`; `TicketHistories/TicketHistoryDescriptionsTests.cs` › `For_Should_ReturnFixedText_WhenActionHasNoValues` (caso `Unassigned`) | `GET tickets/{id}/history` traz um item com a ação `Unassigned` e a descrição "Responsável removido"; o texto também é conferido direto | Aprovado em 2026-10-23 16:55 (execução da `spec-verify`, relatório TRX por teste) |
+| AC-8 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Unassign_Should_ReturnBadRequest_WhenTicketIsNotActiveAndHasNoAssignee`; `tests/TickestPristine.Application.UnitTests/Tickets/UnassignTicketCommandHandlerTests.cs` › `Handle_Should_ReturnNotActive_WhenTicketIsNotActiveAndHasNoAssignee` (Resolvido, Fechado, Cancelado) | chamado inativo sem responsável → 400 `Tickets.NotActive` (não 204) e nenhum registro; unitário: os três status | Aprovado em 2026-10-23 16:55 (execução da `spec-verify`, relatório TRX por teste) |
+| AC-9 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Unassign_Should_RevokeParticipantAccess_WhenFormerAssigneeIsNotRequesterNorManager` | X, indicado na abertura sem `tickets:manage` e sem ser o solicitante, consulta com 200 antes; depois da remoção (204), a consulta de X responde 403 | Aprovado em 2026-10-23 16:55 (execução da `spec-verify`, relatório TRX por teste) |
+| AC-10 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Unassign_Should_NotRecordHistoryAgain_WhenAssigneeWasAlreadyRemoved` | o segundo `DELETE` responde 204 e o chamado continua com um único registro `Unassigned` | Aprovado em 2026-10-23 16:55 (execução da `spec-verify`, relatório TRX por teste) |
+| AC-11 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Unassign_Should_ReturnValidationError_WhenTicketIdIsEmpty`; `Tickets/TicketValidatorsTests.cs` › `UnassignValidator_Should_HaveError_WhenTicketIdIsEmpty` e `UnassignValidator_Should_NotHaveErrors_WhenCommandIsValid` | id vazio → 400 com título `Validation.General`; o validator acusa `TicketId` vazio e aceita um id válido | Aprovado em 2026-10-23 16:55 (execução da `spec-verify`, relatório TRX por teste) |
+| AC-12 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Unassign_Should_ReturnUnauthorized_WhenNoTokenProvided` | sem token → 401; o `GET` do administrador mostra o mesmo responsável | Aprovado em 2026-10-23 16:55 (execução da `spec-verify`, relatório TRX por teste) |
 
 ## 9. Evidências de verificação
-- **Build:**
-- **Testes:**
-- **Revisão:**
-- **Documentação atualizada:** a atualizar em `SYSTEM_SPECIFICATION.md`: 2.2 (o responsável "sempre" vê o chamado: deixa de valer para quem foi removido, AC-9), 2.3 (casos de uso de Tickets), 2.6 (nova RN-23), 2.7 (C-10 e C-18), 4.3.1 (rota nova), 5.10 (fluxo "Remover responsável"), 7 (lacuna: chamado Em andamento pode ficar sem responsável, conforme a DEC-4), 8 (evidência nova).
-- **CI:**
+- **Build:** `dotnet build TickestPristine.slnx` em 2026-10-23 16:55: 0 avisos, 0 erros.
+- **Testes:** `dotnet test TickestPristine.slnx --no-build --logger trx` em 2026-10-23 16:55: 726 aprovados, 0 com falha, 0 ignorados (ArchitectureTests 10/10; Application.UnitTests 455/455; IntegrationTests 261/261). Todos os testes da rastreabilidade aparecem como `Passed` no TRX, inclusive cada caso das Theories (Resolvido, Fechado e Cancelado) e o caso `Unassigned` de `TicketHistoryDescriptionsTests`.
+- **Revisão:** `ca-review` sobre os arquivos do plano técnico: nenhum achado bloqueante, nenhuma violação de convenção, nenhuma lacuna de teste. Veredito: pronto para commit. Mudanças pendentes fora do escopo (documentos de backlog e SDD, spec 004, `prompt-sla-tickest.md`) não foram revisadas.
+- **Documentação atualizada:** `SYSTEM_SPECIFICATION.md`, em 2026-10-23: cabeçalho (estado documentado), 2.2, 2.3, 2.6 (RN-23), 2.7 (C-10, C-18), 4.3.1, 4.4 (enum 1–11), 5.10 ("Remover responsável"), 6.1 (execução da verificação), 6.9 (specs existentes e primeira execução das skills), 7.2 (GAP-18, lacuna da DEC-4), 8 (E-40, E-43) e 9.4. Previsto na spec: 2.2 (o responsável "sempre" vê o chamado: deixa de valer para quem foi removido, AC-9), 2.3 (casos de uso de Tickets), 2.6 (nova RN-23), 2.7 (C-10 e C-18), 4.3.1 (rota nova), 5.10 (fluxo "Remover responsável"), 7 (lacuna: chamado Em andamento pode ficar sem responsável, conforme a DEC-4), 8 (evidência nova).
+- **CI:** não executado (a branch não foi enviada ao GitHub).
 - **Entrega:** <commit ou PR, e a autorização>
 
 ## 10. Histórico
@@ -123,3 +123,6 @@ branch: feat/spec-driven-development
 | 2026-10-22 | Aprovada | Aprovada explicitamente por Rafael Santos no chat ("Aprovo a Spec 001 ... na versão final revisada"). Implementação só com `/spec-implement 001`. |
 | 2026-10-22 | Rascunho | Revisão pedida e autorizada por Rafael Santos no chat, depois da auditoria do ambiente: R-1 corrigido (a reversão falha por NOT NULL, não grava NULL); 409 por concorrência nos contratos e R-3; AC-1 com ação `Unassigned` e `newValue` nulo; REQ-8 e AC-9 (ex-responsável perde o acesso, R-2); AC-10 (segundo DELETE não grava de novo); REQ-9, AC-11 (id vazio) e AC-12 (sem token); seção 2.2 na documentação a atualizar; `TicketHistoryEntriesTests.cs` no plano; tarefas e rastreabilidade ajustadas. Nenhuma decisão mudou. `aprovada-em` limpo até a nova aprovação. Aguardando nova aprovação. |
 | 2026-10-22 | Aprovada | Versão revisada aprovada explicitamente por Rafael Santos no chat ("Spec 001: aprovo a versão revisada, incluindo R-1 corrigido, HTTP 409, seção 2.2, critério para o ex-responsável e AC-9 a AC-12. Preserve as decisões anteriores."). Decisões DEC-1 a DEC-6 preservadas. Implementação só com `/spec-implement 001`. |
+| 2026-10-23 | Em implementação | Início da implementação por `/spec-implement 001`, digitado por Rafael Santos no chat. Linha de base no mesmo dia: build com 0 avisos e 0 erros; 699 testes aprovados (10 de arquitetura, 441 unitários, 248 de integração). |
+| 2026-10-23 | Em implementação | T-1 a T-5 concluídas, com as skills `add-feature` e `add-tests`, só nos arquivos do plano técnico; build e testes rodados ao fim de cada tarefa. Última execução: 0 avisos e 0 erros; 726 testes aprovados (10 de arquitetura, 455 unitários, 261 de integração), sem falhas. Rastreabilidade preenchida (coluna "Resultado" fica para a `spec-verify`). Aguardando verificação. |
+| 2026-10-23 | Verificada | Verificação aprovada pela `spec-verify`: build com 0 avisos e 0 erros; 726 testes aprovados e 0 com falha na execução de 2026-10-23 16:55; os 12 ACs cobertos por testes lidos e conferidos contra Dado, Quando e Então; `ca-review` sem achados. Documentação de estado atualizada (ver "Evidências de verificação"). Ainda não entregue: commit e PR dependem de autorização explícita. |

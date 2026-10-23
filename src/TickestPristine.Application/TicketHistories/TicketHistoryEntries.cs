@@ -69,4 +69,19 @@ public static class TicketHistoryEntries
             occurredAtUtc,
             oldAssignedToUserId?.ToString(),
             newAssignedToUserId.ToString());
+
+    /// <summary>
+    /// Remoção do responsável: guarda o id do anterior, e o chamado fica sem ninguém (sem valor novo).
+    /// </summary>
+    public static TicketHistory Unassigned(
+        Guid ticketId,
+        Guid? changedByUserId,
+        Guid oldAssignedToUserId,
+        DateTime occurredAtUtc) =>
+        Create(
+            ticketId,
+            changedByUserId,
+            TicketHistoryAction.Unassigned,
+            occurredAtUtc,
+            oldAssignedToUserId.ToString());
 }
