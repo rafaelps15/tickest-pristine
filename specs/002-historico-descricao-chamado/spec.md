@@ -1,7 +1,7 @@
 ---
 id: 002
 titulo: Registrar no histórico a alteração da descrição do chamado
-status: Verificada        # Rascunho | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Cancelada (transições: spec-status.md da skill spec-new)
+status: Entregue        # Rascunho | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Cancelada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos  # responsável pelo produto e pelo desenvolvimento
 aprovada-em: 2026-10-22
 branch: feat/spec-driven-development
@@ -93,7 +93,7 @@ Os ACs refletem as decisões DEC-1 a DEC-5 (todas com a opção (a)). "A" e "B" 
 - **Revisão:** `ca-review` sobre os arquivos do plano técnico: nenhum achado bloqueante, nenhuma violação de convenção, nenhuma lacuna de teste. O handler continua usando `IDateTimeProvider` e grava o histórico no mesmo `SaveChangesAsync`; o texto ao usuário está em pt-BR. Veredito: pronto para commit.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md`, em 2026-10-23: cabeçalho (estado documentado), 2.7 (C-18), 4.4 (enum 1–12), 5.4 (persistência e evidências), 6.1 (execução da verificação), 6.9 (specs existentes) e 8 (E-44). No mesmo passo, as afirmações que ficaram desatualizadas com a entrega da spec 001 (cabeçalho, 6.9 e E-40) passaram a citar o commit `b0e78b0`. Previsto na spec: 2.7 (C-18), 5.4 (persistência: `DescriptionChanged`), 8 (evidência nova).
 - **CI:** não executado (a branch não foi enviada ao GitHub).
-- **Entrega:** <commit ou PR, e a autorização>
+- **Entrega:** commit `9ea5ef6` na branch `feat/spec-driven-development`, em 2026-10-23, autorizado por Rafael Santos no chat ("faça commit de tudo que tem no git Changes"). Sem push nem PR.
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -105,3 +105,4 @@ Os ACs refletem as decisões DEC-1 a DEC-5 (todas com a opção (a)). "A" e "B" 
 | 2026-10-23 | Em implementação | Início da implementação por `/spec-implement 002`, digitado por Rafael Santos no chat, sobre o commit `d0e18f5` (spec 001 entregue: a ação 11 já é `Unassigned`, então o R-3 não se aplica). Linha de base: a execução da `spec-verify` da spec 001 em 2026-10-23 16:55 (0 avisos; 726 testes aprovados), sem mudança de código depois dela. |
 | 2026-10-23 | Em implementação | T-1 a T-4 concluídas, com as skills `add-feature` e `add-tests`, só nos arquivos do plano técnico; build e testes rodados ao fim de cada tarefa. Na T-3, o teste existente `UpdateTicketCommandHandlerTests.Handle_Should_UpdateTicket_WhenOwnerHasUpdateOwnPermission` falhou porque esperava um único registro e, pela DEC-2, agora há dois; a asserção foi ajustada à regra aprovada (arquivo do plano, T-4). Última execução: 0 avisos e 0 erros; 742 testes aprovados (10 de arquitetura, 462 unitários, 270 de integração), sem falhas. Rastreabilidade preenchida (coluna "Resultado" fica para a `spec-verify`). Aguardando verificação. |
 | 2026-10-23 | Verificada | Verificação aprovada pela `spec-verify`: build com 0 avisos e 0 erros; 742 testes aprovados e 0 com falha na execução de 2026-10-23 17:53; os 7 ACs cobertos por testes lidos e conferidos contra Dado, Quando e Então; `ca-review` sem achados. Documentação de estado atualizada (ver "Evidências de verificação"). Ainda não entregue: commit e PR dependem de autorização explícita. |
+| 2026-10-23 | Entregue | Commit `9ea5ef6` feito com autorização explícita de Rafael Santos no chat ("faça commit de tudo que tem no git Changes"). Registro feito num commit posterior, coberto pela mesma autorização. Sem push nem PR. |
