@@ -143,6 +143,7 @@ Antes de criar algo, siga o slice real mais parecido (caminhos a partir de `src/
 - Datas e horas pelo `IDateTimeProvider`, nunca `DateTime.UtcNow` na Application.
 - Identificadores de código em inglês; comentários e textos ao usuário em pt-BR.
 - Mensagens de commit em pt-BR, no formato `tipo: descrição` (`feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `chore`).
+- Toda task tem uma branch própria e atômica, criada a partir da branch base vigente (hoje `feat/spec-driven-development`), no padrão `<tipo>/<BL-n>-<descricao-curta-em-kebab-case>`: `tipo` é `feature`, `bugfix`, `hotfix`, `refactor` ou `chore`; `BL-n` é o item do `specs/BACKLOG.md`; a descrição fica em inglês (ex.: `feature/BL-004-sla-business-calendar`). A branch só contém a task dela.
 
 ### Documentos de estado
 

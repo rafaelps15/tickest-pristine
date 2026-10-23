@@ -24,7 +24,8 @@ Esta skill só escreve dentro de `specs/`. Ela nunca altera código, testes, con
    - critérios de aceitação (AC-n) verificáveis, no formato dado/quando/então, com resultado observável (status HTTP, estado gravado, registro produzido);
    - toda regra sem fonte no pedido, no código ou nos documentos vira decisão em aberto (DEC-n), com as opções; nunca uma suposição;
    - o que fica fora do escopo, explícito;
-   - plano técnico e tarefas (T-n), cada tarefa ligada a pelo menos um AC e à skill que a executará.
+   - plano técnico e tarefas (T-n), cada tarefa ligada a pelo menos um AC e à skill que a executará;
+   - a branch da mudança no campo `branch:`, no padrão do `CLAUDE.md`, com o `BL-n` do item do backlog e o tipo conforme a natureza da mudança.
 5. **Pergunte as decisões em aberto** de forma objetiva, com as opções e a sua recomendação. Registre a resposta na spec, com quem decidiu e quando.
 6. **Confira a completude** com o checklist abaixo. Se faltar algo, a spec fica em `Rascunho`, ou passa para `Bloqueada` se depender de uma decisão externa, com a linha correspondente no histórico.
 7. **Peça a aprovação** e pare. Só marque `status: Aprovada`, preenchendo `responsavel` e `aprovada-em` e acrescentando a linha no histórico, quando o responsável aprovar explicitamente no chat. A aprovação de um plano anterior ou de outra spec não vale.

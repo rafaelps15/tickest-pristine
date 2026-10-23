@@ -4,7 +4,7 @@ titulo: <título curto>
 status: Rascunho        # Rascunho | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Cancelada (transições: spec-status.md da skill spec-new)
 responsavel: <quem aprova>
 aprovada-em:
-branch:
+branch:                 # <tipo>/<BL-n>-<descricao-curta-em-kebab-case>, conforme o CLAUDE.md
 backlog:                # BL-n de specs/BACKLOG.md que originou a spec; vazio se o pedido não veio do backlog
 ---
 
