@@ -1,7 +1,7 @@
 ---
 name: spec-verify
 description: Verifica se uma spec implementada atende aos critérios de aceitação — roda build e testes, confere que cada critério é coberto por testes que exercitam o comportamento descrito e passaram na execução atual, executa a revisão de convenções e atualiza a documentação de estado afetada. Use depois de implementar uma spec ou quando o usuário pedir para verificar uma spec.
-argument-hint: <número ou pasta da spec, ex.: "001">
+argument-hint: '<número ou pasta da spec, ex.: "001">'
 ---
 
 # Verificar uma spec implementada

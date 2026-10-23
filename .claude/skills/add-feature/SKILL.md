@@ -1,7 +1,7 @@
 ---
 name: add-feature
 description: Cria um slice vertical completo num projeto .NET de Clean Architecture com handlers próprios de command/query — command ou query, handler próprio, validator do FluentValidation, endpoint de minimal API e testes (unitário, de validator e de integração). Use quando o usuário pedir para adicionar uma feature, caso de uso, command, query ou endpoint ao projeto.
-argument-hint: <descrição da feature, ex.: "archive a todo item" ou "get todos due this week">
+argument-hint: '<descrição da feature, ex.: "archive a todo item" ou "get todos due this week">'
 ---
 
 # Adicionar uma feature (slice vertical)

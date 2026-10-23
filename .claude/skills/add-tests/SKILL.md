@@ -1,7 +1,7 @@
 ---
 name: add-tests
 description: Completa os testes que faltam em casos de uso existentes do projeto — testes unitários de handler, testes de validator do FluentValidation e testes de integração por HTTP. Use quando o usuário pedir para adicionar, melhorar ou completar a cobertura de testes.
-argument-hint: <caso de uso ou feature a cobrir, ex.: "CopyTodoCommand" ou "a feature Users">
+argument-hint: '<caso de uso ou feature a cobrir, ex.: "CopyTodoCommand" ou "a feature Users">'
 ---
 
 # Adicionar testes a um caso de uso existente

@@ -1,7 +1,7 @@
 ---
 name: spec-implement
 description: Implementa uma spec aprovada, tarefa por tarefa, usando as skills de implementação do projeto e preenchendo a rastreabilidade entre critérios de aceitação e testes. Só roda quando chamada explicitamente com /spec-implement.
-argument-hint: <número ou pasta da spec, ex.: "001" ou "specs/001-remover-responsavel">
+argument-hint: '<número ou pasta da spec, ex.: "001" ou "specs/001-remover-responsavel">'
 disable-model-invocation: true
 ---
 

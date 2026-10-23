@@ -1,7 +1,7 @@
 ---
 name: spec-new
 description: Cria ou revisa a especificação (spec) de uma mudança funcional antes de qualquer código — investiga o contexto, escreve requisitos, critérios de aceitação verificáveis, decisões em aberto, plano e tarefas, e para à espera da aprovação do responsável. Use quando o usuário pedir uma funcionalidade nova, uma mudança de comportamento ou uma correção não trivial.
-argument-hint: <pedido, ex.: "permitir remover o responsável de um chamado">
+argument-hint: '<pedido, ex.: "permitir remover o responsável de um chamado">'
 ---
 
 # Criar a spec de uma mudança

@@ -1,7 +1,7 @@
 ---
 name: add-entity
 description: Adiciona uma nova entidade de domínio ao projeto — classe da entidade, catálogo de erros, eventos de domínio, configuração do EF Core, ligação no DbContext e migration. Use quando o usuário pedir para adicionar uma entidade, agregado, modelo de domínio ou tabela.
-argument-hint: <descrição da entidade, ex.: "Project with a name, owner, and list of todos">
+argument-hint: '<descrição da entidade, ex.: "Project with a name, owner, and list of todos">'
 ---
 
 # Adicionar uma entidade de domínio

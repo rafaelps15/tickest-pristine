@@ -1,7 +1,7 @@
 ---
 name: ca-review
 description: Revisa as mudanças pendentes contra as convenções do projeto — limites entre camadas, tratamento de erro com Result, estrutura dos slices, validação, endpoints e cobertura de testes. Use quando o usuário pedir para revisar mudanças, conferir convenções ou auditar uma feature antes do commit.
-argument-hint: [opcional: arquivos ou feature específicos para revisar; o padrão é o diff da árvore de trabalho]
+argument-hint: '[opcional: arquivos ou feature específicos para revisar; o padrão é o diff da árvore de trabalho]'
 ---
 
 # Revisão das convenções do projeto
