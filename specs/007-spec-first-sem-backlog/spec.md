@@ -116,7 +116,7 @@ Ordem por dependência; cada tarefa termina com diff, ok do responsável e commi
 | T-5 | Comando `/spec-status`, somente leitura | AC-7 | — | [x] |
 | T-6 | `CLAUDE.md`: branch, commit, PR, estados, `/spec-status`, sem backlog | AC-8 | — | [x] |
 | T-7 | `auditoria-arquitetural.md` e comentário do `scripts/auditoria_sdd.py` | AC-1 | — | [x] |
-| T-8 | `SYSTEM_SPECIFICATION.md` (6.9, 7.5, nota, E-39) e spec 004 (DEC-8) | AC-9, AC-14 | — | [ ] |
+| T-8 | `SYSTEM_SPECIFICATION.md` (6.9, 7.5, nota, E-39) e spec 004 (DEC-8) | AC-9, AC-14 | — | [x] |
 | T-9 | Verificação antes da remoção: auditoria, build, testes e testes do portão | AC-11, AC-12 | — | [ ] |
 | T-10 | Conferir a cópia externa e remover o `specs/BACKLOG.md` (último passo); `git grep` do AC-1 | AC-1, AC-10 | — | [ ] |
 
@@ -131,12 +131,12 @@ Ordem por dependência; cada tarefa termina com diff, ok do responsável e commi
 | AC-6 | Leitura de `.claude/skills/spec-verify/SKILL.md` (verificação descrita) | Passo 2 (build sem avisos, `dotnet test` e `python scripts/auditoria_sdd.py .`), passo 3 (cada critério contra teste aprovado nesta execução), passo 6 (auditoria no veredito) e passo 8 (`pr:` no próprio PR) | Conferido em 2026-10-24 (T-4; a confirmar na verificação) |
 | AC-7 | `.claude/commands/spec-status.md` (somente leitura: `Read`, `Glob`, `Grep` e `gh pr view`); ensaio dos passos do comando sobre `specs/*/spec.md` em 2026-10-24 | O ensaio leu o frontmatter de todas as specs (001 a 004, 007 e as specs não rastreadas do responsável) e devolveu número, título, status, branch, `aprovada-em` e `pr` iguais aos de cada arquivo; a execução do `/spec-status` em si fica para a verificação | Ensaio conferido em 2026-10-24 (T-5; o `/spec-status` roda na verificação) |
 | AC-8 | Leitura do `CLAUDE.md` ("Regras permanentes", "Documentos de estado", "Fluxo de desenvolvimento (SDD)" e "Portão determinístico") e `grep -i -E "backlog\|BL-[0-9]" CLAUDE.md` sem resultado | Branch `<tipo>/SPEC-NNN-<slug>` com os sete tipos; commit `tipo(escopo): descrição [SPEC-NNN T00n]`; PR com `SPEC-NNN`, link do `spec.md` e REQs; spec como unidade de trabalho, `/spec-status`, descoberta, uma tarefa por vez e entrega pelo merge; política de autonomia com "diff e ok antes de todo commit" (DEC-12) | Conferido em 2026-10-24 (T-6; a confirmar na verificação) |
-| AC-9 | | | |
+| AC-9 | `git diff specs/004-sla-calendario-util/spec.md` | Só mudam o campo `backlog:` (removido) e as duas menções ao backlog no contexto (linhas 14 e 25), que passam a citar o BL-004 e o BL-012 a BL-018 como identificadores anteriores; nenhuma linha de REQ, AC ou DEC muda | Conferido em 2026-10-24 (T-8; a confirmar na verificação) |
 | AC-10 | | | |
 | AC-11 | | | |
 | AC-12 | | | |
 | AC-13 | | | |
-| AC-14 | | | |
+| AC-14 | Leitura do `SYSTEM_SPECIFICATION.md` 6.9, 7.5 e E-39 (verificação descrita) | 6.9 descreve o fluxo spec-first (descoberta, `[SUPOSIÇÃO]`, uma tarefa por vez, DEC-12 e DEC-13, entrega pelo merge, `/spec-status`, estados novos, portão com a DEC-11) e traz a nota única de que `BL-n` era o identificador anterior, com o antigo backlog como histórico; 7.5 diz que a ordem fica com o responsável, fora do repositório; E-39 inclui o `/spec-status` | Conferido em 2026-10-24 (T-8; a confirmar na verificação) |
 
 ## 9. Evidências de verificação
 - **Build:**

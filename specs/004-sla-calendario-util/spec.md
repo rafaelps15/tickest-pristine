@@ -5,13 +5,12 @@ status: Rascunho        # Rascunho | Bloqueada | Aprovada | Em implementação |
 responsavel: Rafael Santos
 aprovada-em:
 branch:
-backlog: BL-004
 ---
 
 # 004 — SLA: calendário útil e feriados nacionais
 
 ## 1. Contexto
-- **Item do backlog:** BL-004 (`specs/BACKLOG.md`).
+- **Demanda:** BL-004 (identificador anterior; desde a spec 007, a demanda é identificada pela própria spec).
 - **Fonte:** `specs/_fontes/prompt-sla.md`, cópia byte a byte do `prompt-sla-tickest.md` (não versionado, mantido na raiz), feita em 2026-10-23 (SHA-256 `07ecd5f66563fc292fbdcf29c076f6f7ce43e79df683fe1e365ecca3975bd57f` nos dois arquivos). Os itens citados nesta spec (1.1, 1.8, regras 10 e 11) estão nessa cópia.
 - **Pedido original:** `/spec-new` com o `prompt-sla-tickest.md` (não versionado) como pedido, escolhido no chat em 2026-10-23: "SLA, Fase 1". Por decisão no chat (DEC-1), a Fase 1 foi dividida em três specs; esta cobre o item **1.1 Calendário** do prompt:
   > Agregado `SlaCalendar`: `Id`, `Name`, `TimeZoneId`, `Is24x7`, `WorkSchedule` (lista de `DayOfWeek` + `Start` + `End`, como JSON), `Holidays` (entidade filha: `Date` como `DateOnly`, `Description`; índice único por calendário + data). Classe pura de domínio `BusinessCalendar` (construída a partir do `SlaCalendar`): `AddBusinessMinutes`, `SubtractBusinessMinutes`, `BusinessSecondsBetween`; percorre dia a dia em hora local, pulando dias sem faixas e feriados; limite de segurança de 366 dias. `Is24x7` = aritmética simples. Classe pura `BrazilianNationalHolidays.For(int year)` (fixos + móveis calculados pela Páscoa: Carnaval seg/ter, Sexta-feira Santa, Corpus Christi; inclui 20/11). `ISlaCalendarProvider.GetAsync(Guid calendarId, CancellationToken ct)` na Application; implementação na Infrastructure com `HybridCache` (ou o cache já usado) por 1 hora, com invalidação quando o calendário for alterado. Migration com seed do calendário padrão e feriados nacionais do ano corrente e do próximo.
@@ -22,7 +21,7 @@ backlog: BL-004
 - **Série da Fase 1:** 004 (esta) → 005 (plano de SLA, cronômetros de 1ª resposta e resolução, migração dos chamados existentes e consultas; itens 1.2 a 1.5 e 1.7) → 006 (job de monitoramento e escalonamento; item 1.6). As decisões DEC-1 a DEC-4 e DEC-7 valem para a série e serão repetidas nas specs 005 e 006.
 - **Referências:**
   - `SYSTEM_SPECIFICATION.md`: 1.2 (SLA completo "planejado, não implementado"), 2.6 (RN-01 a RN-03, SLA atual em horas corridas), 2.7 (C-14, C-15), 9.5 (Q-10 e Q-11).
-  - `specs/BACKLOG.md`: BL-004 (esta série) e BL-012 a BL-018 (demais fases do SLA).
+  - demais fases do SLA: BL-012 a BL-018 (identificadores anteriores), fora do repositório desde a spec 007.
   - Código: `src/TickestPristine.Application/Tickets/TicketSla.cs` (SLA atual, intocado nesta spec); `src/TickestPristine.Infrastructure/Authorization/PermissionProvider.cs` (único uso de `HybridCache`, modelo para o provider); `src/TickestPristine.Application/Abstractions/Authorization/IPermissionProvider.cs` (modelo da interface, com `InvalidateAsync`); `src/TickestPristine.Infrastructure/Audit/AuditLoggingInterceptor.cs` (auditoria de entidades `IAuditable`); `src/TickestPristine.Domain/Departments/Department.cs` e `Infrastructure/Departments/DepartmentConfiguration.cs` (referência viva de entidade).
   - Testes de referência: `tests/TickestPristine.IntegrationTests/Database/RefreshTokenStorageTests.cs` (teste de integração que usa o `DbContext` direto, sem HTTP).
 - **Fatos do repositório que afetam o prompt:**
