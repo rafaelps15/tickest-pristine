@@ -111,7 +111,7 @@ Ordem por dependência; cada tarefa termina com diff, ok do responsável e commi
 | T-2 | `spec-status.md` e `spec-template.md`: ciclo da DEC-2, `Entregue` pela DEC-6, campos `branch:` e `pr:`, sem `backlog:` | AC-3 | — | [x] |
 | T-3 | `spec-new`: descoberta, `[SUPOSIÇÃO]`, sem backlog | AC-4 | — | [x] |
 | T-4 | `spec-implement` e `spec-verify`: disciplina de execução, mudança de escopo, DEC nova, bloqueio do portão, auditoria, `pr:` | AC-5, AC-6 | — | [x] |
-| T-5 | Comando `/spec-status`, somente leitura | AC-7 | — | [ ] |
+| T-5 | Comando `/spec-status`, somente leitura | AC-7 | — | [x] |
 | T-6 | `CLAUDE.md`: branch, commit, PR, estados, `/spec-status`, sem backlog | AC-8 | — | [ ] |
 | T-7 | `auditoria-arquitetural.md` e comentário do `scripts/auditoria_sdd.py` | AC-1 | — | [ ] |
 | T-8 | `SYSTEM_SPECIFICATION.md` (6.9, 7.5, nota, E-39) e spec 004 (DEC-8) | AC-9, AC-14 | — | [ ] |
@@ -127,7 +127,7 @@ Ordem por dependência; cada tarefa termina com diff, ok do responsável e commi
 | AC-4 | Leitura de `.claude/skills/spec-new/SKILL.md` (verificação descrita) | Passo 2 (descoberta: leitura do contexto, não perguntar o que o código responde, no máximo 5 perguntas por rodada em negócio e técnico, parar e esperar), passo 3 (`[SUPOSIÇÃO]`), passo 5 e checklist (suposição pendente impede a aprovação); nenhuma menção a backlog | Conferido em 2026-10-24 (T-3; a confirmar na verificação) |
 | AC-5 | Leitura de `.claude/skills/spec-implement/SKILL.md` (verificação descrita) | "Antes de começar" (branch e estados aceitos, recusa dos demais), "Execução" (uma tarefa por vez: implementa, build e testes, rastreabilidade, diff, ok e commit; bloqueio do portão classificado, sem contorno), "Quando parar" (mudança de REQ, critério ou DEC; DEC nova só com aprovação explícita, motivo e data) | Conferido em 2026-10-24 (T-4; a confirmar na verificação) |
 | AC-6 | Leitura de `.claude/skills/spec-verify/SKILL.md` (verificação descrita) | Passo 2 (build sem avisos, `dotnet test` e `python scripts/auditoria_sdd.py .`), passo 3 (cada critério contra teste aprovado nesta execução), passo 6 (auditoria no veredito) e passo 8 (`pr:` no próprio PR) | Conferido em 2026-10-24 (T-4; a confirmar na verificação) |
-| AC-7 | | | |
+| AC-7 | `.claude/commands/spec-status.md` (somente leitura: `Read`, `Glob`, `Grep` e `gh pr view`); ensaio dos passos do comando sobre `specs/*/spec.md` em 2026-10-24 | O ensaio leu o frontmatter de todas as specs (001 a 004, 007 e as specs não rastreadas do responsável) e devolveu número, título, status, branch, `aprovada-em` e `pr` iguais aos de cada arquivo; a execução do `/spec-status` em si fica para a verificação | Ensaio conferido em 2026-10-24 (T-5; o `/spec-status` roda na verificação) |
 | AC-8 | | | |
 | AC-9 | | | |
 | AC-10 | | | |
