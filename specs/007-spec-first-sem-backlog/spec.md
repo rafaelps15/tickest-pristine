@@ -117,7 +117,7 @@ Ordem por dependência; cada tarefa termina com diff, ok do responsável e commi
 | T-6 | `CLAUDE.md`: branch, commit, PR, estados, `/spec-status`, sem backlog | AC-8 | — | [x] |
 | T-7 | `auditoria-arquitetural.md` e comentário do `scripts/auditoria_sdd.py` | AC-1 | — | [x] |
 | T-8 | `SYSTEM_SPECIFICATION.md` (6.9, 7.5, nota, E-39) e spec 004 (DEC-8) | AC-9, AC-14 | — | [x] |
-| T-9 | Verificação antes da remoção: auditoria, build, testes e testes do portão | AC-11, AC-12 | — | [ ] |
+| T-9 | Verificação antes da remoção: auditoria, build, testes e testes do portão | AC-11, AC-12 | — | [x] |
 | T-10 | Conferir a cópia externa e remover o `specs/BACKLOG.md` (último passo); `git grep` do AC-1 | AC-1, AC-10 | — | [ ] |
 
 ## 8. Rastreabilidade
@@ -133,8 +133,8 @@ Ordem por dependência; cada tarefa termina com diff, ok do responsável e commi
 | AC-8 | Leitura do `CLAUDE.md` ("Regras permanentes", "Documentos de estado", "Fluxo de desenvolvimento (SDD)" e "Portão determinístico") e `grep -i -E "backlog\|BL-[0-9]" CLAUDE.md` sem resultado | Branch `<tipo>/SPEC-NNN-<slug>` com os sete tipos; commit `tipo(escopo): descrição [SPEC-NNN T00n]`; PR com `SPEC-NNN`, link do `spec.md` e REQs; spec como unidade de trabalho, `/spec-status`, descoberta, uma tarefa por vez e entrega pelo merge; política de autonomia com "diff e ok antes de todo commit" (DEC-12) | Conferido em 2026-10-24 (T-6; a confirmar na verificação) |
 | AC-9 | `git diff specs/004-sla-calendario-util/spec.md` | Só mudam o campo `backlog:` (removido) e as duas menções ao backlog no contexto (linhas 14 e 25), que passam a citar o BL-004 e o BL-012 a BL-018 como identificadores anteriores; nenhuma linha de REQ, AC ou DEC muda | Conferido em 2026-10-24 (T-8; a confirmar na verificação) |
 | AC-10 | | | |
-| AC-11 | | | |
-| AC-12 | | | |
+| AC-11 | `python scripts/auditoria_sdd.py .` (e `--formato json`) | Score e código de saída da auditoria na branch da migração, antes da remoção do backlog | 100% (`CONFORME`), código de saída 0, em 2026-10-24 18:25 (T-9; a repetir depois da T-10, na verificação) |
+| AC-12 | `dotnet build TickestPristine.slnx --no-incremental` e `dotnet test TickestPristine.slnx --no-build`; `python -m unittest discover -s .claude/hooks -p "test_*.py"` | Build e todos os testes da solução, mais os testes do portão | Build com 0 avisos e 0 erros; 50 + 462 + 270 testes aprovados; 39 testes do portão aprovados, em 2026-10-24 18:25 (T-9; a repetir na verificação) |
 | AC-13 | | | |
 | AC-14 | Leitura do `SYSTEM_SPECIFICATION.md` 6.9, 7.5 e E-39 (verificação descrita) | 6.9 descreve o fluxo spec-first (descoberta, `[SUPOSIÇÃO]`, uma tarefa por vez, DEC-12 e DEC-13, entrega pelo merge, `/spec-status`, estados novos, portão com a DEC-11) e traz a nota única de que `BL-n` era o identificador anterior, com o antigo backlog como histórico; 7.5 diz que a ordem fica com o responsável, fora do repositório; E-39 inclui o `/spec-status` | Conferido em 2026-10-24 (T-8; a confirmar na verificação) |
 
