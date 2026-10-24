@@ -73,7 +73,6 @@ BL-006 não muda `src/` nem `tests/`; se precisa de spec é uma decisão do resp
 | BL-027 | Edição de prioridade, título e setor, e recálculo do SLA | Q-06; C-09 | Q-06 | Proposta | — |
 | BL-028 | Mensagens e anexos em chamados encerrados | Q-07; C-16 | Q-07 | Proposta | — |
 | BL-029 | Reativação de departamentos e setores e responsável ativo | Q-12; C-07 | Q-12 | Proposta | — |
-| BL-035 | Mover o `auditoria_sdd.py` da raiz para `scripts/` e remover o `prompt-sla-tickest.md` da raiz, idêntico ao `specs/_fontes/prompt-sla.md` | Pedido de Rafael Santos no chat (2026-10-24) | — | Pronta | — |
 
 Decisões da spec 004 que alcançam itens ainda sem spec (a decisão completa está na spec):
 - DEC-2 (estilo de código do `CLAUDE.md`, não o do prompt): BL-012 a BL-018.
@@ -93,4 +92,3 @@ Decisões da spec 004 que alcançam itens ainda sem spec (a decisão completa es
 | 2026-10-23 | Criação do arquivo e carga inicial (BL-001 a BL-029), pelo critério provisório descrito acima. | Rafael Santos, no chat |
 | 2026-10-23 | Regras: a coluna Specs de um item `Especificada` passa a aceitar specs posteriores da mesma demanda, e só números de specs existentes; criada esta seção. BL-004: Q-11 em "Depende de" (só a spec 006); "005 e 006 previstas" saiu da coluna Specs e foi para uma nota. Notas novas: fonte do prompt de SLA e decisões da spec 004 que alcançam BL-012 a BL-018. Faixas, ordem e estados não mudaram. | Rafael Santos, no chat |
 | 2026-10-23 | Novo item BL-031 (falsos positivos do portão SDD), no fim da faixa `Agora`, em `Pronta`: problema e escopo confirmados pelo responsável, correção sem spec por não mudar `src/` nem `tests/`. | Rafael Santos, no chat |
-| 2026-10-24 | Novo item BL-035 (mover o `auditoria_sdd.py` para `scripts/` e remover o `prompt-sla-tickest.md` da raiz), no fim da faixa `Depois`, em `Pronta`: mudança feita pelo responsável e entregue sem spec, por não mudar `src/` nem `tests/`. | Rafael Santos, no chat |
