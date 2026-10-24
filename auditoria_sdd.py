@@ -55,7 +55,8 @@ PADROES_SEGREDO = [
     ("Token GitHub", re.compile(r"gh[pousr]_[A-Za-z0-9]{30,}")),
     ("Chave Google", re.compile(r"AIza[0-9A-Za-z_\-]{35}")),
     ("Senha em connection string",
-     re.compile(r"(?i)(password|pwd)\s*=\s*(?!\s*;|\s*\"|\$\{|\{\{|<)([^;\"\s]{4,})")),
+     # Valores mascarados (ex.: Password=****) são exemplos em documentação, não segredos.
+     re.compile(r"(?i)(password|pwd)\s*=\s*(?!\s*;|\s*\"|\$\{|\{\{|<|\*)([^;\"\s]{4,})")),
 ]
 
 # Valores que casam com o padrão de senha mas não são segredo: a senha padrão do PostgreSQL
