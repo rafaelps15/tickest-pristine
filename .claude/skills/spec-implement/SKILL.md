@@ -31,7 +31,7 @@ Os estados e as transições da spec seguem [../spec-new/references/spec-status.
 
 1. Leia no histórico o estado de origem e a pendência que bloqueou a spec. Se a origem foi `Em descoberta` (ou `Rascunho`, em specs anteriores à spec 007), a retomada cabe à skill `spec-new`: pare e informe.
 2. Confirme com o responsável que a pendência foi resolvida e registre a resolução: uma decisão nova ou atualizada na tabela de decisões (com quem decidiu, quando e o motivo) ou uma observação no histórico.
-3. Se a resolução alterar requisito, critério ou decisão já aprovados, a spec volta para `Em descoberta` e precisa de nova aprovação: pare e indique a skill `spec-new`.
+3. Se a resolução for uma mudança de escopo, siga a seção "Mudança de escopo": um ajuste aprovado no chat é registrado e a retomada segue; REQ novo, REQ removido ou mudança grande de escopo leva a spec para `Em descoberta`, com nova aprovação: pare e indique a skill `spec-new`.
 4. Caso contrário, volte para `Em implementação`, registrando a resolução no histórico. Preserve as tarefas já marcadas, a rastreabilidade e o histórico, e continue da primeira tarefa não concluída.
 5. Enquanto a pendência não estiver resolvida, a spec continua `Bloqueada`: não implemente nada.
 
@@ -47,12 +47,23 @@ Execute **uma tarefa por vez**, na ordem da spec. Para cada tarefa:
 
 Se o portão SDD bloquear um comando, não o contorne: classifique o bloqueio como **correto** (a escrita violaria a regra) ou **falso positivo** (a escrita não toca `src/`, `tests/` nem o portão) e informe o responsável. Quando o comando for necessário, passe a ele o comando exato para rodar com `!`.
 
+## Mudança de escopo
+
+Quando for preciso incluir, remover ou alterar um REQ, um critério de aceitação ou uma DEC da spec aprovada, ou quando surgir uma decisão que a spec não cobre, **pare e pergunte** ao responsável antes de mudar qualquer coisa. Depois da resposta:
+
+- **Ajuste aprovado no chat** (DEC nova ou ajuste de AC): registre na spec a decisão ou o ajuste, com o motivo, a data e as palavras do responsável, acrescente a linha no histórico e siga a implementação no estado atual.
+- **REQ novo, REQ removido ou mudança grande de escopo:** a spec volta para `Em descoberta`, pela `spec-new`, e exige nova aprovação; pare e indique a skill. A mudança é grande quando:
+  - a. muda o objetivo da spec;
+  - b. exige arquivos ou camadas fora do plano técnico;
+  - c. invalida uma tarefa já feita;
+  - d. muda um AC a ponto de ele deixar de cobrir o seu REQ;
+  - e. muda segurança, permissões ou o contrato público da API.
+
+Nenhuma DEC nova entra sem aprovação explícita do responsável no chat. Na dúvida entre ajuste e mudança grande, trate como mudança grande e pergunte.
+
 ## Quando parar
 
 Pare, mude o status para `Bloqueada`, registre no histórico o estado de origem e o motivo, e pergunte ao responsável quando:
-- for preciso incluir, remover ou alterar um REQ, um critério de aceitação ou uma DEC da spec aprovada (mudança de escopo);
-- surgir uma decisão que a spec não cobre: nenhuma DEC nova entra sem aprovação explícita do responsável no chat, registrada na spec com o motivo e a data;
-- for preciso alterar algo fora do plano técnico;
 - um AC se mostrar impossível de verificar;
 - a spec contradisser o `CLAUDE.md`;
 - um teste falhar por um defeito fora do escopo da spec.
@@ -65,5 +76,5 @@ Pare, mude o status para `Bloqueada`, registre no histórico o estado de origem 
 ## Regras
 
 - Commit só depois do ok do responsável para aquela tarefa, só com os arquivos dela. Nunca faça push, rebase, merge nem `git rm` sem autorização; quando o portão exigir, o responsável roda esses comandos com `!`.
-- Não altere requisitos, critérios nem decisões aprovados: mudança neles volta a spec para `Em descoberta` e exige nova aprovação.
+- Não altere requisitos, critérios nem decisões aprovados por conta própria: siga a seção "Mudança de escopo".
 - Não implemente nada que não esteja numa tarefa da spec.

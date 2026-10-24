@@ -38,7 +38,7 @@ Esta skill só escreve dentro de `specs/`. Ela nunca altera código, testes, con
 
 ## Revisão de uma spec existente
 
-1. Se a revisão mudar requisito, critério ou decisão de uma spec `Aprovada`, `Em implementação` ou `Bloqueada`, registre no histórico a transição para `Em descoberta`, com o motivo e quem pediu. Uma spec `Verificada` passa antes por `Em implementação`, pela `spec-implement`, como manda a tabela de transições. Uma spec antiga em `Rascunho` passa a `Em descoberta` quando a revisão começar.
+1. Numa spec `Aprovada`, `Em implementação` ou `Bloqueada`: se a revisão trouxer REQ novo, REQ removido ou mudança grande de escopo (critérios a a e na seção "Mudança de escopo" da `spec-implement`), registre no histórico a transição para `Em descoberta`, com o motivo e quem pediu; se for só DEC nova ou ajuste de AC aprovados explicitamente pelo responsável no chat, registre na spec com o motivo, a data e as palavras dele, sem mudar o estado nem pedir nova aprovação. Uma spec `Verificada` passa antes por `Em implementação`, pela `spec-implement`, como manda a tabela de transições. Uma spec antiga em `Rascunho` passa a `Em descoberta` quando a revisão começar.
 2. Faça a descoberta da mudança (passo 2 do fluxo) e altere preservando o histórico, as tarefas feitas e a rastreabilidade; registre no histórico o que mudou.
 3. Rode de novo o checklist de completude e peça nova aprovação explícita.
 
@@ -58,5 +58,5 @@ Esta skill só escreve dentro de `specs/`. Ela nunca altera código, testes, con
 - Não escreva código nem testes, nem como rascunho fora de `specs/`.
 - Não invente requisitos para preencher o modelo: seção sem conteúdo fica com "Não se aplica".
 - Não escreva a spec antes de terminar a descoberta, nem decida sozinho o que o responsável não confirmou: pergunte ou marque `[SUPOSIÇÃO]`.
-- Spec aprovada que precise mudar volta para `Em descoberta` e exige nova aprovação.
+- Spec aprovada com REQ novo, REQ removido ou mudança grande de escopo volta para `Em descoberta` e exige nova aprovação; DEC nova ou ajuste de AC aprovados no chat são registrados e seguem.
 - Spec `Bloqueada` durante a escrita volta para `Em descoberta` quando a pendência for resolvida; registre a resolução no histórico.
