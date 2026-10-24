@@ -1,11 +1,11 @@
 ---
 id: 007
 titulo: Fluxo spec-first, sem backlog no repositório
-status: Em implementação        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
 aprovada-em: 2026-10-24
 branch: chore/SPEC-007-spec-first-sem-backlog
-backlog:
+pr: "#22"
 ---
 
 # 007 — Fluxo spec-first, sem backlog no repositório
@@ -135,7 +135,7 @@ Ordem por dependência; cada tarefa termina com diff, ok do responsável e commi
 | AC-10 | Comparação linha a linha entre `git show origin/main:specs/BACKLOG.md` e `C:\dev\tickest-backlog\BACKLOG-arquivado-2026-10-24.md`, antes do `git rm`; `git status` depois | As 95 linhas do arquivo da `main` estão todas na cópia (0 ausentes), e o arquivo na branch era idêntico ao da `main`; depois do `git rm`, o `git status` mostra `D specs/BACKLOG.md`; auditoria refeita com 100% e código de saída 0 | Conferido na T-10 (2026-10-24); a auditoria e o `git grep` foram repetidos na verificação de 2026-10-24 18:45, com o mesmo resultado |
 | AC-11 | `python scripts/auditoria_sdd.py .` (e `--formato json`) | Score e código de saída da auditoria na branch da migração, antes da remoção do backlog | 100% (`CONFORME`), código de saída 0, na verificação de 2026-10-24 18:45 (depois da remoção do backlog) |
 | AC-12 | `dotnet build TickestPristine.slnx --no-incremental` e `dotnet test TickestPristine.slnx --no-build`; `python -m unittest discover -s .claude/hooks -p "test_*.py"` | Build e todos os testes da solução, mais os testes do portão | Build com 0 avisos e 0 erros; 50 + 462 + 270 testes aprovados; 39 testes do portão aprovados, na verificação de 2026-10-24 18:45 |
-| AC-13 | CI do PR (job `build`) | — | Pendente: o PR ainda não existe |
+| AC-13 | CI do PR #22 (job `build`, run `40136430653`) | O workflow `build.yml` rodou no PR para a `main`, com os testes do portão, a auditoria, o build e os testes da solução | Verde em 2026-10-24 (4 min 54 s) |
 | AC-14 | Leitura do `SYSTEM_SPECIFICATION.md` 6.9, 7.5 e E-39 (verificação descrita) | 6.9 descreve o fluxo spec-first (descoberta, `[SUPOSIÇÃO]`, uma tarefa por vez, DEC-12 e DEC-13, entrega pelo merge, `/spec-status`, estados novos, portão com a DEC-11) e traz a nota única de que `BL-n` era o identificador anterior, com o antigo backlog como histórico; 7.5 diz que a ordem fica com o responsável, fora do repositório; E-39 inclui o `/spec-status` | Conferido de novo na verificação de 2026-10-24 18:45 |
 
 ## 9. Evidências de verificação
@@ -143,8 +143,8 @@ Ordem por dependência; cada tarefa termina com diff, ok do responsável e commi
 - **Testes:** `dotnet test TickestPristine.slnx --no-build` em 2026-10-24 18:45: 782 aprovados, 0 com falha (ArchitectureTests 50/50, Application.UnitTests 462/462, IntegrationTests 270/270); testes do portão (`python -m unittest discover`, verbose): 39 aprovados, 0 com falha. Auditoria `python scripts/auditoria_sdd.py .`: 100% (`CONFORME`), código de saída 0.
 - **Revisão:** revisão de coerência entre os 15 arquivos alterados (a `ca-review` trata de convenções .NET, e esta spec não muda `src/` nem `tests/`): nenhum achado bloqueante; nenhuma regra ativa usa `Cancelada` nem manda revisões para `Rascunho`; o modelo lista os estados novos. Observação não bloqueante corrigida: o comentário do `status:` desta spec trazia os estados antigos.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 6.9 (fluxo, skills, estados, specs existentes, nota sobre o `BL-n`, portão com a DEC-11), 7.5 e E-39, pela T-8 (commit `4c93182`).
-- **CI:** pendente: roda no PR desta spec (AC-13).
-- **Entrega:**
+- **CI:** PR #22, job `build` verde (run `40136430653`, 4 min 54 s), em 2026-10-24.
+- **Entrega:** PR #22 (https://github.com/rafaelps15/tickest-pristine/pull/22); a spec fica `Entregue` quando o responsável mergear o PR na `main`.
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -159,3 +159,4 @@ Ordem por dependência; cada tarefa termina com diff, ok do responsável e commi
 | 2026-10-24 | Em implementação | Durante a T-6, DEC-12 nova, aprovada explicitamente por Rafael Santos no chat, com motivo e data: todo commit, dentro ou fora das skills, só depois de mostrar o diff e receber o ok do responsável. O AC-8 passa a conferir essa frase na política de autonomia do `CLAUDE.md`, por pedido do responsável na mesma mensagem; nenhum outro REQ, AC ou DEC mudou. |
 | 2026-10-24 | Em implementação | DEC-13 nova, aprovada explicitamente por Rafael Santos no chat, com motivo e data (mudança de escopo: ajuste aprovado é registrado e segue; REQ novo, REQ removido ou mudança grande, pelos critérios a a e, volta para `Em descoberta`). A T-4 é reaberta para aplicá-la na `spec-implement`, no `spec-status.md` e na revisão da `spec-new`, num commit `[SPEC-007 T004]`; o AC-5 passa a conferir a regra, a pedido do responsável. Nenhum outro REQ, AC ou DEC mudou. |
 | 2026-10-24 | Em implementação | Verificação pela `spec-verify` (`/spec-verify 007`, Rafael Santos no chat) em 2026-10-24 18:45: build com 0 avisos e 0 erros, 782 testes e 39 testes do portão aprovados, auditoria com 100% e código de saída 0, `/spec-status` executado, AC-1 a AC-12 e AC-14 conferidos nesta execução, revisão sem achado bloqueante. Falta o AC-13 (CI verde no PR), que só pode ser comprovado depois de o PR existir: a spec continua `Em implementação` até essa evidência. |
+| 2026-10-24 | Verificada | Verificação concluída pela `spec-verify`: CI do PR #22 verde (AC-13), somado à execução de 2026-10-24 18:45 (AC-1 a AC-12 e AC-14). Todos os ACs cobertos, nenhum achado bloqueante. O campo `backlog:` do frontmatter (do modelo anterior à T-2) foi trocado por `pr:`, preenchido com o PR #22, e a linha "Entrega" também, neste mesmo PR. |
