@@ -5,9 +5,6 @@ namespace TickestPristine.IntegrationTests.Departments;
 
 public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
-    private const string AdminEmail = "admin@tickestpristine.dev";
-    private const string AdminPassword = "ChangeMe123!";
-
     private async Task AuthenticateAsAdminAsync()
     {
         AccessTokens tokens = await LoginAsync(AdminEmail, AdminPassword);
@@ -45,11 +42,18 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
         // Arrange
         await AuthenticateAsAdminAsync();
 
+        string name = $"Department-{Guid.NewGuid():N}";
+
         // Act
-        Guid departmentId = await CreateDepartmentAsync();
+        Guid departmentId = await CreateDepartmentAsync(name);
 
         // Assert
         departmentId.ShouldNotBe(Guid.Empty);
+
+        DepartmentDto? department = await HttpClient.GetFromJsonAsync<DepartmentDto>($"departments/{departmentId}");
+        department!.Name.ShouldBe(name);
+        department.Description.ShouldBe("A department created by tests");
+        department.IsActive.ShouldBeTrue();
     }
 
     [Fact]
@@ -201,9 +205,145 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
         deleteResponse.StatusCode.ShouldBe(HttpStatusCode.Conflict);
     }
 
+    [Fact]
+    public async Task Update_Should_ReturnNotFound_WhenDepartmentDoesNotExist()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"departments/{Guid.NewGuid()}", new
+        {
+            name = "Customer Support",
+            description = "Updated description"
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Deactivate_Should_ReturnConflict_WhenDepartmentIsAlreadyDeactivated()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid departmentId = await CreateDepartmentAsync();
+        (await HttpClient.DeleteAsync($"departments/{departmentId}")).EnsureSuccessStatusCode();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"departments/{departmentId}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task Create_Should_ReturnBadRequest_WhenNameIsEmpty()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("departments", new
+        {
+            name = string.Empty,
+            description = "A department created by tests"
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        // A mensagem usa o nome do campo em português, não o da propriedade.
+        ValidationProblemDto? problem = await response.Content.ReadFromJsonAsync<ValidationProblemDto>();
+        problem!.Errors.ShouldContain(e => e.Description.Contains("Nome", StringComparison.Ordinal));
+        problem.Errors.ShouldNotContain(e => e.Description.Contains("Name", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Create_Should_ReturnNotFound_WhenResponsibleUserDoesNotExist()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("departments", new
+        {
+            name = $"Department-{Guid.NewGuid():N}",
+            description = "A department created by tests",
+            responsibleUserId = Guid.NewGuid()
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.NotFound");
+    }
+
+    [Fact]
+    public async Task Update_Should_ReturnConflict_WhenAnotherActiveDepartmentHasTheName()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string takenName = $"Department-{Guid.NewGuid():N}";
+        await CreateDepartmentAsync(takenName);
+        Guid departmentId = await CreateDepartmentAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"departments/{departmentId}", new
+        {
+            name = takenName,
+            description = "Updated description"
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Departments.NameNotUnique");
+    }
+
+    [Fact]
+    public async Task Update_Should_ReturnNotFound_WhenResponsibleUserDoesNotExist()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid departmentId = await CreateDepartmentAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"departments/{departmentId}", new
+        {
+            name = $"Department-{Guid.NewGuid():N}",
+            description = "Updated description",
+            responsibleUserId = Guid.NewGuid()
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.NotFound");
+    }
+
+    [Fact]
+    public async Task Deactivate_Should_ReturnNotFound_WhenDepartmentDoesNotExist()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"departments/{Guid.NewGuid()}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
     private sealed record DepartmentDto(Guid Id, string Name, string Description, bool IsActive, Guid? ResponsibleUserId);
 
     private sealed record DepartmentSummaryDto(Guid Id, string Name, string Description);
 
     private sealed record SectorSummaryDto(Guid Id, string Name);
+
+    private sealed record ProblemDto(int Status, string Title, string Detail);
+
+    private sealed record ValidationProblemDto(int Status, string Title, List<ValidationErrorDto> Errors);
+
+    private sealed record ValidationErrorDto(string Code, string Description);
 }

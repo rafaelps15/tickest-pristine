@@ -1,18 +1,18 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Authorization;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Application.Users.UpdateProfile;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
-using TickestPristine.SharedKernel;
+using TickestPristine.Application.Users;
 
 namespace TickestPristine.Application.UnitTests.Users;
 
 public sealed class UpdateUserProfileCommandHandlerTests : BaseHandlerTest
 {
     [Fact]
-    public async Task Handle_Should_ReturnUnauthorized_WhenCallerIsNotSelfAndLacksManagePermission()
+    public async Task Handle_Should_ReturnUnauthorized_WhenCallerIsNotSelfAndLacksUpdatePermission()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -22,7 +22,7 @@ public sealed class UpdateUserProfileCommandHandlerTests : BaseHandlerTest
             Email = "someone@example.com",
             FirstName = "Some",
             LastName = "One",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(user);
         await context.SaveChangesAsync();
@@ -78,7 +78,7 @@ public sealed class UpdateUserProfileCommandHandlerTests : BaseHandlerTest
             Email = "someone@example.com",
             FirstName = "Some",
             LastName = "One",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(user);
         await context.SaveChangesAsync();
@@ -109,7 +109,7 @@ public sealed class UpdateUserProfileCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_UpdateProfile_WhenCallerHasManagePermission()
+    public async Task Handle_Should_UpdateProfile_WhenCallerHasUpdatePermission()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -119,7 +119,7 @@ public sealed class UpdateUserProfileCommandHandlerTests : BaseHandlerTest
             Email = "someone@example.com",
             FirstName = "Some",
             LastName = "One",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(user);
         await context.SaveChangesAsync();
@@ -156,7 +156,7 @@ public sealed class UpdateUserProfileCommandHandlerTests : BaseHandlerTest
             Email = "someone@example.com",
             FirstName = "Some",
             LastName = "One",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(user);
         await context.SaveChangesAsync();

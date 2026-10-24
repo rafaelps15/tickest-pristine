@@ -35,12 +35,12 @@ internal sealed class GetUsersQueryHandler(IApplicationDbContext context)
                 IsActive = u.IsActive,
                 CreatedAtUtc = u.CreatedAtUtc,
                 DeactivatedAtUtc = u.DeactivatedAtUtc,
-                Roles = context.Roles
-                    .Where(r => context.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleId == r.Id))
-                    .Select(r => new RoleSummaryResponse { Id = r.Id, Name = r.Name })
+                Roles = context.UserRoles
+                    .Where(ur => ur.UserId == u.Id)
+                    .Select(ur => new RoleSummaryResponse { Name = ur.RoleName })
                     .ToList()
             })
-            .ToPagedResponseAsync(query.Page, query.PageSize, cancellationToken);
+            .ToPagedListAsync(query.Paging, cancellationToken);
 
         return users;
     }

@@ -1,10 +1,17 @@
 ﻿using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Infrastructure.DomainEvents;
 
-internal sealed class DomainEventsDispatcher(IServiceProvider serviceProvider) : IDomainEventsDispatcher
+/// <summary>
+/// Publica os eventos depois do SaveChanges, fora da transação: a mudança já foi gravada. Por isso a falha de um
+/// handler é registrada e não interrompe os demais nem a resposta da requisição, que já foi bem-sucedida.
+/// </summary>
+internal sealed class DomainEventsDispatcher(
+    IServiceProvider serviceProvider,
+    ILogger<DomainEventsDispatcher> logger) : IDomainEventsDispatcher
 {
     private static readonly ConcurrentDictionary<Type, Type> HandlerTypeDictionary = new();
     private static readonly ConcurrentDictionary<Type, Type> WrapperTypeDictionary = new();
@@ -33,7 +40,20 @@ internal sealed class DomainEventsDispatcher(IServiceProvider serviceProvider) :
 
                 var handlerWrapper = HandlerWrapper.Create(handler, domainEventType);
 
-                await handlerWrapper.Handle(domainEvent, cancellationToken);
+#pragma warning disable CA1031 // A mudança já foi salva: a falha de um handler é registrada sem derrubar a requisição.
+                try
+                {
+                    await handlerWrapper.Handle(domainEvent, cancellationToken);
+                }
+                catch (Exception exception)
+                {
+                    logger.LogError(
+                        exception,
+                        "O handler {Handler} do evento de domínio {DomainEvent} falhou",
+                        handler.GetType().Name,
+                        domainEventType.Name);
+                }
+#pragma warning restore CA1031
             }
         }
     }

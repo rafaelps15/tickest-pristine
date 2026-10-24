@@ -3,8 +3,9 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Authorization;
+using TickestPristine.Application.TicketHistories;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Tickets;
-using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -13,7 +14,8 @@ namespace TickestPristine.Application.Tickets.Reopen;
 internal sealed class ReopenTicketCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IPermissionProvider permissionProvider)
+    IPermissionProvider permissionProvider,
+    IDateTimeProvider dateTimeProvider)
     : ICommandHandler<ReopenTicketCommand>
 {
     public async Task<Result> Handle(ReopenTicketCommand command, CancellationToken cancellationToken)
@@ -23,6 +25,18 @@ internal sealed class ReopenTicketCommandHandler(
         if (ticket is null)
         {
             return Result.Failure(TicketErrors.NotFound(command.TicketId));
+        }
+
+        Result access = await TicketAccessGuard.EnsureOwnerOrManagerAsync(
+            permissionProvider,
+            userContext.UserId,
+            ticket.CreatedByUserId,
+            PermissionCodes.Tickets.ReopenOwn,
+            cancellationToken);
+
+        if (access.IsFailure)
+        {
+            return access;
         }
 
         if (TicketStatusTransitions.IsActive(ticket.Status))
@@ -35,19 +49,19 @@ internal sealed class ReopenTicketCommandHandler(
             return Result.Failure(TicketErrors.InvalidStatusTransition(ticket.Status, TicketStatus.Open));
         }
 
-        bool isOwner = ticket.CreatedByUserId == userContext.UserId;
-        string requiredPermission = isOwner ? PermissionCodes.Tickets.ReopenOwn : PermissionCodes.Tickets.Manage;
-
-        bool hasPermission = await permissionProvider.HasPermissionAsync(userContext.UserId, requiredPermission, cancellationToken);
-
-        if (!hasPermission)
-        {
-            return Result.Failure(UserErrors.Unauthorized());
-        }
+        TicketStatus previousStatus = ticket.Status;
 
         ticket.Status = TicketStatus.Open;
 
         ticket.Raise(new TicketReopenedDomainEvent(ticket.Id, userContext.UserId));
+
+        context.TicketHistories.Add(TicketHistoryEntries.Create(
+            ticket.Id,
+            userContext.UserId,
+            TicketHistoryAction.Reopened,
+            dateTimeProvider.UtcNow,
+            oldValue: previousStatus.ToString(),
+            newValue: TicketStatus.Open.ToString()));
 
         await context.SaveChangesAsync(cancellationToken);
 

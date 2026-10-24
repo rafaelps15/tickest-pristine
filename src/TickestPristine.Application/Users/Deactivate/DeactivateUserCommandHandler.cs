@@ -3,7 +3,6 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Authorization;
-using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -36,21 +35,26 @@ internal sealed class DeactivateUserCommandHandler(
             return Result.Failure(UserErrors.AlreadyDeactivated);
         }
 
-        Role? administratorRole = await context.Roles.SingleOrDefaultAsync(r => r.IsAdministrator, cancellationToken);
+        Result privilegeCheck = await PrivilegeEscalationGuard.EnsureCallerCanManageUserAsync(
+            context,
+            permissionProvider,
+            userContext.UserId,
+            user.Id,
+            cancellationToken);
 
-        if (administratorRole is not null &&
-            await context.UserRoles.AnyAsync(ur => ur.UserId == user.Id && ur.RoleId == administratorRole.Id, cancellationToken))
+        if (privilegeCheck.IsFailure)
         {
-            Result administratorCheck = await AdministratorGuard.EnsureAnotherActiveAdministratorAsync(
-                context,
-                administratorRole,
-                user.Id,
-                cancellationToken);
+            return privilegeCheck;
+        }
 
-            if (administratorCheck.IsFailure)
-            {
-                return administratorCheck;
-            }
+        Result administratorCheck = await AdministratorGuard.EnsureNotLastAdministratorAsync(
+            context,
+            user.Id,
+            cancellationToken);
+
+        if (administratorCheck.IsFailure)
+        {
+            return administratorCheck;
         }
 
         user.IsActive = false;
@@ -58,10 +62,15 @@ internal sealed class DeactivateUserCommandHandler(
 
         user.Raise(new UserDeactivatedDomainEvent(user.Id));
 
+        // Encerra as sessões abertas: sem isso, uma reativação faria os refresh tokens anteriores voltarem a valer.
+        await UserSessions.RevokeAllAsync(context, user.Id, cancellationToken);
+
         await context.SaveChangesAsync(cancellationToken);
 
-        // Sem as permissões em cache, o access token que o usuário ainda tem deixa de valer na próxima requisição.
-        await permissionProvider.InvalidateAsync(user.Id, cancellationToken);
+        // Sem as permissões e a situação do usuário em cache, o access token que ele ainda tem deixa de valer na próxima
+        // requisição (só users/me e logout continuam aceitando o usuário desativado). Depois do commit, a invalidação não
+        // pode ser cancelada junto com a requisição.
+        await permissionProvider.InvalidateAsync(user.Id, CancellationToken.None);
 
         return Result.Success();
     }

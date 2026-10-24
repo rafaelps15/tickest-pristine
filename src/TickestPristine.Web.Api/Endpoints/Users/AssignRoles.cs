@@ -1,6 +1,6 @@
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Users.AssignRoles;
+using TickestPristine.Application.Roles;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
 using TickestPristine.Web.Api.Infrastructure;
@@ -9,10 +9,7 @@ namespace TickestPristine.Web.Api.Endpoints.Users;
 
 internal sealed class AssignRoles : IEndpoint
 {
-    public sealed class Request
-    {
-        public List<Guid> RoleIds { get; set; } = [];
-    }
+    public sealed record Request(List<string> RoleNames);
 
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
@@ -22,17 +19,13 @@ internal sealed class AssignRoles : IEndpoint
             ICommandHandler<AssignUserRolesCommand> handler,
             CancellationToken cancellationToken) =>
         {
-            var command = new AssignUserRolesCommand
-            {
-                UserId = userId,
-                RoleIds = request.RoleIds
-            };
+            var command = new AssignUserRolesCommand(userId, request.RoleNames);
 
             Result result = await handler.Handle(command, cancellationToken);
 
             return result.Match(Results.NoContent, CustomResults.Problem);
         })
         .WithTags(Tags.Users)
-        .HasPermission(PermissionCodes.Users.AssignRoles);
+        .HasPermission(Permissions.UsersAssignRoles);
     }
 }

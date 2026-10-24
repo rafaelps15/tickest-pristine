@@ -16,4 +16,10 @@ public sealed class SeedingOptions
     /// Cria chamados fictícios nos setores existentes, num banco sem chamados. Só para desenvolvimento.
     /// </summary>
     public bool SampleData { get; init; }
+
+    /// <summary>
+    /// Senha dos usuários fictícios que o <see cref="SampleData"/> cria (um grupo por role, menos Administrador). Fica
+    /// nos user-secrets, como as outras senhas; é obrigatória quando o <see cref="SampleData"/> está ligado.
+    /// </summary>
+    public string? SampleUserPassword { get; init; }
 }

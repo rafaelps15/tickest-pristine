@@ -15,6 +15,10 @@ internal sealed class TicketMessageConfiguration : IEntityTypeConfiguration<Tick
 
         builder.HasQueryFilter(m => m.DeletedAtUtc == null);
 
+        // Paginação por cursor composto (data + id), da mais nova para a mais antiga, dentro de cada chamado.
+        builder.HasIndex(m => new { m.TicketId, m.CreatedAtUtc, m.Id })
+            .IsDescending(false, true, true);
+
         builder.HasOne<Ticket>()
             .WithMany()
             .HasForeignKey(m => m.TicketId)

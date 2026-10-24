@@ -3,8 +3,9 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Authorization;
+using TickestPristine.Application.TicketHistories;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Tickets;
-using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -26,24 +27,34 @@ internal sealed class DeleteTicketCommandHandler(
             return Result.Failure(TicketErrors.NotFound(command.TicketId));
         }
 
+        Result access = await TicketAccessGuard.EnsureOwnerOrManagerAsync(
+            permissionProvider,
+            userContext.UserId,
+            ticket.CreatedByUserId,
+            PermissionCodes.Tickets.DeleteOwn,
+            cancellationToken);
+
+        if (access.IsFailure)
+        {
+            return access;
+        }
+
         if (!TicketStatusTransitions.IsActive(ticket.Status))
         {
             return Result.Failure(TicketErrors.NotActive(ticket.Id));
         }
 
-        bool isOwner = ticket.CreatedByUserId == userContext.UserId;
-        string requiredPermission = isOwner ? PermissionCodes.Tickets.DeleteOwn : PermissionCodes.Tickets.Manage;
+        DateTime nowUtc = dateTimeProvider.UtcNow;
 
-        bool hasPermission = await permissionProvider.HasPermissionAsync(userContext.UserId, requiredPermission, cancellationToken);
-
-        if (!hasPermission)
-        {
-            return Result.Failure(UserErrors.Unauthorized());
-        }
-
-        ticket.DeletedAtUtc = dateTimeProvider.UtcNow;
+        ticket.DeletedAtUtc = nowUtc;
 
         ticket.Raise(new TicketDeletedDomainEvent(ticket.Id));
+
+        context.TicketHistories.Add(TicketHistoryEntries.Create(
+            ticket.Id,
+            userContext.UserId,
+            TicketHistoryAction.Deleted,
+            nowUtc));
 
         await context.SaveChangesAsync(cancellationToken);
 

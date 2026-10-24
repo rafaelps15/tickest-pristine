@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 env:
   DOTNET_VERSION: "10.x"
@@ -15,11 +18,25 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Histórico completo: a auditoria de conformidade avalia os últimos commits (RAS-02/RAS-03).
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Test SDD gate hook
+        run: python -m unittest discover -s .claude/hooks -p "test_*.py"
+
+      - name: SDD compliance audit
+        run: python auditoria_sdd.py . --min-score 70
 
       - name: Restore
         run: dotnet restore TickestPristine.slnx
@@ -31,4 +48,5 @@ jobs:
         run: dotnet test TickestPristine.slnx --configuration Release --no-restore --no-build
 
       - name: Publish
+        if: github.event_name != 'pull_request'
         run: dotnet publish TickestPristine.slnx --configuration Release --no-restore --no-build

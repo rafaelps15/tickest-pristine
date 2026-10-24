@@ -4,7 +4,6 @@ using TickestPristine.Application.Users;
 using TickestPristine.Application.Users.Logout;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.Users;
 

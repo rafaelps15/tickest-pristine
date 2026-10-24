@@ -19,6 +19,6 @@ internal sealed class GetCurrent : IEndpoint
             return result.Match(Results.Ok, CustomResults.Problem);
         })
         .WithTags(Tags.Users)
-        .RequireAuthorization();
+        .RequireAuthenticatedUser();
     }
 }

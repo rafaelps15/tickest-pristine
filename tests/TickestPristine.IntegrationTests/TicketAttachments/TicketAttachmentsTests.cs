@@ -7,9 +7,6 @@ namespace TickestPristine.IntegrationTests.TicketAttachments;
 
 public sealed class TicketAttachmentsTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
-    private const string AdminEmail = "admin@tickestpristine.dev";
-    private const string AdminPassword = "ChangeMe123!";
-
     private async Task AuthenticateAsAdminAsync()
     {
         AccessTokens tokens = await LoginAsync(AdminEmail, AdminPassword);
@@ -109,7 +106,7 @@ public sealed class TicketAttachmentsTests(IntegrationTestWebAppFactory factory)
     }
 
     [Fact]
-    public async Task Upload_Should_ReturnProblem_WhenContentTypeIsNotAllowed()
+    public async Task Upload_Should_ReturnBadRequest_WhenContentTypeIsNotAllowed()
     {
         // Arrange
         Guid sectorId = await CreateSectorAsAdminAsync();
@@ -142,7 +139,7 @@ public sealed class TicketAttachmentsTests(IntegrationTestWebAppFactory factory)
 
         HttpResponseMessage getResponse = await HttpClient.GetAsync($"tickets/{ticketId}/attachments");
         getResponse.EnsureSuccessStatusCode();
-        List<TicketAttachmentDto>? attachments = await getResponse.Content.ReadFromJsonAsync<List<TicketAttachmentDto>>();
+        List<TicketAttachmentDto>? attachments = (await getResponse.Content.ReadFromJsonAsync<CursorPageDto<TicketAttachmentDto>>())?.Items;
         attachments!.ShouldContain(a => a.Id == attachmentId && a.FileName == "report.pdf");
     }
 
@@ -163,10 +160,28 @@ public sealed class TicketAttachmentsTests(IntegrationTestWebAppFactory factory)
         response.EnsureSuccessStatusCode();
         string downloaded = await response.Content.ReadAsStringAsync();
         downloaded.ShouldBe("hello from the attachment");
+        response.Headers.GetValues("X-Content-Type-Options").ShouldBe(["nosniff"]);
     }
 
     [Fact]
-    public async Task Download_Should_ReturnNotFound_WhenCallerIsNotParticipantAndLacksManagePermission()
+    public async Task Upload_Should_ReturnBadRequest_WhenExtensionDoesNotMatchContentType()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        // Act: executável declarado como PDF
+        using MultipartFormDataContent content = BuildFileContent(fileName: "nota.pdf.exe");
+        HttpResponseMessage response = await HttpClient.PostAsync($"tickets/{ticketId}/attachments", content);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Download_Should_ReturnForbidden_WhenCallerIsNotParticipantAndLacksManagePermission()
     {
         // Arrange
         Guid sectorId = await CreateSectorAsAdminAsync();
@@ -182,7 +197,7 @@ public sealed class TicketAttachmentsTests(IntegrationTestWebAppFactory factory)
         HttpResponseMessage response = await HttpClient.GetAsync($"ticket-attachments/{attachmentId}/download");
 
         // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 
     [Fact]
@@ -203,9 +218,133 @@ public sealed class TicketAttachmentsTests(IntegrationTestWebAppFactory factory)
 
         HttpResponseMessage getResponse = await HttpClient.GetAsync($"tickets/{ticketId}/attachments");
         getResponse.EnsureSuccessStatusCode();
-        List<TicketAttachmentDto>? attachments = await getResponse.Content.ReadFromJsonAsync<List<TicketAttachmentDto>>();
+        List<TicketAttachmentDto>? attachments = (await getResponse.Content.ReadFromJsonAsync<CursorPageDto<TicketAttachmentDto>>())?.Items;
         attachments!.ShouldNotContain(a => a.Id == attachmentId);
     }
+
+    [Fact]
+    public async Task Delete_Should_ReturnNotFound_WhenAttachmentDoesNotExist()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"ticket-attachments/{Guid.NewGuid()}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnForbidden_WhenCallerIsNotParticipantAndLacksManagePermission()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens ownerTokens) = await RegisterAndLoginAsync();
+        Authenticate(ownerTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        (_, AccessTokens outsiderTokens) = await RegisterAndLoginAsync();
+        Authenticate(outsiderTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/{ticketId}/attachments");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Upload_Should_ReturnForbidden_WhenCallerIsNotParticipantAndLacksManagePermission()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens ownerTokens) = await RegisterAndLoginAsync();
+        Authenticate(ownerTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        (_, AccessTokens outsiderTokens) = await RegisterAndLoginAsync();
+        Authenticate(outsiderTokens.AccessToken);
+
+        // Act
+        using MultipartFormDataContent content = BuildFileContent();
+        HttpResponseMessage response = await HttpClient.PostAsync($"tickets/{ticketId}/attachments", content);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Upload_Should_RejectBodyBeforeValidation_WhenBodyExceedsLimit()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        // Act: 12 MB passam do limite de 11 MB do corpo da requisição
+        using MultipartFormDataContent content = BuildFileContent(fileText: new string('a', 12 * 1024 * 1024));
+        HttpResponseMessage response = await HttpClient.PostAsync($"tickets/{ticketId}/attachments", content);
+
+        // Assert
+        // O TestServer não aplica o limite do Kestrel (que responderia 413); aqui quem recusa é o limite do multipart, ao
+        // ler o formulário. Nos dois casos o corpo para antes do validator, que responderia com o erro de validação.
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Requisição inválida");
+    }
+
+    [Fact]
+    public async Task Download_Should_ReturnNotFound_WhenAttachmentDoesNotExist()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"ticket-attachments/{Guid.NewGuid()}/download");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnNotFound_WhenTicketDoesNotExist()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/{Guid.NewGuid()}/attachments");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Delete_Should_ReturnForbidden_WhenCallerIsNotUploaderAndLacksManagePermission()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens ownerTokens) = await RegisterAndLoginAsync();
+        Authenticate(ownerTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        Guid attachmentId = await UploadAttachmentAsync(ticketId);
+
+        (_, AccessTokens outsiderTokens) = await RegisterAndLoginAsync();
+        Authenticate(outsiderTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"ticket-attachments/{attachmentId}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    private sealed record ProblemDto(int Status, string Title, string Detail);
 
     private sealed record TicketAttachmentDto(
         Guid Id,

@@ -3,8 +3,9 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Authorization;
+using TickestPristine.Application.TicketHistories;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Tickets;
-using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -13,7 +14,8 @@ namespace TickestPristine.Application.Tickets.Update;
 internal sealed class UpdateTicketCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IPermissionProvider permissionProvider)
+    IPermissionProvider permissionProvider,
+    IDateTimeProvider dateTimeProvider)
     : ICommandHandler<UpdateTicketCommand>
 {
     public async Task<Result> Handle(UpdateTicketCommand command, CancellationToken cancellationToken)
@@ -25,19 +27,21 @@ internal sealed class UpdateTicketCommandHandler(
             return Result.Failure(TicketErrors.NotFound(command.TicketId));
         }
 
+        Result access = await TicketAccessGuard.EnsureOwnerOrManagerAsync(
+            permissionProvider,
+            userContext.UserId,
+            ticket.CreatedByUserId,
+            PermissionCodes.Tickets.UpdateOwn,
+            cancellationToken);
+
+        if (access.IsFailure)
+        {
+            return access;
+        }
+
         if (!TicketStatusTransitions.IsActive(ticket.Status))
         {
             return Result.Failure(TicketErrors.NotActive(ticket.Id));
-        }
-
-        bool isOwner = ticket.CreatedByUserId == userContext.UserId;
-        string requiredPermission = isOwner ? PermissionCodes.Tickets.UpdateOwn : PermissionCodes.Tickets.Manage;
-
-        bool hasPermission = await permissionProvider.HasPermissionAsync(userContext.UserId, requiredPermission, cancellationToken);
-
-        if (!hasPermission)
-        {
-            return Result.Failure(UserErrors.Unauthorized());
         }
 
         if (command.Status != ticket.Status && !TicketStatusTransitions.CanTransition(ticket.Status, command.Status))
@@ -46,15 +50,40 @@ internal sealed class UpdateTicketCommandHandler(
         }
 
         TicketStatus previousStatus = ticket.Status;
+        string previousDescription = ticket.Description;
+        DateTime nowUtc = dateTimeProvider.UtcNow;
 
         ticket.Description = command.Description;
         ticket.Status = command.Status;
+
+        // O SLA é medido até a primeira resolução; reaberturas não mudam o resultado.
+        if (command.Status == TicketStatus.Resolved && ticket.ResolvedAtUtc is null)
+        {
+            ticket.ResolvedAtUtc = nowUtc;
+        }
 
         ticket.Raise(new TicketUpdatedDomainEvent(ticket.Id));
 
         if (previousStatus != command.Status)
         {
             ticket.Raise(new TicketStatusChangedDomainEvent(ticket.Id, previousStatus, command.Status, userContext.UserId));
+
+            context.TicketHistories.Add(TicketHistoryEntries.StatusChanged(
+                ticket.Id,
+                userContext.UserId,
+                previousStatus,
+                command.Status,
+                nowUtc));
+        }
+
+        if (!string.Equals(previousDescription, command.Description, StringComparison.Ordinal))
+        {
+            context.TicketHistories.Add(TicketHistoryEntries.DescriptionChanged(
+                ticket.Id,
+                userContext.UserId,
+                previousDescription,
+                command.Description,
+                nowUtc));
         }
 
         await context.SaveChangesAsync(cancellationToken);

@@ -1,7 +1,6 @@
-using TickestPristine.Application.Authorization;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Application.Permissions.GetAll;
 using TickestPristine.Application.UnitTests.Abstractions;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.Permissions;
 
@@ -18,7 +17,7 @@ public sealed class GetPermissionsQueryHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
-        result.Value.Select(p => p.Code).ShouldBe(PermissionCodes.All);
+        result.Value.Select(p => p.Code).ShouldBe(PermissionCatalog.All.Select(p => p.Code));
 
         PermissionResponse assignRoles = result.Value.Single(p => p.Code == PermissionCodes.Users.AssignRoles);
         assignRoles.Name.ShouldBe("Alterar funções de colaboradores");

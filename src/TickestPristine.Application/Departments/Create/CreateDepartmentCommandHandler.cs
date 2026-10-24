@@ -1,7 +1,6 @@
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Domain.Departments;
-using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -19,14 +18,14 @@ internal sealed class CreateDepartmentCommandHandler(IApplicationDbContext conte
             return Result.Failure<Guid>(DepartmentErrors.NameNotUnique(command.Name));
         }
 
-        if (command.ResponsibleUserId is { } responsibleUserId)
-        {
-            bool responsibleUserExists = await context.Users.AnyAsync(u => u.Id == responsibleUserId, cancellationToken);
+        Result responsibleCheck = await DepartmentResponsibleUser.EnsureExistsAsync(
+            context,
+            command.ResponsibleUserId,
+            cancellationToken);
 
-            if (!responsibleUserExists)
-            {
-                return Result.Failure<Guid>(UserErrors.NotFound(responsibleUserId));
-            }
+        if (responsibleCheck.IsFailure)
+        {
+            return Result.Failure<Guid>(responsibleCheck.Error);
         }
 
         var department = new Department

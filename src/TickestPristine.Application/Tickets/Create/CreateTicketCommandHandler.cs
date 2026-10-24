@@ -3,6 +3,7 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Authorization;
+using TickestPristine.Application.TicketHistories;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
@@ -22,20 +23,21 @@ internal sealed class CreateTicketCommandHandler(
     {
         Guid openedByUserId = command.RequesterId ?? userContext.UserId;
 
-        if (openedByUserId != userContext.UserId)
-        {
-            bool canManageTickets = await permissionProvider.HasPermissionAsync(
-                userContext.UserId,
-                PermissionCodes.Tickets.Manage,
-                cancellationToken);
+        // Abrir em nome de outra pessoa exige gerenciar chamados.
+        Result access = await TicketAccessGuard.EnsureOwnerOrManagerAsync(
+            permissionProvider,
+            userContext.UserId,
+            openedByUserId,
+            ownPermission: null,
+            cancellationToken);
 
-            if (!canManageTickets)
-            {
-                return Result.Failure<Guid>(UserErrors.Unauthorized());
-            }
+        if (access.IsFailure)
+        {
+            return Result.Failure<Guid>(access.Error);
         }
 
-        // Solicitante e responsável informados são conferidos numa única consulta; o usuário logado já é válido.
+        // Solicitante e responsável informados são conferidos numa única consulta; o usuário logado já é válido. Usuário
+        // desativado conta como inexistente, como o setor inativo logo abaixo.
         Guid[] referencedUserIds = new[] { command.RequesterId, command.AssignedToUserId }
             .OfType<Guid>()
             .Where(id => id != userContext.UserId)
@@ -45,7 +47,7 @@ internal sealed class CreateTicketCommandHandler(
         if (referencedUserIds.Length > 0)
         {
             List<Guid> existingUserIds = await context.Users
-                .Where(u => referencedUserIds.Contains(u.Id))
+                .Where(u => referencedUserIds.Contains(u.Id) && u.IsActive)
                 .Select(u => u.Id)
                 .ToListAsync(cancellationToken);
 
@@ -64,6 +66,8 @@ internal sealed class CreateTicketCommandHandler(
             return Result.Failure<Guid>(SectorErrors.NotFound(command.SectorId));
         }
 
+        DateTime createdAtUtc = dateTimeProvider.UtcNow;
+
         var ticket = new Ticket
         {
             Id = Guid.NewGuid(),
@@ -74,12 +78,15 @@ internal sealed class CreateTicketCommandHandler(
             CreatedByUserId = openedByUserId,
             AssignedToUserId = command.AssignedToUserId,
             SectorId = command.SectorId,
-            CreatedAtUtc = dateTimeProvider.UtcNow
+            CreatedAtUtc = createdAtUtc,
+            DueAtUtc = TicketSla.DueAt(createdAtUtc, command.Priority),
+            SlaWarningAtUtc = TicketSla.WarningAt(createdAtUtc, command.Priority)
         };
 
-        ticket.Raise(new TicketCreatedDomainEvent(ticket.Id));
+        ticket.Raise(new TicketCreatedDomainEvent(ticket.Id, userContext.UserId));
 
         context.Tickets.Add(ticket);
+        context.TicketHistories.Add(TicketHistoryEntries.Created(ticket.Id, userContext.UserId, createdAtUtc));
 
         await context.SaveChangesAsync(cancellationToken);
 

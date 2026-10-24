@@ -2,7 +2,7 @@ using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Domain.Users;
 
-public sealed class User : Entity
+public sealed class User : Entity, IAuditable
 {
     public Guid Id { get; set; }
     public string Email { get; set; }

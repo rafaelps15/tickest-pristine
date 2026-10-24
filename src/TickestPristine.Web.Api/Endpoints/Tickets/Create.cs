@@ -1,5 +1,4 @@
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Tickets.Create;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.SharedKernel;
@@ -14,9 +13,9 @@ internal sealed class Create : IEndpoint
     {
         public string Title { get; set; }
         public string Description { get; set; }
-        public TicketPriority Priority { get; set; }
+        public int Priority { get; set; }
         public Guid? RequesterId { get; set; }
-        public Guid? ResponsibleId { get; set; }
+        public Guid? AssignedToUserId { get; set; }
         public Guid SectorId { get; set; }
     }
 
@@ -31,9 +30,9 @@ internal sealed class Create : IEndpoint
             {
                 Title = request.Title,
                 Description = request.Description,
-                Priority = request.Priority,
+                Priority = (TicketPriority)request.Priority,
                 RequesterId = request.RequesterId,
-                AssignedToUserId = request.ResponsibleId,
+                AssignedToUserId = request.AssignedToUserId,
                 SectorId = request.SectorId
             };
 
@@ -42,6 +41,6 @@ internal sealed class Create : IEndpoint
             return result.Match(Results.Ok, CustomResults.Problem);
         })
         .WithTags(Tags.Tickets)
-        .HasPermission(PermissionCodes.Tickets.Create);
+        .HasPermission(Permissions.TicketsCreate);
     }
 }

@@ -11,4 +11,5 @@ public static class Tags
     public const string TicketAttachments = "TicketAttachments";
     public const string TicketHistories = "TicketHistories";
     public const string Roles = "Roles";
+    public const string AuditLogs = "AuditLogs";
 }

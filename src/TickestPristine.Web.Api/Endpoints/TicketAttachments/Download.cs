@@ -12,9 +12,13 @@ internal sealed class Download : IEndpoint
     {
         app.MapGet("ticket-attachments/{attachmentId:guid}/download", async (
             Guid attachmentId,
+            HttpContext httpContext,
             IQueryHandler<GetTicketAttachmentContentQuery, TicketAttachmentResponse> handler,
             CancellationToken cancellationToken) =>
         {
+            // O tipo do arquivo veio do cliente no upload: o navegador não deve tentar adivinhar outro pelo conteúdo.
+            httpContext.Response.Headers.XContentTypeOptions = "nosniff";
+
             var query = new GetTicketAttachmentContentQuery(attachmentId);
 
             Result<TicketAttachmentResponse> result = await handler.Handle(query, cancellationToken);

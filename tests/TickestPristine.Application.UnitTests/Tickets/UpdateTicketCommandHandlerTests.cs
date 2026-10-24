@@ -1,12 +1,11 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Authorization;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Application.Tickets.Update;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -23,7 +22,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         userContext.UserId.Returns(OwnerId);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
 
-        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider);
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
         var command = new UpdateTicketCommand { TicketId = Guid.NewGuid(), Description = "Updated description", Status = TicketStatus.Open };
 
         // Act
@@ -47,8 +46,75 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider);
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
         var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.Open };
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.Unauthorized());
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnUnauthorized_WhenOwnerLacksUpdateOwnPermission()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(OwnerId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
+        var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.InProgress };
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.Unauthorized());
+        (await context.TicketHistories.AnyAsync()).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnNotActive_WhenTicketIsResolved()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Resolved);
+        UpdateTicketCommandHandler handler = CreateManagerHandler(context, DateTime.UtcNow);
+        var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.Closed };
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketErrors.NotActive(ticketId));
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnUnauthorized_WhenNonOwnerLacksManagePermissionAndTicketIsInactive()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Resolved);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        var outsiderId = Guid.NewGuid();
+        userContext.UserId.Returns(outsiderId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(outsiderId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
+        var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.Closed };
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -71,7 +137,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider);
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
         var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.Closed };
 
         // Act
@@ -96,7 +162,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider);
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
         var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.InProgress };
 
         // Act
@@ -110,6 +176,11 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         ticket.Status.ShouldBe(TicketStatus.InProgress);
         ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketUpdatedDomainEvent);
         ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketStatusChangedDomainEvent);
+        List<TicketHistoryAction> actions = await context.TicketHistories
+            .Where(h => h.TicketId == ticket.Id)
+            .Select(h => h.Action)
+            .ToListAsync();
+        actions.ShouldBe([TicketHistoryAction.StatusChanged, TicketHistoryAction.DescriptionChanged], ignoreOrder: true);
     }
 
     [Fact]
@@ -125,7 +196,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider);
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
         var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.Open };
 
         // Act
@@ -137,6 +208,176 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == ticketId);
         ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketUpdatedDomainEvent);
         ticket.DomainEvents.ShouldNotContain(domainEvent => domainEvent is TicketStatusChangedDomainEvent);
+    }
+
+    [Fact]
+    public async Task Handle_Should_RecordResolutionTime_WhenTicketIsResolvedForTheFirstTime()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.InProgress);
+        var resolvedAtUtc = new DateTime(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc);
+
+        UpdateTicketCommandHandler handler = CreateManagerHandler(context, resolvedAtUtc);
+        var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Fixed", Status = TicketStatus.Resolved };
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == ticketId);
+        ticket.ResolvedAtUtc.ShouldBe(resolvedAtUtc);
+    }
+
+    [Fact]
+    public async Task Handle_Should_KeepFirstResolutionTime_WhenReopenedTicketIsResolvedAgain()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.InProgress);
+        var firstResolutionUtc = new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        Ticket seeded = await context.Tickets.SingleAsync(t => t.Id == ticketId);
+        seeded.ResolvedAtUtc = firstResolutionUtc;
+        await context.SaveChangesAsync();
+
+        UpdateTicketCommandHandler handler = CreateManagerHandler(context, firstResolutionUtc.AddDays(4));
+        var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Fixed again", Status = TicketStatus.Resolved };
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == ticketId);
+        ticket.ResolvedAtUtc.ShouldBe(firstResolutionUtc);
+    }
+
+    [Fact]
+    public async Task Handle_Should_RecordDescriptionChanged_WhenOnlyDescriptionChanges()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open);
+        UpdateTicketCommandHandler handler = CreateOwnerHandler(context);
+        var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.Open };
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticketId);
+        history.Action.ShouldBe(TicketHistoryAction.DescriptionChanged);
+        history.OldValue.ShouldBe("Original description");
+        history.NewValue.ShouldBe("Updated description");
+        history.ChangedByUserId.ShouldBe(OwnerId);
+    }
+
+    [Fact]
+    public async Task Handle_Should_RecordStatusAndDescriptionChanges_WhenManagerChangesBoth()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open);
+        UpdateTicketCommandHandler handler = CreateManagerHandler(context, DateTime.UtcNow);
+        var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.InProgress };
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        List<TicketHistory> histories = await context.TicketHistories.Where(h => h.TicketId == ticketId).ToListAsync();
+        histories.Count.ShouldBe(2);
+
+        TicketHistory statusChanged = histories.Single(h => h.Action == TicketHistoryAction.StatusChanged);
+        statusChanged.OldValue.ShouldBe(nameof(TicketStatus.Open));
+        statusChanged.NewValue.ShouldBe(nameof(TicketStatus.InProgress));
+
+        TicketHistory descriptionChanged = histories.Single(h => h.Action == TicketHistoryAction.DescriptionChanged);
+        descriptionChanged.OldValue.ShouldBe("Original description");
+        descriptionChanged.NewValue.ShouldBe("Updated description");
+    }
+
+    [Fact]
+    public async Task Handle_Should_RecordOnlyStatusChanged_WhenDescriptionIsUnchanged()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open);
+        UpdateTicketCommandHandler handler = CreateManagerHandler(context, DateTime.UtcNow);
+        var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Original description", Status = TicketStatus.InProgress };
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        (await context.TicketHistories.SingleAsync(h => h.TicketId == ticketId)).Action.ShouldBe(TicketHistoryAction.StatusChanged);
+    }
+
+    [Fact]
+    public async Task Handle_Should_RecordNothing_WhenDescriptionAndStatusAreUnchanged()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open);
+        UpdateTicketCommandHandler handler = CreateOwnerHandler(context);
+        var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Original description", Status = TicketStatus.Open };
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        (await context.TicketHistories.AnyAsync(h => h.TicketId == ticketId)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_Should_RecordDescriptionChanged_WhenDescriptionDiffersOnlyInCase()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open);
+        UpdateTicketCommandHandler handler = CreateOwnerHandler(context);
+        var command = new UpdateTicketCommand { TicketId = ticketId, Description = "original description", Status = TicketStatus.Open };
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticketId);
+        history.Action.ShouldBe(TicketHistoryAction.DescriptionChanged);
+        history.NewValue.ShouldBe("original description");
+    }
+
+    private static UpdateTicketCommandHandler CreateOwnerHandler(TestDbContext context)
+    {
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(OwnerId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        return new UpdateTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
+    }
+
+    private static UpdateTicketCommandHandler CreateManagerHandler(TestDbContext context, DateTime nowUtc)
+    {
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(Guid.NewGuid());
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+            .Returns(true);
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(nowUtc);
+
+        return new UpdateTicketCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
     }
 
     private static async Task<Guid> SeedTicketAsync(TestDbContext context, Guid openedByUserId, TicketStatus status)

@@ -1,5 +1,7 @@
-using TickestPristine.Application.Authorization;
+using TickestPristine.Application.Permissions;
+using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Roles;
+using TickestPristine.Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -9,39 +11,52 @@ internal sealed class RolePermissionConfiguration : IEntityTypeConfiguration<Rol
 {
     public void Configure(EntityTypeBuilder<RolePermission> builder)
     {
-        builder.HasKey(rolePermission => new { rolePermission.RoleId, rolePermission.PermissionCode });
+        builder.HasKey(rolePermission => rolePermission.Id);
+
+        builder.HasIndex(rolePermission => new { rolePermission.RoleName, rolePermission.PermissionCode }).IsUnique();
 
         builder.Property(rolePermission => rolePermission.PermissionCode).HasMaxLength(100);
 
         builder.HasOne<Role>()
             .WithMany()
-            .HasForeignKey(rolePermission => rolePermission.RoleId);
+            .HasForeignKey(rolePermission => rolePermission.RoleName)
+            .HasPrincipalKey(role => role.Name);
 
-        // Permissões das roles padrão. Qualquer mudança aqui, inclusive no catálogo PermissionCodes
-        // (que o Administrador recebe inteiro), exige uma nova migration.
+        builder.HasOne<Permission>()
+            .WithMany()
+            .HasForeignKey(rolePermission => rolePermission.PermissionCode)
+            .HasPrincipalKey(permission => permission.Code);
+
+        // Permissões padrão de cada role. Depois da migration o administrador pode mudar as das outras roles pela API,
+        // por isso uma migration que acrescente um vínculo aqui precisa trocar o InsertData gerado por um INSERT com
+        // ON CONFLICT DO NOTHING (o vínculo pode já ter sido concedido à mão).
         RolePermission[] defaultRolePermissions =
             [
-                .. PermissionCodes.All.Select(code => Create(Role.Administrator, code)),
+                .. PermissionCatalog.All.Select(permission => Create(RoleNames.Administrator, permission)),
 
                 // Atendente
-                Create(Role.Agent, PermissionCodes.Tickets.Create),
-                Create(Role.Agent, PermissionCodes.Tickets.ViewOwn),
-                Create(Role.Agent, PermissionCodes.Tickets.UpdateOwn),
-                Create(Role.Agent, PermissionCodes.Tickets.DeleteOwn),
-                Create(Role.Agent, PermissionCodes.Tickets.ReopenOwn),
-                Create(Role.Agent, PermissionCodes.Tickets.Manage),
+                Create(RoleNames.Agent, PermissionCatalog.TicketsCreate),
+                Create(RoleNames.Agent, PermissionCatalog.TicketsViewOwn),
+                Create(RoleNames.Agent, PermissionCatalog.TicketsUpdateOwn),
+                Create(RoleNames.Agent, PermissionCatalog.TicketsDeleteOwn),
+                Create(RoleNames.Agent, PermissionCatalog.TicketsReopenOwn),
+                Create(RoleNames.Agent, PermissionCatalog.TicketsManage),
 
                 // Colaborador
-                Create(Role.Collaborator, PermissionCodes.Tickets.Create),
-                Create(Role.Collaborator, PermissionCodes.Tickets.ViewOwn),
-                Create(Role.Collaborator, PermissionCodes.Tickets.UpdateOwn),
-                Create(Role.Collaborator, PermissionCodes.Tickets.DeleteOwn),
-                Create(Role.Collaborator, PermissionCodes.Tickets.ReopenOwn)
+                Create(RoleNames.Collaborator, PermissionCatalog.TicketsCreate),
+                Create(RoleNames.Collaborator, PermissionCatalog.TicketsViewOwn),
+                Create(RoleNames.Collaborator, PermissionCatalog.TicketsUpdateOwn),
+                Create(RoleNames.Collaborator, PermissionCatalog.TicketsDeleteOwn),
+                Create(RoleNames.Collaborator, PermissionCatalog.TicketsReopenOwn)
             ];
 
         builder.HasData(defaultRolePermissions);
     }
 
-    private static RolePermission Create(Role role, string permissionCode) =>
-        new() { RoleId = role.Id, PermissionCode = permissionCode };
+    private static RolePermission Create(string roleName, PermissionCatalogEntry permission) => new()
+    {
+        Id = DeterministicGuid.Create($"role-permission:{roleName}:{permission.Code}"),
+        RoleName = roleName,
+        PermissionCode = permission.Code
+    };
 }

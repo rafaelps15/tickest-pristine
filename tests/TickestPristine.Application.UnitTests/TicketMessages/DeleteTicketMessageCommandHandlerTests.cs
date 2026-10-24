@@ -1,12 +1,11 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Authorization;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Application.TicketMessages.Delete;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.TicketMessages;
 
@@ -33,6 +32,30 @@ public sealed class DeleteTicketMessageCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(TicketMessageErrors.NotFound(command.MessageId));
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnNotFound_WhenTicketIsDeleted()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        // A mensagem continua ativa, mas o chamado dela foi excluído logicamente.
+        Guid messageId = await SeedMessageAsync(context, ticketDeleted: true);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(AuthorId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+
+        var handler = new DeleteTicketMessageCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        var command = new DeleteTicketMessageCommand(messageId);
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketMessageErrors.NotFound(messageId));
     }
 
     [Fact]
@@ -86,6 +109,7 @@ public sealed class DeleteTicketMessageCommandHandlerTests : BaseHandlerTest
         TicketMessage message = await context.TicketMessages.IgnoreQueryFilters().SingleAsync(m => m.Id == messageId);
         message.DeletedAtUtc.ShouldNotBeNull();
         message.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketMessageDeletedDomainEvent);
+        (await context.TicketHistories.SingleAsync(h => h.TicketId == message.TicketId)).Action.ShouldBe(TicketHistoryAction.MessageRemoved);
     }
 
     [Fact]
@@ -117,7 +141,7 @@ public sealed class DeleteTicketMessageCommandHandlerTests : BaseHandlerTest
         message.DeletedAtUtc.ShouldNotBeNull();
     }
 
-    private static async Task<Guid> SeedMessageAsync(TestDbContext context)
+    private static async Task<Guid> SeedMessageAsync(TestDbContext context, bool ticketDeleted = false)
     {
         var ticket = new Ticket
         {
@@ -129,7 +153,8 @@ public sealed class DeleteTicketMessageCommandHandlerTests : BaseHandlerTest
             CreatedByUserId = AuthorId,
             AssignedToUserId = null,
             SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = DateTime.UtcNow,
+            DeletedAtUtc = ticketDeleted ? DateTime.UtcNow : null
         };
         context.Tickets.Add(ticket);
 

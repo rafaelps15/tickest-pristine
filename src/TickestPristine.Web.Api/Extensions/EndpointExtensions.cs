@@ -1,6 +1,6 @@
 ﻿using System.Reflection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using TickestPristine.Application.Authorization;
+using TickestPristine.Infrastructure.Authorization;
 using TickestPristine.Web.Api.Endpoints;
 
 namespace TickestPristine.Web.Api.Extensions;
@@ -39,13 +39,15 @@ public static class EndpointExtensions
 
     public static RouteHandlerBuilder HasPermission(this RouteHandlerBuilder app, string permission)
     {
-        // Impede a API de iniciar com um código de permissão que não está no catálogo.
-        if (!PermissionCodes.All.Contains(permission))
-        {
-            throw new InvalidOperationException(
-                $"A permissão '{permission}' não existe no catálogo (PermissionCodes.Definitions).");
-        }
+        return app.RequireAuthorization(new HasPermissionAttribute(permission));
+    }
 
-        return app.RequireAuthorization(permission);
+    /// <summary>
+    /// Só exige o token válido, sem conferir se o usuário continua ativo; as demais rotas usam
+    /// <c>RequireAuthorization()</c>, que barra o usuário desativado.
+    /// </summary>
+    public static RouteHandlerBuilder RequireAuthenticatedUser(this RouteHandlerBuilder app)
+    {
+        return app.RequireAuthorization(AuthorizationPolicies.AuthenticatedUser);
     }
 }

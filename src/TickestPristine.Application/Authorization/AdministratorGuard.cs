@@ -1,4 +1,5 @@
 using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Roles;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -8,17 +9,40 @@ namespace TickestPristine.Application.Authorization;
 internal static class AdministratorGuard
 {
     /// <summary>
-    /// Confere se, sem o usuário informado, ainda resta outro administrador ativo. Se restar, incrementa a versão da
-    /// role de administrador para que duas operações simultâneas não deixem o sistema sem administrador.
+    /// Nome da propriedade sombra (só no banco) usada como token de concorrência da role de administrador.
     /// </summary>
-    public static async Task<Result> EnsureAnotherActiveAdministratorAsync(
+    internal const string RoleVersionProperty = "Version";
+
+    /// <summary>
+    /// Chamado antes de um administrador perder o acesso (desativação ou remoção da role): falha se ele for o último
+    /// administrador ativo. Usuário que não é administrador passa direto.
+    /// </summary>
+    /// <remarks>
+    /// Quando resta outro administrador, incrementa a versão da role de administrador (token de concorrência): de duas
+    /// operações simultâneas que tirariam os dois últimos administradores, só a primeira consegue salvar.
+    /// </remarks>
+    public static async Task<Result> EnsureNotLastAdministratorAsync(
         IApplicationDbContext context,
-        Role administratorRole,
         Guid leavingUserId,
         CancellationToken cancellationToken)
     {
+        string administratorRoleName = RoleNames.Administrator;
+
+        bool isAdministrator = await context.UserRoles.AnyAsync(
+            userRole => userRole.UserId == leavingUserId && userRole.RoleName == administratorRoleName,
+            cancellationToken);
+
+        if (!isAdministrator)
+        {
+            return Result.Success();
+        }
+
+        // A role é lida antes da checagem: o valor original do token passa a ser o do momento da decisão, então uma
+        // remoção concorrente que salvar primeiro faz esta falhar no SaveChanges (409), em vez de passar as duas.
+        Role administratorRole = await context.Roles.SingleAsync(r => r.Name == administratorRoleName, cancellationToken);
+
         bool anotherActiveAdministratorExists = await context.UserRoles.AnyAsync(
-            userRole => userRole.RoleId == administratorRole.Id &&
+            userRole => userRole.RoleName == administratorRoleName &&
                         userRole.UserId != leavingUserId &&
                         context.Users.Any(user => user.Id == userRole.UserId && user.IsActive),
             cancellationToken);
@@ -28,7 +52,7 @@ internal static class AdministratorGuard
             return Result.Failure(RoleErrors.LastAdministrator);
         }
 
-        administratorRole.Version++;
+        context.Entry(administratorRole).Property<int>(RoleVersionProperty).CurrentValue++;
 
         return Result.Success();
     }

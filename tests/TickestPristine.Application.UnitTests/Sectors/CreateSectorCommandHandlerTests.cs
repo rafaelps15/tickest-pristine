@@ -3,7 +3,6 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using Microsoft.EntityFrameworkCore;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.Sectors;
 
@@ -109,5 +108,10 @@ public sealed class CreateSectorCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
+
+        Sector sector = await context.Sectors.SingleAsync(s => s.Id == result.Value);
+        sector.Name.ShouldBe("Helpdesk");
+        sector.DepartmentId.ShouldBe(department.Id);
+        sector.IsActive.ShouldBeTrue();
     }
 }

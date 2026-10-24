@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using FluentValidation;
 
 namespace TickestPristine.Application.Users;
@@ -25,4 +26,16 @@ internal static class UserValidationRules
             .MinimumLength(6).WithMessage(StrengthRequirementsMessage)
             .Matches(@"\p{Lu}").WithMessage(StrengthRequirementsMessage)
             .Matches(@"[^\p{L}\p{N}\s]").WithMessage(StrengthRequirementsMessage);
+
+    /// <summary>
+    /// Nova senha numa troca de senha: obrigatória, forte e diferente da senha atual.
+    /// </summary>
+    public static IRuleBuilderOptions<T, string> NewPassword<T>(
+        this IRuleBuilderInitial<T, string> ruleBuilder,
+        Expression<Func<T, string>> currentPassword) =>
+        ruleBuilder
+            .Cascade(CascadeMode.Stop)
+            .NotEmpty().WithMessage("Informe a nova senha.")
+            .StrongPassword()
+            .NotEqual(currentPassword).WithMessage("A nova senha precisa ser diferente da atual.");
 }

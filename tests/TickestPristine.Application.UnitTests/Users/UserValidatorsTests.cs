@@ -1,6 +1,7 @@
 using TickestPristine.Application.Users.Activate;
 using TickestPristine.Application.Users.AssignRoles;
 using TickestPristine.Application.Users.ChangePassword;
+using TickestPristine.Application.Users.ChangeRequiredPassword;
 using TickestPristine.Application.Users.Deactivate;
 using TickestPristine.Application.Users.Login;
 using TickestPristine.Application.Users.Logout;
@@ -8,6 +9,8 @@ using TickestPristine.Application.Users.Refresh;
 using TickestPristine.Application.Users.Register;
 using TickestPristine.Application.Users.UpdateProfile;
 using FluentValidation.TestHelper;
+
+using TickestPristine.Application.Roles;
 
 namespace TickestPristine.Application.UnitTests.Users;
 
@@ -21,6 +24,7 @@ public sealed class UserValidatorsTests
     private readonly LoginUserCommandValidator _loginValidator = new();
     private readonly UpdateUserProfileCommandValidator _updateProfileValidator = new();
     private readonly ChangeUserPasswordCommandValidator _changePasswordValidator = new();
+    private readonly ChangeRequiredUserPasswordCommandValidator _changeRequiredPasswordValidator = new();
     private readonly AssignUserRolesCommandValidator _assignUserRolesValidator = new();
     private readonly DeactivateUserCommandValidator _deactivateValidator = new();
     private readonly ActivateUserCommandValidator _activateValidator = new();
@@ -366,7 +370,7 @@ public sealed class UserValidatorsTests
     public void AssignUserRolesValidator_Should_HaveError_WhenUserIdIsEmpty()
     {
         // Arrange
-        var command = new AssignUserRolesCommand { UserId = Guid.Empty, RoleIds = [Guid.NewGuid()] };
+        var command = new AssignUserRolesCommand(Guid.Empty, ["Gestor"]);
 
         // Act
         TestValidationResult<AssignUserRolesCommand> result = _assignUserRolesValidator.TestValidate(command);
@@ -376,23 +380,23 @@ public sealed class UserValidatorsTests
     }
 
     [Fact]
-    public void AssignUserRolesValidator_Should_HaveError_WhenRoleIdsIsNull()
+    public void AssignUserRolesValidator_Should_HaveError_WhenRoleNamesIsNull()
     {
         // Arrange
-        var command = new AssignUserRolesCommand { UserId = Guid.NewGuid(), RoleIds = null! };
+        var command = new AssignUserRolesCommand(Guid.NewGuid(), null!);
 
         // Act
         TestValidationResult<AssignUserRolesCommand> result = _assignUserRolesValidator.TestValidate(command);
 
         // Assert
-        result.ShouldHaveValidationErrorFor(c => c.RoleIds);
+        result.ShouldHaveValidationErrorFor(c => c.RoleNames);
     }
 
     [Fact]
     public void AssignUserRolesValidator_Should_NotHaveErrors_WhenCommandIsValid()
     {
         // Arrange
-        var command = new AssignUserRolesCommand { UserId = Guid.NewGuid(), RoleIds = [Guid.NewGuid()] };
+        var command = new AssignUserRolesCommand(Guid.NewGuid(), ["Gestor"]);
 
         // Act
         TestValidationResult<AssignUserRolesCommand> result = _assignUserRolesValidator.TestValidate(command);
@@ -573,6 +577,101 @@ public sealed class UserValidatorsTests
 
         // Act
         TestValidationResult<ActivateUserCommand> result = _activateValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void ChangeRequiredPasswordValidator_Should_HaveError_WhenEmailIsEmpty()
+    {
+        // Arrange
+        var command = new ChangeRequiredUserPasswordCommand(string.Empty, "Current123!", "NewPassword123!");
+
+        // Act
+        TestValidationResult<ChangeRequiredUserPasswordCommand> result = _changeRequiredPasswordValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.Email);
+    }
+
+    [Fact]
+    public void ChangeRequiredPasswordValidator_Should_HaveError_WhenEmailIsInvalid()
+    {
+        // Arrange
+        var command = new ChangeRequiredUserPasswordCommand("not-an-email", "Current123!", "NewPassword123!");
+
+        // Act
+        TestValidationResult<ChangeRequiredUserPasswordCommand> result = _changeRequiredPasswordValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.Email);
+    }
+
+    [Fact]
+    public void ChangeRequiredPasswordValidator_Should_HaveError_WhenCurrentPasswordIsEmpty()
+    {
+        // Arrange
+        var command = new ChangeRequiredUserPasswordCommand("test@example.com", string.Empty, "NewPassword123!");
+
+        // Act
+        TestValidationResult<ChangeRequiredUserPasswordCommand> result = _changeRequiredPasswordValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.CurrentPassword)
+            .WithErrorMessage("Informe a senha atual.");
+    }
+
+    [Fact]
+    public void ChangeRequiredPasswordValidator_Should_HaveError_WhenNewPasswordIsEmpty()
+    {
+        // Arrange
+        var command = new ChangeRequiredUserPasswordCommand("test@example.com", "Current123!", string.Empty);
+
+        // Act
+        TestValidationResult<ChangeRequiredUserPasswordCommand> result = _changeRequiredPasswordValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.NewPassword)
+            .WithErrorMessage("Informe a nova senha.");
+    }
+
+    [Fact]
+    public void ChangeRequiredPasswordValidator_Should_HaveError_WhenNewPasswordIsWeak()
+    {
+        // Arrange
+        var command = new ChangeRequiredUserPasswordCommand("test@example.com", "Current123!", "weakpassword");
+
+        // Act
+        TestValidationResult<ChangeRequiredUserPasswordCommand> result = _changeRequiredPasswordValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.NewPassword)
+            .WithErrorMessage(StrengthRequirementsMessage);
+    }
+
+    [Fact]
+    public void ChangeRequiredPasswordValidator_Should_HaveError_WhenNewPasswordEqualsCurrent()
+    {
+        // Arrange
+        var command = new ChangeRequiredUserPasswordCommand("test@example.com", "Current123!", "Current123!");
+
+        // Act
+        TestValidationResult<ChangeRequiredUserPasswordCommand> result = _changeRequiredPasswordValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.NewPassword)
+            .WithErrorMessage("A nova senha precisa ser diferente da atual.");
+    }
+
+    [Fact]
+    public void ChangeRequiredPasswordValidator_Should_NotHaveErrors_WhenCommandIsValid()
+    {
+        // Arrange
+        var command = new ChangeRequiredUserPasswordCommand("test@example.com", "Current123!", "NewPassword123!");
+
+        // Act
+        TestValidationResult<ChangeRequiredUserPasswordCommand> result = _changeRequiredPasswordValidator.TestValidate(command);
 
         // Assert
         result.ShouldNotHaveAnyValidationErrors();

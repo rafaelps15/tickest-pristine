@@ -4,14 +4,15 @@ using TickestPristine.Application.Users.Refresh;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.Users;
 
 public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
 {
+    private static readonly Guid CredentialSecurityStamp = Guid.NewGuid();
+
     [Fact]
-    public async Task Handle_Should_ReturnFailure_WhenRefreshTokenDoesNotExist()
+    public async Task Handle_Should_ReturnInvalidRefreshToken_WhenRefreshTokenDoesNotExist()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -31,7 +32,7 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnFailure_WhenRefreshTokenIsExpired()
+    public async Task Handle_Should_ReturnInvalidRefreshToken_WhenRefreshTokenIsExpired()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -122,7 +123,128 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         result.Error.ShouldBe(UserErrors.Deactivated);
     }
 
-    private static async Task<User> SeedRefreshTokenAsync(TestDbContext context, string token, DateTime expiresOnUtc, bool isActive = true)
+    [Fact]
+    public async Task Handle_Should_RemoveTokenAndReturnFailure_WhenPasswordChangedAfterSessionStarted()
+    {
+        // Arrange: a sessão guardou o carimbo de antes da troca de senha
+        await using TestDbContext context = CreateDbContext();
+        DateTime now = DateTime.UtcNow;
+        await SeedRefreshTokenAsync(context, "stale-token", expiresOnUtc: now.AddDays(1), tokenSecurityStamp: Guid.NewGuid());
+
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(now);
+        ITokenProvider tokenProvider = Substitute.For<ITokenProvider>();
+
+        var handler = new RefreshTokenCommandHandler(context, tokenProvider, dateTimeProvider);
+
+        // Act
+        Result<AccessTokensResponse> result = await handler.Handle(
+            new RefreshTokenCommand("stale-token"),
+            CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.InvalidRefreshToken);
+        (await context.RefreshTokens.AnyAsync()).ShouldBeFalse();
+        await tokenProvider.DidNotReceive().CreateAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Should_KeepExpirationWithinSessionLimit_WhenRotating()
+    {
+        // Arrange: a sessão acaba antes da validade que um token novo teria
+        await using TestDbContext context = CreateDbContext();
+        DateTime now = DateTime.UtcNow;
+        await SeedRefreshTokenAsync(context, "old-token", expiresOnUtc: now.AddDays(1));
+        RefreshToken seeded = await context.RefreshTokens.SingleAsync();
+        seeded.SessionExpiresOnUtc = now.AddDays(2);
+        await context.SaveChangesAsync();
+
+        ITokenProvider tokenProvider = Substitute.For<ITokenProvider>();
+        tokenProvider.CreateAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns("new-access-token");
+        tokenProvider.GenerateRefreshToken().Returns(new GeneratedRefreshToken("new-refresh-token", now.AddDays(7)));
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(now);
+
+        var handler = new RefreshTokenCommandHandler(context, tokenProvider, dateTimeProvider);
+
+        // Act
+        Result<AccessTokensResponse> result = await handler.Handle(
+            new RefreshTokenCommand("old-token"),
+            CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        RefreshToken stored = await context.RefreshTokens.SingleAsync();
+        stored.ExpiresOnUtc.ShouldBe(now.AddDays(2));
+        stored.PreviousTokenHash.ShouldBe(RefreshTokenHasher.Hash("old-token"));
+        stored.RotatedAtUtc.ShouldBe(now);
+    }
+
+    [Fact]
+    public async Task Handle_Should_RevokeAllSessions_WhenRotatedTokenIsReusedAfterGracePeriod()
+    {
+        // Arrange: o token antigo volta um minuto depois da renovação
+        await using TestDbContext context = CreateDbContext();
+        DateTime now = DateTime.UtcNow;
+        User user = await SeedRotatedTokenAsync(context, "old-token", rotatedAtUtc: now.AddMinutes(-1));
+
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(now);
+
+        var handler = new RefreshTokenCommandHandler(context, Substitute.For<ITokenProvider>(), dateTimeProvider);
+
+        // Act
+        Result<AccessTokensResponse> result = await handler.Handle(
+            new RefreshTokenCommand("old-token"),
+            CancellationToken.None);
+
+        // Assert
+        result.Error.ShouldBe(UserErrors.InvalidRefreshToken);
+        (await context.RefreshTokens.AnyAsync(r => r.UserId == user.Id)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_Should_KeepSessions_WhenRotatedTokenIsReusedWithinGracePeriod()
+    {
+        // Arrange: duas abas renovando juntas, a segunda chega logo depois da primeira
+        await using TestDbContext context = CreateDbContext();
+        DateTime now = DateTime.UtcNow;
+        User user = await SeedRotatedTokenAsync(context, "old-token", rotatedAtUtc: now.AddSeconds(-5));
+
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(now);
+
+        var handler = new RefreshTokenCommandHandler(context, Substitute.For<ITokenProvider>(), dateTimeProvider);
+
+        // Act
+        Result<AccessTokensResponse> result = await handler.Handle(
+            new RefreshTokenCommand("old-token"),
+            CancellationToken.None);
+
+        // Assert
+        result.Error.ShouldBe(UserErrors.InvalidRefreshToken);
+        (await context.RefreshTokens.AnyAsync(r => r.UserId == user.Id)).ShouldBeTrue();
+    }
+
+    private static async Task<User> SeedRotatedTokenAsync(TestDbContext context, string previousToken, DateTime rotatedAtUtc)
+    {
+        User user = await SeedRefreshTokenAsync(context, "current-token", expiresOnUtc: rotatedAtUtc.AddDays(7));
+
+        RefreshToken current = await context.RefreshTokens.SingleAsync(r => r.UserId == user.Id);
+        current.PreviousTokenHash = RefreshTokenHasher.Hash(previousToken);
+        current.RotatedAtUtc = rotatedAtUtc;
+        await context.SaveChangesAsync();
+
+        return user;
+    }
+
+    private static async Task<User> SeedRefreshTokenAsync(
+        TestDbContext context,
+        string token,
+        DateTime expiresOnUtc,
+        bool isActive = true,
+        Guid? tokenSecurityStamp = null)
     {
         var user = new User
         {
@@ -130,12 +252,27 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
             Email = "test@example.com",
             FirstName = "Test",
             LastName = "User",
-            Code = $"usr_{Ulid.NewUlid()}",
+            Code = UserCodes.New(),
             IsActive = isActive
         };
 
         context.Users.Add(user);
-        context.RefreshTokens.Add(new RefreshToken { Id = Guid.NewGuid(), TokenHash = RefreshTokenHasher.Hash(token), UserId = user.Id, ExpiresOnUtc = expiresOnUtc });
+        context.UserCredentials.Add(new UserCredential
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            PasswordHash = "hash",
+            SecurityStamp = CredentialSecurityStamp
+        });
+        context.RefreshTokens.Add(new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            TokenHash = RefreshTokenHasher.Hash(token),
+            UserId = user.Id,
+            ExpiresOnUtc = expiresOnUtc,
+            SessionExpiresOnUtc = expiresOnUtc.AddDays(30),
+            SecurityStamp = tokenSecurityStamp ?? CredentialSecurityStamp
+        });
 
         await context.SaveChangesAsync();
 

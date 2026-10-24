@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Domain.Users;
 using TickestPristine.Infrastructure.Database;
+using TickestPristine.Application.Users;
 
 namespace TickestPristine.IntegrationTests.Database;
 
@@ -22,7 +23,7 @@ public sealed class UserIsActiveTests(IntegrationTestWebAppFactory factory) : Ba
             Email = UniqueEmail(),
             FirstName = "Test",
             LastName = "User",
-            Code = $"usr_{Ulid.NewUlid()}",
+            Code = UserCodes.New(),
             IsActive = isActive
         };
 

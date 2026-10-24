@@ -1,6 +1,8 @@
+using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Authorization;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -9,6 +11,7 @@ namespace TickestPristine.Application.Users.Activate;
 
 internal sealed class ActivateUserCommandHandler(
     IApplicationDbContext context,
+    IUserContext userContext,
     IPermissionProvider permissionProvider)
     : ICommandHandler<ActivateUserCommand>
 {
@@ -26,6 +29,18 @@ internal sealed class ActivateUserCommandHandler(
             return Result.Failure(UserErrors.AlreadyActive);
         }
 
+        Result privilegeCheck = await PrivilegeEscalationGuard.EnsureCallerCanManageUserAsync(
+            context,
+            permissionProvider,
+            userContext.UserId,
+            user.Id,
+            cancellationToken);
+
+        if (privilegeCheck.IsFailure)
+        {
+            return privilegeCheck;
+        }
+
         user.IsActive = true;
         user.DeactivatedAtUtc = null;
 
@@ -34,7 +49,8 @@ internal sealed class ActivateUserCommandHandler(
         await context.SaveChangesAsync(cancellationToken);
 
         // O cache guardou a lista vazia de quando o usuário estava inativo; sem invalidar, ele seguiria sem permissões.
-        await permissionProvider.InvalidateAsync(user.Id, cancellationToken);
+        // Depois do commit, a invalidação não pode ser cancelada junto com a requisição.
+        await permissionProvider.InvalidateAsync(user.Id, CancellationToken.None);
 
         return Result.Success();
     }

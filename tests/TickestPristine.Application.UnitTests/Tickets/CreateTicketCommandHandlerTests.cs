@@ -1,12 +1,11 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Authorization;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Application.Tickets.Create;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
-using TickestPristine.SharedKernel;
 using TickestPristine.Domain.Users;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
@@ -105,6 +104,37 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
         ticket.CreatedByUserId.ShouldBe(UserId);
         ticket.Status.ShouldBe(TicketStatus.Open);
         ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketCreatedDomainEvent);
+        (await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id)).Action.ShouldBe(TicketHistoryAction.Created);
+    }
+
+    [Fact]
+    public async Task Handle_Should_SetSlaDeadlinesFromPriority_WhenTicketIsOpened()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid sectorId = await SeedSectorAsync(context);
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(UserId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        var nowUtc = new DateTime(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc);
+        dateTimeProvider.UtcNow.Returns(nowUtc);
+
+        var handler = new CreateTicketCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        CreateTicketCommand command = Command;
+        command.SectorId = sectorId;
+
+        // Act
+        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == result.Value);
+        ticket.CreatedAtUtc.ShouldBe(nowUtc);
+        ticket.DueAtUtc.ShouldBe(nowUtc.AddHours(24));
+        ticket.SlaWarningAtUtc.ShouldBe(nowUtc.AddHours(18));
+        ticket.ResolvedAtUtc.ShouldBeNull();
     }
 
     [Fact]
@@ -162,6 +192,7 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
 
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == result.Value);
         ticket.CreatedByUserId.ShouldBe(requesterId);
+        ticket.DomainEvents.OfType<TicketCreatedDomainEvent>().ShouldHaveSingleItem().OpenedByUserId.ShouldBe(UserId);
     }
 
     [Fact]
@@ -241,11 +272,41 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
         result.IsSuccess.ShouldBeTrue();
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == result.Value);
         ticket.AssignedToUserId.ShouldBe(assigneeId);
+        ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketCreatedDomainEvent);
     }
 
-    private static async Task<Guid> SeedUserAsync(TestDbContext context)
+    [Fact]
+    public async Task Handle_Should_ReturnNotFound_WhenAssignedUserIsDeactivated()
     {
-        User user = CreateUser();
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid sectorId = await SeedSectorAsync(context);
+        // Usuário desativado conta como inexistente para receber o chamado.
+        Guid assigneeId = await SeedUserAsync(context, isActive: false);
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(UserId);
+
+        var handler = new CreateTicketCommandHandler(
+            context,
+            userContext,
+            Substitute.For<IPermissionProvider>(),
+            Substitute.For<IDateTimeProvider>());
+        CreateTicketCommand command = Command;
+        command.SectorId = sectorId;
+        command.AssignedToUserId = assigneeId;
+
+        // Act
+        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.NotFound(assigneeId));
+        (await context.Tickets.AnyAsync()).ShouldBeFalse();
+    }
+
+    private static async Task<Guid> SeedUserAsync(TestDbContext context, bool isActive = true)
+    {
+        User user = CreateUser(isActive);
         context.Users.Add(user);
         await context.SaveChangesAsync();
 

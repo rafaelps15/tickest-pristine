@@ -11,5 +11,4 @@ public sealed record GetUsersQuery(
     string? Search,
     DateOnly? CreatedFrom,
     DateOnly? CreatedTo,
-    int? Page,
-    int? PageSize) : IQuery<PagedResponse<UserSummaryResponse>>;
+    PageRequest Paging) : IQuery<PagedResponse<UserSummaryResponse>>;

@@ -1,7 +1,8 @@
 using System.Net.Http.Json;
+using TickestPristine.Application.Roles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using TickestPristine.Application.Authorization;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
@@ -10,16 +11,13 @@ using TickestPristine.Infrastructure.Database;
 namespace TickestPristine.IntegrationTests.Seeding;
 
 /// <summary>
-/// Valida os dados que as migrations e o seed criam: roles padrão (HasData), o administrador inicial e a
-/// estrutura inicial de departamentos e setores.
+/// Valida os dados que as migrations e o seed criam: role de administrador (HasData), roles iniciais, o
+/// administrador inicial e a estrutura inicial de departamentos e setores.
 /// </summary>
 public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
-    private const string AdminEmail = "admin@tickestpristine.dev";
-    private const string AdminPassword = "ChangeMe123!";
-
     [Fact]
-    public async Task Migrations_Should_CreateDefaultRolesWithFixedIds()
+    public async Task Seeding_Should_CreateAdministratorAndDefaultRoles()
     {
         // Arrange
         AccessTokens tokens = await LoginAsync(AdminEmail, AdminPassword);
@@ -29,20 +27,21 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
         List<RoleDto>? roles = await HttpClient.GetFromJsonAsync<List<RoleDto>>("roles");
 
         // Assert
-        RoleDto administrator = roles!.Single(r => r.Id == Role.Administrator.Id);
-        administrator.Name.ShouldBe(Role.Administrator.Name);
+        RoleDto administrator = roles!.Single(r => r.Name == RoleNames.Administrator);
         administrator.IsAdministrator.ShouldBeTrue();
 
-        RoleDto agent = roles!.Single(r => r.Id == Role.Agent.Id);
-        agent.Name.ShouldBe(Role.Agent.Name);
+        RoleDto agent = roles!.Single(r => r.Name == "Atendente");
+        agent.IsDefault.ShouldBeFalse();
+        agent.PermissionCodes.ShouldContain(PermissionCodes.Tickets.Manage);
 
-        RoleDto collaborator = roles!.Single(r => r.Id == Role.Collaborator.Id);
-        collaborator.Name.ShouldBe(Role.Collaborator.Name);
+        RoleDto collaborator = roles!.Single(r => r.Name == "Colaborador");
         collaborator.IsDefault.ShouldBeTrue();
+        collaborator.PermissionCodes.ShouldContain(PermissionCodes.Tickets.Create);
+        collaborator.PermissionCodes.ShouldNotContain(PermissionCodes.Tickets.Manage);
     }
 
     [Fact]
-    public async Task Migrations_Should_GrantEveryCatalogPermissionToAdministrator()
+    public async Task Seeding_Should_GrantEveryCatalogPermissionToAdministrator()
     {
         // Arrange
         AccessTokens tokens = await LoginAsync(AdminEmail, AdminPassword);
@@ -51,9 +50,9 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
         // Act
         List<RoleDto>? roles = await HttpClient.GetFromJsonAsync<List<RoleDto>>("roles");
 
-        // Assert: falha quando um código entra ou sai do PermissionCodes sem a migration correspondente
-        RoleDto administrator = roles!.Single(r => r.Id == Role.Administrator.Id);
-        administrator.PermissionCodes.ShouldBe(PermissionCodes.All, ignoreOrder: true);
+        // Assert: falha quando um código entra ou sai do catálogo de Permission sem a migration correspondente
+        RoleDto administrator = roles!.Single(r => r.Name == RoleNames.Administrator);
+        administrator.PermissionCodes.ShouldBe(PermissionCatalog.All.Select(p => p.Code), ignoreOrder: true);
     }
 
     [Fact]
@@ -70,10 +69,48 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
         User administrator = await context.Users.SingleAsync(u => u.Email == AdminEmail);
         administrator.IsActive.ShouldBeTrue();
 
-        Guid administratorRoleId = Role.Administrator.Id;
+        string administratorRoleName = RoleNames.Administrator;
         int administratorRoleLinks = await context.UserRoles
-            .CountAsync(ur => ur.UserId == administrator.Id && ur.RoleId == administratorRoleId);
+            .CountAsync(ur => ur.UserId == administrator.Id && ur.RoleName == administratorRoleName);
         administratorRoleLinks.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Seeding_Should_NotRestoreAdministratorRole_WhenAnotherActiveAdministratorExists()
+    {
+        // Arrange
+        string administratorRoleName = RoleNames.Administrator;
+        Guid anotherAdministratorId = await RegisterUserAsync(UniqueEmail());
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        User seededAdministrator = await context.Users.SingleAsync(u => u.Email == AdminEmail);
+        UserRole seededAdministratorRole = await context.UserRoles
+            .SingleAsync(ur => ur.UserId == seededAdministrator.Id && ur.RoleName == administratorRoleName);
+        var anotherAdministratorRole = new UserRole { Id = Guid.NewGuid(), UserId = anotherAdministratorId, RoleName = administratorRoleName };
+
+        context.UserRoles.Remove(seededAdministratorRole);
+        context.UserRoles.Add(anotherAdministratorRole);
+        await context.SaveChangesAsync();
+
+        try
+        {
+            // Act
+            await context.Database.MigrateAsync();
+
+            // Assert
+            bool seededAdministratorHasRole = await context.UserRoles
+                .AnyAsync(ur => ur.UserId == seededAdministrator.Id && ur.RoleName == administratorRoleName);
+            seededAdministratorHasRole.ShouldBeFalse();
+        }
+        finally
+        {
+            // Devolve o banco compartilhado ao estado inicial: só o administrador do seed.
+            context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = seededAdministrator.Id, RoleName = administratorRoleName });
+            context.UserRoles.Remove(anotherAdministratorRole);
+            await context.SaveChangesAsync();
+        }
     }
 
     [Fact]
@@ -94,8 +131,10 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
             .Where(s => s.DepartmentId == informationTechnology.Id)
             .Select(s => s.Name)
             .ToListAsync();
-        sectorNames.ShouldBe(["Helpdesk", "Infraestrutura"], ignoreOrder: true);
+        sectorNames.ShouldBe(
+            ["Suporte ao Usuário", "Infraestrutura e Redes", "Sistemas Corporativos", "Segurança da Informação"],
+            ignoreOrder: true);
     }
 
-    private sealed record RoleDto(Guid Id, string Name, bool IsDefault, bool IsAdministrator, List<string> PermissionCodes);
+    private sealed record RoleDto(string Name, bool IsDefault, bool IsAdministrator, List<string> PermissionCodes);
 }

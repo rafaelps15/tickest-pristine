@@ -12,6 +12,4 @@ internal static class TokenClaimTypes
     internal const string Email = JwtRegisteredClaimNames.Email;
 
     internal const string Name = JwtRegisteredClaimNames.Name;
-
-    internal const string Permissions = "permissions";
 }

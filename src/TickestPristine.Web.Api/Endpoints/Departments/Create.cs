@@ -1,5 +1,4 @@
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Departments.Create;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
@@ -35,6 +34,6 @@ internal sealed class Create : IEndpoint
             return result.Match(Results.Ok, CustomResults.Problem);
         })
         .WithTags(Tags.Departments)
-        .HasPermission(PermissionCodes.Departments.Manage);
+        .HasPermission(Permissions.DepartmentsManage);
     }
 }

@@ -15,4 +15,8 @@ public static class DepartmentErrors
     public static Error HasActiveTickets() => Error.Conflict(
         "Departments.HasActiveTickets",
         "O departamento tem chamados em aberto ou em andamento nos seus setores. Conclua ou cancele esses chamados antes de desativá-lo.");
+
+    public static Error AlreadyDeactivated(Guid departmentId) => Error.Conflict(
+        "Departments.AlreadyDeactivated",
+        $"O departamento com o Id = '{departmentId}' já está desativado.");
 }

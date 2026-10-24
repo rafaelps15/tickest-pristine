@@ -1,9 +1,7 @@
 using TickestPristine.Application.Abstractions.Messaging;
 
+using TickestPristine.Application.Roles;
+
 namespace TickestPristine.Application.Users.AssignRoles;
 
-public sealed class AssignUserRolesCommand : ICommand
-{
-    public Guid UserId { get; set; }
-    public List<Guid> RoleIds { get; set; } = [];
-}
+public sealed record AssignUserRolesCommand(Guid UserId, List<string> RoleNames) : ICommand;

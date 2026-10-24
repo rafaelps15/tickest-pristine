@@ -1,6 +1,6 @@
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Roles.AssignPermissions;
+using TickestPristine.Application.Permissions;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
 using TickestPristine.Web.Api.Infrastructure;
@@ -16,15 +16,15 @@ internal sealed class AssignPermissions : IEndpoint
 
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapPut("roles/{roleId:guid}/permissions", async (
-            Guid roleId,
+        app.MapPut("roles/{roleName}/permissions", async (
+            string roleName,
             Request request,
             ICommandHandler<AssignRolePermissionsCommand> handler,
             CancellationToken cancellationToken) =>
         {
             var command = new AssignRolePermissionsCommand
             {
-                RoleId = roleId,
+                RoleName = roleName,
                 PermissionCodes = request.PermissionCodes
             };
 
@@ -33,6 +33,6 @@ internal sealed class AssignPermissions : IEndpoint
             return result.Match(Results.NoContent, CustomResults.Problem);
         })
         .WithTags(Tags.Roles)
-        .HasPermission(PermissionCodes.Roles.Manage);
+        .HasPermission(Permissions.RolesManage);
     }
 }

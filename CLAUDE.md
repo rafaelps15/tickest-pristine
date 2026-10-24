@@ -4,101 +4,177 @@ Este arquivo orienta o Claude Code (claude.ai/code) ao trabalhar com o código d
 
 ## O que é
 
-Um template pragmático de Clean Architecture para .NET 10 (domínio de exemplo com Todos + Users), usando PostgreSQL, com autenticação JWT + refresh tokens, permissões por função, cache, logs estruturados e OpenTelemetry já configurados. É um *template* — o código de Todos/Users é conteúdo de exemplo, feito para ser ampliado ou substituído.
+O TickestPristine é o backend de um sistema de chamados internos (helpdesk) em .NET 10 e PostgreSQL, construído sobre uma base pragmática de Clean Architecture: chamados (abertura, atendimento, atribuição, fechamento, reabertura e SLA de resolução), mensagens, anexos, histórico, usuários com roles e permissões, departamentos, setores e auditoria. Autenticação JWT, autorização por permissões, logs estruturados e OpenTelemetry já vêm configurados. Não há front-end neste repositório.
 
-Os nomes usados neste arquivo e em `.claude/skills/` são os nomes fictícios do template (`CleanArchitecture.slnx`, `src/Application`, `TodoItem`). Uma solução real costuma ter prefixo nos projetos (ex.: `src/MyApp.Application`, `tests/MyApp.IntegrationTests`); troque os nomes fictícios pelos nomes reais do repositório.
+Os exemplos de Todos que aparecem neste arquivo e nas skills vêm do modelo de referência e são ilustrativos; o contexto real deste repositório está na seção [Contexto do projeto](#contexto-do-projeto).
 
 ## Comandos
 
 ```bash
-# Sobe só a infraestrutura (PostgreSQL + Seq; portas no docker-compose.yml).
-# Um `docker compose up -d` simples também sobe o container da API.
-docker compose up -d postgres seq
+# Sobe a infraestrutura (PostgreSQL + Seq) antes de rodar a API ou os testes de integração
+docker compose up -d
 
-# Roda a API (em Development, aplica as migrations e roda os seeders ao iniciar)
-dotnet run --project src/Web.Api
+# Roda a API
+dotnet run --project src/TickestPristine.Web.Api
 
 # Build / restore
-dotnet restore CleanArchitecture.slnx
-dotnet build CleanArchitecture.slnx
+dotnet restore TickestPristine.slnx
+dotnet build TickestPristine.slnx
 
-# Roda todos os testes (os de integração sobem um PostgreSQL descartável via
+# Roda todos os testes (os de integração sobem um container descartável do PostgreSQL via
 # Testcontainers, então o Docker precisa estar rodando)
-dotnet test CleanArchitecture.slnx
+dotnet test TickestPristine.slnx
 
 # Roda um projeto de teste
-dotnet test tests/Application.UnitTests
-dotnet test tests/IntegrationTests
-dotnet test tests/ArchitectureTests
+dotnet test tests/TickestPristine.Application.UnitTests
+dotnet test tests/TickestPristine.IntegrationTests
+dotnet test tests/TickestPristine.ArchitectureTests
 
 # Roda um teste pelo nome (qualquer projeto)
 dotnet test --filter "FullyQualifiedName~CreateTodoCommandHandlerTests"
-
-# Cria uma migration (nomes no formato PascalCase_With_Underscores)
-dotnet ef migrations add Add_Todos --project src/Infrastructure --startup-project src/Web.Api --output-dir Database/Migrations
 ```
 
-O Seq (visualizador de logs estruturados) sobe junto com a infraestrutura; a porta está no `docker-compose.yml`.
+O Seq (visualizador de logs estruturados) fica disponível em http://localhost:8090 depois do `docker compose up -d`.
 
-Para usar .NET 8 ou .NET 9 em vez de .NET 10, veja as notas no `Directory.Build.props` (também é preciso atualizar o Dockerfile em `src/Web.Api`).
+Para usar .NET 8 ou .NET 9 em vez de .NET 10, veja as notas no `Directory.Build.props` (também é preciso atualizar o Dockerfile em `src/TickestPristine.Web.Api`).
 
-Avisos são tratados como erros (`TreatWarningsAsErrors`, `AnalysisMode=All`, SonarAnalyzer), então o `dotnet build` é uma verificação de qualidade de verdade, e não só uma compilação.
+Avisos são tratados como erros (`TreatWarningsAsErrors`, `AnalysisMode=All`), então o `dotnet build` é uma verificação de qualidade de verdade, e não só uma compilação.
 
 ## Arquitetura
 
-Cinco projetos, com dependências sempre apontando para dentro. Isso é garantido por `tests/ArchitectureTests/Layers/LayerTests.cs` (via NetArchTest) — Domain e Application nunca podem referenciar Infrastructure ou Web.Api.
+Cinco projetos, com dependências sempre apontando para dentro. Isso é garantido por `tests/TickestPristine.ArchitectureTests/Layers/LayerTests.cs` (via NetArchTest) — Domain e Application nunca podem referenciar Infrastructure ou Web.Api.
 
 ```
 SharedKernel  <-- Domain <-- Application <-- Infrastructure
                                   ^--------------- Web.Api
 ```
 
-- **SharedKernel** — peças básicas de DDD, sem dependência de nenhum outro projeto da solução: `Entity` (classe base que guarda os eventos disparados), `Result`/`Result<T>`, `Error`/`ErrorType`/`ValidationError`, `IDomainEvent`, `IDomainEventHandler<T>`, `IDateTimeProvider`.
-- **Domain** — entidades, eventos de domínio e uma classe estática `*Errors` por agregado (ex.: `TodoItemErrors`, `UserErrors`), organizados por pasta de agregado (`Todos/`, `Users/`), e não por tipo técnico. As entidades são classes simples, com propriedades com setter e ids das chaves estrangeiras (sem propriedades de navegação); as regras de negócio ficam nos handlers da Application.
-- **Application** — casos de uso, um por pasta de slice vertical (ex.: `Todos/Create/`, `Todos/Complete/`), mais `Abstractions/` com as interfaces transversais (`Messaging`, `Behaviors`, `Data`, `Authentication`, `Authorization`, `Pagination`) e `Authorization/` com o catálogo de permissões e os guards. Sem MediatR — commands e queries são tratados por interfaces próprias `ICommandHandler`/`IQueryHandler`, resolvidas pela DI com varredura de assembly do `Scrutor`.
-- **Infrastructure** — EF Core (`ApplicationDbContext`, PostgreSQL, nomes em snake_case, migrations em `Database/Migrations`, seeders em `Database/Seeding`), JWT + refresh tokens, provedor de permissões e policies de autorização, `HybridCache` e despacho dos eventos de domínio.
-- **Web.Api** — endpoints de minimal API (uma classe por endpoint implementando `IEndpoint`, registrada automaticamente pela varredura em `EndpointExtensions`), rate limiting, CORS, OpenTelemetry, log de requisições com Serilog, tratamento global de exceções → `ProblemDetails` e Swagger com JWT.
+A Web.Api referencia diretamente só a Infrastructure e chega à Application de forma transitiva.
+
+- **SharedKernel** — peças básicas de DDD, sem dependência de nenhum outro projeto da solução: `Entity` (classe base que guarda os eventos de domínio disparados), `Result`/`Result<T>` (a convenção de tratamento de erro — veja abaixo), `Error`/`ErrorType`, `IDomainEvent`, `IDateTimeProvider`.
+- **Domain** — entidades, eventos de domínio e uma classe estática `*Errors` por agregado (ex.: `TodoItemErrors`, `UserErrors`). Sem dependência de frameworks. Organizado por pasta de agregado (`Todos/`, `Users/`), e não por tipo técnico.
+- **Application** — casos de uso, um por pasta de slice vertical (ex.: `Todos/Create/`, `Todos/Complete/`), mais `Abstractions/` com as interfaces transversais (`Messaging`, `Behaviors`, `Data`, `Authentication`). Sem MediatR — commands e queries são tratados por interfaces próprias `ICommandHandler`/`IQueryHandler`, resolvidas pela DI com varredura de assembly do `Scrutor`.
+- **Infrastructure** — EF Core (`ApplicationDbContext`, PostgreSQL, nomes em snake_case, migrations), autenticação JWT com rotação de refresh tokens, autorização por permissões, `HybridCache`, Serilog e despacho dos eventos de domínio.
+- **Web.Api** — endpoints de minimal API (uma classe por endpoint implementando `IEndpoint`, registrada automaticamente pela varredura de assembly em `EndpointExtensions`), rate limiting, OpenTelemetry, tratamento global de exceções → `ProblemDetails` e Swagger/OpenAPI com JWT.
 
 ### Organização dos slices verticais
 
 Cada caso de uso fica em `Application/{Aggregate}/{UseCase}/` como um slice independente, ex.: `Application/Todos/Create/`:
 - `CreateTodoCommand.cs` — o DTO `ICommand<TResponse>` (ou `IQuery<TResponse>`).
-- `CreateTodoCommandHandler.cs` — `internal sealed class ... : ICommandHandler<TCommand, TResponse>`. Dependências pelo construtor primário (`IApplicationDbContext`, `IUserContext`, `IPermissionProvider`, `IDateTimeProvider` etc.). Retorna `Result<T>` e nunca lança exceção para falhas esperadas.
-- `CreateTodoCommandValidator.cs` — `AbstractValidator<TCommand>` do FluentValidation, `internal sealed`, carregado automaticamente pelo `AddValidatorsFromAssembly`. Todo command tem um; queries não têm.
-- Queries projetam direto num DTO `{X}Response` do próprio slice, com `.Select(...)`, e nunca retornam entidades. Listas paginadas usam `ToPagedResponseAsync` (`Abstractions/Pagination`).
+- `CreateTodoCommandHandler.cs` — `internal sealed class ... : ICommandHandler<TCommand, TResponse>`. Dependências injetadas pelo construtor primário (`IApplicationDbContext`, `IUserContext`, `IDateTimeProvider` etc.). Retorna `Result<T>` e nunca lança exceção para falhas esperadas.
+- `CreateTodoCommandValidator.cs` — `AbstractValidator<TCommand>` do FluentValidation, carregado automaticamente pelo `AddValidatorsFromAssembly`.
 
-Limites usados por mais de um validator do mesmo agregado (tamanhos máximos, política de senha) ficam numa classe estática `{Feature}ValidationRules` ao lado dos slices (ex.: `Application/Todos/TodoValidationRules.cs`), em vez de repetidos como números soltos.
+O endpoint correspondente fica em `Web.Api/Endpoints/{Aggregate}/{Verb}.cs`, como uma `internal sealed class : IEndpoint` com um DTO `Request` aninhado. Ele mapeia a requisição para o command/query, chama o handler e converte o `Result` em HTTP com `result.Match(Results.Ok, CustomResults.Problem)`.
 
-O endpoint correspondente fica em `Web.Api/Endpoints/{Aggregate}/{UseCase}.cs`, como uma `internal sealed class : IEndpoint` com um DTO `Request` aninhado. Ele mapeia a requisição para o command/query, chama o handler e converte o `Result` em HTTP com `result.Match(Results.Ok | Results.NoContent, CustomResults.Problem)`.
-
-Os testes seguem a mesma estrutura: `tests/Application.UnitTests/{Aggregate}/{UseCase}{Command|Query}HandlerTests.cs` para os handlers, `{Aggregate}ValidatorsTests.cs` para os validators, e `tests/IntegrationTests/{Aggregate}/{Aggregate}Tests.cs` para os testes de ponta a ponta por HTTP contra um PostgreSQL do Testcontainers.
+Os testes seguem a mesma estrutura: `tests/TickestPristine.Application.UnitTests/{Aggregate}/{UseCase}HandlerTests.cs` para os testes unitários dos handlers, mais os testes de validator, e `tests/TickestPristine.IntegrationTests/{Aggregate}/{Aggregate}Tests.cs` para os testes de ponta a ponta por HTTP contra uma instância de PostgreSQL do Testcontainers.
 
 ### Comportamentos transversais com decorators
 
-O `Application/DependencyInjection.cs` envolve os handlers com decorators usando o `.Decorate` do `Scrutor`. Em execução, a requisição passa por **Logging → Validation → handler** (o logging é o decorator mais externo, então falhas de validação também são registradas). A validação só envolve commands; ela interrompe com um `ValidationError` antes de o handler rodar, então os handlers não reconferem o formato da entrada — só aplicam as regras de negócio.
+O `Application/DependencyInjection.cs` envolve todos os handlers de command/query com decorators (pelo `.Decorate` do `Scrutor`), aplicados nesta ordem: **Validation → Logging → handler** (a Validation envolve só os commands; as queries passam só pelo Logging). A validação interrompe em caso de falha e retorna `Result.Failure` com um `ValidationError` antes de o handler rodar — os próprios handlers não precisam validar a entrada.
 
 ### Padrão Result (sem exceções para falhas esperadas)
 
-`Result` / `Result<T>` do `SharedKernel` é a convenção de tratamento de erro em Domain, Application e Web.Api. Os handlers retornam `Result.Failure<T>(SomeErrors.Reason(...))` em vez de lançar exceção. Cada agregado tem a sua classe estática de erros (`TodoItemErrors`, `UserErrors`) com códigos como `"TodoItems.NotFound"`. O `CustomResults.Problem` converte `ErrorType` em status HTTP: `Validation`/`Problem` → 400, `NotFound` → 404, `Conflict` → 409, `Forbidden` → 403, `Failure` → 500. O `GlobalExceptionHandler` trata as falhas realmente inesperadas, além de conflitos de concorrência e violações de índice único (409) e requisições ilegíveis (400).
+`Result` / `Result<T>` do `SharedKernel` é a convenção de tratamento de erro em Domain, Application e Web.Api. Os handlers retornam `Result.Failure<T>(SomeErrors.Reason(...))` em vez de lançar exceção. Cada agregado define a sua própria classe estática de erros (`TodoItemErrors`, `UserErrors`) com métodos de fábrica nomeados. Os endpoints convertem o `Result` em resposta HTTP pelo `CustomResults.Problem` (que converte o `ErrorType` no status adequado do `ProblemDetails`). Exceções ficam reservadas para falhas realmente inesperadas e são capturadas pelo `GlobalExceptionHandler`.
 
 ### Eventos de domínio
 
-Os handlers chamam `entity.Raise(new SomeDomainEvent(...))` antes do `SaveChangesAsync`. O `ApplicationDbContext.SaveChangesAsync` salva primeiro e depois o `DomainEventsDispatcher` publica os eventos, cada um no seu próprio escopo de DI e **fora da transação original**. Os handlers de evento implementam `IDomainEventHandler<T>` e são registrados automaticamente pela varredura de assembly.
-
-## Autenticação e autorização
-
-- **Modelo:** Usuários → Funções → Permissões. Os códigos de permissão (ex.: `"todos:manage"`) ficam catalogados em `Application/Authorization/PermissionCodes.cs`, com nome de exibição, descrição, grupo e a marcação `IsAdministrative`. As funções padrão e suas permissões são criadas via `HasData` nas configurações da Infrastructure; usuários novos recebem a função padrão no cadastro.
-- **No endpoint:** use `.HasPermission(PermissionCodes.X.Y)`, que impede a API de iniciar se o código não estiver no catálogo. Use `.RequireAuthorization()` simples quando a regra depende do dado (dono do item).
-- **No handler:** regras que dependem de uma permissão *e* do dado são conferidas no handler via `IPermissionProvider` — ex.: "o próprio item exige `todos:update-own`, o de qualquer pessoa exige `todos:manage`", ou `IsSelfOrHasPermissionAsync`. Falhas retornam `UserErrors.Unauthorized()` (403).
-- **Fonte da verdade:** as permissões são sempre resolvidas no servidor pelo `IPermissionProvider` (banco + `HybridCache` por usuário). Usuários desativados ficam sem nenhuma permissão. Todo command que muda as permissões efetivas de um usuário (funções, permissões de uma função, ativação) precisa chamar `permissionProvider.InvalidateAsync(userId)` depois de salvar. Os clientes leem a lista atualizada em `GET /users/me`; a API nunca autoriza com base nas claims do JWT.
-- **Guards:** o `PrivilegeEscalationGuard` impede conceder ou remover permissões administrativas que quem chama não tem; o `AdministratorGuard` garante que sempre reste pelo menos um administrador ativo.
-- **Tokens:** o access token expira após `Jwt:ExpirationInMinutes`; o refresh token, após `Jwt:RefreshTokenExpirationInDays`. O refresh token é guardado só como hash SHA-256 (que também é token de concorrência), trocado a cada renovação e revogado no logout ou na troca de senha.
+As entidades herdam de `Entity` e não têm métodos (domínio anêmico): são os handlers da Application que chamam `entity.Raise(new SomeDomainEvent(...))` ao mudar o estado, antes do `SaveChangesAsync`. O `DomainEventsDispatcher` (Infrastructure) despacha os eventos disparados depois do `SaveChangesAsync`; os handlers de evento implementam `IDomainEventHandler<T>` e são registrados automaticamente pela varredura de assembly.
 
 ## Convenções a manter ao ampliar
 
-- Todo texto mostrado ao usuário (descrições de erro, mensagens de validação) fica em português do Brasil; código, identificadores, códigos de erro e templates de log ficam em inglês.
 - Casos de uso novos vão em `Application/{Aggregate}/{UseCase}/`, seguindo o trio Command/Handler/Validator acima — não introduza MediatR.
-- Entidades novas ganham a sua própria classe estática `{Entity}Errors` no Domain, em vez de lançar exceções ou reaproveitar os erros de outro agregado.
-- As configurações do EF Core (`IEntityTypeConfiguration<T>`) ficam em `Infrastructure/{Aggregate}/{Entity}Configuration.cs` e são carregadas pelo `ApplyConfigurationsFromAssembly`; `DbSet`s novos vão em `IApplicationDbContext`, `ApplicationDbContext` e no `TestDbContext` dos testes unitários.
+- Entidades novas ganham a sua própria classe estática `{Entity}Errors` no Domain, em vez de lançar exceções cruas ou reaproveitar os erros de outro agregado.
+- As configurações do EF Core (`IEntityTypeConfiguration<T>`) ficam em `Infrastructure/{Aggregate}/{Entity}Configuration.cs` e precisam ser adicionadas ao `ApplicationDbContext`.
 - Endpoints são uma classe por rota em `Web.Api/Endpoints/{Aggregate}/`, com tag via `Web.Api/Endpoints/Tags.cs`, e registrados automaticamente — não há tabela de rotas para atualizar.
-- Este repositório tem `.claude/skills/` (`add-entity`, `add-feature`, `add-tests`, `ca-review`) com essas convenções em forma de roteiro executável — prefira usá-las a escrever à mão, para que o código novo fique igual aos slices existentes.
+- Este repositório tem `.claude/skills/` (`add-entity`, `add-feature`, `add-tests`, `ca-review`) com essas convenções em forma de roteiro executável — prefira usá-las a escrever à mão, para que o código novo fique exatamente igual aos slices existentes. Ao usá-las, os caminhos, nomes e desvios da seção [Contexto do projeto](#contexto-do-projeto) prevalecem sobre os exemplos delas. As skills `spec-new`, `spec-implement` e `spec-verify` conduzem o fluxo SDD; `add-entity`, `add-feature` e `add-tests` só escrevem código dentro dele.
+
+## Contexto do projeto
+
+### Stack
+
+.NET 10 (minimal APIs), EF Core 10 com Npgsql e PostgreSQL 17, FluentValidation, Scrutor, Dapper (só em consultas de relatório), JWT, `HybridCache` (Redis opcional), Serilog + Seq, OpenTelemetry. Testes: xUnit, NSubstitute, Shouldly, Testcontainers e NetArchTest. Versões dos pacotes em `Directory.Packages.props`.
+
+### Mapa do repositório
+
+| O quê | Onde (namespace = caminho, com prefixo `TickestPristine.`) |
+|---|---|
+| Slices de caso de uso | `src/TickestPristine.Application/{Aggregate}/{UseCase}/` |
+| Abstrações transversais | `src/TickestPristine.Application/Abstractions/` (`Authentication`, `Authorization`, `Behaviors`, `Data`, `Messaging`, `Pagination`, `Storage`) |
+| Guards de autorização | `src/TickestPristine.Application/Authorization/` (`TicketAccessGuard`, `PrivilegeEscalationGuard`, `AdministratorGuard`) |
+| Catálogo de permissões | `src/TickestPristine.Application/Permissions/` (`PermissionCodes`, `PermissionCatalog`) |
+| Entidades, erros e eventos | `src/TickestPristine.Domain/{Aggregate}/` |
+| Configurações EF | `src/TickestPristine.Infrastructure/{Aggregate}/{Entity}Configuration.cs` |
+| Migrations e seed | `src/TickestPristine.Infrastructure/Database/Migrations/` e `Database/Seeding/` |
+| Endpoints | `src/TickestPristine.Web.Api/Endpoints/{Aggregate}/{UseCase}.cs`, com as constantes de permissão em `Endpoints/{Aggregate}/Permissions.cs` |
+| Testes | `tests/TickestPristine.Application.UnitTests/{Aggregate}/`, `tests/TickestPristine.IntegrationTests/{Aggregate}/`, `tests/TickestPristine.ArchitectureTests/` |
+
+Validação de uma mudança: `dotnet build TickestPristine.slnx` (0 avisos) e `dotnet test TickestPristine.slnx` (Docker ligado). Migration nova:
+
+```bash
+dotnet ef migrations add Nome_Da_Migration --project src/TickestPristine.Infrastructure --startup-project src/TickestPristine.Web.Api --output-dir Database/Migrations
+```
+
+### Referências vivas
+
+Antes de criar algo, siga o slice real mais parecido (caminhos a partir de `src/TickestPristine.Application/` e `tests/`):
+
+- Command com retorno: `Tickets/Create/` · sem retorno, com permissão na rota: `Tickets/Close/` · com guard por recurso: `Tickets/Reopen/`
+- Query com guard: `Tickets/GetById/` · dados do próprio usuário, paginada por offset: `Tickets/GetOwn/` · paginada por cursor: `TicketMessages/GetAll/` · relatório em SQL (Dapper): `Tickets/GetVolume/`
+- Entidade e configuração EF: `Domain/Departments/Department.cs` e `Infrastructure/Departments/DepartmentConfiguration.cs`
+- Testes: `Tickets/CloseTicketCommandHandlerTests.cs`, `Tickets/TicketValidatorsTests.cs` (unitários) e `Tickets/TicketsTests.cs` (integração)
+
+### Desvios em relação aos exemplos das skills
+
+- **Caminhos e namespaces** têm o prefixo `TickestPristine.` (ex.: `src/TickestPristine.Application`, não `src/Application`).
+- **Autorização** tem três formas, conforme o caso:
+  1. permissão na rota com `.HasPermission(Permissions.X)`, que recebe uma única permissão;
+  2. `.RequireAuthorization()` na rota e um guard no handler para regras por recurso (dono, participante, privilégio);
+  3. filtro por `IUserContext.UserId` só nas consultas de dados do próprio usuário (`Tickets/GetOwn`, `Tickets/GetOwnSummary`).
+  Permissão nova entra em `PermissionCodes` e em `PermissionCatalog`.
+- **Cache:** nenhuma query da Application usa cache; o único uso de `HybridCache` é o `PermissionProvider` (Infrastructure), invalidado com `IPermissionProvider.InvalidateAsync` depois do commit. O padrão de cache dos exemplos de Todo não se aplica aqui sem uma decisão explícita.
+- **Histórico de chamados:** todo command que altera um chamado, uma mensagem ou um anexo grava o registro com `TicketHistoryEntries` no mesmo `SaveChangesAsync`.
+- **Exclusão lógica** (`DeletedAtUtc` + filtro global) em `Ticket`, `TicketMessage` e `TicketAttachment`.
+- **Textos em pt-BR:** mensagens de `{Entity}Errors`, `.WithMessage(...)` dos validators e textos escritos à mão nos `ProblemDetails` (`GlobalExceptionHandler`, `CustomResults`). Os nomes exibidos das propriedades validadas ficam em `Abstractions/Behaviors/ValidationDisplayNames.cs`.
+- **Testes de integração:** o cadastro de usuários exige `users:create`, então os testes cadastram pelo administrador (`BaseIntegrationTest.RegisterUserAsync` / `PostRegisterAsAdminAsync`).
+
+### Regras permanentes
+
+- Sem MediatR (ver [Convenções a manter ao ampliar](#convenções-a-manter-ao-ampliar)); domínio anêmico, com regras nos handlers ou em classes estáticas da pasta do agregado na Application (ex.: `Tickets/TicketStatusTransitions.cs`).
+- Datas e horas pelo `IDateTimeProvider`, nunca `DateTime.UtcNow` na Application.
+- Identificadores de código em inglês; comentários e textos ao usuário em pt-BR.
+- Mensagens de commit em pt-BR, no formato `tipo: descrição` (`feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `chore`).
+- Toda task tem uma branch própria e atômica, criada a partir da branch base vigente (hoje `feat/spec-driven-development`), no padrão `<tipo>/<BL-n>-<descricao-curta-em-kebab-case>`: `tipo` é `feature`, `bugfix`, `hotfix`, `refactor` ou `chore`; `BL-n` é o item do `specs/BACKLOG.md`; a descrição fica em inglês (ex.: `feature/BL-004-sla-business-calendar`). A branch só contém a task dela.
+
+### Documentos de estado
+
+`SYSTEM_SPECIFICATION.md` descreve o que o sistema faz hoje: capacidades (2.7), regras de negócio (2.6), rotas (4.3.1), lacunas (7) e decisões em aberto (9.5). É extenso: leia só as seções de que a tarefa precisa e atualize as que a mudança afetar.
+
+`specs/BACKLOG.md` guarda as demandas futuras e a prioridade (regras no próprio arquivo); o andamento de cada demanda fica na spec dela.
+
+## Política de autonomia
+
+| Pode fazer sem perguntar | Precisa perguntar antes | Precisa de plano aprovado | Precisa de autorização explícita no chat |
+|---|---|---|---|
+| Ler código e documentos, buscar, rodar build e testes, verificações não destrutivas | Regra de negócio sem fonte no código ou nos documentos; mais de uma opção viável; conflito entre o pedido e este arquivo; teste que falha por defeito fora do escopo | Mudança funcional não trivial em `src/` ou `tests/` | Stage, commit, push e PR; excluir ou mover arquivos; aplicar migration em banco; alterar este arquivo, as skills ou configurações; qualquer ação fora do repositório |
+
+A autorização vale só para a ação pedida, no escopo pedido. Correção realmente trivial (texto, typo) dispensa o plano somente quando autorizada explicitamente no chat.
+
+**Mudança trivial:** corrige texto, typo, comentário ou formatação sem mudar comportamento observável, contrato, banco ou regra; qualquer outra é não trivial. Escrever a spec em `specs/` (pela `spec-new`) e atualizar o `SYSTEM_SPECIFICATION.md` (pela `spec-verify`) fazem parte do fluxo SDD e não exigem autorização à parte.
+
+## Fluxo de desenvolvimento (SDD)
+
+Mudança funcional não trivial segue Spec-Driven Development, com uma spec por mudança em `specs/NNN-slug/spec.md`:
+
+1. **`spec-new`** escreve a spec (requisitos, critérios de aceitação, decisões, plano e tarefas) e pergunta o que não tiver fonte.
+2. **Aprovação explícita** do responsável pelo produto no chat; sem ela, nenhum código de `src/` ou `tests/` é escrito.
+3. **`/spec-implement NNN`** (só por comando) executa as tarefas com as skills de implementação.
+4. **`spec-verify`** comprova cada critério com testes aprovados na execução atual, roda a revisão e atualiza as seções afetadas do `SYSTEM_SPECIFICATION.md`.
+5. **Entrega** (commit e PR) só com autorização explícita: `Verificada` não significa `Entregue`.
+
+Estados e transições da spec: `.claude/skills/spec-new/references/spec-status.md`.
+
+### Portão determinístico
+
+**Estado:** instalado em 23/10/2026 (até essa data só existia na worktree de teste). O `.claude/settings.json` também nega, em `permissions.deny`, a leitura de `.env` e `.env.*` e o `git push` pelo agente: o push é feito pelo responsável (`! git push`).
+
+O hook `.claude/hooks/sdd_gate.py` (registrado em `.claude/settings.json`) bloqueia escrita em `src/` e `tests/`, por ferramenta de edição ou comando de shell, fora de um `/spec-implement NNN` cuja spec esteja `Em implementação` e com `aprovada-em` preenchido. Para uma mudança trivial, inclua `[sdd:autorizo]` na sua mensagem: a liberação vale só para ela e termina na sua próxima mensagem, mesmo que ela chegue no meio de uma resposta. O próprio hook e os settings também exigem o marcador. O hook evita erros do agente; não resiste a quem queira burlá-lo de propósito. Os caminhos bloqueados e os limites conhecidos estão no `SYSTEM_SPECIFICATION.md` (6.9). Testes: `python -m unittest discover -s .claude/hooks -p "test_*.py"` (também configurados como passo do CI em `.github/workflows/build.yml`).

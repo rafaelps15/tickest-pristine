@@ -28,16 +28,7 @@ internal sealed class ChangeUserPasswordCommandHandler(
             return Result.Failure(UserErrors.InvalidCurrentPassword);
         }
 
-        credential.PasswordHash = passwordHasher.Hash(command.NewPassword);
-
-        credential.Raise(new UserPasswordChangedDomainEvent(credential.UserId));
-
-        // Revoga todas as sessões ativas do usuário.
-        List<RefreshToken> refreshTokens = await context.RefreshTokens
-            .Where(r => r.UserId == userContext.UserId)
-            .ToListAsync(cancellationToken);
-
-        context.RefreshTokens.RemoveRange(refreshTokens);
+        await UserPasswords.ReplaceAsync(context, passwordHasher, credential, command.NewPassword, cancellationToken);
 
         await context.SaveChangesAsync(cancellationToken);
 

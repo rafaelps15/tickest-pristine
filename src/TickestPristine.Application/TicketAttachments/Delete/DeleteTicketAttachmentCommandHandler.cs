@@ -3,8 +3,8 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Authorization;
+using TickestPristine.Application.TicketHistories;
 using TickestPristine.Domain.Tickets;
-using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -19,32 +19,40 @@ internal sealed class DeleteTicketAttachmentCommandHandler(
 {
     public async Task<Result> Handle(DeleteTicketAttachmentCommand command, CancellationToken cancellationToken)
     {
+        // O filtro global do chamado exclui os excluídos: mensagem ou anexo de chamado excluído não é mais alterado.
         TicketAttachment? attachment = await context.TicketAttachments
-            .SingleOrDefaultAsync(a => a.Id == command.AttachmentId, cancellationToken);
+            .SingleOrDefaultAsync(
+                a => a.Id == command.AttachmentId && context.Tickets.Any(t => t.Id == a.TicketId),
+                cancellationToken);
 
         if (attachment is null)
         {
             return Result.Failure(TicketAttachmentErrors.NotFound(command.AttachmentId));
         }
 
-        bool isUploader = attachment.UploadedByUserId == userContext.UserId;
+        Result access = await TicketAccessGuard.EnsureOwnerOrManagerAsync(
+            permissionProvider,
+            userContext.UserId,
+            attachment.UploadedByUserId,
+            ownPermission: null,
+            cancellationToken);
 
-        if (!isUploader)
+        if (access.IsFailure)
         {
-            bool canManageTickets = await permissionProvider.HasPermissionAsync(
-                userContext.UserId,
-                PermissionCodes.Tickets.Manage,
-                cancellationToken);
-
-            if (!canManageTickets)
-            {
-                return Result.Failure(UserErrors.Unauthorized());
-            }
+            return access;
         }
 
-        attachment.DeletedAtUtc = dateTimeProvider.UtcNow;
+        DateTime nowUtc = dateTimeProvider.UtcNow;
+
+        attachment.DeletedAtUtc = nowUtc;
 
         attachment.Raise(new TicketAttachmentDeletedDomainEvent(attachment.Id, attachment.TicketId));
+
+        context.TicketHistories.Add(TicketHistoryEntries.Create(
+            attachment.TicketId,
+            userContext.UserId,
+            TicketHistoryAction.AttachmentRemoved,
+            nowUtc));
 
         await context.SaveChangesAsync(cancellationToken);
 

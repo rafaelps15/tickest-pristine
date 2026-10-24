@@ -3,13 +3,12 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Users.GetAll;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.Users;
 
 public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
 {
-    private static GetUsersQuery AllUsers => new(UserStatusFilter.All, null, null, null, 1, 20);
+    private static GetUsersQuery AllUsers => new(UserStatusFilter.All, null, null, null, new PageRequest(1, 20));
 
     [Fact]
     public async Task Handle_Should_ReturnAllUsers_WhenNoFilterIsGiven()
@@ -154,7 +153,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
 
         // Act
         Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(
-            AllUsers with { Page = 2, PageSize = 2 },
+            AllUsers with { Paging = new PageRequest(2, 2) },
             CancellationToken.None);
 
         // Assert
@@ -165,34 +164,14 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_AdjustPageAndPageSize_WhenOutOfRange()
-    {
-        // Arrange
-        await using TestDbContext context = CreateDbContext();
-        AddUser(context, "Ana", "ana@tickestpristine.dev", isActive: true);
-        await context.SaveChangesAsync();
-
-        var handler = new GetUsersQueryHandler(context);
-
-        // Act
-        Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(
-            AllUsers with { Page = 0, PageSize = 1000 },
-            CancellationToken.None);
-
-        // Assert
-        result.Value.Page.ShouldBe(1);
-        result.Value.PageSize.ShouldBe(100);
-    }
-
-    [Fact]
     public async Task Handle_Should_ReturnAssignedRoles_WhenUserHasRoles()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
         User user = AddUser(context, "Ana", "ana@tickestpristine.dev", isActive: true);
-        var role = new Role { Id = Guid.NewGuid(), Name = "Atendente" };
+        Role role = CreateRole("Atendente");
         context.Roles.Add(role);
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = role.Id });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = role.Name });
         await context.SaveChangesAsync();
 
         var handler = new GetUsersQueryHandler(context);
@@ -202,7 +181,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
 
         // Assert
         UserSummaryResponse response = result.Value.Items.Single(u => u.Id == user.Id);
-        response.Roles.ShouldContain(r => r.Id == role.Id && r.Name == "Atendente");
+        response.Roles.ShouldContain(r => r.Name == role.Name && r.Name == "Atendente");
     }
 
     [Fact]

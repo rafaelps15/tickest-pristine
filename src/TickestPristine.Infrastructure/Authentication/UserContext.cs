@@ -1,21 +1,11 @@
-﻿using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Application.Abstractions.Authentication;
 using Microsoft.AspNetCore.Http;
 
 namespace TickestPristine.Infrastructure.Authentication;
 
-internal sealed class UserContext : IUserContext
+internal sealed class UserContext(IHttpContextAccessor httpContextAccessor) : IUserContext
 {
-    private readonly IHttpContextAccessor _httpContextAccessor;
+    public Guid UserId => httpContextAccessor.HttpContext?.User.GetUserId() ?? throw new UserContextUnavailableException();
 
-    public UserContext(IHttpContextAccessor httpContextAccessor)
-    {
-        _httpContextAccessor = httpContextAccessor;
-    }
-
-    public Guid UserId =>
-        _httpContextAccessor
-            .HttpContext?
-            .User
-            .GetUserId() ??
-        throw new UserContextUnavailableException();
+    public Guid? UserIdOrDefault => httpContextAccessor.HttpContext?.User.FindUserId();
 }

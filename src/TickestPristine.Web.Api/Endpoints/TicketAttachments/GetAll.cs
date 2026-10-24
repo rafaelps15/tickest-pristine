@@ -1,4 +1,5 @@
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Application.TicketAttachments.GetAll;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
@@ -12,12 +13,13 @@ internal sealed class GetAll : IEndpoint
     {
         app.MapGet("tickets/{ticketId:guid}/attachments", async (
             Guid ticketId,
-            IQueryHandler<GetTicketAttachmentsQuery, List<TicketAttachmentResponse>> handler,
+            [AsParameters] CursorPageRequest paging,
+            IQueryHandler<GetTicketAttachmentsQuery, CursorPagedResponse<TicketAttachmentResponse>> handler,
             CancellationToken cancellationToken) =>
         {
-            var query = new GetTicketAttachmentsQuery(ticketId);
+            var query = new GetTicketAttachmentsQuery(ticketId, paging);
 
-            Result<List<TicketAttachmentResponse>> result = await handler.Handle(query, cancellationToken);
+            Result<CursorPagedResponse<TicketAttachmentResponse>> result = await handler.Handle(query, cancellationToken);
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })

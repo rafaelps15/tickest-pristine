@@ -1,9 +1,11 @@
-﻿using TickestPristine.Domain.Departments;
+﻿using TickestPristine.Domain.Audit;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace TickestPristine.Application.Abstractions.Data;
 
@@ -19,8 +21,13 @@ public interface IApplicationDbContext
     DbSet<TicketMessage> TicketMessages { get; }
     DbSet<TicketHistory> TicketHistories { get; }
     DbSet<Role> Roles { get; }
+    DbSet<Permission> Permissions { get; }
     DbSet<RolePermission> RolePermissions { get; }
     DbSet<UserRole> UserRoles { get; }
+    DbSet<AuditLogEntry> AuditLogs { get; }
+
+    EntityEntry<TEntity> Entry<TEntity>(TEntity entity)
+        where TEntity : class;
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

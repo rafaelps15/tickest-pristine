@@ -1,5 +1,4 @@
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Departments.Update;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
@@ -37,6 +36,6 @@ internal sealed class Update : IEndpoint
             return result.Match(Results.NoContent, CustomResults.Problem);
         })
         .WithTags(Tags.Departments)
-        .HasPermission(PermissionCodes.Departments.Manage);
+        .HasPermission(Permissions.DepartmentsManage);
     }
 }

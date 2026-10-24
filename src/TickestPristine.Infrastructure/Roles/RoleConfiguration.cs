@@ -1,4 +1,6 @@
+using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Roles;
+using TickestPristine.Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -8,20 +10,21 @@ internal sealed class RoleConfiguration : IEntityTypeConfiguration<Role>
 {
     public void Configure(EntityTypeBuilder<Role> builder)
     {
-        builder.HasKey(role => role.Id);
+        builder.HasKey(r => r.Id);
 
-        builder.Property(role => role.Name).HasMaxLength(100);
+        // O nome continua sendo a chave que user_roles e role_permissions referenciam (e a que a API usa nas rotas).
+        builder.HasAlternateKey(r => r.Name);
 
-        builder.HasIndex(role => role.Name).IsUnique();
+        builder.Property(r => r.Name).HasMaxLength(50);
 
-        // Permite no máximo uma role padrão e uma role de administrador.
-        builder.HasIndex(role => role.IsDefault).IsUnique().HasFilter("is_default");
+        // Token de concorrência só no banco, incrementado pelo AdministratorGuard quando um administrador perde o acesso.
+        builder.Property<int>("Version").IsConcurrencyToken().HasDefaultValue(0);
 
-        builder.HasIndex(role => role.IsAdministrator).IsUnique().HasFilter("is_administrator");
-
-        builder.Property(role => role.Version).IsConcurrencyToken();
-
-        // Roles padrão: dados de referência versionados pelas migrations.
-        builder.HasData(Role.Administrator, Role.Agent, Role.Collaborator);
+        builder.HasData(
+            Create(RoleNames.Administrator),
+            Create(RoleNames.Agent),
+            Create(RoleNames.Collaborator));
     }
+
+    private static Role Create(string name) => new() { Id = DeterministicGuid.Create($"role:{name}"), Name = name };
 }

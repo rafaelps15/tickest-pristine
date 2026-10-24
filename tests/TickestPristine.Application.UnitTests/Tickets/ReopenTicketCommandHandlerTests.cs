@@ -1,12 +1,11 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Authorization;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Application.Tickets.Reopen;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -23,7 +22,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         userContext.UserId.Returns(OwnerId);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider);
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
         var command = new ReopenTicketCommand(Guid.NewGuid());
 
         // Act
@@ -44,8 +43,10 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(OwnerId);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.ReopenOwn, Arg.Any<CancellationToken>())
+            .Returns(true);
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider);
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
         var command = new ReopenTicketCommand(ticketId);
 
         // Act
@@ -54,6 +55,81 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(TicketErrors.AlreadyActive(ticketId));
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnInvalidStatusTransition_WhenStatusCannotGoBackToOpen()
+    {
+        // Arrange: status fora do enum, que nenhuma transição aceita
+        const TicketStatus unknownStatus = (TicketStatus)99;
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, unknownStatus);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(OwnerId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.ReopenOwn, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
+        var command = new ReopenTicketCommand(ticketId);
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketErrors.InvalidStatusTransition(unknownStatus, TicketStatus.Open));
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnUnauthorized_WhenNonOwnerLacksManagePermissionAndTicketIsActive()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        var outsiderId = Guid.NewGuid();
+        userContext.UserId.Returns(outsiderId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(outsiderId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
+        var command = new ReopenTicketCommand(ticketId);
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.Unauthorized());
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnUnauthorized_WhenOwnerLacksReopenOwnPermission()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Closed);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(OwnerId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.ReopenOwn, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
+        var command = new ReopenTicketCommand(ticketId);
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.Unauthorized());
+        (await context.Tickets.SingleAsync(t => t.Id == ticketId)).Status.ShouldBe(TicketStatus.Closed);
     }
 
     [Fact]
@@ -69,7 +145,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider);
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
         var command = new ReopenTicketCommand(ticketId);
 
         // Act
@@ -96,7 +172,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.ReopenOwn, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider);
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
         var command = new ReopenTicketCommand(ticketId);
 
         // Act
@@ -108,6 +184,12 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == ticketId);
         ticket.Status.ShouldBe(TicketStatus.Open);
         ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketReopenedDomainEvent);
+
+        // O histórico guarda o status anterior e o novo.
+        TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id);
+        history.Action.ShouldBe(TicketHistoryAction.Reopened);
+        history.OldValue.ShouldBe(status.ToString());
+        history.NewValue.ShouldBe(TicketStatus.Open.ToString());
     }
 
     [Fact]
@@ -123,7 +205,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider);
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
         var command = new ReopenTicketCommand(ticketId);
 
         // Act
@@ -134,6 +216,11 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
 
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == ticketId);
         ticket.Status.ShouldBe(TicketStatus.Open);
+        ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketReopenedDomainEvent);
+
+        TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id);
+        history.OldValue.ShouldBe(nameof(TicketStatus.Closed));
+        history.NewValue.ShouldBe(nameof(TicketStatus.Open));
     }
 
     private static async Task<Guid> SeedTicketAsync(TestDbContext context, Guid createdByUserId, TicketStatus status)

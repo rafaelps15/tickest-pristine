@@ -1,74 +1,43 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace TickestPristine.Infrastructure.Database.Seeding;
 
 /// <summary>
-/// Executado pelo EF Core ao aplicar as migrations (UseSeeding/UseAsyncSeeding): cria o administrador inicial,
-/// a estrutura inicial de departamentos e setores (com "Seeding:DefaultOrganization", ligado por padrão) e, com
-/// "Seeding:SampleData" ligado, os chamados de exemplo. Roda a cada Migrate, por isso não duplica nada.
-/// As roles padrão e suas permissões não passam por aqui: vêm das migrations (HasData).
+/// Executado pelo EF Core junto com as migrations (UseSeeding/UseAsyncSeeding), ou seja, a cada Migrate: cada seeder
+/// confere antes o que já existe e não duplica nada. Roles, permissões e o vínculo padrão entre elas não passam por
+/// aqui: vêm das migrations (HasData).
 /// </summary>
-internal sealed class DatabaseSeeder(AdminUserSeeder adminUserSeeder, IOptions<SeedingOptions> seedingOptions)
+internal sealed class DatabaseSeeder(
+    AdminUserSeeder adminUserSeeder,
+    DefaultOrganizationSeeder defaultOrganizationSeeder,
+    SampleDataSeeder sampleDataSeeder)
 {
-    public void Seed(DbContext context)
-    {
-        ReloadDatabaseTypes(context);
+    /// <summary>
+    /// Versão síncrona usada por Migrate() e pelo "dotnet ef database update". Bloquear aqui é seguro: só roda na
+    /// inicialização da aplicação ou na ferramenta de linha de comando, onde não há SynchronizationContext.
+    /// </summary>
+    public void Seed(DbContext context) => SeedAsync(context, CancellationToken.None).GetAwaiter().GetResult();
 
-        adminUserSeeder.Seed(context);
-
-        if (DefaultOrganizationEnabled)
-        {
-            DefaultOrganizationSeeder.Seed(context);
-        }
-
-        if (SampleDataEnabled)
-        {
-            SampleDataSeeder.Seed(context);
-        }
-    }
-
+    /// <summary>
+    /// Roda os seeders em ordem: os chamados de exemplo dependem do administrador e dos setores já criados.
+    /// </summary>
     public async Task SeedAsync(DbContext context, CancellationToken cancellationToken)
     {
-        await ReloadDatabaseTypesAsync(context, cancellationToken);
+        var applicationDbContext = (ApplicationDbContext)context;
 
-        await adminUserSeeder.SeedAsync(context, cancellationToken);
+        await ReloadDatabaseTypesAsync(applicationDbContext, cancellationToken);
 
-        if (DefaultOrganizationEnabled)
-        {
-            await DefaultOrganizationSeeder.SeedAsync(context, cancellationToken);
-        }
-
-        if (SampleDataEnabled)
-        {
-            await SampleDataSeeder.SeedAsync(context, cancellationToken);
-        }
+        await adminUserSeeder.SeedAsync(applicationDbContext, cancellationToken);
+        await defaultOrganizationSeeder.SeedAsync(applicationDbContext, cancellationToken);
+        await sampleDataSeeder.SeedAsync(applicationDbContext, cancellationToken);
     }
-
-    private bool DefaultOrganizationEnabled => seedingOptions.Value.DefaultOrganization;
-
-    private bool SampleDataEnabled => seedingOptions.Value.SampleData;
 
     /// <summary>
     /// As migrations podem criar extensões com tipos novos (ex.: citext) na mesma conexão; o Npgsql só passa a
     /// conhecê-los depois de recarregar os tipos do banco.
     /// </summary>
-    private static void ReloadDatabaseTypes(DbContext context)
-    {
-        context.Database.OpenConnection();
-
-        try
-        {
-            ((NpgsqlConnection)context.Database.GetDbConnection()).ReloadTypes();
-        }
-        finally
-        {
-            context.Database.CloseConnection();
-        }
-    }
-
-    private static async Task ReloadDatabaseTypesAsync(DbContext context, CancellationToken cancellationToken)
+    private static async Task ReloadDatabaseTypesAsync(ApplicationDbContext context, CancellationToken cancellationToken)
     {
         await context.Database.OpenConnectionAsync(cancellationToken);
 

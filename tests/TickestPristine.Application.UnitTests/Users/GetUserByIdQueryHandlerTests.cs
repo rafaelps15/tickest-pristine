@@ -1,17 +1,17 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Authorization;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Application.Users.GetById;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Users;
-using TickestPristine.SharedKernel;
+using TickestPristine.Application.Users;
 
 namespace TickestPristine.Application.UnitTests.Users;
 
 public sealed class GetUserByIdQueryHandlerTests : BaseHandlerTest
 {
     [Fact]
-    public async Task Handle_Should_ReturnUnauthorized_WhenCallerIsNotSelfAndLacksManagePermission()
+    public async Task Handle_Should_ReturnUnauthorized_WhenCallerIsNotSelfAndLacksReadPermission()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -21,7 +21,7 @@ public sealed class GetUserByIdQueryHandlerTests : BaseHandlerTest
             Email = "someone@example.com",
             FirstName = "Some",
             LastName = "One",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(user);
         await context.SaveChangesAsync();
@@ -77,7 +77,7 @@ public sealed class GetUserByIdQueryHandlerTests : BaseHandlerTest
             Email = "someone@example.com",
             FirstName = "Some",
             LastName = "One",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(user);
         await context.SaveChangesAsync();
@@ -98,7 +98,7 @@ public sealed class GetUserByIdQueryHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnUser_WhenCallerHasManagePermission()
+    public async Task Handle_Should_ReturnUser_WhenCallerHasReadPermission()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -108,7 +108,7 @@ public sealed class GetUserByIdQueryHandlerTests : BaseHandlerTest
             Email = "someone@example.com",
             FirstName = "Some",
             LastName = "One",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(user);
         await context.SaveChangesAsync();

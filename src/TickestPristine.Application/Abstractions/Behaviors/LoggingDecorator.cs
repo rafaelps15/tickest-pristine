@@ -1,6 +1,5 @@
-﻿using TickestPristine.Application.Abstractions.Messaging;
 using Microsoft.Extensions.Logging;
-using Serilog.Context;
+using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Abstractions.Behaviors;
@@ -27,7 +26,7 @@ internal static class LoggingDecorator
             }
             else
             {
-                using (LogContext.PushProperty("Error", result.Error, true))
+                using (logger.BeginScope(new Dictionary<string, object?> { ["@Error"] = result.Error }))
                 {
                     logger.LogError("Comando {Command} concluído com erro", commandName);
                 }
@@ -57,7 +56,7 @@ internal static class LoggingDecorator
             }
             else
             {
-                using (LogContext.PushProperty("Error", result.Error, true))
+                using (logger.BeginScope(new Dictionary<string, object?> { ["@Error"] = result.Error }))
                 {
                     logger.LogError("Comando {Command} concluído com erro", commandName);
                 }
@@ -87,7 +86,7 @@ internal static class LoggingDecorator
             }
             else
             {
-                using (LogContext.PushProperty("Error", result.Error, true))
+                using (logger.BeginScope(new Dictionary<string, object?> { ["@Error"] = result.Error }))
                 {
                     logger.LogError("Consulta {Query} concluída com erro", queryName);
                 }

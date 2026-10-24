@@ -1,6 +1,7 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.TicketHistories;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -16,8 +17,11 @@ internal sealed class EditTicketMessageCommandHandler(
 {
     public async Task<Result> Handle(EditTicketMessageCommand command, CancellationToken cancellationToken)
     {
+        // O filtro global do chamado exclui os excluídos: mensagem ou anexo de chamado excluído não é mais alterado.
         TicketMessage? message = await context.TicketMessages
-            .SingleOrDefaultAsync(m => m.Id == command.MessageId, cancellationToken);
+            .SingleOrDefaultAsync(
+                m => m.Id == command.MessageId && context.Tickets.Any(t => t.Id == m.TicketId),
+                cancellationToken);
 
         if (message is null)
         {
@@ -29,10 +33,18 @@ internal sealed class EditTicketMessageCommandHandler(
             return Result.Failure(UserErrors.Unauthorized());
         }
 
-        message.Content = command.Content;
-        message.EditedAtUtc = dateTimeProvider.UtcNow;
+        DateTime nowUtc = dateTimeProvider.UtcNow;
 
-        message.Raise(new TicketMessageEditedDomainEvent(message.Id, message.TicketId));
+        message.Content = command.Content;
+        message.EditedAtUtc = nowUtc;
+
+        message.Raise(new TicketMessageEditedDomainEvent(message.Id, message.TicketId, message.AuthorUserId));
+
+        context.TicketHistories.Add(TicketHistoryEntries.Create(
+            message.TicketId,
+            message.AuthorUserId,
+            TicketHistoryAction.MessageEdited,
+            nowUtc));
 
         await context.SaveChangesAsync(cancellationToken);
 

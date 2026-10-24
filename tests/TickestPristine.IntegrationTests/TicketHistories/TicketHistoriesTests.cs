@@ -11,9 +11,6 @@ namespace TickestPristine.IntegrationTests.TicketHistories;
 
 public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
-    private const string AdminEmail = "admin@tickestpristine.dev";
-    private const string AdminPassword = "ChangeMe123!";
-
     private async Task AuthenticateAsAdminAsync()
     {
         AccessTokens tokens = await LoginAsync(AdminEmail, AdminPassword);
@@ -85,6 +82,25 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
     }
 
     [Fact]
+    public async Task GetAll_Should_ReturnForbidden_WhenCallerIsNotParticipantAndLacksManagePermission()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens ownerTokens) = await RegisterAndLoginAsync();
+        Authenticate(ownerTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        (_, AccessTokens outsiderTokens) = await RegisterAndLoginAsync();
+        Authenticate(outsiderTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/{ticketId}/history");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public async Task GetAll_Should_ContainCreatedEntry_WhenTicketWasJustOpened()
     {
         // Arrange
@@ -98,8 +114,36 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
 
         // Assert
         response.EnsureSuccessStatusCode();
-        List<TicketHistoryDto>? history = await response.Content.ReadFromJsonAsync<List<TicketHistoryDto>>();
+        List<TicketHistoryDto>? history = (await response.Content.ReadFromJsonAsync<CursorPageDto<TicketHistoryDto>>())?.Items;
         history!.ShouldContain(h => h.TicketId == ticketId && h.Action == 1 /* Created */);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_RecordCallerInCreatedEntry_WhenManagerOpensTicketOnBehalfOfRequester()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        Guid requesterId = await RegisterUserAsync(UniqueEmail());
+
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+
+        HttpResponseMessage createResponse = await HttpClient.PostAsJsonAsync("tickets", new
+        {
+            title = "Printer is broken",
+            description = "The printer on the 3rd floor is not working",
+            priority = 2,
+            sectorId,
+            requesterId
+        });
+        createResponse.EnsureSuccessStatusCode();
+        Guid ticketId = await createResponse.Content.ReadFromJsonAsync<Guid>();
+
+        // Act
+        List<TicketHistoryDto> history = await GetHistoryAsync(ticketId);
+
+        // Assert
+        history.ShouldContain(h => h.Action == 1 /* Created */ && h.ChangedByUserId == GetUserId(adminTokens));
     }
 
     [Fact]
@@ -121,7 +165,7 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
 
         // Assert
         response.EnsureSuccessStatusCode();
-        List<TicketHistoryDto>? history = await response.Content.ReadFromJsonAsync<List<TicketHistoryDto>>();
+        List<TicketHistoryDto>? history = (await response.Content.ReadFromJsonAsync<CursorPageDto<TicketHistoryDto>>())?.Items;
         history!.ShouldContain(h => h.TicketId == ticketId && h.Action == 6 /* MessageAdded */);
     }
 
@@ -146,8 +190,11 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
 
         // Assert
         response.EnsureSuccessStatusCode();
-        List<TicketHistoryDto>? history = await response.Content.ReadFromJsonAsync<List<TicketHistoryDto>>();
-        history!.ShouldContain(h => h.TicketId == ticketId && h.Action == 2 /* StatusChanged */);
+        List<TicketHistoryDto>? history = (await response.Content.ReadFromJsonAsync<CursorPageDto<TicketHistoryDto>>())?.Items;
+        history!.ShouldContain(h =>
+            h.TicketId == ticketId &&
+            h.Action == 2 /* StatusChanged */ &&
+            h.Description == "Status alterado de Aberto para Em andamento");
     }
 
     [Fact]
@@ -174,7 +221,7 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
 
         // Assert
         response.EnsureSuccessStatusCode();
-        List<TicketHistoryDto>? history = await response.Content.ReadFromJsonAsync<List<TicketHistoryDto>>();
+        List<TicketHistoryDto>? history = (await response.Content.ReadFromJsonAsync<CursorPageDto<TicketHistoryDto>>())?.Items;
         history!.ShouldContain(h => h.TicketId == ticketId && h.Action == 4 /* Reopened */);
     }
 
@@ -234,7 +281,9 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
         List<TicketHistoryDto> history = await GetHistoryAsync(ticketId);
 
         // Assert
-        history.ShouldContain(h => h.Action == (int)TicketHistoryAction.AttachmentAdded);
+        history.ShouldContain(h =>
+            h.Action == (int)TicketHistoryAction.AttachmentAdded &&
+            h.Description == "Anexo 'report.pdf' adicionado");
     }
 
     [Fact]
@@ -317,7 +366,7 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
         HttpResponseMessage response = await HttpClient.GetAsync($"tickets/{ticketId}/history");
         response.EnsureSuccessStatusCode();
 
-        List<TicketHistoryDto>? history = await response.Content.ReadFromJsonAsync<List<TicketHistoryDto>>();
+        List<TicketHistoryDto>? history = (await response.Content.ReadFromJsonAsync<CursorPageDto<TicketHistoryDto>>())?.Items;
 
         return history!;
     }

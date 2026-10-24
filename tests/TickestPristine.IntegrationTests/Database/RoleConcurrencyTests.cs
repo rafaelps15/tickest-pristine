@@ -1,3 +1,4 @@
+using TickestPristine.Application.Roles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Domain.Roles;
@@ -11,19 +12,20 @@ namespace TickestPristine.IntegrationTests.Database;
 public sealed class RoleConcurrencyTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
     [Fact]
-    public async Task SaveChanges_Should_RejectSecondAdministratorRemoval_WhenBothReadTheSameVersion()
+    public async Task SaveChanges_Should_ThrowConcurrencyException_WhenBothContextsReadTheSameRoleVersion()
     {
-        // Arrange: dois contextos leem a role de administrador na mesma versão
+        // Arrange
+        // Dois contextos leem a role de administrador na mesma versão.
         using IServiceScope firstScope = Services.CreateScope();
         using IServiceScope secondScope = Services.CreateScope();
         ApplicationDbContext firstContext = firstScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         ApplicationDbContext secondContext = secondScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        Role firstCopy = await firstContext.Roles.SingleAsync(r => r.IsAdministrator);
-        Role secondCopy = await secondContext.Roles.SingleAsync(r => r.IsAdministrator);
+        Role firstCopy = await firstContext.Roles.SingleAsync(r => r.Name == RoleNames.Administrator);
+        Role secondCopy = await secondContext.Roles.SingleAsync(r => r.Name == RoleNames.Administrator);
 
-        firstCopy.Version++;
-        secondCopy.Version++;
+        firstContext.Entry(firstCopy).Property<int>("Version").CurrentValue++;
+        secondContext.Entry(secondCopy).Property<int>("Version").CurrentValue++;
 
         // Act
         await firstContext.SaveChangesAsync();

@@ -12,11 +12,15 @@ public static class TicketErrors
         "Tickets.NotActive",
         $"O chamado com o Id = '{ticketId}' não está ativo");
 
-    public static Error AlreadyActive(Guid ticketId) => Error.Problem(
+    public static Error AlreadyActive(Guid ticketId) => Error.Conflict(
         "Tickets.AlreadyActive",
         $"O chamado com o Id = '{ticketId}' já está ativo");
 
     public static Error InvalidStatusTransition(TicketStatus from, TicketStatus to) => Error.Problem(
         "Tickets.InvalidStatusTransition",
         $"Não é possível alterar o status do chamado de '{TicketStatusNames.GetDisplayName(from)}' para '{TicketStatusNames.GetDisplayName(to)}'");
+
+    public static Error AssigneeCannotManageTickets(Guid userId) => Error.Problem(
+        "Tickets.AssigneeCannotManageTickets",
+        $"O usuário com o Id = '{userId}' não atende chamados e não pode ser o responsável");
 }

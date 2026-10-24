@@ -1,12 +1,11 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Authorization;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Application.TicketMessages.Post;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
-using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.UnitTests.TicketMessages;
 
@@ -89,6 +88,7 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
         message.AuthorUserId.ShouldBe(CreatorId);
         message.Content.ShouldBe("Hello there");
         message.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketMessagePostedDomainEvent);
+        (await context.TicketHistories.SingleAsync(h => h.TicketId == message.TicketId)).Action.ShouldBe(TicketHistoryAction.MessageAdded);
     }
 
     [Fact]
@@ -112,6 +112,11 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
+
+        TicketMessage message = await context.TicketMessages.SingleAsync(m => m.Id == result.Value);
+        message.TicketId.ShouldBe(ticketId);
+        message.AuthorUserId.ShouldBe(AssignedId);
+        message.Content.ShouldBe("On it");
     }
 
     [Fact]
@@ -138,6 +143,11 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
+
+        TicketMessage message = await context.TicketMessages.SingleAsync(m => m.Id == result.Value);
+        message.TicketId.ShouldBe(ticketId);
+        message.AuthorUserId.ShouldBe(managerId);
+        message.Content.ShouldBe("Escalating this");
     }
 
     private static async Task<Guid> SeedTicketAsync(TestDbContext context)

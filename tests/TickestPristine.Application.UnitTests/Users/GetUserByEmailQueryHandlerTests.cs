@@ -1,7 +1,7 @@
 using TickestPristine.Application.Users.GetByEmail;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Users;
-using TickestPristine.SharedKernel;
+using TickestPristine.Application.Users;
 
 namespace TickestPristine.Application.UnitTests.Users;
 
@@ -34,7 +34,7 @@ public sealed class GetUserByEmailQueryHandlerTests : BaseHandlerTest
             Email = "someone@example.com",
             FirstName = "Some",
             LastName = "One",
-            Code = $"usr_{Ulid.NewUlid()}"
+            Code = UserCodes.New()
         };
         context.Users.Add(user);
         await context.SaveChangesAsync();

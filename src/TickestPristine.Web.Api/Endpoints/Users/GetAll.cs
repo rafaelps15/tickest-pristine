@@ -1,6 +1,5 @@
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Pagination;
-using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Users.GetAll;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
@@ -17,8 +16,7 @@ internal sealed class GetAll : IEndpoint
             string? search,
             DateOnly? createdFrom,
             DateOnly? createdTo,
-            int? page,
-            int? pageSize,
+            [AsParameters] PageRequest paging,
             IQueryHandler<GetUsersQuery, PagedResponse<UserSummaryResponse>> handler,
             CancellationToken cancellationToken) =>
         {
@@ -27,14 +25,13 @@ internal sealed class GetAll : IEndpoint
                 search,
                 createdFrom,
                 createdTo,
-                page,
-                pageSize);
+                paging);
 
             Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(query, cancellationToken);
 
             return result.Match(Results.Ok, CustomResults.Problem);
         })
         .WithTags(Tags.Users)
-        .HasPermission(PermissionCodes.Users.Read);
+        .HasPermission(Permissions.UsersRead);
     }
 }

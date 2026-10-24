@@ -186,6 +186,69 @@ public sealed class TicketAttachmentValidatorsTests
     }
 
     [Fact]
+    public void UploadValidator_Should_HaveError_WhenExtensionDoesNotMatchContentType()
+    {
+        // Arrange: executável declarado como PDF
+        UploadTicketAttachmentCommand command = ValidUploadCommand;
+        command.FileName = "nota.pdf.exe";
+
+        // Act
+        TestValidationResult<UploadTicketAttachmentCommand> result = _uploadValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.FileName)
+            .WithErrorMessage("A extensão do arquivo não corresponde ao tipo 'application/pdf'.");
+    }
+
+    [Theory]
+    [InlineData("../report.pdf")]
+    [InlineData("pasta\\report.pdf")]
+    [InlineData("report\n.pdf")]
+    public void UploadValidator_Should_HaveError_WhenFileNameHasInvalidCharacters(string fileName)
+    {
+        // Arrange
+        UploadTicketAttachmentCommand command = ValidUploadCommand;
+        command.FileName = fileName;
+
+        // Act
+        TestValidationResult<UploadTicketAttachmentCommand> result = _uploadValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.FileName)
+            .WithErrorMessage("O nome do arquivo contém caracteres inválidos.");
+    }
+
+    [Fact]
+    public void UploadValidator_Should_NotHaveErrors_WhenExtensionMatchesContentTypeIgnoringCase()
+    {
+        // Arrange
+        UploadTicketAttachmentCommand command = ValidUploadCommand;
+        command.FileName = "Foto.JPEG";
+        command.ContentType = "image/jpeg";
+
+        // Act
+        TestValidationResult<UploadTicketAttachmentCommand> result = _uploadValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void UploadValidator_Should_NotHaveErrors_WhenContentTypeHasParameters()
+    {
+        // Arrange: alguns clientes enviam o charset junto com o tipo
+        UploadTicketAttachmentCommand command = ValidUploadCommand;
+        command.FileName = "notas.txt";
+        command.ContentType = "text/plain; charset=utf-8";
+
+        // Act
+        TestValidationResult<UploadTicketAttachmentCommand> result = _uploadValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
     public void UploadValidator_Should_HaveError_WhenContentTypeIsNotAllowed()
     {
         // Arrange

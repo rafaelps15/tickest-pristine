@@ -19,6 +19,10 @@ internal sealed class TicketAttachmentConfiguration : IEntityTypeConfiguration<T
 
         builder.HasQueryFilter(a => a.DeletedAtUtc == null);
 
+        // Paginação por cursor composto (data + id), do mais novo para o mais antigo, dentro de cada chamado.
+        builder.HasIndex(a => new { a.TicketId, a.UploadedAtUtc, a.Id })
+            .IsDescending(false, true, true);
+
         builder.HasOne<Ticket>()
             .WithMany()
             .HasForeignKey(a => a.TicketId)

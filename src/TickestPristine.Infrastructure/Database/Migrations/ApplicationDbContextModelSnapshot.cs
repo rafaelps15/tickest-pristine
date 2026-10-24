@@ -24,6 +24,61 @@ namespace TickestPristine.Infrastructure.Database.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "citext");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("TickestPristine.Domain.Audit.AuditLogEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("action");
+
+                    b.Property<string>("AffectedColumns")
+                        .HasColumnType("text")
+                        .HasColumnName("affected_columns");
+
+                    b.Property<string>("EntityId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("entity_name");
+
+                    b.Property<string>("NewValues")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("new_values");
+
+                    b.Property<string>("OldValues")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("old_values");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("timestamp");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_audit_logs");
+
+                    b.HasIndex("Timestamp")
+                        .HasDatabaseName("ix_audit_logs_timestamp");
+
+                    b.HasIndex("EntityName", "EntityId", "Timestamp", "Id")
+                        .IsDescending(false, false, true, true)
+                        .HasDatabaseName("ix_audit_logs_entity_name_entity_id_timestamp_id");
+
+                    b.ToTable("audit_logs", "public");
+                });
+
             modelBuilder.Entity("TickestPristine.Domain.Departments.Department", b =>
                 {
                     b.Property<Guid>("Id")
@@ -65,20 +120,34 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.ToTable("departments", "public");
                 });
 
-            modelBuilder.Entity("TickestPristine.Domain.Roles.Role", b =>
+            modelBuilder.Entity("TickestPristine.Domain.Roles.Permission", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<bool>("IsAdministrator")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_administrator");
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("code");
 
-                    b.Property<bool>("IsDefault")
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Group")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("group");
+
+                    b.Property<bool>("IsAdministrative")
                         .HasColumnType("boolean")
-                        .HasColumnName("is_default");
+                        .HasColumnName("is_administrative");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -86,203 +155,399 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
+                    b.HasKey("Id")
+                        .HasName("pk_permissions");
+
+                    b.HasAlternateKey("Code")
+                        .HasName("ak_permissions_code");
+
+                    b.ToTable("permissions", "public");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("04052818-fae0-a52b-fc99-d88c242ac32e"),
+                            Code = "tickets:create",
+                            Description = "Abrir novos chamados.",
+                            Group = "Chamados",
+                            IsAdministrative = false,
+                            Name = "Abrir chamados"
+                        },
+                        new
+                        {
+                            Id = new Guid("128bf00f-99d4-9bb0-785d-596299d48e33"),
+                            Code = "tickets:view-own",
+                            Description = "Consultar os chamados que a própria pessoa abriu.",
+                            Group = "Chamados",
+                            IsAdministrative = false,
+                            Name = "Ver os próprios chamados"
+                        },
+                        new
+                        {
+                            Id = new Guid("662b9ba3-7852-38c7-05e1-7df6bc20eb5f"),
+                            Code = "tickets:update-own",
+                            Description = "Alterar os chamados que a própria pessoa abriu.",
+                            Group = "Chamados",
+                            IsAdministrative = false,
+                            Name = "Editar os próprios chamados"
+                        },
+                        new
+                        {
+                            Id = new Guid("76583caa-5504-32d4-a843-7fff15e6ab2b"),
+                            Code = "tickets:delete-own",
+                            Description = "Excluir os chamados que a própria pessoa abriu.",
+                            Group = "Chamados",
+                            IsAdministrative = false,
+                            Name = "Excluir os próprios chamados"
+                        },
+                        new
+                        {
+                            Id = new Guid("30063cdb-88a3-5a45-de27-db794f52e5a7"),
+                            Code = "tickets:reopen-own",
+                            Description = "Reabrir chamados resolvidos que a própria pessoa abriu.",
+                            Group = "Chamados",
+                            IsAdministrative = false,
+                            Name = "Reabrir os próprios chamados"
+                        },
+                        new
+                        {
+                            Id = new Guid("afcdfa17-7fca-b984-d394-ef1952424fab"),
+                            Code = "tickets:manage",
+                            Description = "Ver e tratar os chamados de todos os colaboradores.",
+                            Group = "Chamados",
+                            IsAdministrative = false,
+                            Name = "Atender a fila de chamados"
+                        },
+                        new
+                        {
+                            Id = new Guid("04762218-ca52-1659-e82b-3ff4091c368d"),
+                            Code = "users:read",
+                            Description = "Listar e consultar os colaboradores cadastrados.",
+                            Group = "Usuários",
+                            IsAdministrative = true,
+                            Name = "Ver usuários"
+                        },
+                        new
+                        {
+                            Id = new Guid("1d90c499-7b6c-a3c3-190f-57a024d7d6c1"),
+                            Code = "users:create",
+                            Description = "Incluir novos colaboradores no sistema.",
+                            Group = "Usuários",
+                            IsAdministrative = true,
+                            Name = "Cadastrar colaboradores"
+                        },
+                        new
+                        {
+                            Id = new Guid("4b433bf2-e8ce-6413-43a0-809b4f793c38"),
+                            Code = "users:update",
+                            Description = "Alterar nome e sobrenome de outros colaboradores.",
+                            Group = "Usuários",
+                            IsAdministrative = true,
+                            Name = "Editar dados de colaboradores"
+                        },
+                        new
+                        {
+                            Id = new Guid("e31654f6-9233-9894-f4e3-e482036a4b6e"),
+                            Code = "users:deactivate",
+                            Description = "Bloquear ou devolver o acesso de colaboradores ao sistema.",
+                            Group = "Usuários",
+                            IsAdministrative = true,
+                            Name = "Desativar e reativar colaboradores"
+                        },
+                        new
+                        {
+                            Id = new Guid("ddaf8eb7-1fb2-7f81-9b35-c5d5abd5abe5"),
+                            Code = "users:assign-roles",
+                            Description = "Definir quais funções cada colaborador tem.",
+                            Group = "Usuários",
+                            IsAdministrative = true,
+                            Name = "Alterar funções de colaboradores"
+                        },
+                        new
+                        {
+                            Id = new Guid("740c3f8c-774d-f224-fbae-1bf7f3e8ff58"),
+                            Code = "roles:read",
+                            Description = "Consultar as funções existentes e as permissões de cada uma.",
+                            Group = "Funções e permissões",
+                            IsAdministrative = true,
+                            Name = "Ver funções"
+                        },
+                        new
+                        {
+                            Id = new Guid("89c4003e-0ba0-b6e7-8392-a690ebf6d653"),
+                            Code = "roles:manage",
+                            Description = "Definir as permissões de cada função.",
+                            Group = "Funções e permissões",
+                            IsAdministrative = true,
+                            Name = "Gerenciar funções"
+                        },
+                        new
+                        {
+                            Id = new Guid("cefdb38d-b1ba-eed9-f756-2059426055bb"),
+                            Code = "departments:manage",
+                            Description = "Criar, editar e desativar departamentos.",
+                            Group = "Estrutura organizacional",
+                            IsAdministrative = true,
+                            Name = "Gerenciar departamentos"
+                        },
+                        new
+                        {
+                            Id = new Guid("61c2743e-9543-dda6-c430-649abc988dc2"),
+                            Code = "sectors:manage",
+                            Description = "Criar, editar e desativar setores.",
+                            Group = "Estrutura organizacional",
+                            IsAdministrative = true,
+                            Name = "Gerenciar setores"
+                        },
+                        new
+                        {
+                            Id = new Guid("36b4fa47-c4e1-25a4-aa09-fcc8c66a2e3d"),
+                            Code = "audit:read",
+                            Description = "Consultar quem alterou cada registro, quando e quais valores mudaram.",
+                            Group = "Auditoria",
+                            IsAdministrative = true,
+                            Name = "Ver o log de auditoria"
+                        });
+                });
+
+            modelBuilder.Entity("TickestPristine.Domain.Roles.Role", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("name");
+
                     b.Property<int>("Version")
                         .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
+                        .HasDefaultValue(0)
                         .HasColumnName("version");
 
                     b.HasKey("Id")
                         .HasName("pk_roles");
 
-                    b.HasIndex("IsAdministrator")
-                        .IsUnique()
-                        .HasDatabaseName("ix_roles_is_administrator")
-                        .HasFilter("is_administrator");
-
-                    b.HasIndex("IsDefault")
-                        .IsUnique()
-                        .HasDatabaseName("ix_roles_is_default")
-                        .HasFilter("is_default");
-
-                    b.HasIndex("Name")
-                        .IsUnique()
-                        .HasDatabaseName("ix_roles_name");
+                    b.HasAlternateKey("Name")
+                        .HasName("ak_roles_name");
 
                     b.ToTable("roles", "public");
 
                     b.HasData(
                         new
                         {
-                            Id = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            IsAdministrator = true,
-                            IsDefault = false,
-                            Name = "Administrador",
-                            Version = 0
+                            Id = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86"),
+                            Name = "Administrador"
                         },
                         new
                         {
-                            Id = new Guid("0199a7c4-0000-7000-8000-000000000002"),
-                            IsAdministrator = false,
-                            IsDefault = false,
-                            Name = "Atendente",
-                            Version = 0
+                            Id = new Guid("726e4001-4a5f-44ee-bb07-9cd652d3ac12"),
+                            Name = "Atendente"
                         },
                         new
                         {
-                            Id = new Guid("0199a7c4-0000-7000-8000-000000000003"),
-                            IsAdministrator = false,
-                            IsDefault = true,
-                            Name = "Colaborador",
-                            Version = 0
+                            Id = new Guid("3a989d00-fc17-bef6-ea31-c01d46507743"),
+                            Name = "Colaborador"
                         });
                 });
 
             modelBuilder.Entity("TickestPristine.Domain.Roles.RolePermission", b =>
                 {
-                    b.Property<Guid>("RoleId")
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("role_id");
+                        .HasColumnName("id");
 
                     b.Property<string>("PermissionCode")
+                        .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("permission_code");
 
-                    b.HasKey("RoleId", "PermissionCode")
+                    b.Property<string>("RoleName")
+                        .IsRequired()
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("role_name");
+
+                    b.HasKey("Id")
                         .HasName("pk_role_permissions");
+
+                    b.HasIndex("PermissionCode")
+                        .HasDatabaseName("ix_role_permissions_permission_code");
+
+                    b.HasIndex("RoleName", "PermissionCode")
+                        .IsUnique()
+                        .HasDatabaseName("ix_role_permissions_role_name_permission_code");
 
                     b.ToTable("role_permissions", "public");
 
                     b.HasData(
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            PermissionCode = "tickets:create"
+                            Id = new Guid("44ab1ea5-87a7-5364-9671-be7877fb806b"),
+                            PermissionCode = "tickets:create",
+                            RoleName = "Administrador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            PermissionCode = "tickets:view-own"
+                            Id = new Guid("c85b12e5-37d0-8ff6-2f72-8d5cec7a7255"),
+                            PermissionCode = "tickets:view-own",
+                            RoleName = "Administrador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            PermissionCode = "tickets:update-own"
+                            Id = new Guid("58febfa5-b3a9-22a8-3336-aba51c888bb3"),
+                            PermissionCode = "tickets:update-own",
+                            RoleName = "Administrador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            PermissionCode = "tickets:delete-own"
+                            Id = new Guid("b65a9c90-5695-a8d9-44d1-6e7a494af14b"),
+                            PermissionCode = "tickets:delete-own",
+                            RoleName = "Administrador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            PermissionCode = "tickets:reopen-own"
+                            Id = new Guid("99cd2325-9d85-79fe-6e0b-835560aa5680"),
+                            PermissionCode = "tickets:reopen-own",
+                            RoleName = "Administrador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            PermissionCode = "tickets:manage"
+                            Id = new Guid("b0513a1c-f631-a369-cdee-72ce420f2d87"),
+                            PermissionCode = "tickets:manage",
+                            RoleName = "Administrador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            PermissionCode = "users:read"
+                            Id = new Guid("285c0340-dd3c-fab6-1c1a-a73a84c240e0"),
+                            PermissionCode = "users:read",
+                            RoleName = "Administrador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            PermissionCode = "users:create"
+                            Id = new Guid("33ec3031-f828-13f9-444d-9cece14b50c0"),
+                            PermissionCode = "users:create",
+                            RoleName = "Administrador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            PermissionCode = "users:update"
+                            Id = new Guid("aeadfd71-415d-ac6b-7715-0582d035bc57"),
+                            PermissionCode = "users:update",
+                            RoleName = "Administrador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            PermissionCode = "users:deactivate"
+                            Id = new Guid("e3aa5fdf-ff60-0bd0-8b58-b3fd47a9bc79"),
+                            PermissionCode = "users:deactivate",
+                            RoleName = "Administrador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            PermissionCode = "users:assign-roles"
+                            Id = new Guid("ff42df69-f2e1-d225-5ac7-3dff68ac8735"),
+                            PermissionCode = "users:assign-roles",
+                            RoleName = "Administrador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            PermissionCode = "roles:read"
+                            Id = new Guid("d4a767dc-7561-5054-1217-dfa02692f5af"),
+                            PermissionCode = "roles:read",
+                            RoleName = "Administrador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            PermissionCode = "roles:manage"
+                            Id = new Guid("54f6f69d-2888-0857-2e61-9d68638f8fd0"),
+                            PermissionCode = "roles:manage",
+                            RoleName = "Administrador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            PermissionCode = "departments:manage"
+                            Id = new Guid("f59d392f-8643-dee7-0101-7b5fc9e6690c"),
+                            PermissionCode = "departments:manage",
+                            RoleName = "Administrador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000001"),
-                            PermissionCode = "sectors:manage"
+                            Id = new Guid("b459209f-6d78-5925-4760-a11abf66dee9"),
+                            PermissionCode = "sectors:manage",
+                            RoleName = "Administrador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
-                            PermissionCode = "tickets:create"
+                            Id = new Guid("750af9f1-7257-d133-2f06-fc0add073e71"),
+                            PermissionCode = "audit:read",
+                            RoleName = "Administrador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
-                            PermissionCode = "tickets:view-own"
+                            Id = new Guid("69c17723-7284-f173-858e-591cee64be75"),
+                            PermissionCode = "tickets:create",
+                            RoleName = "Atendente"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
-                            PermissionCode = "tickets:update-own"
+                            Id = new Guid("0439551b-7fba-6a61-1622-831195728b59"),
+                            PermissionCode = "tickets:view-own",
+                            RoleName = "Atendente"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
-                            PermissionCode = "tickets:delete-own"
+                            Id = new Guid("1a4c4790-af31-a236-9c99-a69ab77be9da"),
+                            PermissionCode = "tickets:update-own",
+                            RoleName = "Atendente"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
-                            PermissionCode = "tickets:reopen-own"
+                            Id = new Guid("679ee996-9f28-3f75-24e2-531ed4f8f374"),
+                            PermissionCode = "tickets:delete-own",
+                            RoleName = "Atendente"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000002"),
-                            PermissionCode = "tickets:manage"
+                            Id = new Guid("8856e21a-cb64-85cc-5e39-dcbf34cfc31e"),
+                            PermissionCode = "tickets:reopen-own",
+                            RoleName = "Atendente"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
-                            PermissionCode = "tickets:create"
+                            Id = new Guid("72c6b7da-f2f9-5963-e2d0-926ea669ddb8"),
+                            PermissionCode = "tickets:manage",
+                            RoleName = "Atendente"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
-                            PermissionCode = "tickets:view-own"
+                            Id = new Guid("dfb54b55-bfa4-ecb9-bc3f-4d1e592cc8e9"),
+                            PermissionCode = "tickets:create",
+                            RoleName = "Colaborador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
-                            PermissionCode = "tickets:update-own"
+                            Id = new Guid("57bf1063-3266-fe33-a01a-bbf8429e360f"),
+                            PermissionCode = "tickets:view-own",
+                            RoleName = "Colaborador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
-                            PermissionCode = "tickets:delete-own"
+                            Id = new Guid("cbf0cb78-7768-aa71-e5ae-dc79b2bfe6c5"),
+                            PermissionCode = "tickets:update-own",
+                            RoleName = "Colaborador"
                         },
                         new
                         {
-                            RoleId = new Guid("0199a7c4-0000-7000-8000-000000000003"),
-                            PermissionCode = "tickets:reopen-own"
+                            Id = new Guid("2760e0bf-81e7-dbf7-4790-6d1782cb78eb"),
+                            PermissionCode = "tickets:delete-own",
+                            RoleName = "Colaborador"
+                        },
+                        new
+                        {
+                            Id = new Guid("bc96648d-77d8-a641-2946-c6afb0638774"),
+                            PermissionCode = "tickets:reopen-own",
+                            RoleName = "Colaborador"
                         });
                 });
 
@@ -352,23 +617,45 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("description");
 
-                    b.Property<int>("Priority")
-                        .HasColumnType("integer")
+                    b.Property<DateTime>("DueAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("due_at_utc");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
                         .HasColumnName("priority");
+
+                    b.Property<DateTime?>("ResolvedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at_utc");
 
                     b.Property<Guid>("SectorId")
                         .HasColumnType("uuid")
                         .HasColumnName("sector_id");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("integer")
+                    b.Property<DateTime>("SlaWarningAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sla_warning_at_utc");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
                         .HasColumnName("status");
 
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("citext")
                         .HasColumnName("title");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id")
                         .HasName("pk_tickets");
@@ -376,11 +663,19 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasIndex("AssignedToUserId")
                         .HasDatabaseName("ix_tickets_assigned_to_user_id");
 
-                    b.HasIndex("CreatedByUserId")
-                        .HasDatabaseName("ix_tickets_created_by_user_id");
-
                     b.HasIndex("SectorId")
                         .HasDatabaseName("ix_tickets_sector_id");
+
+                    b.HasIndex("CreatedAtUtc", "Id")
+                        .IsDescending()
+                        .HasDatabaseName("ix_tickets_created_at_utc_id");
+
+                    b.HasIndex("Status", "DueAtUtc")
+                        .HasDatabaseName("ix_tickets_status_due_at_utc");
+
+                    b.HasIndex("CreatedByUserId", "CreatedAtUtc", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_tickets_created_by_user_id_created_at_utc_id");
 
                     b.ToTable("tickets", "public");
                 });
@@ -433,11 +728,12 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasKey("Id")
                         .HasName("pk_ticket_attachments");
 
-                    b.HasIndex("TicketId")
-                        .HasDatabaseName("ix_ticket_attachments_ticket_id");
-
                     b.HasIndex("UploadedByUserId")
                         .HasDatabaseName("ix_ticket_attachments_uploaded_by_user_id");
+
+                    b.HasIndex("TicketId", "UploadedAtUtc", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_ticket_attachments_ticket_id_uploaded_at_utc_id");
 
                     b.ToTable("ticket_attachments", "public");
                 });
@@ -449,19 +745,15 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<int>("Action")
-                        .HasColumnType("integer")
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
                         .HasColumnName("action");
 
                     b.Property<Guid?>("ChangedByUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("changed_by_user_id");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("description");
 
                     b.Property<string>("NewValue")
                         .HasMaxLength(500)
@@ -487,8 +779,9 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasIndex("ChangedByUserId")
                         .HasDatabaseName("ix_ticket_histories_changed_by_user_id");
 
-                    b.HasIndex("TicketId")
-                        .HasDatabaseName("ix_ticket_histories_ticket_id");
+                    b.HasIndex("TicketId", "OccurredAtUtc", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_ticket_histories_ticket_id_occurred_at_utc_id");
 
                     b.ToTable("ticket_histories", "public");
                 });
@@ -532,8 +825,9 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasIndex("AuthorUserId")
                         .HasDatabaseName("ix_ticket_messages_author_user_id");
 
-                    b.HasIndex("TicketId")
-                        .HasDatabaseName("ix_ticket_messages_ticket_id");
+                    b.HasIndex("TicketId", "CreatedAtUtc", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_ticket_messages_ticket_id_created_at_utc_id");
 
                     b.ToTable("ticket_messages", "public");
                 });
@@ -549,6 +843,23 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_on_utc");
 
+                    b.Property<string>("PreviousTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("previous_token_hash");
+
+                    b.Property<DateTime?>("RotatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("rotated_at_utc");
+
+                    b.Property<Guid>("SecurityStamp")
+                        .HasColumnType("uuid")
+                        .HasColumnName("security_stamp");
+
+                    b.Property<DateTime>("SessionExpiresOnUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("session_expires_on_utc");
+
                     b.Property<string>("TokenHash")
                         .IsConcurrencyToken()
                         .IsRequired()
@@ -562,6 +873,9 @@ namespace TickestPristine.Infrastructure.Database.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_refresh_tokens");
+
+                    b.HasIndex("PreviousTokenHash")
+                        .HasDatabaseName("ix_refresh_tokens_previous_token_hash");
 
                     b.HasIndex("TokenHash")
                         .IsUnique()
@@ -626,6 +940,9 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_users_email");
 
+                    b.HasIndex("FirstName", "LastName", "Id")
+                        .HasDatabaseName("ix_users_first_name_last_name_id");
+
                     b.ToTable("users", "public");
                 });
 
@@ -636,11 +953,29 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<int>("FailedLoginAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("failed_login_attempts");
+
+                    b.Property<DateTime?>("LockoutEndsAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lockout_ends_at_utc");
+
+                    b.Property<bool>("MustChangePassword")
+                        .HasColumnType("boolean")
+                        .HasColumnName("must_change_password");
+
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("password_hash");
+
+                    b.Property<Guid>("SecurityStamp")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("security_stamp")
+                        .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
@@ -663,9 +998,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("role_id");
+                    b.Property<string>("RoleName")
+                        .IsRequired()
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("role_name");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
@@ -674,12 +1010,12 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasKey("Id")
                         .HasName("pk_user_roles");
 
-                    b.HasIndex("RoleId")
-                        .HasDatabaseName("ix_user_roles_role_id");
+                    b.HasIndex("RoleName")
+                        .HasDatabaseName("ix_user_roles_role_name");
 
-                    b.HasIndex("UserId", "RoleId")
+                    b.HasIndex("UserId", "RoleName")
                         .IsUnique()
-                        .HasDatabaseName("ix_user_roles_user_id_role_id");
+                        .HasDatabaseName("ix_user_roles_user_id_role_name");
 
                     b.ToTable("user_roles", "public");
                 });
@@ -695,12 +1031,21 @@ namespace TickestPristine.Infrastructure.Database.Migrations
 
             modelBuilder.Entity("TickestPristine.Domain.Roles.RolePermission", b =>
                 {
-                    b.HasOne("TickestPristine.Domain.Roles.Role", null)
+                    b.HasOne("TickestPristine.Domain.Roles.Permission", null)
                         .WithMany()
-                        .HasForeignKey("RoleId")
+                        .HasForeignKey("PermissionCode")
+                        .HasPrincipalKey("Code")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_role_permissions_roles_role_id");
+                        .HasConstraintName("fk_role_permissions_permissions_permission_code");
+
+                    b.HasOne("TickestPristine.Domain.Roles.Role", null)
+                        .WithMany()
+                        .HasForeignKey("RoleName")
+                        .HasPrincipalKey("Name")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_role_permissions_roles_role_name");
                 });
 
             modelBuilder.Entity("TickestPristine.Domain.Sectors.Sector", b =>
@@ -810,10 +1155,11 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                 {
                     b.HasOne("TickestPristine.Domain.Roles.Role", null)
                         .WithMany()
-                        .HasForeignKey("RoleId")
+                        .HasForeignKey("RoleName")
+                        .HasPrincipalKey("Name")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_user_roles_roles_role_id");
+                        .HasConstraintName("fk_user_roles_roles_role_name");
 
                     b.HasOne("TickestPristine.Domain.Users.User", null)
                         .WithMany()

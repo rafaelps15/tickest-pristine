@@ -1,4 +1,4 @@
-﻿using TickestPristine.SharedKernel;
+using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Domain.Users;
 
@@ -11,6 +11,14 @@ public static class UserErrors
     public static Error Unauthorized() => Error.Forbidden(
         "Users.Unauthorized",
         "Você não tem permissão para executar esta ação.");
+
+    public static Error CannotManagePrivilegedUser(IEnumerable<string> permissionNames) => Error.Forbidden(
+        "Users.CannotManagePrivilegedUser",
+        $"Você não pode desativar nem reativar quem tem permissões administrativas que você não possui: {string.Join(", ", permissionNames)}");
+
+    public static readonly Error LockedOut = Error.Forbidden(
+        "Users.LockedOut",
+        "Muitas tentativas de login sem sucesso. A conta está bloqueada por alguns minutos; tente de novo mais tarde.");
 
     public static readonly Error NotFoundByEmail = Error.NotFound(
         "Users.NotFoundByEmail",
@@ -44,7 +52,15 @@ public static class UserErrors
         "Users.AlreadyActive",
         "O usuário já está ativo.");
 
-    public static readonly Error Deactivated = Error.Problem(
+    public static readonly Error Deactivated = Error.Forbidden(
         "Users.Deactivated",
         "O usuário está desativado.");
+
+    public static readonly Error PasswordChangeRequired = Error.Forbidden(
+        "Users.PasswordChangeRequired",
+        "É preciso definir uma nova senha antes de acessar o sistema.");
+
+    public static readonly Error PasswordChangeNotRequired = Error.Conflict(
+        "Users.PasswordChangeNotRequired",
+        "Não há troca de senha pendente para este usuário.");
 }

@@ -18,6 +18,11 @@ internal sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refre
         // Duas renovações simultâneas com o mesmo token: só a primeira grava, a outra recebe conflito.
         builder.Property(refreshToken => refreshToken.TokenHash).IsConcurrencyToken();
 
+        builder.Property(refreshToken => refreshToken.PreviousTokenHash).HasMaxLength(64);
+
+        // A renovação procura o token anterior para detectar reuso.
+        builder.HasIndex(refreshToken => refreshToken.PreviousTokenHash);
+
         builder.HasOne<User>()
             .WithMany()
             .HasForeignKey(refreshToken => refreshToken.UserId);

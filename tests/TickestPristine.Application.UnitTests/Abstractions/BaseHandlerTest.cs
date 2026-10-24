@@ -1,7 +1,10 @@
-﻿using TickestPristine.Domain.Users;
+﻿using TickestPristine.Application.Roles;
+using TickestPristine.Domain.Roles;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
+using TickestPristine.Application.Users;
 
 namespace TickestPristine.Application.UnitTests.Abstractions;
 
@@ -36,8 +39,13 @@ public abstract class BaseHandlerTest
         Email = $"{Guid.NewGuid():N}@example.com",
         FirstName = "Test",
         LastName = "User",
-        Code = $"usr_{Ulid.NewUlid()}",
+        Code = UserCodes.New(),
         IsActive = isActive,
         CreatedAtUtc = new DateTime(2026, 10, 1, 9, 0, 0, DateTimeKind.Utc)
     };
+
+    /// <summary>
+    /// Role com qualquer nome, como as que já existem no banco além das fixas de <see cref="RoleNames"/>.
+    /// </summary>
+    protected static Role CreateRole(string name) => new() { Id = Guid.NewGuid(), Name = name };
 }
