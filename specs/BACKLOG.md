@@ -44,8 +44,11 @@ BL-031 só muda o portão (`.claude/hooks/`) e o `SYSTEM_SPECIFICATION.md`, não
 | BL-005 | Regra do responsável indicado na abertura do chamado | GAP-02 (pendência restante); Q-05; C-08 | Q-05 | Proposta | — |
 | BL-006 | Validar o CI num pull request para a `main` e avaliar exigir o check na proteção da branch | GAP-12 | — | Proposta | — |
 | BL-007 | Política de retenção e remoção física de anexos excluídos | GAP-08; Q-08 | Q-08 | Proposta | — |
+| BL-032 | Autorização obrigatória em todo endpoint (`HasPermission`, `RequireAuthorization` ou `AllowAnonymous`) e `FallbackPolicy` | Pedido de Rafael Santos no chat (2026-10-23); auditoria arquitetural de 2026-10-23 (ACH-ARQ-02); fora da spec 003 por decisão do responsável | — | Proposta | — |
 
 BL-006 não muda `src/` nem `tests/`; se precisa de spec é uma decisão do responsável na triagem.
+
+BL-032: o responsável pediu uma spec própria para o item. O número 004 já é da spec de SLA, e 005 e 006 estão reservados para o BL-004 (DEC-1 da spec 004); pela ordem atual, a spec do BL-032 seria a 007, número que a `spec-new` confirma ao criá-la.
 
 ## Depois
 
@@ -73,6 +76,9 @@ BL-006 não muda `src/` nem `tests/`; se precisa de spec é uma decisão do resp
 | BL-027 | Edição de prioridade, título e setor, e recálculo do SLA | Q-06; C-09 | Q-06 | Proposta | — |
 | BL-028 | Mensagens e anexos em chamados encerrados | Q-07; C-16 | Q-07 | Proposta | — |
 | BL-029 | Reativação de departamentos e setores e responsável ativo | Q-12; C-07 | Q-12 | Proposta | — |
+| BL-030 | Agrupar no Dependabot as atualizações minor e patch dos pacotes `Microsoft.*` | Pedido de Rafael Santos no chat (2026-10-23): PRs #6 a #10 | — | Proposta | — |
+| BL-033 | `git stash list` e `git stash show` bloqueados pelo portão SDD, embora só leiam | Pedido de Rafael Santos no chat (2026-10-23); observado na sessão do BL-031 | — | Proposta | — |
+| BL-034 | `cd /c/...` (Git Bash) não convertido pelo portão SDD: `git restore` e `git checkout -- <caminho>` fora de `src/` e `tests/` ficam bloqueados quando vêm depois desse `cd` | Pedido de Rafael Santos no chat (2026-10-23); observado depois do merge do BL-031 (`CD_PATTERN` em `sdd_gate.py` guarda `/c/...` sem converter para `C:/...`) | — | Proposta | — |
 
 Decisões da spec 004 que alcançam itens ainda sem spec (a decisão completa está na spec):
 - DEC-2 (estilo de código do `CLAUDE.md`, não o do prompt): BL-012 a BL-018.
@@ -91,4 +97,8 @@ Decisões da spec 004 que alcançam itens ainda sem spec (a decisão completa es
 |---|---|---|
 | 2026-10-23 | Criação do arquivo e carga inicial (BL-001 a BL-029), pelo critério provisório descrito acima. | Rafael Santos, no chat |
 | 2026-10-23 | Regras: a coluna Specs de um item `Especificada` passa a aceitar specs posteriores da mesma demanda, e só números de specs existentes; criada esta seção. BL-004: Q-11 em "Depende de" (só a spec 006); "005 e 006 previstas" saiu da coluna Specs e foi para uma nota. Notas novas: fonte do prompt de SLA e decisões da spec 004 que alcançam BL-012 a BL-018. Faixas, ordem e estados não mudaram. | Rafael Santos, no chat |
+| 2026-10-23 | Novo item BL-030 (agrupamento do Dependabot), no fim da faixa `Depois`, em `Proposta`. | Rafael Santos, no chat |
 | 2026-10-23 | Novo item BL-031 (falsos positivos do portão SDD), no fim da faixa `Agora`, em `Pronta`: problema e escopo confirmados pelo responsável, correção sem spec por não mudar `src/` nem `tests/`. | Rafael Santos, no chat |
+| 2026-10-23 | Novo item BL-032 (autorização obrigatória em todo endpoint e `FallbackPolicy`), no fim da faixa `Próxima`, em `Proposta`, a especificar numa spec própria; não entra na spec 003. | Rafael Santos, no chat |
+| 2026-10-23 | Novo item BL-033 (`git stash list` e `git stash show` bloqueados pelo portão SDD), no fim da faixa `Depois`, em `Proposta`; o BL-031 não muda. | Rafael Santos, no chat |
+| 2026-10-23 | Novo item BL-034 (`cd /c/...` não convertido pelo portão SDD), no fim da faixa `Depois`, em `Proposta`; o BL-031 não muda. | Rafael Santos, no chat |

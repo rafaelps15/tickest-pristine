@@ -4,3 +4,10 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    groups:
+      microsoft:
+        patterns:
+          - "Microsoft.*"
+        update-types:
+          - "minor"
+          - "patch"
