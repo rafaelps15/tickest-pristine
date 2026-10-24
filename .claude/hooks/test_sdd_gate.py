@@ -282,6 +282,102 @@ class SddGateTests(unittest.TestCase):
             "$env:X = 'a'; Remove-Item Env:X; Get-Content .claude\\hooks\\sdd_gate.py",
         ), denied=False)
 
+    def test_read_only_false_positives_observed_on_2026_10_23_are_allowed(self) -> None:
+        self.prompt("investigue")
+        self.assert_commands("Bash", (
+            # 1. python -c só lendo JSON de src/, com '<vazio>' no código.
+            "python -c \"\nimport json\nfor f in ['src/Web.Api/appsettings.json']:\n"
+            "    d=json.load(open(f,encoding='utf-8-sig'))\n    print(f, '<vazio>' if not d else '****')\n\"",
+            # 2. python sem -c, grep -E e >/dev/null, citando .claude/hooks em outra instrução.
+            "python auditoria_sdd.py . | grep -E \"SCORE|X\"; python auditoria_sdd.py . --min-score 70 >/dev/null; "
+            "python -m unittest discover -s .claude/hooks -p \"test_*.py\" 2>&1 | tail -2",
+            # 3. git merge-base é leitura.
+            "git merge-base --is-ancestor main feat && echo contida",
+            # 4. Saída na pasta temporária, com src e tests citados em outra instrução.
+            "python auditoria_sdd.py . --formato json > \"$TEMP/aud.json\"; git log -1 --format=%h -- src tests",
+            "dotnet test tests/X > \"${TMPDIR}/t.log\" 2>&1",
+            # 5. Heredoc gravando na pasta temporária, com .claude/hooks e src/ só no texto.
+            "cat > \"$TEMP/pr_body.md\" <<'EOF'\n## Resumo\n- copy do hook `.claude/hooks/sdd_gate.py` -> bloqueia src/\nEOF\n"
+            "gh pr create --body-file \"$TEMP/pr_body.md\"",
+        ), denied=False)
+        self.assert_commands("PowerShell", (
+            "dotnet test tests/X | Out-File \"$env:TEMP\\t.log\"",
+            "dotnet build src/A > \"%TEMP%\\b.log\"",
+        ), denied=False)
+
+    def test_restoring_files_outside_gated_dirs_is_allowed(self) -> None:
+        self.prompt("restaure o script")
+        self.assert_commands("Bash", (
+            "git checkout -- auditoria_sdd.py",
+            "git checkout HEAD -- README.md specs/001-exemplo/spec.md",
+            "git restore auditoria_sdd.py",
+            "git restore --source=HEAD~1 -- README.md",
+            "git restore -s HEAD SYSTEM_SPECIFICATION.md",
+        ), denied=False)
+
+    def test_creating_branches_and_checking_or_staging_patches_are_allowed(self) -> None:
+        self.prompt("crie a branch e prepare o stage")
+        self.assert_commands("Bash", (
+            "git switch -c bugfix/BL-031-sdd-gate-false-positives",
+            "git switch --create chore/BL-003-x",
+            "git checkout -b feature/BL-004-y",
+            "git apply --check /tmp/a.patch",
+            "git apply --stat /tmp/a.patch",
+            "git apply --cached /tmp/a.patch",
+            "git apply --cached --check \"C:/Users/x/scratchpad/bl031.patch\"",
+        ), denied=False)
+
+    def test_branch_switches_and_patches_on_the_worktree_are_still_denied(self) -> None:
+        self.prompt("troque de branch")
+        self.assert_commands("Bash", (
+            # Com ponto de partida, a árvore muda para ele.
+            "git switch -c nova origin/main",
+            "git checkout -b nova main",
+            "git checkout -B nova",
+            "git switch -C nova",
+            "git switch outra",
+            # Aplicar na árvore, com ou sem o stage.
+            "git apply /tmp/a.patch",
+            "git apply --index /tmp/a.patch",
+            "git apply --cached --index /tmp/a.patch",
+            "git apply --3way /tmp/a.patch",
+            "git apply --reject /tmp/a.patch",
+            "git apply --check --apply /tmp/a.patch",
+        ), denied=True)
+
+    def test_variants_of_the_fixed_false_positives_that_write_are_still_denied(self) -> None:
+        self.prompt("ajuste")
+        self.assert_commands("Bash", (
+            # Pasta temporária redefinida no próprio comando.
+            "TEMP=src; echo x > \"$TEMP/a.cs\"",
+            "export TMPDIR=tests; dotnet test > \"$TMPDIR/a.cs\"",
+            # Restaurar sem caminho, com ".", curinga ou dentro das pastas protegidas.
+            "git checkout -- src/a.cs",
+            "git checkout HEAD -- README.md tests/a.cs",
+            "git restore src/a.cs",
+            "git restore -- .",
+            "git checkout HEAD -- .",
+            "git restore '*.cs'",
+            "git restore :/src",
+            "git checkout feature",
+            "git restore --staged --worktree -s HEAD~1 tests",
+            # O desvio usado em 23/10 continua bloqueado quando o destino é src/.
+            "git show HEAD:src/a.cs > src/a.cs",
+            # Código embutido com opções antes da flag, por heredoc e por pipe.
+            "python -X utf8 -c \"open('src/a.cs','w').write('x')\"",
+            "python3 <<'EOF'\nopen('src/a.cs','w').write('x')\nEOF",
+            "cat <<'EOF' | python\nopen('tests/a.cs','w').write('x')\nEOF",
+            "bash <<'EOF'\necho x > src/a.cs\nEOF",
+            "node -e \"require('fs').writeFileSync('src/a.js','x')\"",
+            "perl -pi -e 's/a/b/' src/a.cs",
+            # Heredoc gravando dentro de src/ continua bloqueado.
+            "cat > src/a.cs <<'EOF'\nx\nEOF",
+        ), denied=True)
+        self.assert_commands("PowerShell", (
+            "$env:TEMP = 'src'; 'x' > \"$env:TEMP\\a.cs\"",
+            "git restore .claude\\hooks\\sdd_gate.py",
+        ), denied=True)
+
     def test_git_commit_with_heredoc_message_is_allowed(self) -> None:
         self.prompt("faça o commit")
         self.assert_allowed(self.tool("Bash", {"command": (
