@@ -110,7 +110,7 @@ Ordem por dependência; cada tarefa termina com diff, ok do responsável e commi
 | T-1 | Portão: não apagar o registro do `/spec-implement` ao bloquear; testes do AC-2 | AC-2 | — (edição direta; exige `[sdd:autorizo]`, R-1) | [x] |
 | T-2 | `spec-status.md` e `spec-template.md`: ciclo da DEC-2, `Entregue` pela DEC-6, campos `branch:` e `pr:`, sem `backlog:` | AC-3 | — | [x] |
 | T-3 | `spec-new`: descoberta, `[SUPOSIÇÃO]`, sem backlog | AC-4 | — | [x] |
-| T-4 | `spec-implement` e `spec-verify`: disciplina de execução, mudança de escopo, DEC nova, bloqueio do portão, auditoria, `pr:` | AC-5, AC-6 | — | [ ] |
+| T-4 | `spec-implement` e `spec-verify`: disciplina de execução, mudança de escopo, DEC nova, bloqueio do portão, auditoria, `pr:` | AC-5, AC-6 | — | [x] |
 | T-5 | Comando `/spec-status`, somente leitura | AC-7 | — | [ ] |
 | T-6 | `CLAUDE.md`: branch, commit, PR, estados, `/spec-status`, sem backlog | AC-8 | — | [ ] |
 | T-7 | `auditoria-arquitetural.md` e comentário do `scripts/auditoria_sdd.py` | AC-1 | — | [ ] |
@@ -125,8 +125,8 @@ Ordem por dependência; cada tarefa termina com diff, ok do responsável e commi
 | AC-2 | `.claude/hooks/test_sdd_gate.py` › `test_spec_implement_mode_survives_a_denial_while_spec_is_still_approved` (novo), `test_spec_implement_mode_ends_when_spec_leaves_implementation` (sem alteração), `test_creating_branches_and_checking_or_staging_patches_are_allowed` (caso `git switch -c chore/SPEC-007-x`), demais testes do arquivo | Bloqueio com a spec `Aprovada` mantém o registro e libera a escrita quando ela passa a `Em implementação`; nos outros estados, o registro continua sendo apagado; criar a branch `SPEC-NNN` é liberado | 39 aprovados em 2026-10-24 (T-1; a confirmar na verificação) |
 | AC-3 | Leitura de `.claude/skills/spec-new/references/spec-status.md` e `spec-template.md` (verificação descrita) | Estados `Rascunho`, `Em descoberta`, `Bloqueada`, `Aprovada`, `Em implementação`, `Verificada`, `Entregue` e `Descartada`, com as transições e os responsáveis da 4.1; `Entregue` = PR mergeado, lido do `pr:`; o modelo tem `branch:` (`<tipo>/SPEC-NNN-<slug>`) e `pr:`, sem `backlog:` | Conferido em 2026-10-24 (T-2; a confirmar na verificação) |
 | AC-4 | Leitura de `.claude/skills/spec-new/SKILL.md` (verificação descrita) | Passo 2 (descoberta: leitura do contexto, não perguntar o que o código responde, no máximo 5 perguntas por rodada em negócio e técnico, parar e esperar), passo 3 (`[SUPOSIÇÃO]`), passo 5 e checklist (suposição pendente impede a aprovação); nenhuma menção a backlog | Conferido em 2026-10-24 (T-3; a confirmar na verificação) |
-| AC-5 | | | |
-| AC-6 | | | |
+| AC-5 | Leitura de `.claude/skills/spec-implement/SKILL.md` (verificação descrita) | "Antes de começar" (branch e estados aceitos, recusa dos demais), "Execução" (uma tarefa por vez: implementa, build e testes, rastreabilidade, diff, ok e commit; bloqueio do portão classificado, sem contorno), "Quando parar" (mudança de REQ, critério ou DEC; DEC nova só com aprovação explícita, motivo e data) | Conferido em 2026-10-24 (T-4; a confirmar na verificação) |
+| AC-6 | Leitura de `.claude/skills/spec-verify/SKILL.md` (verificação descrita) | Passo 2 (build sem avisos, `dotnet test` e `python scripts/auditoria_sdd.py .`), passo 3 (cada critério contra teste aprovado nesta execução), passo 6 (auditoria no veredito) e passo 8 (`pr:` no próprio PR) | Conferido em 2026-10-24 (T-4; a confirmar na verificação) |
 | AC-7 | | | |
 | AC-8 | | | |
 | AC-9 | | | |

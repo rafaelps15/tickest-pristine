@@ -17,7 +17,7 @@ Esta skill não altera código de produção nem testes. Ela só atualiza a spec
 ## Fluxo
 
 1. **Localize a spec.** Se o status não for `Em implementação`, pare e informe.
-2. **Build e testes:** rode os comandos de validação do contexto do projeto de forma que o resultado de cada teste fique visível (por exemplo, um relatório por teste ou uma execução filtrada pelos nomes da rastreabilidade). Registre na seção "Evidências de verificação" as contagens (avisos, erros, testes aprovados e com falha) e a data da execução.
+2. **Build, testes e auditoria:** rode os comandos de validação do contexto do projeto de forma que o resultado de cada teste fique visível (por exemplo, um relatório por teste ou uma execução filtrada pelos nomes da rastreabilidade): o build sem avisos, o `dotnet test` e a auditoria de conformidade `python scripts/auditoria_sdd.py .` (score e código de saída). Registre na seção "Evidências de verificação" as contagens (avisos, erros, testes aprovados e com falha), o score da auditoria e a data da execução.
 3. **Cobertura de cada critério:** para cada AC, abra cada teste listado na rastreabilidade e confirme, lendo o código do teste, que:
    - o cenário preparado corresponde ao "Dado";
    - a ação executada corresponde ao "Quando";
@@ -28,13 +28,14 @@ Esta skill não altera código de produção nem testes. Ela só atualiza a spec
 4. **Revisão:** execute a skill de revisão de convenções do projeto (por exemplo, `ca-review`) sobre as mudanças da spec e registre o veredito e os achados bloqueantes.
 5. **Documentação:** atualize só as seções do documento de estado do sistema que a mudança afetou, citando a spec, e registre quais foram. Faça este passo só se o veredito do passo 6 for aprovar; se for reprovar, não altere o documento de estado e registre no histórico que a documentação fica para a próxima verificação.
 6. **Veredito:**
-   - build e testes verdes, todo AC coberto conforme o passo 3 e nenhum achado bloqueante → status `Verificada`, com a linha no histórico;
+   - build e testes verdes, auditoria com código de saída 0, todo AC coberto conforme o passo 3 e nenhum achado bloqueante → status `Verificada`, com a linha no histórico;
    - caso contrário → o status continua `Em implementação`; registre no histórico a verificação reprovada e o que falta.
-7. **Apresente o resultado:** evidências, limitações, riscos e pendências.
+7. **Apresente o resultado:** evidências, limitações, riscos e pendências, com o diff da spec e da documentação e o commit proposto no formato `tipo(escopo): descrição [SPEC-NNN]`; commite só depois do ok do responsável.
+8. **Depois que o PR for aberto:** preencha o campo `pr:` e a linha "Entrega" das evidências com o número do PR, mostre o diff e commite na mesma branch depois do ok. A spec continua `Verificada`; o `/spec-status` passa a mostrá-la como `Entregue` quando o responsável mergear o PR.
 
 ## Regras
 
 - Não corrija código nem testes para fazer a verificação passar; relate o que falhou.
 - Um AC não conta como atendido se não tiver teste, se o teste não rodou ou falhou nesta execução, ou se o teste não exercitar o comportamento descrito, mesmo que exista e passe. A mera existência do arquivo e do método de teste não basta.
 - Evidência de uma execução anterior não vale: a verificação usa a execução feita por ela.
-- Não faça stage, commit nem push. `Verificada` não é `Entregue`: a entrega depende de autorização explícita do responsável.
+- Commit só depois do ok do responsável, só com a spec e a documentação de estado. Nunca faça push, rebase, merge nem `git rm` sem autorização. `Verificada` não é `Entregue`: a spec só fica `Entregue` quando o responsável mergear o PR.
