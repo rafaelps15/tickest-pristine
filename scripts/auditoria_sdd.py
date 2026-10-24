@@ -9,7 +9,7 @@ por agentes de IA (Claude Code, Copilot, Cursor etc.) seguindo SDD:
 spec -> plano -> tarefas -> código -> testes -> revisão humana.
 
 Uso:
-    python auditoria_sdd.py [caminho] [--formato console|md|json]
+    python scripts/auditoria_sdd.py [caminho] [--formato console|md|json]
                             [--saida arquivo] [--min-score 70] [--commits 30]
 
 Código de saída:
@@ -376,7 +376,7 @@ def auditar(repo: Repo, n_commits: int) -> List[Resultado]:
         "", "Inclua `dotnet test` no pipeline.", na=not ci)
 
     add(D, "CI-03", "CI roda este script de auditoria (gate de conformidade)", "MEDIA",
-        "auditoria_sdd" in txt_ci, "", "Adicione `python auditoria_sdd.py . --min-score 70` como etapa do CI.",
+        "auditoria_sdd" in txt_ci, "", "Adicione `python scripts/auditoria_sdd.py . --min-score 70` como etapa do CI.",
         na=not ci)
 
     # ---------------- 6. SEGURANÇA ----------------
