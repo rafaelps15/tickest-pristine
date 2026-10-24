@@ -31,8 +31,11 @@
 | BL-002 | Registrar no histórico a alteração só da descrição do chamado | Pedido de Rafael Santos no chat (2026-10-22) | — | Especificada | 002 |
 | BL-003 | Testes de arquitetura para as regras permanentes do `CLAUDE.md` | Missão corretiva do ambiente, Fase 2 (Rafael Santos, 2026-10-22) | — | Especificada | 003 |
 | BL-004 | SLA, Fase 1: núcleo (calendário, plano e cronômetros, monitoramento) | Prompt de SLA, Fase 1; C-14, C-15 | Q-11 (só a spec 006: execução única do job, item 1.6 do prompt) | Especificada | 004 |
+| BL-031 | Falsos positivos do portão SDD em comandos só de leitura e restauração de arquivos fora de `src/` e `tests/` | Pedido de Rafael Santos no chat (2026-10-23); auditoria arquitetural de 2026-10-23 (ACH-PLT-01); `SYSTEM_SPECIFICATION.md` 6.9 | — | Pronta | — |
 
 BL-004: pela DEC-1 da spec 004, a demanda se divide em três specs. A 004 cobre o item 1.1 do prompt; a 005 (itens 1.2 a 1.5 e 1.7) e a 006 (item 1.6) ainda não existem e entram na coluna Specs quando a `spec-new` as criar.
+
+BL-031 só muda o portão (`.claude/hooks/`) e o `SYSTEM_SPECIFICATION.md`, não `src/` nem `tests/`: a correção foi feita sem spec, com autorização explícita do responsável (`[sdd:autorizo]`, 2026-10-23), na branch `bugfix/BL-031-sdd-gate-false-positives`.
 
 ## Próxima
 
@@ -88,3 +91,4 @@ Decisões da spec 004 que alcançam itens ainda sem spec (a decisão completa es
 |---|---|---|
 | 2026-10-23 | Criação do arquivo e carga inicial (BL-001 a BL-029), pelo critério provisório descrito acima. | Rafael Santos, no chat |
 | 2026-10-23 | Regras: a coluna Specs de um item `Especificada` passa a aceitar specs posteriores da mesma demanda, e só números de specs existentes; criada esta seção. BL-004: Q-11 em "Depende de" (só a spec 006); "005 e 006 previstas" saiu da coluna Specs e foi para uma nota. Notas novas: fonte do prompt de SLA e decisões da spec 004 que alcançam BL-012 a BL-018. Faixas, ordem e estados não mudaram. | Rafael Santos, no chat |
+| 2026-10-23 | Novo item BL-031 (falsos positivos do portão SDD), no fim da faixa `Agora`, em `Pronta`: problema e escopo confirmados pelo responsável, correção sem spec por não mudar `src/` nem `tests/`. | Rafael Santos, no chat |

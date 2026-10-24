@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import sys
 import tempfile
 import time
@@ -62,11 +63,24 @@ WRITE_COMMAND_PATTERNS = (
     re.compile(r"(?i)\bdotnet\s+(ef|new|add|remove|sln)\b"),
     re.compile(r"(?i)\b(curl|wget)\b.*\s-(o|O|-output)\b"),
 )
-# Comandos que mudam a árvore de trabalho mesmo sem citar caminho.
+# Comandos que mudam a árvore de trabalho mesmo sem citar caminho. O subcomando precisa terminar
+# ali (ex.: "git merge-base" e "git am-x" não contam).
 TREE_CHANGING_PATTERN = re.compile(
     r"(?i)\bgit\s+(-C\s+\S+\s+)?(checkout|switch|restore|stash|apply|am|merge|pull|rebase|cherry-pick|revert|"
-    r"clean|mv|rm|reset\s+[^;&|]*--hard)\b|\bdotnet\s+format\b"
+    r"clean|mv|rm|reset\s+[^;&|]*--hard)(?=\s|$|[;&|)])|\bdotnet\s+format\b"
 )
+# "git checkout [<commit>] -- <caminhos>" e "git restore <caminhos>": decide pelos caminhos citados.
+GIT_PATH_RESTORE_PATTERN = re.compile(r"(?i)^\s*git\s+(checkout|restore)(\s.*)?$")
+GIT_RESTORE_OPTIONS_WITH_VALUE = {"-s", "--source", "--pathspec-from-file"}
+# Criar uma branch a partir do commit atual não muda a árvore (sem ponto de partida: só o nome).
+# -C e -B (maiúsculas) recriam uma branch existente e continuam bloqueados.
+GIT_CREATE_BRANCH_PATTERN = re.compile(
+    r"(?i)^\s*git\s+(switch\s+((?-i:-c)|--create)|checkout\s+(?-i:-b))\s+[^\s;&|<>]+\s*$"
+)
+# "git apply" que só confere (--check, --stat...) ou só aplica no stage (--cached) não muda a árvore.
+GIT_APPLY_PATTERN = re.compile(r"(?i)^\s*git\s+apply(\s.*)?$")
+GIT_APPLY_READ_ONLY_OPTIONS = {"--check", "--stat", "--numstat", "--summary"}
+GIT_APPLY_WORKTREE_OPTIONS = {"--index", "--apply", "--3way", "-3", "--reject"}
 GIT_COMMIT_ONLY_PATTERN = re.compile(r"(?is)\s*(cd\s+[^;&|]+(&&|;)\s*)?git\s+(-C\s+\S+\s+)?commit\b[^;&|]*")
 HEREDOC_SUBSTITUTION_PATTERN = re.compile(r"(?s)\$\(\s*cat\s+<<-?\s*['\"]?(\w+)['\"]?\n.*?\n\1\s*\)")
 CD_PATTERN = re.compile(r"(?i)^\s*(cd|set-location|sl|pushd|chdir)\s+(['\"]?)([^'\";&|]+)\2\s*$")
@@ -78,16 +92,36 @@ OUT_FILE_TARGET_PATTERN = re.compile(
 NULL_TARGETS = {"$null", "/dev/null", "nul"}
 # Alvo que só se conhece na execução (variável ou substituição de comando).
 DYNAMIC_TARGET_PATTERN = re.compile(r"^[\"']?(\$|%|`)")
+# Alvo na pasta temporária do sistema ($TEMP, $TMP, $TMPDIR, $env:TEMP, %TEMP%...): resolvido para ela,
+# desde que o próprio comando não redefina a variável.
+TEMP_TARGET_PATTERN = re.compile(
+    r"(?i)^[\"']?(?:\$\{?(TEMP|TMP|TMPDIR)\}?|\$env:(TEMP|TMP)|%(TEMP|TMP)%)(?=[/\\\"']|$)(.*)$"
+)
+TEMP_VARIABLE_PATTERN = re.compile(r"(?i)\$\{?(TEMP|TMP|TMPDIR)\}?(?!\w)|\$env:(TEMP|TMP)(?!\w)|%(TEMP|TMP)%")
+TEMP_REASSIGNMENT_PATTERN = re.compile(
+    r"(?i)(^|[\s;&|(])((export|set|declare|local|readonly)\s+)?(TEMP|TMP|TMPDIR)\s*=|\$env:(TEMP|TMP)\s*=|"
+    r"env:(TEMP|TMP)\b[^;&|]*-value|setenvironmentvariable"
+)
 # Comando codificado: o conteúdo não pode ser inspecionado.
 ENCODED_COMMAND_PATTERN = re.compile(r"(?i)(^|\s)-(e|ec|enc|encodedcommand)\s+[A-Za-z0-9+/=]{8,}")
+_INTERPRETERS = r"(python[0-9.]*|py|node|ruby|perl|pwsh|powershell)(\.exe)?"
+_SHELL_INTERPRETERS = r"(python[0-9.]*|py|node|ruby|perl|pwsh|powershell|bash|sh|zsh)(\.exe)?"
+# Código embutido: a flag (-c, -e, -Command ou - para stdin) vem logo depois do interpretador, só com
+# outras opções no meio (ex.: "python -X utf8 -c", "pwsh -NoProfile -Command", "perl -pi -e").
 INLINE_INTERPRETER_PATTERN = re.compile(
-    r"(?i)(^|[\s;&|(`])(python[0-9.]*|py|node|ruby|perl|pwsh|powershell)(\.exe)?\s(.*\s)?(-c|-e|-command|-)(\s|$)|<<"
+    r"(?i)(^|[\s;&|(`/\\])" + _INTERPRETERS
+    + r"(\s+-(?!(c|e|command)(\s|$))\w[\w-]*(\s+(?!-)[^\s;&|]+)?)*?\s+(-c|-e|-command|-)(\s|$)"
 )
+# Heredoc ou pipe entregando código a um interpretador (ex.: "python <<EOF", "cat <<EOF | bash").
+HEREDOC_TO_INTERPRETER_PATTERN = re.compile(r"(?i)(^|[\s;&|(`/\\])" + _SHELL_INTERPRETERS + r"\b[^\n|;&]*<<")
+PIPE_TO_INTERPRETER_PATTERN = re.compile(r"(?i)\|\s*" + _SHELL_INTERPRETERS + r"(\s+-\S+)*\s*(\n|$|[|;&)])")
+# O ">" só conta como escrita quando é seguido de um alvo (não "->", ">=", "'<vazio>'" nem /dev/null).
 INLINE_CODE_WRITE_PATTERN = re.compile(
     r"(?i)(open\([^)]*['\"][wax+]|\.write(_text|_bytes|lines)?\(|unlink|rmtree|os\.remove|os\.rename|os\.replace|"
     r"shutil\.|writefile|appendfile|set-content|add-content|out-file|remove-item|move-item|copy-item|new-item|"
-    r"writeall|>\s*[^\s&])"
+    r"writeall|(?<![-=<>])>{1,2}(?!=)(?!\s*(/dev/null|\$null|nul)\b)\s*['\"]?[\w.$~/\\])"
 )
+HEREDOC_START_PATTERN = re.compile(r"<<(-?)\s*(['\"]?)(\w+)\2")
 
 DENY_REASON_GATED = (
     "Portão SDD: escrita em src/ ou tests/ bloqueada. Ela só é permitida durante "
@@ -227,25 +261,135 @@ def split_segments(command: str) -> list[str]:
     return [segment for segment in re.split(r"\s*(?:&&|\|\||[;|\n])\s*", command) if segment.strip()]
 
 
+def strip_heredoc_bodies(command: str) -> str:
+    """Remove o conteúdo dos heredocs, que é dado e não comando; a linha que abre o heredoc fica."""
+    kept: list[str] = []
+    delimiter: str | None = None
+    allow_tabs = False
+    for line in command.split("\n"):
+        if delimiter is not None:
+            if (line.lstrip("\t") if allow_tabs else line).strip() == delimiter:
+                delimiter = None
+            continue
+        kept.append(line)
+        # Fora de aspas, para que um "<<" dentro de código embutido (ex.: deslocamento de bits) não conte.
+        unquoted = re.sub(
+            r"(<<-?\s*)?(\"[^\"]*\"|'[^']*')", lambda m: m.group(0) if m.group(1) else '""', line
+        )
+        start = HEREDOC_START_PATTERN.search(unquoted)
+        if start:
+            allow_tabs, delimiter = start.group(1) == "-", start.group(3)
+    return "\n".join(kept)
+
+
+def resolve_temp_target(target: str, command: str) -> str | None:
+    """Troca $TEMP, $TMP, $TMPDIR, $env:TEMP ou %TEMP% pela pasta temporária, se o comando não a redefinir."""
+    match = TEMP_TARGET_PATTERN.match(target)
+    if not match or TEMP_REASSIGNMENT_PATTERN.search(command):
+        return None
+    name = next(group for group in match.groups()[:3] if group)
+    base = os.environ.get(name.upper()) or tempfile.gettempdir()
+    return base + match.group(4).strip("'\"")
+
+
+def classify_git_path_restore(segment: str, root: Path, cwd: Path) -> str | None:
+    """Para "git checkout [<commit>] -- <caminhos>" e "git restore <caminhos>", devolve o pior caminho citado.
+
+    Sem caminho explícito (ou com ".", curinga, pathspec mágico ou fora do repositório), vale o bloqueio.
+    """
+    match = GIT_PATH_RESTORE_PATTERN.match(segment)
+    if not match:
+        return "gated"
+    try:
+        # Barras invertidas viram normais: no modo POSIX o shlex as trataria como escape (.claude\hooks).
+        args = shlex.split((match.group(2) or "").replace("\\", "/"), posix=True)
+    except ValueError:
+        return "gated"
+    if match.group(1).lower() == "checkout":
+        if "--" not in args:
+            return "gated"
+        paths = args[args.index("--") + 1:]
+    else:
+        paths, skip_next, after_separator = [], False, False
+        for arg in args:
+            if skip_next:
+                skip_next = False
+            elif after_separator or not arg.startswith("-"):
+                paths.append(arg)
+            elif arg == "--":
+                after_separator = True
+            elif arg in GIT_RESTORE_OPTIONS_WITH_VALUE:
+                skip_next = True
+            elif arg.startswith("--pathspec-from-file"):
+                return "gated"
+    if not paths:
+        return "gated"
+    verdicts = []
+    for path in paths:
+        if any(char in path for char in "*?[") or path.startswith(":"):
+            return "gated"
+        relative = relative_to_root(path, root, cwd)
+        if relative in (None, ".", ""):
+            return "gated"
+        verdicts.append(classify_relative(relative))
+    if "protected" in verdicts:
+        return "protected"
+    return "gated" if "gated" in verdicts else None
+
+
+def classify_git_apply(segment: str) -> str | None:
+    """Libera "git apply" com --check/--stat/--numstat/--summary ou com --cached; o resto muda a árvore."""
+    match = GIT_APPLY_PATTERN.match(segment)
+    if not match:
+        return "gated"
+    try:
+        args = shlex.split((match.group(1) or "").replace("\\", "/"), posix=True)
+    except ValueError:
+        return "gated"
+    options = {arg.split("=", 1)[0] for arg in args if arg.startswith("-")}
+    if options & GIT_APPLY_WORKTREE_OPTIONS:
+        return "gated"
+    if options & GIT_APPLY_READ_ONLY_OPTIONS or "--cached" in options:
+        return None
+    return "gated"
+
+
+def classify_tree_changing(segment: str, root: Path, cwd: Path) -> str | None:
+    """Decide os comandos do git que podem mudar a árvore: só alguns formatos ficam livres."""
+    if GIT_CREATE_BRANCH_PATTERN.match(segment):
+        return None
+    if GIT_APPLY_PATTERN.match(segment):
+        return classify_git_apply(segment)
+    return classify_git_path_restore(segment, root, cwd)
+
+
 def classify_shell(command: str, root: Path, cwd: str | None) -> str | None:
     # Um "git commit" sozinho (mensagem em aspas ou em heredoc) não altera arquivos da árvore de trabalho.
     commit_text = strip_quoted(HEREDOC_SUBSTITUTION_PATTERN.sub('""', command))
     if GIT_COMMIT_ONLY_PATTERN.fullmatch(commit_text):
         return None
 
-    verdicts: list[str] = []
-    mentions_protected = bool(PROTECTED_PATH_PATTERN.search(command))
-    mentions_gated = bool(GATED_PATH_PATTERN.search(command))
-
     if ENCODED_COMMAND_PATTERN.search(command):
         return "gated"
 
+    verdicts: list[str] = []
+
     # Código embutido num interpretador: avaliado no comando inteiro (o heredoc atravessa as linhas).
-    if INLINE_INTERPRETER_PATTERN.search(command) and INLINE_CODE_WRITE_PATTERN.search(command):
+    inline_code = (
+        INLINE_INTERPRETER_PATTERN.search(command)
+        or HEREDOC_TO_INTERPRETER_PATTERN.search(command)
+        or PIPE_TO_INTERPRETER_PATTERN.search(command)
+    )
+    if inline_code and INLINE_CODE_WRITE_PATTERN.search(command):
         if PROTECTED_PATH_PATTERN.search(command):
             verdicts.append("protected")
         elif GATED_PATH_PATTERN.search(command):
             verdicts.append("gated")
+
+    # Fora do código embutido, o conteúdo dos heredocs é dado: não conta como comando nem como menção.
+    command = strip_heredoc_bodies(command)
+    mentions_protected = bool(PROTECTED_PATH_PATTERN.search(command))
+    mentions_gated = bool(GATED_PATH_PATTERN.search(command))
 
     current_dir: Path = Path(cwd) if cwd else root
     for segment in split_segments(command):
@@ -268,7 +412,13 @@ def classify_shell(command: str, root: Path, cwd: str | None) -> str | None:
             if STATE_DIR_NAME in target.lower():
                 verdicts.append("protected")
                 continue
-            if DYNAMIC_TARGET_PATTERN.match(target):
+            temp_target = resolve_temp_target(target, command)
+            if temp_target is not None:
+                if STATE_DIR_NAME in temp_target.lower():
+                    verdicts.append("protected")
+                    continue
+                target = temp_target
+            elif DYNAMIC_TARGET_PATTERN.match(target):
                 # Alvo em variável: decide pelo que o comando inteiro cita (ex.: f=src/a.cs; echo x > $f).
                 if mentions_protected:
                     verdicts.append("protected")
@@ -282,13 +432,17 @@ def classify_shell(command: str, root: Path, cwd: str | None) -> str | None:
         # Comandos que escrevem no que citam, ou que mudam a árvore inteira.
         writes = any(pattern.search(segment) for pattern in WRITE_COMMAND_PATTERNS)
         if writes:
-            uses_variable = re.search(r"[$%`]", strip_quoted(segment)) or re.search(r"\$\w|\$\{|\$\(", segment)
+            # A pasta temporária não redefinida no comando é um valor conhecido, não uma variável qualquer.
+            scanned = segment if TEMP_REASSIGNMENT_PATTERN.search(command) else TEMP_VARIABLE_PATTERN.sub("TEMPDIR", segment)
+            uses_variable = re.search(r"[$%`]", strip_quoted(scanned)) or re.search(r"\$\w|\$\{|\$\(", scanned)
             if PROTECTED_PATH_PATTERN.search(segment) or (uses_variable and mentions_protected):
                 verdicts.append("protected")
             elif GATED_PATH_PATTERN.search(segment) or segment_dir_kind or (uses_variable and mentions_gated):
                 verdicts.append(segment_dir_kind or "gated")
         if TREE_CHANGING_PATTERN.search(segment):
-            verdicts.append("gated")
+            kind = classify_tree_changing(segment, root, current_dir)
+            if kind:
+                verdicts.append(kind)
 
     if "protected" in verdicts:
         return "protected"
