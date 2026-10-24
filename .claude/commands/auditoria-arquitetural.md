@@ -1,6 +1,6 @@
 ---
 description: Auditoria arquitetural somente-leitura do ambiente IA Agêntica + Spec-Driven Development (Tickest / .NET)
-allowed-tools: Read, Glob, Grep, Bash(dotnet --info), Bash(dotnet --list-sdks), Bash(dotnet build:*), Bash(dotnet test:*), Bash(dotnet list package:*), Bash(git status:*), Bash(git log:*), Bash(git branch:*), Bash(git remote:*), Bash(git ls-files:*), Bash(git config --list:*), Bash(gh auth status), Bash(gh repo view:*), Bash(gh workflow list:*), Bash(gh run list:*), Bash(docker version), Bash(docker ps:*), Bash(claude --version), Bash(claude mcp list), Bash(node --version), Bash(python --version), Bash(python auditoria_sdd.py:*), Write(C:/dev/auditorias/**)
+allowed-tools: Read, Glob, Grep, Bash(dotnet --info), Bash(dotnet --list-sdks), Bash(dotnet build:*), Bash(dotnet test:*), Bash(dotnet list package:*), Bash(git status:*), Bash(git log:*), Bash(git branch:*), Bash(git remote:*), Bash(git ls-files:*), Bash(git config --list:*), Bash(gh auth status), Bash(gh repo view:*), Bash(gh workflow list:*), Bash(gh run list:*), Bash(docker version), Bash(docker ps:*), Bash(claude --version), Bash(claude mcp list), Bash(node --version), Bash(python --version), Bash(python scripts/auditoria_sdd.py:*), Write(C:/dev/auditorias/**)
 ---
 
 # AUDITORIA ARQUITETURAL — IA AGÊNTICA + SPEC-DRIVEN DEVELOPMENT
@@ -46,7 +46,7 @@ Estes comandos são permitidos porque só geram artefatos descartáveis (`bin/`,
 - `gh auth status`, `gh repo view`, `gh workflow list`, `gh run list` (somente leitura)
 - `docker version`, `docker ps`
 - `claude --version`, `claude mcp list`, `node --version`, `python --version`
-- `python auditoria_sdd.py --formato json` (se o script existir na raiz)
+- `python scripts/auditoria_sdd.py --formato json` (se o script existir em `scripts/`)
 
 **Testes de integração** (Testcontainers ou banco real) só rodam se: (a) o Docker estiver ativo, (b) os testes criarem apenas containers efêmeros e (c) nenhuma connection string apontar para banco compartilhado ou de produção. Na dúvida, **não rode**: marque como NÃO VERIFICADO e explique o motivo.
 
@@ -125,7 +125,7 @@ Para cada item: status, evidência e, se não conforme, o impacto concreto no tr
 - `dotnet test`: total, aprovados, falhos e ignorados, separados por unitários, integração e arquitetura.
 - Cobertura, se houver coletor configurado (não instale nada para medir).
 - Os testes de fato verificam os critérios de aceite das specs (use a amostragem da Fase D)?
-- Se `auditoria_sdd.py` existir na raiz, rode com `--formato json` e use o resultado como **uma** fonte de evidência, sem substituir a sua análise.
+- Se `scripts/auditoria_sdd.py` existir, rode com `--formato json` e use o resultado como **uma** fonte de evidência, sem substituir a sua análise.
 
 ### D7. Git, GitHub e CI/CD
 - Padrão de commits (Conventional Commits, IDs de spec/tarefa, trailer de coautoria do agente).
