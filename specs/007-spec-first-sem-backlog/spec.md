@@ -115,7 +115,7 @@ Ordem por dependência; cada tarefa termina com diff, ok do responsável e commi
 | T-4 | `spec-implement` e `spec-verify`: disciplina de execução, mudança de escopo, DEC nova, bloqueio do portão, auditoria, `pr:` | AC-5, AC-6 | — | [x] |
 | T-5 | Comando `/spec-status`, somente leitura | AC-7 | — | [x] |
 | T-6 | `CLAUDE.md`: branch, commit, PR, estados, `/spec-status`, sem backlog | AC-8 | — | [x] |
-| T-7 | `auditoria-arquitetural.md` e comentário do `scripts/auditoria_sdd.py` | AC-1 | — | [ ] |
+| T-7 | `auditoria-arquitetural.md` e comentário do `scripts/auditoria_sdd.py` | AC-1 | — | [x] |
 | T-8 | `SYSTEM_SPECIFICATION.md` (6.9, 7.5, nota, E-39) e spec 004 (DEC-8) | AC-9, AC-14 | — | [ ] |
 | T-9 | Verificação antes da remoção: auditoria, build, testes e testes do portão | AC-11, AC-12 | — | [ ] |
 | T-10 | Conferir a cópia externa e remover o `specs/BACKLOG.md` (último passo); `git grep` do AC-1 | AC-1, AC-10 | — | [ ] |
