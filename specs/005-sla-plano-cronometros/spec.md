@@ -1,0 +1,181 @@
+---
+id: 005
+titulo: SLA — plano, cronômetros de primeira resposta e resolução, e SLA no detalhe do chamado
+status: Em descoberta        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+responsavel: Rafael Santos
+aprovada-em:
+branch: feat/SPEC-005-sla-plan-timers
+pr:
+---
+
+# 005 — SLA: plano, cronômetros de primeira resposta e resolução, e SLA no detalhe do chamado
+
+## 1. Contexto
+- **Pedido original:** Rafael Santos, no chat, em 2026-10-24, sobre a "SPEC — Backend: Gestão de SLA e API de Detalhes do Ticket" refinada no mesmo dia: "vc ajustou com as novas informações a espc que tenho para implementação da SLA ?"; à proposta de ajustar a 004 e criar a 005 depois das decisões de produto: "Sim!"; às decisões DP-15 a DP-21: "Aceito todas".
+- **Fonte:** `specs/_fontes/sla-detalhe-chamado.md` (gravado em 2026-10-24, SHA-256 `c9e9a88a69799bc6f3e33d1d1ba4d939e243cc2d9b52c6aaa98f5d6e122eaa04`). Os identificadores RF-0x.y, RNF-xx, CA-xx e D-xx citados aqui são dela. Esta spec é a **Entrega 1** da fonte.
+- **Requisitos de produto atendidos (`SPEC-TICKEST.md` 0.5.0):** RF-52, RF-53, RF-65, RF-66; RN-37 a RN-43; RN-44 (só a parte "sem pausa"); AC-28 a AC-34.
+- **Série do SLA (DEC-1 da spec 004):** 004 (calendário útil, em Rascunho) → **005 (esta)** → 006 (monitoramento). As decisões DEC-1 a DEC-4 e DEC-7 da 004 valem para a série: código no estilo do `CLAUDE.md` (domínio anêmico, regras na Application), SLA atual mantido no contrato, sem Outbox, nenhuma migration de SLA grava dados de configuração.
+- **Referências:**
+  - `SYSTEM_SPECIFICATION.md`: 2.5 (estados do chamado), 2.6 (RN-01 a RN-03, RN-26), 5.x do chamado e do SLA.
+  - `specs/_fontes/prompt-sla.md`: itens 1.2 (plano), 1.3 (cronômetro), 1.4 (`Ticket`), 1.5 (persistência), 1.7 (consultas).
+  - Spec 004: `BusinessCalendar` (soma, subtração e segundos úteis), `ISlaCalendarProvider`, calendário padrão em código.
+  - Código: `Application/Tickets/TicketSla.cs` e `TicketSlaFilters.cs` (SLA atual em horas corridas, em memória e em SQL); `Tickets/Create/CreateTicketCommandHandler.cs:69-91` (grava `DueAtUtc` e `SlaWarningAtUtc` na abertura); `Tickets/Update/UpdateTicketCommandHandler.cs:54-89` (status; grava `ResolvedAtUtc` na primeira ida a Resolvido); `Tickets/Reopen/ReopenTicketCommandHandler.cs:42-66`; `TicketMessages/Post/PostTicketMessageCommandHandler.cs:33-54` (cria a mensagem sem alterar a linha do chamado); `Tickets/GetById/*` (detalhe); `Tickets/GetSlaSummary/*`; `Infrastructure/Tickets/TicketConfiguration.cs:27-29` (`xmin` como token de concorrência do chamado); `Authorization/TicketAccessGuard.cs` (acesso: solicitante, responsável ou `tickets:manage`; sem acesso → 403).
+- **Fatos do repositório que afetam a fonte:**
+  - A spec 004 ainda não foi implementada: esta spec depende dela entregue (o cálculo útil não existe no código).
+  - Publicar uma mensagem não altera a linha do chamado; concluir a primeira resposta por mensagem mexe só no cronômetro, então a concorrência entre duas primeiras mensagens precisa de proteção própria (ver descoberta).
+  - A prioridade e o setor ainda não são editáveis; o recálculo (RN-33, RN-39) só ganha rota com a spec da F1 que implementar a DP-05.
+  - Não há status de espera pelo solicitante; por isso não há pausa (DP-19).
+
+## 2. Requisitos
+| ID | Requisito | Fonte |
+|---|---|---|
+| REQ-1 | `GET tickets/{ticketId:guid}` continua sendo o detalhe, com o mesmo acesso (`TicketAccessGuard.EnsureCanViewAsync`): 200; 401 sem autenticação; 403 para quem não é solicitante, responsável nem tem `tickets:manage`; 404 para chamado inexistente, excluído ou id que não é GUID. O `TicketResponse` mantém todos os campos atuais e ganha o campo `sla` (REQ-12). | RF-01; DEC-7 |
+| REQ-2 | `GET tickets/{ticketId:guid}/sla` devolve só o bloco `sla` do chamado, com o mesmo acesso e os mesmos erros do REQ-1. | RF-07.1; RF-66 |
+| REQ-3 | A política é única e definida em código, devolvida por `ISlaPlanResolver.ResolveAsync(contexto do chamado)`, cuja assinatura não muda quando as políticas forem configuráveis. Usa o calendário "Expediente" da spec 004 e as metas em minutos úteis: Urgente 30 / 240, Alta 120 / 600, Média 240 / 1.200, Baixa 600 / 3.000 (primeira resposta / resolução). O alerta "em risco" vale aos 75% da meta em tempo útil. | RF-02; DEC-2 |
+| REQ-4 | Na abertura, o chamado grava o plano aplicado: id da política (nulo na padrão), nome "Padrão", versão 1, calendário, metas da prioridade e `IsLegacy = false`. Mudar a política em código depois não altera planos nem prazos já gravados. | RF-03.1, RF-03.3 |
+| REQ-5 | Na mesma transação da abertura, o sistema cria os cronômetros `FirstResponse` ciclo 1 e `Resolution` ciclo 1, iniciados no `CreatedAtUtc`, com prazo e alerta calculados pelo calendário do plano. `DueAtUtc` e `SlaWarningAtUtc` do chamado recebem o prazo e o alerta do `Resolution` ciclo 1. | RF-03.2, RF-03.4 |
+| REQ-6 | A primeira mensagem publicada por um usuário diferente do solicitante e que tenha `tickets:manage` naquele momento conclui o `FirstResponse` em aberto, com o instante da mensagem. Mensagem do solicitante não conclui. Editar ou excluir essa mensagem depois não reabre o objetivo. Duas primeiras mensagens simultâneas resultam numa única conclusão, e as duas mensagens são gravadas. | RF-05.2; DEC-1 |
+| REQ-7 | A ida a Resolvido conclui o `Resolution` do ciclo corrente e, se ainda estiver em aberto, também o `FirstResponse`, no mesmo instante. | RF-05.3; DEC-1 |
+| REQ-8 | A ida a Cancelado para (`StoppedOnUtc`) todos os cronômetros em aberto, que passam a `Stopped` e não contam como violação. Fechado e Em andamento não mexem nos cronômetros. | RF-05.4, RF-05.5 |
+| REQ-9 | A reabertura cria um novo ciclo de `Resolution`, iniciado no instante da reabertura, com a meta integral do plano. Ciclos anteriores não mudam, o `FirstResponse` não reabre, e `DueAtUtc`, `SlaWarningAtUtc`, `ResolvedAtUtc` e `SlaStatus` continuam seguindo o ciclo 1. | RF-05.6; DEC-3; DEC-8 |
+| REQ-10 | O estado de cada cronômetro é calculado no servidor, com um único `UtcNow` por requisição: em aberto, `Running` antes do alerta, `AtRisk` do alerta até o prazo e `Breached` a partir do prazo; concluído até o prazo (inclusive), `Met`; depois, `Missed`; parado, `Stopped`. O consumido é o tempo útil entre o início e o menor instante entre agora, a conclusão e a parada; o restante é a meta menos o consumido, nunca negativo. Não há pausa. | RF-05.1, RF-05.7, RF-05.9; DEC-5; DEC-9 |
+| REQ-11 | A migration cria, para cada chamado existente, o plano "Legado (horas corridas)" (`IsLegacy = true`, calendário "24 horas" em código, meta igual às horas atuais da prioridade) e o `Resolution` ciclo 1 com o mesmo início (`CreatedAtUtc`), prazo (`DueAtUtc`) e alerta (`SlaWarningAtUtc`) já gravados; concluído em `ResolvedAtUtc` se houver, parado se cancelado sem resolução. Chamados existentes não ganham `FirstResponse`. Rodar a migration de novo não duplica nada, e ela não grava política nem calendário no banco. | RF-06; DEC-4; DEC-10; DEC-7 da spec 004 |
+| REQ-12 | O bloco `sla` traz `serverNowUtc`, o plano (`policyId`, `policyName`, `policyVersion`, `calendarId`, `calendarName`, `isLegacy`) e `objectives`: todos os ciclos, ordenados por objetivo e ciclo, cada um com `metric`, `cycle`, `state`, `targetMinutes`, `startedAtUtc`, `warningAtUtc`, `dueAtUtc`, `completedAtUtc`, `stoppedAtUtc`, `consumedMinutes`, `remainingMinutes` e `isCurrentCycle`. Sempre há um item de ciclo corrente para `FirstResponse` e `Resolution`; sem cronômetro, o item vem com `state` = `NotApplicable` e datas nulas. | RF-07; fonte 4.3; DEC-6 |
+| REQ-13 | O resumo (`GET tickets/sla-summary`), os filtros por situação do SLA e o campo `SlaStatus` continuam com o mesmo significado e o mesmo resultado para os chamados existentes. | RF-07.3; RNF-09; DEC-8 |
+| REQ-14 | Abertura, mudança de status e reabertura gravam chamado e cronômetros no mesmo `SaveChangesAsync`, sob o `xmin` do chamado; conflito responde 409. | RNF-02 |
+| REQ-15 | Cronômetros passam pela auditoria existente; início, conclusão e parada, uma vez gravados, nunca mudam. | RNF-01; fonte 4.2 |
+
+## 3. Critérios de aceitação
+Horários em São Paulo; relógio controlado nos testes; calendário "Expediente" da spec 004.
+
+| ID | REQ | Dado | Quando | Então (resultado observável) |
+|---|---|---|---|---|
+| AC-1 | REQ-1 | um chamado; um Colaborador que não participa dele | o participante, o não participante e um usuário sem autenticação chamam `GET tickets/{id}`; e alguém chama com um id inexistente | 200 com todos os campos atuais e o campo `sla`; 403; 401; 404 |
+| AC-2 | REQ-2 | o mesmo cenário do AC-1 | as mesmas chamadas em `GET tickets/{id}/sla` | 200 com o bloco `sla` igual ao do detalhe no mesmo instante; 403; 401; 404 |
+| AC-3 | REQ-3 | — | `ISlaPlanResolver.ResolveAsync` para cada prioridade | as metas do REQ-3 e o calendário "Expediente" |
+| AC-4 | REQ-4, REQ-5 | segunda 26/10/2026 08:10 | um Colaborador abre um chamado Urgente | plano "Padrão" versão 1 gravado; `FirstResponse` 1 com prazo 08:40 e alerta 08:32:30; `Resolution` 1 com prazo 12:10 e alerta 11:10; `DueAtUtc` e `SlaWarningAtUtc` iguais aos do `Resolution` 1 |
+| AC-5 | REQ-5 | sexta 30/10/2026 17:50 | um chamado Alta é aberto | prazo do `FirstResponse` 1 na terça 03/11/2026 09:50 (segunda 02/11 é feriado) |
+| AC-6 | REQ-4 | um chamado aberto com o plano padrão | o teste troca as metas devolvidas pelo resolvedor e consulta o chamado | prazos e plano do chamado iguais aos gravados na abertura |
+| AC-7 | REQ-6 | um chamado aberto | o solicitante publica uma mensagem; depois um Atendente publica outra | após a primeira, `FirstResponse` continua em aberto; após a segunda, `Met` com conclusão no instante dela |
+| AC-8 | REQ-6 | o `FirstResponse` concluído do AC-7 | o Atendente edita e depois exclui a mensagem | o `FirstResponse` continua concluído no mesmo instante |
+| AC-9 | REQ-6 | um chamado com `FirstResponse` em aberto | dois Atendentes publicam mensagens ao mesmo tempo | as duas chamadas respondem 200 e as duas mensagens são gravadas; o `FirstResponse` tem uma única conclusão, no instante de uma delas |
+| AC-10 | REQ-6 | um usuário que não é o solicitante e não tem `tickets:manage` (ex.: responsável anterior sem a permissão), com acesso para publicar | ele publica a primeira mensagem | `FirstResponse` continua em aberto |
+| AC-11 | REQ-7 | um chamado Em andamento sem resposta | o Atendente muda para Resolvido antes do prazo | `Resolution` 1 e `FirstResponse` 1 ficam `Met`, concluídos no mesmo instante |
+| AC-12 | REQ-8 | um chamado Aberto | é cancelado | os dois cronômetros ficam `Stopped`; `SlaStatus` = `NotApplicable`; o resumo não o conta como violado |
+| AC-13 | REQ-8 | um chamado Resolvido | é fechado | nenhum cronômetro muda |
+| AC-14 | REQ-9 | um chamado resolvido no prazo | é reaberto às 14:00 | `Resolution` 1 continua `Met`; existe `Resolution` 2 iniciado às 14:00 com a meta integral e `isCurrentCycle = true`; `FirstResponse` não muda; `DueAtUtc` e `SlaStatus` continuam os do ciclo 1 |
+| AC-15 | REQ-10 | um chamado Urgente aberto às 08:10 | o detalhe é consultado às 11:15 e às 12:20 | `Resolution` vem `AtRisk` com 185 minutos consumidos e 55 restantes às 11:15; `Breached` com 250 consumidos e 0 restante às 12:20 |
+| AC-16 | REQ-10 | o chamado do AC-15 | é resolvido às 12:10 em ponto; e outro igual, às 12:30 | `Met` no primeiro; `Missed` no segundo |
+| AC-17 | REQ-11 | chamados existentes abertos, resolvidos e cancelados antes da migration | a migration roda duas vezes | cada um tem exatamente um `Resolution` 1 com plano legado, calendário "24 horas" e o mesmo `DueAtUtc`; o resolvido está concluído em `ResolvedAtUtc`; o cancelado sem resolução está parado; nenhum tem `FirstResponse`; nenhuma linha de política ou calendário foi gravada |
+| AC-18 | REQ-12 | um chamado legado e um chamado novo | consulta o bloco `sla` dos dois | o legado tem `isLegacy = true` e o `FirstResponse` como `NotApplicable` com datas nulas; o novo traz os itens com todos os campos do REQ-12 e `serverNowUtc` igual ao instante do relógio |
+| AC-19 | REQ-13 | chamados existentes em todas as situações do SLA | consulta o resumo e a listagem filtrada por situação antes e depois da mudança | mesmos números e mesmos chamados |
+| AC-20 | REQ-14 | um chamado aberto | duas mudanças de status simultâneas | uma responde 204 e a outra 409; os cronômetros correspondem só à mudança gravada |
+| AC-21 | REQ-15 | uma abertura e uma resolução | lê a auditoria dos cronômetros | registros de inclusão e de alteração; nenhuma alteração posterior em `StartedAtUtc`, `CompletedOnUtc` ou `StoppedOnUtc` |
+| AC-22 | todos | a mudança aplicada | `dotnet build TickestPristine.slnx` e `dotnet test TickestPristine.slnx` | 0 avisos; todos os testes passam |
+
+## 4. Decisões
+| ID | Pergunta | Opções | Decisão | Decidido por, em |
+|---|---|---|---|---|
+| DEC-1 | O que conta como primeira resposta? | (a) primeira mensagem de quem não é o solicitante e tem `tickets:manage`; resolver também conta; (b) contar também a ida a Em andamento ou a atribuição | (a) | Rafael Santos, 2026-10-24, no chat ("Aceito todas"; DP-15 do `SPEC-TICKEST.md`) |
+| DEC-2 | Metas padrão | (a) em minutos úteis: Urgente 30/240, Alta 120/600, Média 240/1.200, Baixa 600/3.000, alerta aos 75%; (b) manter 4/8/24/72 h corridas | (a) | Rafael Santos, 2026-10-24, no chat ("Aceito todas"; DP-16) |
+| DEC-3 | Reabertura | (a) novo ciclo de resolução com meta integral, primeiro ciclo congelado; (b) continuar o ciclo | (a) | Rafael Santos, 2026-10-24, no chat ("Aceito todas"; DP-17) |
+| DEC-4 | Chamados existentes | (a) mantêm o prazo em horas corridas, sem primeira resposta; (b) recalcular em horas úteis | (a) | Rafael Santos, 2026-10-24, no chat ("Aceito todas"; DP-18) |
+| DEC-5 | Pausa | (a) sem pausa nesta spec; status "Aguardando solicitante" numa spec própria; (b) pausar em Em andamento | (a) | Rafael Santos, 2026-10-24, no chat ("Aceito todas"; DP-19) |
+| DEC-6 | O solicitante vê o plano (política e metas)? | (a) sim, todo participante vê o SLA inteiro; (b) ocultar o plano de quem não tem `tickets:manage` | (a) | Rafael Santos, 2026-10-24, no chat ("Aceito todas"; DP-21) |
+| DEC-7 | Acesso negado ao detalhe e ao SLA | (a) 403, como hoje; (b) 404, para não confirmar a existência do chamado | (a) 403, como hoje | Rafael Santos, 2026-10-24, no chat ("eu aceito!", às recomendações da primeira rodada técnica) |
+| DEC-8 | `SlaStatus` e `DueAtUtc` atuais seguem qual ciclo? | (a) o `Resolution` ciclo 1, significado atual (RN-26); (b) o ciclo corrente | (a) o `Resolution` ciclo 1 (significado atual); o ciclo novo aparece só no bloco `sla` | Rafael Santos, 2026-10-24, no chat ("eu aceito!", às recomendações da primeira rodada técnica) |
+| DEC-9 | Colunas de pausa no cronômetro | (a) só quando a pausa existir; (b) já agora | (a) só quando a pausa existir; o consumido sai do calendário entre início e fim | Rafael Santos, 2026-10-24, no chat ("eu aceito!", às recomendações da primeira rodada técnica) |
+| DEC-10 | Calendário dos chamados existentes (24x7) | (a) calendário fixo em código, ao lado do padrão; (b) sem calendário, nulo = corrido | (a) calendário "24 horas" fixo em código, ao lado do "Expediente" | Rafael Santos, 2026-10-24, no chat ("eu aceito!", às recomendações da primeira rodada técnica) |
+| DEC-11 | Consulta "chamados em risco" e passos de escalonamento do `prompt-sla.md` 1.2 e 1.7 | (a) fora desta spec; (b) dentro | (a) fora desta spec | Rafael Santos, 2026-10-24, no chat ("eu aceito!", às recomendações da primeira rodada técnica) |
+| DEC-12 | Duas primeiras respostas ao mesmo tempo (REQ-6): como garantir uma única conclusão sem perder mensagem? | (a) o cronômetro ganha `xmin` próprio; em conflito, o handler descarta só a mudança do cronômetro e grava a mensagem; passa pela auditoria; (b) atualização condicional direto no banco (`WHERE completed_on_utc IS NULL`), mais simples, mas fora do `AuditLoggingInterceptor`; (c) aceitar que a última sobrescreva o instante | (a): o cronômetro tem `xmin` próprio; em conflito, o handler descarta só a mudança do cronômetro e grava a mensagem | Rafael Santos, 2026-10-24, no chat ("ok pode fazer com A") |
+
+## 5. Fora do escopo
+- Políticas configuráveis, associação por setor ou departamento e permissão `sla:manage` (Entrega 3 da fonte; RF-61 e RN-45 do `SPEC-TICKEST.md`).
+- Job de monitoramento, materialização da violação e eventos (spec 006).
+- Pausa e o status "Aguardando solicitante" (DEC-5).
+- Edição de prioridade e setor (spec da F1 para a DP-05).
+- Consulta de chamados em risco e passos de escalonamento do `prompt-sla.md` (DEC-11).
+
+## 6. Plano técnico
+- **Arquivos a criar ou alterar:**
+  - Domain, `src/TickestPristine.Domain/Tickets/`: `TicketSlaTimer.cs` (`Entity`, `IAuditable`: `Id`, `TicketId`, `Metric`, `Cycle`, `TargetMinutes`, `CalendarId`, `StartedAtUtc`, `WarningOnUtc`, `DueOnUtc`, `CompletedOnUtc`, `StoppedOnUtc`); `SlaMetric.cs` (`FirstResponse`, `Resolution`); `SlaObjectiveState.cs` (`Running`, `AtRisk`, `Breached`, `Met`, `Missed`, `Stopped`, `NotApplicable`); `TicketSlaPlan.cs` (valor guardado como JSON: `PolicyId?`, `PolicyName`, `PolicyVersion`, `CalendarId`, `FirstResponseMinutes?`, `ResolutionMinutes`, `IsLegacy`); `Ticket.cs` ganha `SlaPlan` e a coleção `SlaTimers`.
+  - Application:
+    - `Sla/ISlaPlanResolver.cs` e `Sla/DefaultSlaPlanResolver.cs` (metas do REQ-3 em código; contexto com prioridade e setor, para a assinatura não mudar na Entrega 3).
+    - `Sla/SlaCalendarIds.cs` (spec 004) ganha `Continuous`, o calendário "24 horas" em código, e o `ISlaCalendarProvider` passa a devolvê-lo (DEC-10).
+    - `Sla/TicketSlaClock.cs` (estática, regras do domínio anêmico, DEC-2 da spec 004): iniciar os cronômetros, concluir a primeira resposta, concluir a resolução, parar os abertos, abrir novo ciclo, e calcular estado, consumido e restante (REQ-10) com o `BusinessCalendar`.
+    - `Tickets/Create/CreateTicketCommandHandler.cs`: resolve o plano, cria os cronômetros e preenche `DueAtUtc` e `SlaWarningAtUtc` a partir do `Resolution` 1 (deixa de usar `TicketSla.DueAt` e `WarningAt`).
+    - `Tickets/Update/UpdateTicketCommandHandler.cs` (Resolvido e Cancelado), `Tickets/Reopen/ReopenTicketCommandHandler.cs` (novo ciclo), `TicketMessages/Post/PostTicketMessageCommandHandler.cs` (primeira resposta, com o tratamento de concorrência da DEC-12).
+    - `Tickets/GetSla/*` (query, handler e `TicketSlaResponse`, montado uma vez e reutilizado); `Tickets/GetById/*` passa a preencher `Sla`.
+    - `TicketSla.cs` e `TicketSlaFilters.cs` continuam para `SlaStatus`, resumo e filtros (REQ-13); `TicketSla.ResolutionTime` passa a servir só ao plano legado.
+  - Infrastructure: `Tickets/TicketSlaTimerConfiguration.cs` (tabela `ticket_sla_timers`, FK para `tickets`, índice único `ticket_id + metric + cycle`, `metric` como texto, `xmin` como token de concorrência do cronômetro, DEC-12); `Tickets/TicketConfiguration.cs` (`SlaPlan` como `jsonb` via `OwnsOne(...).ToJson()`); `DbSet` no `ApplicationDbContext` e no `IApplicationDbContext`.
+  - Migration `Add_Ticket_Sla_Timers`: estrutura; `UPDATE tickets SET sla_plan = <plano legado da prioridade> WHERE sla_plan IS NULL`; `INSERT INTO ticket_sla_timers ... SELECT ... FROM tickets ... ON CONFLICT (ticket_id, metric, cycle) DO NOTHING`; depois `sla_plan` passa a obrigatória. O SQL aparece na própria migration.
+  - Web.Api: `Endpoints/Tickets/GetSla.cs` (`GET tickets/{ticketId:guid}/sla`, `RequireAuthorization`, tag `Tickets`).
+  - Testes: `tests/TickestPristine.Application.UnitTests/Sla/` (`DefaultSlaPlanResolverTests`, `TicketSlaClockTests` com tabela de estados e fronteiras); `Tickets/` (handlers de abertura, status, reabertura, detalhe e SLA); `TicketMessages/` (primeira resposta); `tests/TickestPristine.IntegrationTests/Tickets/TicketSlaTests.cs` (ACs por HTTP, migration de dados com chamados criados antes, concorrência).
+- **Contratos:**
+  - `GET tickets/{ticketId:guid}` → `TicketResponse` + campo `sla` (`TicketSlaResponse`).
+  - `GET tickets/{ticketId:guid}/sla` (nova) → 200 `TicketSlaResponse`; 401; 403; 404.
+  - Formato do `TicketSlaResponse`: o do REQ-12 (exemplo completo na fonte, seção 4.3); enums na serialização já usada pela API.
+  - Sem evento de domínio novo (os eventos de violação são da spec 006).
+- **Mudança no banco:** sim. Coluna `tickets.sla_plan` (`jsonb`, obrigatória depois do preenchimento) e tabela `ticket_sla_timers`, com os dados dos chamados existentes (REQ-11).
+- **Dependência:** a spec 004 entregue (`BusinessCalendar`, `ISlaCalendarProvider`, feriados).
+- **Riscos:**
+  - R-1: os prazos dos chamados novos mudam de horas corridas para minutos úteis; um chamado Baixa aberto na sexta passa a vencer dias depois do que venceria hoje. É a decisão DEC-2, e o front deve exibir os prazos do servidor.
+  - R-2: a permissão do autor da mensagem é lida pelo `IPermissionProvider`, com cache de até 5 minutos; quem acabou de perder `tickets:manage` ainda pode concluir a primeira resposta nesse intervalo.
+  - R-3: chamados reabertos ficam com dois prazos de resolução (ciclo 1 nos campos atuais e ciclo corrente no bloco `sla`); o front precisa usar o bloco `sla` para o ciclo corrente (DEC-8).
+  - R-4: a migration de dados percorre todos os chamados; em bases grandes, deve rodar fora do horário de uso.
+
+## 7. Tarefas
+| ID | Tarefa | ACs | Skill | Feita |
+|---|---|---|---|---|
+| T-1 | `TicketSlaTimer`, `SlaMetric`, `SlaObjectiveState`, `TicketSlaPlan`, mudanças no `Ticket`, configurações EF e migration com o preenchimento dos chamados existentes | AC-17, AC-21 | add-entity | [ ] |
+| T-2 | `ISlaPlanResolver` com a política padrão e o calendário "24 horas" no provider da spec 004 | AC-3, AC-6 | add-feature | [ ] |
+| T-3 | `TicketSlaClock`: iniciar, concluir, parar, novo ciclo, estado, consumido e restante | AC-4, AC-5, AC-15, AC-16 | add-feature | [ ] |
+| T-4 | Abertura com plano e cronômetros | AC-4, AC-5, AC-6, AC-20 | add-feature | [ ] |
+| T-5 | Mudança de status (Resolvido, Cancelado, Fechado) e reabertura | AC-11, AC-12, AC-13, AC-14, AC-20 | add-feature | [ ] |
+| T-6 | Primeira resposta na publicação de mensagem, com o tratamento de concorrência do cronômetro | AC-7, AC-8, AC-9, AC-10 | add-feature | [ ] |
+| T-7 | `TicketSlaResponse`, slice `GetSla`, campo `sla` no detalhe e endpoint `GET tickets/{id}/sla` | AC-1, AC-2, AC-18 | add-feature | [ ] |
+| T-8 | Testes unitários e de integração dos ACs, incluindo a equivalência do resumo e dos filtros antes e depois | AC-1 a AC-21 | add-tests | [ ] |
+| T-9 | Build e testes da solução | AC-19, AC-22 | add-tests | [ ] |
+
+## 8. Rastreabilidade
+| AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
+|---|---|---|---|
+| AC-1 | | | |
+| AC-2 | | | |
+| AC-3 | | | |
+| AC-4 | | | |
+| AC-5 | | | |
+| AC-6 | | | |
+| AC-7 | | | |
+| AC-8 | | | |
+| AC-9 | | | |
+| AC-10 | | | |
+| AC-11 | | | |
+| AC-12 | | | |
+| AC-13 | | | |
+| AC-14 | | | |
+| AC-15 | | | |
+| AC-16 | | | |
+| AC-17 | | | |
+| AC-18 | | | |
+| AC-19 | | | |
+| AC-20 | | | |
+| AC-21 | | | |
+| AC-22 | | | |
+
+## 9. Evidências de verificação
+- **Build:**
+- **Testes:**
+- **Revisão:**
+- **Documentação atualizada:** a atualizar pela `spec-verify`: `SYSTEM_SPECIFICATION.md` 2.6 (RN-01 a RN-03 e RN-26 no modelo útil), 4.3.1 (rota nova), 5.x do chamado (detalhe e SLA), C-14 e C-15.
+- **CI:**
+- **Entrega:**
+
+## 10. Histórico
+| Data | Status | Observação |
+|---|---|---|
+| 2026-10-24 | Rascunho | Criada pela `spec-new` a partir de `specs/_fontes/sla-detalhe-chamado.md`, a pedido de Rafael Santos no chat ("Sim!"). |
+| 2026-10-24 | Em descoberta | Descoberta iniciada. DEC-1 a DEC-6 decididas por Rafael Santos no chat ("Aceito todas", DP-15 a DP-19 e DP-21 do `SPEC-TICKEST.md`). DEC-7 a DEC-11 perguntadas na primeira rodada técnica. |
+| 2026-10-24 | Em descoberta | DEC-7 a DEC-11 decididas por Rafael Santos no chat ("eu aceito!"), todas pela opção recomendada. A divisão da série continua a da DEC-1 da spec 004 ("mantenha como estava"). |
+| 2026-10-24 | Em descoberta | Requisitos, critérios, plano e tarefas escritos a partir da Entrega 1 de `specs/_fontes/sla-detalhe-chamado.md`, a pedido de Rafael Santos no chat ("vc pegou o conteudo dela e inseriu na spc de desenvolvimento ?"). DEC-12 (concorrência da primeira resposta) aberta na segunda rodada; é a única pendência para a aprovação. |
+| 2026-10-24 | Em descoberta | DEC-12 decidida por Rafael Santos no chat ("ok pode fazer com A"). Checklist de completude atendido: nenhuma pergunta sem resposta, nenhum `[SUPOSIÇÃO]`, nenhuma DEC em aberto, todo REQ com AC e toda tarefa ligada a ACs. Aguarda aprovação explícita. |
