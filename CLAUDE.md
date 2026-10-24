@@ -142,14 +142,14 @@ Antes de criar algo, siga o slice real mais parecido (caminhos a partir de `src/
 - Sem MediatR (ver [Convenções a manter ao ampliar](#convenções-a-manter-ao-ampliar)); domínio anêmico, com regras nos handlers ou em classes estáticas da pasta do agregado na Application (ex.: `Tickets/TicketStatusTransitions.cs`).
 - Datas e horas pelo `IDateTimeProvider`, nunca `DateTime.UtcNow` na Application.
 - Identificadores de código em inglês; comentários e textos ao usuário em pt-BR.
-- Mensagens de commit em pt-BR, no formato `tipo: descrição` (`feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `chore`).
-- Toda task tem uma branch própria e atômica, criada a partir da `main` atualizada (`origin/main`) e entregue por pull request para a `main`, onde o CI e a proteção da branch valem, no padrão `<tipo>/<BL-n>-<descricao-curta-em-kebab-case>`: `tipo` é `feature`, `bugfix`, `hotfix`, `refactor` ou `chore`; `BL-n` é o item do `specs/BACKLOG.md`; a descrição fica em inglês (ex.: `feature/BL-004-sla-business-calendar`). A branch só contém a task dela.
+- Mensagens de commit em pt-BR, no formato `tipo(escopo): descrição [SPEC-NNN T00n]` (`tipo` em `feat`, `fix`, `refactor`, `perf`, `test`, `docs` ou `chore`; `T00n` é a tarefa da spec, omitido em commits que não são de uma tarefa), com o trailer de coautoria do agente.
+- Toda spec tem uma branch própria e atômica, criada a partir da `main` atualizada (`origin/main`) e entregue por pull request para a `main`, onde o CI e a proteção da branch valem, no padrão `<tipo>/SPEC-NNN-<slug>`: `tipo` é `feat`, `fix`, `bugfix`, `chore`, `docs`, `test` ou `refactor`; `NNN` é o número da spec; o slug fica em inglês, em kebab-case (ex.: `feat/SPEC-009-attendant-lookup-assignment`). A branch só contém a spec dela. O título do PR cita `SPEC-NNN`, e o corpo traz o link para o `spec.md` e a lista de REQs atendidos.
 
 ### Documentos de estado
 
 `SYSTEM_SPECIFICATION.md` descreve o que o sistema faz hoje: capacidades (2.7), regras de negócio (2.6), rotas (4.3.1), lacunas (7) e decisões em aberto (9.5). É extenso: leia só as seções de que a tarefa precisa e atualize as que a mudança afetar.
 
-`specs/BACKLOG.md` guarda as demandas futuras e a prioridade (regras no próprio arquivo); o andamento de cada demanda fica na spec dela.
+A spec é a unidade de trabalho: não há trabalho sem spec, e o estado de cada demanda fica só no frontmatter da spec dela, sem arquivo central. As ideias e as prioridades ficam com o responsável, fora do repositório. O comando `/spec-status` (somente leitura) mostra a visão geral de todas as specs.
 
 ## Política de autonomia
 
@@ -157,7 +157,7 @@ Antes de criar algo, siga o slice real mais parecido (caminhos a partir de `src/
 |---|---|---|---|
 | Ler código e documentos, buscar, rodar build e testes, verificações não destrutivas | Regra de negócio sem fonte no código ou nos documentos; mais de uma opção viável; conflito entre o pedido e este arquivo; teste que falha por defeito fora do escopo | Mudança funcional não trivial em `src/` ou `tests/` | Stage, commit, push e PR; excluir ou mover arquivos; aplicar migration em banco; alterar este arquivo, as skills ou configurações; qualquer ação fora do repositório |
 
-A autorização vale só para a ação pedida, no escopo pedido. Correção realmente trivial (texto, typo) dispensa o plano somente quando autorizada explicitamente no chat.
+A autorização vale só para a ação pedida, no escopo pedido. Todo commit, dentro ou fora das skills, só acontece depois de o agente mostrar o diff e receber o ok do responsável. Correção realmente trivial (texto, typo) dispensa o plano somente quando autorizada explicitamente no chat.
 
 **Mudança trivial:** corrige texto, typo, comentário ou formatação sem mudar comportamento observável, contrato, banco ou regra; qualquer outra é não trivial. Escrever a spec em `specs/` (pela `spec-new`) e atualizar o `SYSTEM_SPECIFICATION.md` (pela `spec-verify`) fazem parte do fluxo SDD e não exigem autorização à parte.
 
@@ -165,11 +165,11 @@ A autorização vale só para a ação pedida, no escopo pedido. Correção real
 
 Mudança funcional não trivial segue Spec-Driven Development, com uma spec por mudança em `specs/NNN-slug/spec.md`:
 
-1. **`spec-new`** escreve a spec (requisitos, critérios de aceitação, decisões, plano e tarefas) e pergunta o que não tiver fonte.
-2. **Aprovação explícita** do responsável pelo produto no chat; sem ela, nenhum código de `src/` ou `tests/` é escrito.
-3. **`/spec-implement NNN`** (só por comando) executa as tarefas com as skills de implementação.
-4. **`spec-verify`** comprova cada critério com testes aprovados na execução atual, roda a revisão e atualiza as seções afetadas do `SYSTEM_SPECIFICATION.md`.
-5. **Entrega** (commit e PR) só com autorização explícita: `Verificada` não significa `Entregue`.
+1. **`spec-new`** faz a descoberta (no máximo 5 perguntas por rodada, de negócio e técnicas, e para à espera das respostas) e só então escreve a spec (requisitos, critérios de aceitação, decisões, plano e tarefas); o que não foi confirmado fica marcado como `[SUPOSIÇÃO]`.
+2. **Aprovação explícita** do responsável pelo produto no chat, sem `[SUPOSIÇÃO]` pendente; sem ela, nenhum código de `src/` ou `tests/` é escrito.
+3. **`/spec-implement NNN`** (só por comando, na branch da spec) executa uma tarefa por vez com as skills de implementação: build e testes, diff, ok do responsável e commit. Mudança de escopo ou DEC nova faz a skill parar e perguntar.
+4. **`spec-verify`** comprova cada critério com testes aprovados na execução atual, roda a auditoria (`python scripts/auditoria_sdd.py .`) e a revisão e atualiza as seções afetadas do `SYSTEM_SPECIFICATION.md`.
+5. **Entrega:** o PR leva a spec `Verificada`, com o número do PR no campo `pr:`; o push e o merge são do responsável. Com o PR mergeado na `main`, a spec está `Entregue`, e o `/spec-status` mostra isso.
 
 Estados e transições da spec: `.claude/skills/spec-new/references/spec-status.md`.
 
@@ -177,4 +177,4 @@ Estados e transições da spec: `.claude/skills/spec-new/references/spec-status.
 
 **Estado:** instalado em 23/10/2026 (até essa data só existia na worktree de teste). O `.claude/settings.json` também nega, em `permissions.deny`, a leitura de `.env` e `.env.*` e o `git push` pelo agente: o push é feito pelo responsável (`! git push`).
 
-O hook `.claude/hooks/sdd_gate.py` (registrado em `.claude/settings.json`) bloqueia escrita em `src/` e `tests/`, por ferramenta de edição ou comando de shell, fora de um `/spec-implement NNN` cuja spec esteja `Em implementação` e com `aprovada-em` preenchido. Para uma mudança trivial, inclua `[sdd:autorizo]` na sua mensagem: a liberação vale só para ela e termina na sua próxima mensagem, mesmo que ela chegue no meio de uma resposta. O próprio hook e os settings também exigem o marcador. O hook evita erros do agente; não resiste a quem queira burlá-lo de propósito. Os caminhos bloqueados e os limites conhecidos estão no `SYSTEM_SPECIFICATION.md` (6.9). Testes: `python -m unittest discover -s .claude/hooks -p "test_*.py"` (também configurados como passo do CI em `.github/workflows/build.yml`).
+O hook `.claude/hooks/sdd_gate.py` (registrado em `.claude/settings.json`) bloqueia escrita em `src/` e `tests/`, por ferramenta de edição ou comando de shell, fora de um `/spec-implement NNN` cuja spec esteja `Em implementação` e com `aprovada-em` preenchido; um bloqueio com a spec ainda `Aprovada` não encerra o `/spec-implement` da sessão. Para uma mudança trivial, inclua `[sdd:autorizo]` na sua mensagem: a liberação vale só para ela e termina na sua próxima mensagem, mesmo que ela chegue no meio de uma resposta. O próprio hook e os settings também exigem o marcador. O hook evita erros do agente; não resiste a quem queira burlá-lo de propósito. Os caminhos bloqueados e os limites conhecidos estão no `SYSTEM_SPECIFICATION.md` (6.9). Testes: `python -m unittest discover -s .claude/hooks -p "test_*.py"` (também configurados como passo do CI em `.github/workflows/build.yml`).

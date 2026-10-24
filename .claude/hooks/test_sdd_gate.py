@@ -155,6 +155,14 @@ class SddGateTests(unittest.TestCase):
                 self.write_spec("001-exemplo", "Em implementação")
                 self.assert_denied(self.tool("Write", {"file_path": self.src_file()}))
 
+    def test_spec_implement_mode_survives_a_denial_while_spec_is_still_approved(self) -> None:
+        self.write_spec("001-exemplo", "Aprovada")
+        self.prompt("/spec-implement 001")
+        self.assert_denied(self.tool("Write", {"file_path": self.src_file()}))
+        # O bloqueio com a spec ainda "Aprovada" não encerra a implementação (spec 007, DEC-11).
+        self.write_spec("001-exemplo", "Em implementação")
+        self.assert_allowed(self.tool("Write", {"file_path": self.src_file()}))
+
     def test_spec_implement_mentioned_mid_prompt_does_not_count(self) -> None:
         self.write_spec("001-exemplo", "Em implementação")
         self.prompt("depois rode /spec-implement 001, mas agora corrija o handler")
@@ -321,6 +329,7 @@ class SddGateTests(unittest.TestCase):
             "git switch -c bugfix/BL-031-sdd-gate-false-positives",
             "git switch --create chore/BL-003-x",
             "git checkout -b feature/BL-004-y",
+            "git switch -c chore/SPEC-007-x",
             "git apply --check /tmp/a.patch",
             "git apply --stat /tmp/a.patch",
             "git apply --cached /tmp/a.patch",

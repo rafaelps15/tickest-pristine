@@ -1,11 +1,11 @@
 ---
 id: NNN
 titulo: <título curto>
-status: Rascunho        # Rascunho | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Cancelada (transições: spec-status.md da skill spec-new)
+status: Rascunho        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: <quem aprova>
 aprovada-em:
-branch:                 # <tipo>/<BL-n>-<descricao-curta-em-kebab-case>, conforme o CLAUDE.md
-backlog:                # BL-n de specs/BACKLOG.md que originou a spec; vazio se o pedido não veio do backlog
+branch:                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
+pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # NNN — <título>
@@ -53,7 +53,7 @@ backlog:                # BL-n de specs/BACKLOG.md que originou a spec; vazio se
 - **Revisão:**
 - **Documentação atualizada:**
 - **CI:**
-- **Entrega:** <commit ou PR, e a autorização>
+- **Entrega:** <PR #n (o mesmo do campo `pr:`); a spec fica `Entregue` quando o responsável mergear o PR na `main`>
 
 ## 10. Histórico
 | Data | Status | Observação |

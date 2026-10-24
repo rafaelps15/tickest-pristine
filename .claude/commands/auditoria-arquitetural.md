@@ -95,18 +95,18 @@ Para cada item: status, evidência e, se não conforme, o impacto concreto no tr
 - **Isolamento:** há estratégia para o agente trabalhar sem sujar a branch principal (worktrees, branches por feature)?
 
 ### D3. Processo SDD (o mais importante)
-- O ciclo completo está **definido por escrito**: descoberta → backlog → spec → aprovação → plano → tarefas → implementação → testes → verificação → revisão → merge?
+- O ciclo completo está **definido por escrito**: descoberta → spec → aprovação → plano → tarefas → implementação → testes → verificação → revisão → merge?
 - **Portões de aprovação:** onde o humano aprova? Isso está explícito e é verificável (status na spec, checklist, PR)?
 - Existe **Definition of Ready** (quando uma spec está pronta para o agente) e **Definition of Done** (quando uma feature está concluída)?
 - Cada etapa tem comando ou skill correspondente? Onde o fluxo depende só da memória humana?
 - **Divergência spec × código:** quando o código muda, a spec é atualizada? Há specs desatualizadas? (use a amostragem da Fase D)
 
-### D4. Qualidade das specs e do backlog
+### D4. Qualidade das specs
 - Estrutura consistente entre as specs (template único?).
 - Requisitos com ID, critérios de aceite verificáveis (Dado/Quando/Então ou EARS), escopo e fora de escopo explícitos.
 - Requisitos não funcionais (performance, segurança, auditoria, multi-tenancy, SLA) presentes quando relevantes.
 - Ambiguidades não resolvidas (`TBD`, `[NEEDS CLARIFICATION]`, termos vagos como "rápido" ou "adequado").
-- Coerência entre `SYSTEM_SPECIFICATION.md`, backlog e specs individuais (contradições, duplicidade, órfãos).
+- Coerência entre `SYSTEM_SPECIFICATION.md` e as specs individuais (contradições, duplicidade, órfãos), com o estado de cada demanda só no frontmatter da spec dela, sem arquivo central.
 - Rastreabilidade: requisito → tarefa → commit → teste.
 
 ### D5. Arquitetura .NET
@@ -172,7 +172,7 @@ Tabela: componente | versão/estado | fonte da evidência | DECLARADO/COMPROVADO
 
 ## 3. Plataforma Claude Code (D2)
 ## 4. Processo SDD (D3)
-## 5. Specs, backlog e skills (D4 + skills de D2)
+## 5. Specs e skills (D4 + skills de D2)
 ## 6. Arquitetura .NET (D5)
 ## 7. Build, testes e automação (D6 + D7)
 ## 8. Segurança e autonomia (D8)

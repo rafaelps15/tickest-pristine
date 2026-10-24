@@ -256,7 +256,7 @@ def auditar(repo: Repo, n_commits: int) -> List[Resultado]:
     md_specs: List[Path] = []
     for p in pastas:
         md_specs += [f for f in (repo.raiz / p).rglob("*.md")]
-    # A raiz da pasta de specs (backlog, índices) e subpastas iniciadas por "_" (fontes,
+    # A raiz da pasta de specs (índices) e subpastas iniciadas por "_" (fontes,
     # rascunhos) não são features.
     raizes_specs = {repo.raiz / p for p in pastas}
     features = sorted({f.parent for f in md_specs

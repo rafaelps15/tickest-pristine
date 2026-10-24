@@ -8,8 +8,9 @@ Regra: escrever em src/ ou tests/ (por Edit, Write, NotebookEdit ou comando de
 shell) e alterar o próprio portão só é permitido quando
   (a) uma mensagem do usuário iniciada por "/spec-implement NNN" abriu a
       implementação nesta sessão e a spec NNN está com "status: Em implementação"
-      e "aprovada-em" preenchido (vale até outro /spec-implement ou até a spec
-      sair de "Em implementação"); ou
+      e "aprovada-em" preenchido (vale até outro /spec-implement ou até uma
+      escrita ser bloqueada com a spec fora de "Em implementação"; um bloqueio
+      com a spec ainda "Aprovada" não encerra a implementação); ou
   (b) a mensagem atual do usuário contém o marcador [sdd:autorizo].
 Alterar o próprio portão exige sempre o marcador.
 
@@ -32,6 +33,7 @@ from pathlib import Path
 AUTHORIZATION_TOKEN = "[sdd:autorizo]"
 STATE_DIR_NAME = "claude-sdd-gate"
 STATUS_IN_IMPLEMENTATION = "Em implementação"
+STATUS_APPROVED = "Aprovada"
 GATED_TOP_LEVEL_DIRS = ("src", "tests")
 PROTECTED_RELATIVE_PATHS = (".claude/hooks", ".claude/settings.json", ".claude/settings.local.json")
 # Defesa extra: se o UserPromptSubmit falhar, uma autorização antiga não vale para sempre.
@@ -224,6 +226,16 @@ def spec_allows_implementation(root: Path, spec_ref: str) -> bool:
     status = SPEC_STATUS_PATTERN.search(text)
     approved_at = SPEC_APPROVED_AT_PATTERN.search(text)
     return bool(status and status.group(1).strip() == STATUS_IN_IMPLEMENTATION and approved_at)
+
+
+def spec_status(root: Path, spec_ref: str) -> str | None:
+    path = spec_file(root, spec_ref)
+    try:
+        text = path.read_text(encoding="utf-8") if path else ""
+    except OSError:
+        return None
+    status = SPEC_STATUS_PATTERN.search(text)
+    return status.group(1).strip() if status else None
 
 
 def turn_is_authorized(state: dict) -> bool:
@@ -492,7 +504,9 @@ def handle_tool(payload: dict) -> None:
     spec_ref = state.get("spec_implement")
     if spec_ref and spec_allows_implementation(root, spec_ref):
         return
-    if spec_ref:  # a spec saiu de "Em implementação": a sessão deixa de estar em implementação
+    # A spec saiu de "Em implementação": a sessão deixa de estar em implementação. Com a spec
+    # ainda "Aprovada" (antes de passar a "Em implementação"), o registro continua (spec 007, DEC-11).
+    if spec_ref and spec_status(root, spec_ref) != STATUS_APPROVED:
         state.pop("spec_implement", None)
         save_state(session_id, state)
     deny(DENY_REASON_GATED)
