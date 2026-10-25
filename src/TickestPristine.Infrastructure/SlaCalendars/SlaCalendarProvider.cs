@@ -24,6 +24,11 @@ internal sealed class SlaCalendarProvider(IApplicationDbContext context, HybridC
             return DefaultSlaCalendar.Create();
         }
 
+        if (calendarId == SlaCalendarIds.Continuous)
+        {
+            return ContinuousSlaCalendar.Create();
+        }
+
         SlaCalendarSnapshot? snapshot = await cache.GetOrCreateAsync(
             SlaCalendarCacheKeys.ForCalendar(calendarId),
             async cancellation => await LoadAsync(calendarId, cancellation),

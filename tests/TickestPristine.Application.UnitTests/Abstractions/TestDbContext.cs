@@ -1,4 +1,5 @@
-﻿using TickestPristine.Application.Abstractions.Data;
+﻿using System.Text.Json;
+using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Domain.Audit;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Roles;
@@ -34,6 +35,8 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
 
     public DbSet<TicketHistory> TicketHistories { get; set; }
 
+    public DbSet<TicketSlaTimer> TicketSlaTimers { get; set; }
+
     public DbSet<Role> Roles { get; set; }
 
     public DbSet<Permission> Permissions { get; set; }
@@ -68,6 +71,13 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
         modelBuilder.Entity<RolePermission>().HasKey(p => new { p.RoleName, p.PermissionCode });
 
         modelBuilder.Entity<Ticket>().HasQueryFilter(t => t.DeletedAtUtc == null);
+
+        // O plano é jsonb no banco real; aqui vira texto, opcional para os testes que montam chamados sem plano.
+        modelBuilder.Entity<Ticket>().Property(t => t.SlaPlan)
+            .HasConversion(
+                plan => JsonSerializer.Serialize(plan, JsonSerializerOptions.Default),
+                json => JsonSerializer.Deserialize<TicketSlaPlan>(json, JsonSerializerOptions.Default)!)
+            .IsRequired(false);
         modelBuilder.Entity<TicketMessage>().HasQueryFilter(m => m.DeletedAtUtc == null);
         modelBuilder.Entity<TicketAttachment>().HasQueryFilter(a => a.DeletedAtUtc == null);
 

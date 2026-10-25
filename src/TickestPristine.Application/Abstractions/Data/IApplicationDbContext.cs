@@ -21,6 +21,7 @@ public interface IApplicationDbContext
     DbSet<TicketAttachment> TicketAttachments { get; }
     DbSet<TicketMessage> TicketMessages { get; }
     DbSet<TicketHistory> TicketHistories { get; }
+    DbSet<TicketSlaTimer> TicketSlaTimers { get; }
     DbSet<Role> Roles { get; }
     DbSet<Permission> Permissions { get; }
     DbSet<RolePermission> RolePermissions { get; }

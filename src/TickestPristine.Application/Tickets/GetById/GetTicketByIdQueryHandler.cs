@@ -2,7 +2,10 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Abstractions.Sla;
 using TickestPristine.Application.Authorization;
+using TickestPristine.Application.SlaCalendars;
+using TickestPristine.Application.Tickets.GetSla;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -13,6 +16,7 @@ internal sealed class GetTicketByIdQueryHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IPermissionProvider permissionProvider,
+    ISlaCalendarProvider slaCalendarProvider,
     IDateTimeProvider dateTimeProvider)
     : IQueryHandler<GetTicketByIdQuery, TicketResponse>
 {
@@ -68,6 +72,42 @@ internal sealed class GetTicketByIdQueryHandler(
         {
             return Result.Failure<TicketResponse>(TicketErrors.NotFound(query.TicketId));
         }
+
+        TicketSlaPlan plan = await context.Tickets
+            .Where(t => t.Id == query.TicketId)
+            .Select(t => t.SlaPlan)
+            .SingleAsync(cancellationToken);
+
+        Result<BusinessCalendar> calendar = await slaCalendarProvider.GetAsync(plan.CalendarId, cancellationToken);
+
+        if (calendar.IsFailure)
+        {
+            return Result.Failure<TicketResponse>(calendar.Error);
+        }
+
+        List<TicketSlaTimer> timers = await context.TicketSlaTimers
+            .AsNoTracking()
+            .Where(t => t.TicketId == query.TicketId)
+            .ToListAsync(cancellationToken);
+
+        string calendarName = TicketSlaClock.CodeCalendarName(plan.CalendarId)
+            ?? await context.SlaCalendars.Where(c => c.Id == plan.CalendarId).Select(c => c.Name).SingleAsync(cancellationToken);
+
+        // O mesmo instante do SlaStatus, para o bloco sla e os campos atuais concordarem.
+        ticket.Sla = new TicketSlaResponse
+        {
+            ServerNowUtc = nowUtc,
+            Plan = new TicketSlaPlanResponse
+            {
+                PolicyId = plan.PolicyId,
+                PolicyName = plan.PolicyName,
+                PolicyVersion = plan.PolicyVersion,
+                CalendarId = plan.CalendarId,
+                CalendarName = calendarName,
+                IsLegacy = plan.IsLegacy
+            },
+            Objectives = TicketSlaClock.ToObjectives(timers, calendar.Value, nowUtc)
+        };
 
         return ticket;
     }

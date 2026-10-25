@@ -6,8 +6,8 @@ namespace TickestPristine.Application.Abstractions.Sla;
 public interface ISlaCalendarProvider
 {
     /// <summary>
-    /// Calendário pronto para os cálculos: o padrão em código para <see cref="SlaCalendarIds.Default"/>, sem ir ao
-    /// banco; os demais, do banco, com grade e feriados. Calendário inexistente devolve
+    /// Calendário pronto para os cálculos: os definidos em código para <see cref="SlaCalendarIds.Default"/> e
+    /// <see cref="SlaCalendarIds.Continuous"/>, sem ir ao banco; os demais, do banco, com grade e feriados. Calendário inexistente devolve
     /// <c>SlaCalendars.NotFound</c>.
     /// </summary>
     Task<Result<BusinessCalendar>> GetAsync(Guid calendarId, CancellationToken cancellationToken = default);

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
@@ -8,6 +9,9 @@ namespace TickestPristine.Infrastructure.Tickets;
 
 internal sealed class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 {
+    // Nomes das propriedades como no C# (ex.: "ResolutionMinutes"); a migration dos chamados existentes monta o mesmo JSON.
+    private static readonly JsonSerializerOptions SlaPlanJsonOptions = new(JsonSerializerDefaults.General);
+
     public void Configure(EntityTypeBuilder<Ticket> builder)
     {
         builder.HasKey(t => t.Id);
@@ -21,6 +25,14 @@ internal sealed class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(20);
 
         builder.Property(t => t.Priority).HasConversion<string>().HasMaxLength(20);
+
+        // Propriedade comum convertida para jsonb, e não ToJson, como a grade do calendário de SLA: o plano entra no
+        // registro de auditoria do chamado. O plano é imutável, então a igualdade do record basta para o EF.
+        builder.Property(t => t.SlaPlan)
+            .HasColumnType("jsonb")
+            .HasConversion(
+                plan => JsonSerializer.Serialize(plan, SlaPlanJsonOptions),
+                json => JsonSerializer.Deserialize<TicketSlaPlan>(json, SlaPlanJsonOptions)!);
 
         builder.HasQueryFilter(t => t.DeletedAtUtc == null);
 

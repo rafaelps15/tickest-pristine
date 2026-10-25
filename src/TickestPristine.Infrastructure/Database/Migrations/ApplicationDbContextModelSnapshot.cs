@@ -700,6 +700,11 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("sector_id");
 
+                    b.Property<string>("SlaPlan")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("sla_plan");
+
                     b.Property<DateTime>("SlaWarningAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("sla_warning_at_utc");
@@ -895,6 +900,67 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasDatabaseName("ix_ticket_messages_ticket_id_created_at_utc_id");
 
                     b.ToTable("ticket_messages", "public");
+                });
+
+            modelBuilder.Entity("TickestPristine.Domain.Tickets.TicketSlaTimer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CalendarId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("calendar_id");
+
+                    b.Property<DateTime?>("CompletedOnUtc")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_on_utc");
+
+                    b.Property<int>("Cycle")
+                        .HasColumnType("integer")
+                        .HasColumnName("cycle");
+
+                    b.Property<DateTime>("DueOnUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("due_on_utc");
+
+                    b.Property<string>("Metric")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("metric");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at_utc");
+
+                    b.Property<DateTime?>("StoppedOnUtc")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("stopped_on_utc");
+
+                    b.Property<int>("TargetMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("target_minutes");
+
+                    b.Property<Guid>("TicketId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ticket_id");
+
+                    b.Property<DateTime>("WarningOnUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("warning_on_utc");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ticket_sla_timers");
+
+                    b.HasIndex("TicketId", "Metric", "Cycle")
+                        .IsUnique()
+                        .HasDatabaseName("ix_ticket_sla_timers_ticket_id_metric_cycle");
+
+                    b.ToTable("ticket_sla_timers", "public");
                 });
 
             modelBuilder.Entity("TickestPristine.Domain.Users.RefreshToken", b =>
@@ -1204,6 +1270,16 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_ticket_messages_tickets_ticket_id");
+                });
+
+            modelBuilder.Entity("TickestPristine.Domain.Tickets.TicketSlaTimer", b =>
+                {
+                    b.HasOne("TickestPristine.Domain.Tickets.Ticket", null)
+                        .WithMany()
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_ticket_sla_timers_tickets_ticket_id");
                 });
 
             modelBuilder.Entity("TickestPristine.Domain.Users.RefreshToken", b =>

@@ -1,4 +1,4 @@
-using TickestPristine.Application.Abstractions.Authentication;
+﻿using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Tickets.GetById;
 using TickestPristine.Application.UnitTests.Abstractions;
@@ -92,7 +92,7 @@ public sealed class GetTicketByIdQueryHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(NowUtc);
 
-        return new GetTicketByIdQueryHandler(context, userContext, permissionProvider, dateTimeProvider);
+        return new GetTicketByIdQueryHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), dateTimeProvider);
     }
 
     /// <summary>
@@ -115,7 +115,8 @@ public sealed class GetTicketByIdQueryHandlerTests : BaseHandlerTest
             SectorId = sector.Id,
             CreatedAtUtc = createdAtUtc,
             DueAtUtc = TicketSla.DueAt(createdAtUtc, TicketPriority.Urgent),
-            SlaWarningAtUtc = TicketSla.WarningAt(createdAtUtc, TicketPriority.Urgent)
+            SlaWarningAtUtc = TicketSla.WarningAt(createdAtUtc, TicketPriority.Urgent),
+            SlaPlan = TicketSla.LegacyPlan(TicketPriority.Urgent)
         };
 
         context.Users.Add(requester);

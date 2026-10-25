@@ -1,3 +1,4 @@
+using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Domain.Tickets;
 
@@ -100,5 +101,46 @@ public sealed class TicketSlaTests
 
         // Assert
         status.ShouldBe(TicketSlaStatus.NotApplicable);
+    }
+
+    [Theory]
+    [InlineData(TicketPriority.Urgent, 30, 240)]
+    [InlineData(TicketPriority.High, 120, 600)]
+    [InlineData(TicketPriority.Medium, 240, 1200)]
+    [InlineData(TicketPriority.Low, 600, 3000)]
+    public void DefaultPlan_Should_ReturnDefaultPolicyTargetsInExpedienteCalendar(
+        TicketPriority priority,
+        int firstResponseMinutes,
+        int resolutionMinutes)
+    {
+        // Act
+        TicketSlaPlan plan = TicketSla.DefaultPlan(priority);
+
+        // Assert
+        plan.PolicyId.ShouldBeNull();
+        plan.PolicyName.ShouldBe("Padrão");
+        plan.PolicyVersion.ShouldBe(1);
+        plan.CalendarId.ShouldBe(SlaCalendarIds.Default);
+        plan.FirstResponseMinutes.ShouldBe(firstResponseMinutes);
+        plan.ResolutionMinutes.ShouldBe(resolutionMinutes);
+        plan.IsLegacy.ShouldBeFalse();
+    }
+
+    [Theory]
+    [InlineData(TicketPriority.Urgent, 240)]
+    [InlineData(TicketPriority.High, 480)]
+    [InlineData(TicketPriority.Medium, 1440)]
+    [InlineData(TicketPriority.Low, 4320)]
+    public void LegacyPlan_Should_KeepCurrentHoursWithoutFirstResponseInContinuousCalendar(TicketPriority priority, int resolutionMinutes)
+    {
+        // Act
+        TicketSlaPlan plan = TicketSla.LegacyPlan(priority);
+
+        // Assert
+        plan.PolicyName.ShouldBe("Legado (horas corridas)");
+        plan.CalendarId.ShouldBe(SlaCalendarIds.Continuous);
+        plan.FirstResponseMinutes.ShouldBeNull();
+        plan.ResolutionMinutes.ShouldBe(resolutionMinutes);
+        plan.IsLegacy.ShouldBeTrue();
     }
 }

@@ -81,8 +81,11 @@ internal sealed class SampleDataSeeder(
 
             Ticket ticket = CreateTicket(faker, sampleTicket, sectorId, requesterIds, agentIds, now);
 
+            List<TicketHistory> history = [.. CreateHistory(faker, ticket, now)];
+
             context.Tickets.Add(ticket);
-            context.TicketHistories.AddRange(CreateHistory(faker, ticket, now));
+            context.TicketHistories.AddRange(history);
+            context.TicketSlaTimers.Add(CreateResolutionTimer(ticket, history));
         }
 
         await context.SaveChangesAsync(cancellationToken);
@@ -198,9 +201,31 @@ internal sealed class SampleDataSeeder(
             CreatedAtUtc = createdAtUtc,
             DueAtUtc = TicketSla.DueAt(createdAtUtc, sampleTicket.Priority),
             SlaWarningAtUtc = TicketSla.WarningAt(createdAtUtc, sampleTicket.Priority),
-            ResolvedAtUtc = resolvedAtUtc
+            ResolvedAtUtc = resolvedAtUtc,
+            SlaPlan = TicketSla.LegacyPlan(sampleTicket.Priority)
         };
     }
+
+    /// <summary>
+    /// Cronômetro de resolução do ciclo 1 nas horas corridas do plano legado, como a migration grava nos chamados
+    /// existentes: concluído na resolução e parado no cancelamento sem resolução.
+    /// </summary>
+    private static TicketSlaTimer CreateResolutionTimer(Ticket ticket, IEnumerable<TicketHistory> history) => new()
+    {
+        Id = Guid.NewGuid(),
+        TicketId = ticket.Id,
+        Metric = SlaMetric.Resolution,
+        Cycle = 1,
+        TargetMinutes = ticket.SlaPlan.ResolutionMinutes,
+        CalendarId = ticket.SlaPlan.CalendarId,
+        StartedAtUtc = ticket.CreatedAtUtc,
+        WarningOnUtc = ticket.SlaWarningAtUtc,
+        DueOnUtc = ticket.DueAtUtc,
+        CompletedOnUtc = ticket.ResolvedAtUtc,
+        StoppedOnUtc = ticket.ResolvedAtUtc is null && ticket.Status == TicketStatus.Canceled
+            ? history.Last().OccurredAtUtc
+            : null
+    };
 
     /// <summary>
     /// Histórico igual ao que os handlers de evento de domínio gravam: a criação e cada mudança de status, em ordem.

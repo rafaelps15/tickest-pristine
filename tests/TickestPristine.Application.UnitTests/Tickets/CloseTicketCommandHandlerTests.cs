@@ -103,4 +103,30 @@ public sealed class CloseTicketCommandHandlerTests : BaseHandlerTest
 
         return ticket.Id;
     }
+
+    // Chamado resolvido dentro do prazo: aberto às 08:10 de 26/10/2026 (São Paulo) e resolvido às 10:10.
+    private static readonly DateTime SlaOpenedAtUtc = new(2026, 10, 26, 11, 10, 0, DateTimeKind.Utc);
+    private static readonly DateTime SlaResolvedAtUtc = new(2026, 10, 26, 13, 10, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public async Task Handle_Should_NotTouchSlaTimers_WhenTicketIsClosed()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Ticket ticket = await SeedResolvedTicketWithSlaAsync(context, Guid.NewGuid(), SlaOpenedAtUtc, SlaResolvedAtUtc);
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(AgentId);
+
+        var handler = new CloseTicketCommandHandler(context, userContext, CreateClock(SlaResolvedAtUtc.AddHours(1)));
+
+        // Act
+        Result result = await handler.Handle(new CloseTicketCommand(ticket.Id), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        List<TicketSlaTimer> timers = await context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id).ToListAsync();
+        timers.Count.ShouldBe(2);
+        timers.ShouldAllBe(t => t.CompletedOnUtc == SlaResolvedAtUtc && t.StoppedOnUtc == null);
+    }
 }
