@@ -7,7 +7,9 @@ namespace TickestPristine.Application.Tickets;
 /// <summary>
 /// Regras dos cronômetros de SLA do chamado: criação com prazo e alerta no calendário do plano, conclusão, parada,
 /// novo ciclo de resolução e o estado, o consumido e o restante calculados num instante. Não há pausa: o consumido é o
-/// tempo útil entre o início e o fim do cronômetro (ou o instante da leitura, se ainda estiver em aberto).
+/// tempo útil entre o início e o fim do cronômetro (ou o instante da leitura, se ainda estiver em aberto). O
+/// <see cref="TicketSlaTimer.NextActionOnUtc"/> acompanha cada transição: vale o prazo enquanto o cronômetro puder ser
+/// violado sem violação gravada, e só o monitoramento grava a violação (<see cref="ProcessDue"/>).
 /// </summary>
 internal static class TicketSlaClock
 {
@@ -49,13 +51,21 @@ internal static class TicketSlaClock
     public static bool IsOpen(TicketSlaTimer timer) => timer.CompletedOnUtc is null && timer.StoppedOnUtc is null;
 
     /// <summary>
-    /// Conclui o cronômetro, se ainda estiver em aberto; conclusão e parada já gravadas não mudam.
+    /// Conclui o cronômetro, se ainda estiver em aberto; conclusão e parada já gravadas não mudam. Concluído até o prazo,
+    /// sai da fila do monitoramento; depois do prazo, continua nela, para o monitoramento gravar a violação.
     /// </summary>
     public static void Complete(TicketSlaTimer timer, DateTime completedAtUtc)
     {
-        if (IsOpen(timer))
+        if (!IsOpen(timer))
         {
-            timer.CompletedOnUtc = completedAtUtc;
+            return;
+        }
+
+        timer.CompletedOnUtc = completedAtUtc;
+
+        if (completedAtUtc <= timer.DueOnUtc)
+        {
+            timer.NextActionOnUtc = null;
         }
     }
 
@@ -67,8 +77,37 @@ internal static class TicketSlaClock
         if (IsOpen(timer))
         {
             timer.StoppedOnUtc = stoppedAtUtc;
+            timer.NextActionOnUtc = null;
         }
     }
+
+    /// <summary>
+    /// Ação do monitoramento sobre um cronômetro da fila: o não cumprido (em aberto, ou concluído depois do prazo) tem a
+    /// violação gravada no próprio prazo e dispara o evento; o concluído até o prazo e o parado só saem da fila. Devolve
+    /// se o cronômetro foi violado.
+    /// </summary>
+    public static bool ProcessDue(TicketSlaTimer timer)
+    {
+        timer.NextActionOnUtc = null;
+
+        bool metDeadline = timer.CompletedOnUtc is { } completedAt && completedAt <= timer.DueOnUtc;
+
+        if (metDeadline || timer.StoppedOnUtc is not null || timer.BreachedOnUtc is not null)
+        {
+            return false;
+        }
+
+        timer.BreachedOnUtc = timer.DueOnUtc;
+
+        timer.Raise(new TicketSlaBreachedDomainEvent(timer.TicketId, timer.Metric, timer.Cycle, timer.DueOnUtc));
+
+        return true;
+    }
+
+    /// <summary>
+    /// Tira o cronômetro da fila do monitoramento sem violação, evento nem parada (exclusão do chamado).
+    /// </summary>
+    public static void Dequeue(TicketSlaTimer timer) => timer.NextActionOnUtc = null;
 
     /// <summary>
     /// Cronômetro do ciclo mais recente do objetivo, ou nulo se o objetivo não tiver cronômetro.
@@ -202,6 +241,8 @@ internal static class TicketSlaClock
         var target = TimeSpan.FromTicks(TimeSpan.TicksPerMinute * targetMinutes);
         var warning = TimeSpan.FromTicks((long)(target.Ticks * WarningRatio));
 
+        DateTime dueOnUtc = calendar.AddBusinessTime(startedAtUtc, target);
+
         return new TicketSlaTimer
         {
             Id = Guid.NewGuid(),
@@ -212,7 +253,8 @@ internal static class TicketSlaClock
             CalendarId = calendarId,
             StartedAtUtc = startedAtUtc,
             WarningOnUtc = calendar.AddBusinessTime(startedAtUtc, warning),
-            DueOnUtc = calendar.AddBusinessTime(startedAtUtc, target)
+            DueOnUtc = dueOnUtc,
+            NextActionOnUtc = dueOnUtc
         };
     }
 }
