@@ -1,6 +1,7 @@
 ﻿using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Application.Abstractions.Sla;
 using TickestPristine.Application.Abstractions.Storage;
 using TickestPristine.Infrastructure.Audit;
 using TickestPristine.Infrastructure.Authentication;
@@ -8,6 +9,7 @@ using TickestPristine.Infrastructure.Authorization;
 using TickestPristine.Infrastructure.Database;
 using TickestPristine.Infrastructure.Database.Seeding;
 using TickestPristine.Infrastructure.DomainEvents;
+using TickestPristine.Infrastructure.SlaCalendars;
 using TickestPristine.Infrastructure.Storage;
 using TickestPristine.Infrastructure.Time;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -74,6 +76,8 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services.AddSingleton<IFileStorage, LocalFileStorage>();
+
+        services.AddScoped<ISlaCalendarProvider, SlaCalendarProvider>();
 
         return services;
     }

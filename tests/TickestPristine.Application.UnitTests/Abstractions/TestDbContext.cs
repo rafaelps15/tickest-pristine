@@ -3,6 +3,7 @@ using TickestPristine.Domain.Audit;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Sectors;
+using TickestPristine.Domain.SlaCalendars;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +44,10 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
 
     public DbSet<AuditLogEntry> AuditLogs { get; set; }
 
+    public DbSet<SlaCalendar> SlaCalendars { get; set; }
+
+    public DbSet<SlaCalendarHoliday> SlaCalendarHolidays { get; set; }
+
     /// <summary>
     /// Aplica as chaves e os filtros de exclusão lógica do banco real.
     /// </summary>
@@ -65,5 +70,8 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
         modelBuilder.Entity<Ticket>().HasQueryFilter(t => t.DeletedAtUtc == null);
         modelBuilder.Entity<TicketMessage>().HasQueryFilter(m => m.DeletedAtUtc == null);
         modelBuilder.Entity<TicketAttachment>().HasQueryFilter(a => a.DeletedAtUtc == null);
+
+        // A grade é jsonb no banco real; sem a conversão da Infrastructure, o EF trataria SlaWorkPeriod como entidade.
+        modelBuilder.Entity<SlaCalendar>().Ignore(c => c.WorkSchedule);
     }
 }
