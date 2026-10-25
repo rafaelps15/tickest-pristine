@@ -56,6 +56,35 @@ public sealed class BrazilianNationalHolidaysTests
         holidays.ShouldAllBe(h => !string.IsNullOrWhiteSpace(h.Name));
     }
 
+    [Fact]
+    public void For_Should_ReturnExpectedDates_WhenYearIs2026()
+    {
+        // Act (AC-12)
+        IReadOnlyList<BrazilianHoliday> holidays = BrazilianNationalHolidays.For(2026);
+
+        // Assert
+        holidays.Select(h => h.Date).ShouldBe(
+        [
+            new(2026, 1, 1), new(2026, 2, 16), new(2026, 2, 17), new(2026, 4, 3), new(2026, 4, 21),
+            new(2026, 5, 1), new(2026, 6, 4), new(2026, 9, 7), new(2026, 10, 12), new(2026, 11, 2),
+            new(2026, 11, 15), new(2026, 11, 20), new(2026, 12, 25)
+        ]);
+    }
+
+    [Fact]
+    public void For_Should_ReturnMovableHolidaysFromEaster_WhenYearIs2027()
+    {
+        // Act (AC-13)
+        IReadOnlyList<BrazilianHoliday> holidays = BrazilianNationalHolidays.For(2027);
+
+        // Assert
+        holidays.Count.ShouldBe(13);
+        DateOf(holidays, "Carnaval (segunda-feira)").ShouldBe(new DateOnly(2027, 2, 8));
+        DateOf(holidays, "Carnaval (terça-feira)").ShouldBe(new DateOnly(2027, 2, 9));
+        DateOf(holidays, GoodFriday).ShouldBe(new DateOnly(2027, 3, 26));
+        DateOf(holidays, "Corpus Christi").ShouldBe(new DateOnly(2027, 5, 27));
+    }
+
     [Theory]
     [InlineData(2023, false, 12)]
     [InlineData(2024, true, 13)]
@@ -115,5 +144,8 @@ public sealed class BrazilianNationalHolidaysTests
     }
 
     private static DayOfWeek DayOf(IReadOnlyList<BrazilianHoliday> holidays, string name) =>
-        holidays.Single(h => h.Name == name).Date.DayOfWeek;
+        DateOf(holidays, name).DayOfWeek;
+
+    private static DateOnly DateOf(IReadOnlyList<BrazilianHoliday> holidays, string name) =>
+        holidays.Single(h => h.Name == name).Date;
 }

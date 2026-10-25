@@ -138,7 +138,7 @@ Horários em hora local de `America/Sao_Paulo` (UTC−3); os testes convertem pa
 | T-2 | `BrazilianNationalHolidays` (fixos e móveis pela Páscoa; DEC-17 e DEC-18) | AC-12, AC-13, AC-24 | add-feature | [x] |
 | T-3 | `BusinessCalendar`: soma, subtração e tempo útil em `TimeSpan` (DEC-11), em hora local, 24x7, fonte de feriados por ano, limite de 366 dias só na soma e na subtração (DEC-8, DEC-12), fronteiras (DEC-9) e duração zero ou negativa (DEC-16) | AC-1 a AC-11, AC-21 a AC-23 | add-feature | [x] |
 | T-4 | `SlaCalendarIds` e `DefaultSlaCalendar`; `ISlaCalendarProvider` e `SlaCalendarProvider` (padrão em código; banco com `HybridCache` de 1 hora sobre a cópia `SlaCalendarSnapshot` e `InvalidateAsync`; DEC-13); registro na DI | AC-1 a AC-9, AC-16, AC-17, AC-18, AC-21 | add-feature | [x] |
-| T-5 | Testes unitários de `BusinessCalendar` e `BrazilianNationalHolidays`; testes de integração da migration sem dados, unicidade, provider (padrão e banco), cache e auditoria | AC-1 a AC-19, AC-21 a AC-23 | add-tests | [ ] |
+| T-5 | Testes unitários de `BusinessCalendar` e `BrazilianNationalHolidays`; testes de integração da migration sem dados, unicidade, provider (padrão e banco), cache e auditoria | AC-1 a AC-19, AC-21 a AC-23 | add-tests | [x] |
 | T-6 | Build e testes da solução, conferindo que nenhum teste existente do SLA atual mudou | AC-20 | add-tests | [ ] |
 
 ## 8. Rastreabilidade
@@ -155,14 +155,14 @@ Horários em hora local de `America/Sao_Paulo` (UTC−3); os testes convertem pa
 | AC-9 | `tests/TickestPristine.Application.UnitTests/SlaCalendars/BusinessCalendarTests.cs` › `BusinessTimeBetween_Should_CountOnlyWorkPeriods_WhenCalendarIsDefault` | afirma 2 horas (7.200 s) de sex 17:00 a seg 09:00 e zero no sentido inverso | |
 | AC-10 | `tests/TickestPristine.Application.UnitTests/SlaCalendars/BusinessCalendarTests.cs` › `Operations_Should_UseElapsedTimeIgnoringHolidays_WhenCalendarIs24x7` | calendário 24x7 com feriado em 17/10: soma dá sáb 02:00, subtração dá sex 22:00, intervalo dá 4 horas | |
 | AC-11 | `tests/TickestPristine.Application.UnitTests/SlaCalendars/BusinessCalendarTests.cs` › `Operations_Should_ThrowForAddAndSubtractAndReturnZeroBetween_WhenCalendarHasNoWorkPeriods` | calendário sem faixa: soma e subtração lançam `InvalidOperationException`; o intervalo de 16/10 a 23/10 é zero | |
-| AC-12 | | | |
-| AC-13 | | | |
-| AC-14 | | | |
-| AC-15 | | | |
-| AC-16 | | | |
-| AC-17 | | | |
-| AC-18 | | | |
-| AC-19 | | | |
+| AC-12 | `tests/TickestPristine.Application.UnitTests/SlaCalendars/BrazilianNationalHolidaysTests.cs` › `For_Should_ReturnExpectedDates_WhenYearIs2026` e `For_Should_ReturnThirteenDistinctDatesInAscendingOrder_WhenYearIs2026` | afirma as 13 datas exatas de 2026, em ordem, distintas e todas com nome | |
+| AC-13 | `tests/TickestPristine.Application.UnitTests/SlaCalendars/BrazilianNationalHolidaysTests.cs` › `For_Should_ReturnMovableHolidaysFromEaster_WhenYearIs2027` | afirma 13 datas em 2027 e os móveis em 08/02, 09/02, 26/03 e 27/05 | |
+| AC-14 | `tests/TickestPristine.IntegrationTests/SlaCalendars/SlaCalendarsTests.cs` › `Migration_Should_CreateTablesWithoutData_WhenDatabaseIsMigrated` | afirma a migration `Add_Sla_Calendars` aplicada, sem `InsertDataOperation`, as duas consultas executadas e nenhum calendário com o Id padrão | |
+| AC-15 | `tests/TickestPristine.IntegrationTests/SlaCalendars/SlaCalendarsTests.cs` › `SaveChanges_Should_RejectSecondHolidayOnSameDate_WhenCalendarIsTheSame` | o segundo feriado na mesma data do mesmo calendário lança `DbUpdateException` com `23505` (unicidade); a mesma data em outro calendário grava | |
+| AC-16 | `tests/TickestPristine.IntegrationTests/SlaCalendars/SlaCalendarsTests.cs` › `GetAsync_Should_ReturnDefaultCalendarFromCode_WhenIdIsDefault` | `GetAsync(SlaCalendarIds.Default)` dá sucesso sem calendário no banco; 09/10/2026 17:59 + 30 min = 13/10 08:29 e 24/12/2030 17:59 + 30 min = 26/12/2030 08:29 | |
+| AC-17 | `tests/TickestPristine.IntegrationTests/SlaCalendars/SlaCalendarsTests.cs` › `GetAsync_Should_ReturnNotFound_WhenCalendarDoesNotExist` | afirma falha com código `SlaCalendars.NotFound`, tipo `NotFound` e a mensagem em pt-BR | |
+| AC-18 | `tests/TickestPristine.IntegrationTests/SlaCalendars/SlaCalendarsTests.cs` › `GetAsync_Should_KeepCachedCalendarUntilInvalidated_WhenDatabaseChanges` | sábado 08:00–12:00: a primeira e a segunda leitura (feriado de 24/10 já gravado) dão 24/10 08:30; depois do `InvalidateAsync`, 31/10 08:30 | |
+| AC-19 | `tests/TickestPristine.IntegrationTests/SlaCalendars/SlaCalendarsTests.cs` › `SaveChanges_Should_AuditCalendarAndHolidayChanges_WhenCalendarIsIncludedAndChanged` | afirma `Added`, `Modified` com `Name` e `Modified` com `WorkSchedule` para o calendário e `Added` para o feriado | |
 | AC-20 | | | |
 | AC-21 | `tests/TickestPristine.Application.UnitTests/SlaCalendars/BusinessCalendarTests.cs` › `AddBusinessTime_Should_KeepSecondsPrecision_WhenDurationHasFractionOfMinute` | soma 22 min 30 s a seg 26/10 08:10 e afirma 08:32:30 | |
 | AC-22 | `tests/TickestPristine.Application.UnitTests/SlaCalendars/BusinessCalendarTests.cs` › `BusinessTimeBetween_Should_CountIntervalLongerThanSearchLimit_WhenCalendarHasNoHolidays` | grade do padrão sem feriados, de 19/10/2026 08:00 a 22/11/2027 08:00: afirma 2.850 horas, sem exceção | |
@@ -196,3 +196,4 @@ Horários em hora local de `America/Sao_Paulo` (UTC−3); os testes convertem pa
 | 2026-10-24 | Em implementação | DEC-18 aprovada por Rafael Santos no chat e registrada sem mudança de status: 20/11 só a partir de 2024 e exceção para anos fora de 1583 a 9999; REQ-8 ajustado e AC-24 acrescentado (sem REQ novo nem removido). Testes de `BrazilianNationalHolidays` ampliados: anos-limite da Páscoa (1818 e 2038), ordem em 2038 e varredura de 1583 a 9999 com os dias da semana dos móveis. |
 | 2026-10-24 | Em implementação | T-3 concluída: `BusinessCalendar` (soma, subtração e tempo útil em `TimeSpan`, faixas em hora local, 24x7, construtor primário como no `LocalFileStorage`, limite de 366 dias só na soma e na subtração). Os testes unitários dos AC-1 a AC-11 e AC-21 a AC-23 foram escritos já nesta tarefa e preenchem a rastreabilidade; até a T-4, o "calendário padrão" deles é montado no próprio teste com a grade e os feriados do REQ-2, e a T-4 passa a usar o `DefaultSlaCalendar`. |
 | 2026-10-25 | Em implementação | T-4 concluída: `SlaCalendarIds.Default` (Id reservado), `DefaultSlaCalendar` ("Expediente" em código), `ISlaCalendarProvider` em `Abstractions/Sla/` e `SlaCalendarProvider` na Infrastructure (padrão sem banco; banco com `HybridCache` de 1 hora e cópia local de 1 minuto sobre a `SlaCalendarSnapshot`; `InvalidateAsync`), registrado como scoped. Os testes unitários dos AC-1 a AC-9 e AC-21 passaram a usar o `DefaultSlaCalendar`. Os testes de integração dos AC-16 a AC-18 entram na T-5. |
+| 2026-10-25 | Em implementação | T-5 concluída: testes de integração dos AC-14 a AC-19 (`SlaCalendarsTests`, pelo `DbContext` e pelo provider resolvidos do `Services`) e unitários que faltavam do AC-12 (as 13 datas de 2026) e do AC-13 (2027). Rastreabilidade de todos os ACs com teste preenchida. |
