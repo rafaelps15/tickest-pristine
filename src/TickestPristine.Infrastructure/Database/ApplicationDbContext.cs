@@ -3,6 +3,7 @@ using TickestPristine.Domain.Audit;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Sectors;
+using TickestPristine.Domain.SlaCalendars;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using TickestPristine.Infrastructure.DomainEvents;
@@ -43,6 +44,10 @@ public sealed class ApplicationDbContext(
     public DbSet<UserRole> UserRoles { get; set; }
 
     public DbSet<AuditLogEntry> AuditLogs { get; set; }
+
+    public DbSet<SlaCalendar> SlaCalendars { get; set; }
+
+    public DbSet<SlaCalendarHoliday> SlaCalendarHolidays { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

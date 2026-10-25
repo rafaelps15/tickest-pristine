@@ -588,6 +588,71 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.ToTable("sectors", "public");
                 });
 
+            modelBuilder.Entity("TickestPristine.Domain.SlaCalendars.SlaCalendar", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Is24x7")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is24x7");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("time_zone_id");
+
+                    b.Property<string>("WorkSchedule")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("work_schedule");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sla_calendars");
+
+                    b.ToTable("sla_calendars", "public");
+                });
+
+            modelBuilder.Entity("TickestPristine.Domain.SlaCalendars.SlaCalendarHoliday", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("description");
+
+                    b.Property<Guid>("SlaCalendarId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sla_calendar_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sla_calendar_holidays");
+
+                    b.HasIndex("SlaCalendarId", "Date")
+                        .IsUnique()
+                        .HasDatabaseName("ix_sla_calendar_holidays_sla_calendar_id_date");
+
+                    b.ToTable("sla_calendar_holidays", "public");
+                });
+
             modelBuilder.Entity("TickestPristine.Domain.Tickets.Ticket", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1056,6 +1121,16 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_sectors_departments_department_id");
+                });
+
+            modelBuilder.Entity("TickestPristine.Domain.SlaCalendars.SlaCalendarHoliday", b =>
+                {
+                    b.HasOne("TickestPristine.Domain.SlaCalendars.SlaCalendar", null)
+                        .WithMany()
+                        .HasForeignKey("SlaCalendarId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sla_calendar_holidays_sla_calendars_sla_calendar_id");
                 });
 
             modelBuilder.Entity("TickestPristine.Domain.Tickets.Ticket", b =>

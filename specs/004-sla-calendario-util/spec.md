@@ -1,7 +1,7 @@
 ---
 id: 004
 titulo: SLA — calendário útil e feriados nacionais
-status: Aprovada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+status: Em implementação        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
 aprovada-em: 2026-10-24
 branch: feat/SPEC-004-sla-business-calendar
@@ -131,7 +131,7 @@ Horários em hora local de `America/Sao_Paulo` (UTC−3); os testes convertem pa
 ## 7. Tarefas
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
-| T-1 | Entidades `SlaCalendar`, `SlaCalendarHoliday`, `SlaWorkPeriod`, `SlaCalendarErrors`; configurações EF com `jsonb` por conversor e comparador (DEC-15) e índice único, sem seed; `DbSet` no `IApplicationDbContext`/`ApplicationDbContext`; migration `Add_Sla_Calendars` | AC-14, AC-15, AC-19 | add-entity | [ ] |
+| T-1 | Entidades `SlaCalendar`, `SlaCalendarHoliday`, `SlaWorkPeriod`, `SlaCalendarErrors`; configurações EF com `jsonb` por conversor e comparador (DEC-15) e índice único, sem seed; `DbSet` no `IApplicationDbContext`/`ApplicationDbContext`; migration `Add_Sla_Calendars` | AC-14, AC-15, AC-19 | add-entity | [x] |
 | T-2 | `BrazilianNationalHolidays` (fixos e móveis pela Páscoa) | AC-12, AC-13 | add-feature | [ ] |
 | T-3 | `BusinessCalendar`: soma, subtração e tempo útil em `TimeSpan` (DEC-11), em hora local, 24x7, fonte de feriados por ano, limite de 366 dias só na soma e na subtração (DEC-8, DEC-12), fronteiras (DEC-9) e duração zero ou negativa (DEC-16) | AC-1 a AC-11, AC-21 a AC-23 | add-feature | [ ] |
 | T-4 | `SlaCalendarIds` e `DefaultSlaCalendar`; `ISlaCalendarProvider` e `SlaCalendarProvider` (padrão em código; banco com `HybridCache` de 1 hora sobre a cópia `SlaCalendarSnapshot` e `InvalidateAsync`; DEC-13); registro na DI | AC-1 a AC-9, AC-16, AC-17, AC-18, AC-21 | add-feature | [ ] |
@@ -185,3 +185,5 @@ Horários em hora local de `America/Sao_Paulo` (UTC−3); os testes convertem pa
 | 2026-10-24 | Em descoberta | Descoberta concluída: as referências de código do contexto e do plano foram conferidas e existem; o AC-28 do `SPEC-TICKEST.md` é coerente com esta spec. DEC-10 decidida (pasta `SlaCalendars/`). Frontmatter levado ao modelo atual (estados da spec 007, campo `pr:`) e branch definida (`feat/SPEC-004-sla-business-calendar`); fonte do §1 corrigida (o `prompt-sla-tickest.md` saiu da raiz no PR #16). Sem mudança de requisito, critério ou tarefa. Checklist de completude conferido. Aguardando aprovação. |
 | 2026-10-24 | Em descoberta | Validação final pedida por Rafael Santos no chat, com quatro problemas e três ressalvas; correções autorizadas por ele ("Opção (1): aplique P1 a P4 e as ressalvas a, b e c. Registre a d como nota para a Fase 3 e ignore a e."; "use TimeSpan como tipo da duração"). DEC-11 a DEC-16 registradas. REQ-3, REQ-4, REQ-5, REQ-7, REQ-10 e REQ-11 reescritos sem mudar o objetivo; AC-9, AC-10, AC-11, AC-14 e AC-19 ajustados; AC-21 a AC-23 acrescentados; plano, R-3, tarefas e rastreabilidade atualizados; nota para a Fase 3 em "Fora do escopo". Checklist de completude conferido. Aguardando aprovação. |
 | 2026-10-24 | Aprovada | Aprovada explicitamente por Rafael Santos no chat ("Aprovo a spec 004. Mantenha DateTime UTC, como está no projeto."). |
+| 2026-10-24 | Em implementação | Implementação iniciada por `/spec-implement 004`, na branch `feat/SPEC-004-sla-business-calendar`. |
+| 2026-10-24 | Em implementação | T-1 concluída: entidades, configurações EF e migration `Add_Sla_Calendars` (só estrutura). `TestDbContext` ganhou os dois `DbSet` (exigência do `IApplicationDbContext`) e ignora a grade, que só tem conversão na Infrastructure. Os testes dos AC-14, AC-15 e AC-19 entram na T-5, que preenche a rastreabilidade. |
