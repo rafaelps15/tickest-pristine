@@ -1902,6 +1902,14 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
     }
 
+    private Guid GetTicketSectorId(Guid ticketId)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return context.Tickets.Where(t => t.Id == ticketId).Select(t => t.SectorId).Single();
+    }
+
     private List<TicketSlaTimer> GetTimers(Guid ticketId)
     {
         using IServiceScope scope = Services.CreateScope();
@@ -1928,11 +1936,31 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         SlaDto? sla = await slaResponse.Content.ReadFromJsonAsync<SlaDto>();
 
         detail.ShouldNotBeNull();
+        sla.ShouldNotBeNull();
+
+        // Todos os campos atuais do detalhe continuam, com os valores gravados.
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Ticket stored = await context.Tickets.AsNoTracking().SingleAsync(t => t.Id == ticketId);
+        string sectorName = await context.Sectors.Where(s => s.Id == stored.SectorId).Select(s => s.Name).SingleAsync();
+
         detail.Id.ShouldBe(ticketId);
         detail.Title.ShouldBe("Printer is broken");
+        detail.Description.ShouldBe("The printer on the 3rd floor is not working");
+        detail.Priority.ShouldBe((int)TicketPriority.Urgent);
+        detail.Status.ShouldBe((int)TicketStatus.Open);
+        detail.OpenedByUserId.ShouldBe(stored.CreatedByUserId);
+        detail.OpenedByName.ShouldBe("Test User");
+        detail.AssignedToUserId.ShouldBeNull();
+        detail.AssignedToName.ShouldBeNull();
+        detail.SectorId.ShouldBe(stored.SectorId);
+        detail.SectorName.ShouldBe(sectorName);
+        detail.CreatedAtUtc.ShouldBe(stored.CreatedAtUtc, TimeSpan.FromMilliseconds(1));
+        detail.DueAtUtc.ShouldBe(stored.DueAtUtc, TimeSpan.FromMilliseconds(1));
+        detail.SlaWarningAtUtc.ShouldBe(stored.SlaWarningAtUtc, TimeSpan.FromMilliseconds(1));
+        detail.ResolvedAtUtc.ShouldBeNull();
         detail.SlaStatus.ShouldBe(1);
         detail.Sla.ShouldNotBeNull();
-        sla.ShouldNotBeNull();
 
         detail.Sla.Plan.ShouldBe(sla.Plan);
         detail.Sla.Objectives.Select(o => (o.Metric, o.Cycle, o.TargetMinutes, o.StartedAtUtc, o.WarningAtUtc, o.DueAtUtc, o.IsCurrentCycle))
@@ -2136,12 +2164,23 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     public async Task Cancel_Should_StopTimersAndMakeSlaNotApplicable()
     {
         // Arrange
-        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        (Guid ticketId, AccessTokens requesterTokens) = await CreateTicketAsRequesterAsync();
+        Guid sectorId = GetTicketSectorId(ticketId);
+
+        await AuthenticateAsAdminAsync();
+        SlaSummaryDto? summaryBefore = await HttpClient.GetFromJsonAsync<SlaSummaryDto>($"tickets/sla-summary?sectorId={sectorId}");
+        Authenticate(requesterTokens.AccessToken);
 
         // Act
         await UpdateStatusAsync(ticketId, 5); // Canceled
 
         // Assert
+        await AuthenticateAsAdminAsync();
+        SlaSummaryDto? summaryAfter = await HttpClient.GetFromJsonAsync<SlaSummaryDto>($"tickets/sla-summary?sectorId={sectorId}");
+        summaryBefore.ShouldBe(new SlaSummaryDto(1, 1, 0, 0));
+        summaryAfter.ShouldBe(new SlaSummaryDto(0, 0, 0, 0));
+        Authenticate(requesterTokens.AccessToken);
+
         SlaDto sla = await GetSlaAsync(ticketId);
         sla.Objectives.ShouldAllBe(o => o.State == Stopped && o.StoppedAtUtc != null && o.CompletedAtUtc == null);
 
@@ -2223,6 +2262,155 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         List<TicketSlaTimer> timers = GetTimers(ticketId);
         timers.ShouldAllBe(t => t.StoppedOnUtc != null && t.CompletedOnUtc == null);
+    }
+
+    [Fact]
+    public async Task UpdateStatus_Should_ReturnNoContentAndConflict_WhenTwoStatusChangesRunAtOnce()
+    {
+        // Arrange
+        (Guid ticketId, AccessTokens requesterTokens) = await CreateTicketAsRequesterAsync();
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // Gatilho temporário que segura por um segundo a mudança de status, com a linha bloqueada: a outra mudança lê
+        // o mesmo chamado nesse intervalo e, ao gravar, encontra outra versão (conflito de concorrência).
+        await context.Database.ExecuteSqlRawAsync(DelayTicketStatusChangeSql);
+
+        HttpResponseMessage[] responses;
+
+        try
+        {
+            // Act
+            responses = await Task.WhenAll(
+                SendStatusChangeAsAsync(requesterTokens, ticketId, 2), // InProgress
+                SendStatusChangeAsAsync(requesterTokens, ticketId, 5)); // Canceled
+        }
+        finally
+        {
+            await context.Database.ExecuteSqlRawAsync(DropDelayTicketStatusChangeSql);
+        }
+
+        // Assert
+        responses.Select(r => r.StatusCode).Order()
+            .ShouldBe([HttpStatusCode.NoContent, HttpStatusCode.Conflict]);
+
+        Ticket stored = await context.Tickets.AsNoTracking().SingleAsync(t => t.Id == ticketId);
+        List<TicketSlaTimer> timers = GetTimers(ticketId);
+
+        if (stored.Status == TicketStatus.Canceled)
+        {
+            responses[1].StatusCode.ShouldBe(HttpStatusCode.NoContent);
+            timers.ShouldAllBe(t => t.StoppedOnUtc != null && t.CompletedOnUtc == null);
+        }
+        else
+        {
+            stored.Status.ShouldBe(TicketStatus.InProgress);
+            responses[0].StatusCode.ShouldBe(HttpStatusCode.NoContent);
+            timers.ShouldAllBe(t => t.StoppedOnUtc == null && t.CompletedOnUtc == null);
+        }
+    }
+
+    private async Task<HttpResponseMessage> SendStatusChangeAsAsync(AccessTokens tokens, Guid ticketId, int status)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"tickets/{ticketId}")
+        {
+            Content = JsonContent.Create(new { description = "The printer on the 3rd floor is not working", status })
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
+
+        return await HttpClient.SendAsync(request);
+    }
+
+    private const string DelayTicketStatusChangeSql =
+        """
+        CREATE OR REPLACE FUNCTION public.test_delay_ticket_status_change() RETURNS trigger AS $$
+        BEGIN
+            PERFORM pg_sleep(1);
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        CREATE TRIGGER test_delay_ticket_status_change
+            BEFORE UPDATE ON public.tickets
+            FOR EACH ROW
+            WHEN (OLD.status IS DISTINCT FROM NEW.status)
+            EXECUTE FUNCTION public.test_delay_ticket_status_change();
+        """;
+
+    private const string DropDelayTicketStatusChangeSql =
+        """
+        DROP TRIGGER IF EXISTS test_delay_ticket_status_change ON public.tickets;
+        DROP FUNCTION IF EXISTS public.test_delay_ticket_status_change();
+        """;
+
+    [Fact]
+    public async Task Migration_Should_KeepSlaSummaryAndFilteredListing_ForExistingTickets()
+    {
+        // Arrange: chamados gravados como antes da mudança (sem plano nem cronômetros), um em cada situação do SLA,
+        // num setor só deles. O plano fica opcional durante o teste e volta a ser obrigatório no fim.
+        Guid sectorId = await CreateSectorAsAdminAsync();
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Guid requesterId = await context.Users.Where(u => u.Email == AdminEmail).Select(u => u.Id).SingleAsync();
+        DateTime nowUtc = DateTime.UtcNow;
+
+        await context.Database.ExecuteSqlRawAsync("ALTER TABLE public.tickets ALTER COLUMN sla_plan DROP NOT NULL;");
+
+        try
+        {
+            // Urgente: 4 h de prazo e alerta em 3 h, contados da abertura.
+            await InsertLegacyTicketAsync(context, Guid.NewGuid(), requesterId, sectorId, "Urgent", "Open", nowUtc.AddHours(-1), null);
+            await InsertLegacyTicketAsync(context, Guid.NewGuid(), requesterId, sectorId, "Urgent", "Open", nowUtc.AddHours(-3.5), null);
+            await InsertLegacyTicketAsync(context, Guid.NewGuid(), requesterId, sectorId, "Urgent", "InProgress", nowUtc.AddHours(-5), null);
+            await InsertLegacyTicketAsync(context, Guid.NewGuid(), requesterId, sectorId, "Urgent", "Resolved", nowUtc.AddHours(-10), nowUtc.AddHours(-8));
+            await InsertLegacyTicketAsync(context, Guid.NewGuid(), requesterId, sectorId, "Urgent", "Closed", nowUtc.AddHours(-10), nowUtc.AddHours(-5));
+            await InsertLegacyTicketAsync(context, Guid.NewGuid(), requesterId, sectorId, "Urgent", "Canceled", nowUtc.AddHours(-1), null);
+
+            await AuthenticateAsAdminAsync();
+            (SlaSummaryDto Summary, Dictionary<int, List<Guid>> Listing) before = await GetSlaViewsAsync(sectorId);
+
+            // Act
+            for (int run = 0; run < 2; run++)
+            {
+                await context.Database.ExecuteSqlRawAsync(Add_Ticket_Sla_Timers.BackfillSlaPlansSql);
+                await context.Database.ExecuteSqlRawAsync(Add_Ticket_Sla_Timers.BackfillResolutionTimersSql);
+            }
+
+            (SlaSummaryDto Summary, Dictionary<int, List<Guid>> Listing) after = await GetSlaViewsAsync(sectorId);
+
+            // Assert: os mesmos números e os mesmos chamados em cada situação, que tem um chamado cada.
+            before.Summary.ShouldBe(new SlaSummaryDto(3, 1, 1, 1));
+            after.Summary.ShouldBe(before.Summary);
+            before.Listing.Values.ShouldAllBe(ids => ids.Count == 1);
+
+            foreach ((int slaStatus, List<Guid> ids) in before.Listing)
+            {
+                after.Listing[slaStatus].ShouldBe(ids);
+            }
+        }
+        finally
+        {
+            await context.Database.ExecuteSqlRawAsync(Add_Ticket_Sla_Timers.BackfillSlaPlansSql);
+            await context.Database.ExecuteSqlRawAsync("ALTER TABLE public.tickets ALTER COLUMN sla_plan SET NOT NULL;");
+        }
+    }
+
+    // O resumo e a listagem filtrada por cada situação do SLA (1 a 6), só do setor informado.
+    private async Task<(SlaSummaryDto Summary, Dictionary<int, List<Guid>> Listing)> GetSlaViewsAsync(Guid sectorId)
+    {
+        SlaSummaryDto? summary = await HttpClient.GetFromJsonAsync<SlaSummaryDto>($"tickets/sla-summary?sectorId={sectorId}");
+        var listing = new Dictionary<int, List<Guid>>();
+
+        for (int slaStatus = 1; slaStatus <= 6; slaStatus++)
+        {
+            TicketIdsPageDto? page = await HttpClient.GetFromJsonAsync<TicketIdsPageDto>(
+                $"tickets?sectorId={sectorId}&slaStatus={slaStatus}&pageSize=50");
+            listing[slaStatus] = [.. page!.Items.Select(t => t.Id).Order()];
+        }
+
+        return (summary!, listing);
     }
 
     [Fact]
@@ -2389,6 +2577,16 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     private sealed record SlaTicketDetailDto(
         Guid Id,
         string Title,
+        string Description,
+        int Priority,
+        int Status,
+        Guid OpenedByUserId,
+        string OpenedByName,
+        Guid? AssignedToUserId,
+        string? AssignedToName,
+        Guid SectorId,
+        string SectorName,
+        DateTime CreatedAtUtc,
         DateTime DueAtUtc,
         DateTime SlaWarningAtUtc,
         DateTime? ResolvedAtUtc,
