@@ -4,7 +4,8 @@ namespace TickestPristine.Domain.Tickets;
 
 /// <summary>
 /// Cronômetro de um objetivo do SLA num ciclo do chamado. A reabertura cria um novo ciclo de resolução; início,
-/// conclusão e parada, uma vez gravados, não mudam.
+/// conclusão, parada e violação, uma vez gravados, não mudam. O <see cref="NextActionOnUtc"/> é o próximo instante em
+/// que o monitoramento precisa agir sobre o cronômetro; nulo quando não há mais nada a fazer.
 /// </summary>
 public sealed class TicketSlaTimer : Entity, IAuditable
 {
@@ -19,4 +20,6 @@ public sealed class TicketSlaTimer : Entity, IAuditable
     public DateTime DueOnUtc { get; set; }
     public DateTime? CompletedOnUtc { get; set; }
     public DateTime? StoppedOnUtc { get; set; }
+    public DateTime? BreachedOnUtc { get; set; }
+    public DateTime? NextActionOnUtc { get; set; }
 }

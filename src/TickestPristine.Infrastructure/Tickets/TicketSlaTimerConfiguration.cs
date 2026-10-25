@@ -22,6 +22,9 @@ internal sealed class TicketSlaTimerConfiguration : IEntityTypeConfiguration<Tic
         // Um cronômetro por objetivo e ciclo; a migration dos chamados existentes depende deste índice para não duplicar.
         builder.HasIndex(t => new { t.TicketId, t.Metric, t.Cycle }).IsUnique();
 
+        // Fila do monitoramento: só os cronômetros com ação pendente entram no índice.
+        builder.HasIndex(t => t.NextActionOnUtc).HasFilter("next_action_on_utc IS NOT NULL");
+
         builder.HasOne<Ticket>()
             .WithMany()
             .HasForeignKey(t => t.TicketId)
