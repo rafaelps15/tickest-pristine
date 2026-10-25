@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-24
 branch: feat/SPEC-005-sla-plan-timers
-pr:
+pr: 25
 ---
 
 # 005 — SLA: plano, cronômetros de primeira resposta e resolução, e SLA no detalhe do chamado
@@ -176,7 +176,7 @@ Horários em São Paulo; relógio controlado nos testes; calendário "Expediente
 - **Revisão:** `ca-review` em 2026-10-25: nenhum achado bloqueante. Os testes acrescentados depois da primeira verificação só ampliam o `TicketsTests` e não mudam código de produção. O `try/catch` de conflito no `PostTicketMessageCommandHandler` é o tratamento de concorrência da DEC-12; a montagem do bloco `sla` se repete em `GetById` e `GetSla` (custo aceito na DEC-14).
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md`, citando a spec 005: 1.2 (capacidades de SLA), 2.4 (`TicketSlaTimer`, plano em `jsonb`, migration), 2.5 (reabertura com novo ciclo), 2.6 (RN-01 e RN-02 revistas; RN-26 nova), 2.7 (C-11, C-14 e C-15), 3.9 (prazos materializados), 4.3.1 (`GET tickets/{id}/sla`), 4.4 (entidades, objeto de valor e enums), 4.7 (concorrência da primeira resposta), 5.3 a 5.7 (abrir, tratar, reabrir, mensagens e painel).
 - **CI:**
-- **Entrega:**
+- **Entrega:** PR #25 (https://github.com/rafaelps15/tickest-pristine/pull/25), aberto em 2026-10-25 da branch `feat/SPEC-005-sla-plan-timers` para a `main`; aguarda o CI e o merge do responsável.
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -196,3 +196,4 @@ Horários em São Paulo; relógio controlado nos testes; calendário "Expediente
 | 2026-10-25 | Em implementação | Verificação reprovada pela `spec-verify`: build sem avisos, 868 testes aprovados e auditoria 100% (saída 0), sem achado bloqueante na revisão, mas 4 critérios sem cobertura completa por teste: AC-1 (todos os campos atuais do detalhe), AC-12 (o resumo não conta o cancelado), AC-19 (resumo e listagem filtrada antes e depois da mudança) e AC-20 (204 e 409 por HTTP). Falta acrescentar esses testes pela `/spec-implement 005` e verificar de novo. O `SYSTEM_SPECIFICATION.md` não foi alterado. |
 | 2026-10-25 | Em implementação | Retomada por `/spec-implement 005` para completar a T-8 nas lacunas da verificação: testes de integração em `TicketsTests` para o AC-1 (todos os campos do detalhe), AC-12 (resumo sem o cancelado), AC-19 (resumo e listagem antes e depois da migration) e AC-20 (204 e 409 por HTTP). Nenhum código de produção mudou. Build sem avisos e 870 testes aprovados. Próximo passo: `spec-verify`. |
 | 2026-10-25 | Verificada | Segunda verificação pela `spec-verify`, executada pelo agente por delegação de Rafael Santos no chat ("Você pode seguir e atuar como arquiteto senior caso precise de minha resposta. vc pode responder por mim"): build sem avisos, 870 testes aprovados, auditoria 100% (saída 0), todos os 22 critérios cobertos por testes aprovados nesta execução e conferidos no código, sem achado bloqueante. `SYSTEM_SPECIFICATION.md` atualizado. Falta o PR (push e PR são do responsável). |
+| 2026-10-25 | Verificada | PR #25 aberto pelo agente, por delegação de Rafael Santos no chat ("vc pode responder por mim"), depois do push feito por ele. A spec passa a `Entregue` com o merge. |
