@@ -21,6 +21,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using TickestPristine.SharedKernel;
+using TickestPristine.Infrastructure.Tickets.SlaMonitoring;
 
 namespace TickestPristine.Infrastructure;
 
@@ -78,6 +79,13 @@ public static class DependencyInjection
         services.AddSingleton<IFileStorage, LocalFileStorage>();
 
         services.AddScoped<ISlaCalendarProvider, SlaCalendarProvider>();
+
+        services.AddOptions<SlaMonitorSettings>()
+            .BindConfiguration(SlaMonitorSettings.SettingsKey)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        services.AddHostedService<SlaMonitorBackgroundService>();
 
         return services;
     }

@@ -18,6 +18,7 @@
 
   <ItemGroup>
 	<InternalsVisibleTo Include="TickestPristine.ArchitectureTests" />
+	<InternalsVisibleTo Include="TickestPristine.IntegrationTests" />
   </ItemGroup>
 
 </Project>
