@@ -2,7 +2,9 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Abstractions.Sla;
 using TickestPristine.Application.Authorization;
+using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Application.TicketHistories;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
@@ -16,6 +18,7 @@ internal sealed class CreateTicketCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IPermissionProvider permissionProvider,
+    ISlaCalendarProvider slaCalendarProvider,
     IDateTimeProvider dateTimeProvider)
     : ICommandHandler<CreateTicketCommand, Guid>
 {
@@ -66,11 +69,27 @@ internal sealed class CreateTicketCommandHandler(
             return Result.Failure<Guid>(SectorErrors.NotFound(command.SectorId));
         }
 
+        // O plano fica gravado no chamado: mudar a política depois não altera os prazos deste chamado.
+        TicketSlaPlan slaPlan = TicketSla.DefaultPlan(command.Priority);
+
+        Result<BusinessCalendar> calendar = await slaCalendarProvider.GetAsync(slaPlan.CalendarId, cancellationToken);
+
+        if (calendar.IsFailure)
+        {
+            return Result.Failure<Guid>(calendar.Error);
+        }
+
         DateTime createdAtUtc = dateTimeProvider.UtcNow;
+        var ticketId = Guid.NewGuid();
+
+        List<TicketSlaTimer> slaTimers = TicketSlaClock.Start(ticketId, slaPlan, calendar.Value, createdAtUtc);
+
+        // Os prazos do chamado seguem o primeiro ciclo de resolução, como o SLA que o resumo e os filtros já usam.
+        TicketSlaTimer resolution = slaTimers.Single(t => t.Metric == SlaMetric.Resolution);
 
         var ticket = new Ticket
         {
-            Id = Guid.NewGuid(),
+            Id = ticketId,
             Title = command.Title,
             Description = command.Description,
             Priority = command.Priority,
@@ -79,13 +98,15 @@ internal sealed class CreateTicketCommandHandler(
             AssignedToUserId = command.AssignedToUserId,
             SectorId = command.SectorId,
             CreatedAtUtc = createdAtUtc,
-            DueAtUtc = TicketSla.DueAt(createdAtUtc, command.Priority),
-            SlaWarningAtUtc = TicketSla.WarningAt(createdAtUtc, command.Priority)
+            DueAtUtc = resolution.DueOnUtc,
+            SlaWarningAtUtc = resolution.WarningOnUtc,
+            SlaPlan = slaPlan
         };
 
         ticket.Raise(new TicketCreatedDomainEvent(ticket.Id, userContext.UserId));
 
         context.Tickets.Add(ticket);
+        context.TicketSlaTimers.AddRange(slaTimers);
         context.TicketHistories.Add(TicketHistoryEntries.Created(ticket.Id, userContext.UserId, createdAtUtc));
 
         await context.SaveChangesAsync(cancellationToken);

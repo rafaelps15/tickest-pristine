@@ -62,6 +62,11 @@ internal sealed class UpdateTicketCommandHandler(
             ticket.ResolvedAtUtc = nowUtc;
         }
 
+        if (previousStatus != command.Status)
+        {
+            await UpdateSlaTimersAsync(ticket.Id, command.Status, nowUtc, cancellationToken);
+        }
+
         ticket.Raise(new TicketUpdatedDomainEvent(ticket.Id));
 
         if (previousStatus != command.Status)
@@ -89,5 +94,39 @@ internal sealed class UpdateTicketCommandHandler(
         await context.SaveChangesAsync(cancellationToken);
 
         return Result.Success();
+    }
+
+    /// <summary>
+    /// Resolver conclui o ciclo corrente de resolução e, se ainda estiver em aberto, a primeira resposta, no mesmo
+    /// instante; cancelar para os cronômetros em aberto. Os demais status não mexem nos cronômetros. As mudanças são
+    /// gravadas no mesmo SaveChanges do chamado, sob o token de concorrência dele.
+    /// </summary>
+    private async Task UpdateSlaTimersAsync(Guid ticketId, TicketStatus newStatus, DateTime nowUtc, CancellationToken cancellationToken)
+    {
+        if (newStatus is not (TicketStatus.Resolved or TicketStatus.Canceled))
+        {
+            return;
+        }
+
+        List<TicketSlaTimer> timers = await context.TicketSlaTimers
+            .Where(t => t.TicketId == ticketId)
+            .ToListAsync(cancellationToken);
+
+        if (newStatus == TicketStatus.Canceled)
+        {
+            timers.ForEach(timer => TicketSlaClock.Stop(timer, nowUtc));
+
+            return;
+        }
+
+        if (TicketSlaClock.CurrentCycle(timers, SlaMetric.Resolution) is { } resolution)
+        {
+            TicketSlaClock.Complete(resolution, nowUtc);
+        }
+
+        if (TicketSlaClock.CurrentCycle(timers, SlaMetric.FirstResponse) is { } firstResponse)
+        {
+            TicketSlaClock.Complete(firstResponse, nowUtc);
+        }
     }
 }

@@ -1,3 +1,4 @@
+using TickestPristine.Application.Tickets.GetSla;
 using TickestPristine.Domain.Tickets;
 
 namespace TickestPristine.Application.Tickets.GetById;
@@ -20,4 +21,5 @@ public sealed class TicketResponse
     public DateTime SlaWarningAtUtc { get; set; }
     public DateTime? ResolvedAtUtc { get; set; }
     public TicketSlaStatus SlaStatus { get; set; }
+    public TicketSlaResponse Sla { get; set; }
 }

@@ -35,6 +35,8 @@ public sealed class ApplicationDbContext(
 
     public DbSet<TicketHistory> TicketHistories { get; set; }
 
+    public DbSet<TicketSlaTimer> TicketSlaTimers { get; set; }
+
     public DbSet<Role> Roles { get; set; }
 
     public DbSet<Permission> Permissions { get; set; }

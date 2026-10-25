@@ -6,6 +6,7 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
+using TickestPristine.Application.Tickets;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -404,5 +405,83 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         await context.SaveChangesAsync();
 
         return ticket.Id;
+    }
+
+    // Abertura dos chamados dos testes de SLA: segunda-feira, 26/10/2026, 08:10 em São Paulo.
+    private static readonly DateTime OpenedAtUtc = new(2026, 10, 26, 11, 10, 0, DateTimeKind.Utc);
+
+    private static UpdateTicketCommandHandler CreateOwnerHandler(TestDbContext context, DateTime nowUtc)
+    {
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(OwnerId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        return new UpdateTicketCommandHandler(context, userContext, permissionProvider, CreateClock(nowUtc));
+    }
+
+    private static UpdateTicketCommand StatusCommand(Guid ticketId, TicketStatus status) =>
+        new() { TicketId = ticketId, Description = "The printer on the 3rd floor is not working", Status = status };
+
+    [Fact]
+    public async Task Handle_Should_CompleteResolutionAndFirstResponseTimers_WhenResolvedWithoutResponse()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Ticket ticket = await SeedTicketWithSlaAsync(context, OwnerId, OpenedAtUtc, TicketStatus.InProgress);
+        // Antes dos dois prazos: primeira resposta às 08:40 e resolução às 12:10.
+        DateTime resolvedAtUtc = OpenedAtUtc.AddMinutes(20);
+
+        // Act
+        Result result = await CreateOwnerHandler(context, resolvedAtUtc).Handle(StatusCommand(ticket.Id, TicketStatus.Resolved), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        List<TicketSlaTimer> timers = await context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id).ToListAsync();
+        timers.Count.ShouldBe(2);
+        timers.ShouldAllBe(t => t.CompletedOnUtc == resolvedAtUtc && t.StoppedOnUtc == null);
+        timers.ShouldAllBe(t => t.CompletedOnUtc <= t.DueOnUtc);
+    }
+
+    [Fact]
+    public async Task Handle_Should_StopOpenSlaTimers_WhenCanceled()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Ticket ticket = await SeedTicketWithSlaAsync(context, OwnerId, OpenedAtUtc);
+        DateTime canceledAtUtc = OpenedAtUtc.AddMinutes(20);
+
+        // Act
+        Result result = await CreateOwnerHandler(context, canceledAtUtc).Handle(StatusCommand(ticket.Id, TicketStatus.Canceled), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        List<TicketSlaTimer> timers = await context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id).ToListAsync();
+        timers.ShouldAllBe(t => t.StoppedOnUtc == canceledAtUtc && t.CompletedOnUtc == null);
+
+        Ticket saved = await context.Tickets.SingleAsync(t => t.Id == ticket.Id);
+        TicketSla.GetStatus(saved.Status, saved.DueAtUtc, saved.SlaWarningAtUtc, saved.ResolvedAtUtc, canceledAtUtc)
+            .ShouldBe(TicketSlaStatus.NotApplicable);
+    }
+
+    [Fact]
+    public async Task Handle_Should_NotTouchSlaTimers_WhenMovedToInProgress()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Ticket ticket = await SeedTicketWithSlaAsync(context, OwnerId, OpenedAtUtc);
+
+        // Act
+        Result result = await CreateOwnerHandler(context, OpenedAtUtc.AddMinutes(5))
+            .Handle(StatusCommand(ticket.Id, TicketStatus.InProgress), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        List<TicketSlaTimer> timers = await context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id).ToListAsync();
+        timers.ShouldAllBe(t => t.CompletedOnUtc == null && t.StoppedOnUtc == null);
     }
 }

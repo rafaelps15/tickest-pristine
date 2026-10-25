@@ -43,13 +43,13 @@
 | Autenticação (login, refresh com rotação, logout, troca de senha, senha provisória, bloqueio por tentativas) | Implementada e evidenciada |
 | Autorização por permissões vindas de roles (RBAC), com proteção contra escalada de privilégio e contra a remoção do último administrador | Implementada e evidenciada |
 | Chamados: abrir, editar descrição/status, atribuir responsável, fechar, reabrir, excluir (lógico), listar, detalhar | Implementada e evidenciada (fechamento e atribuição incluídos na revisão de 22/10) |
-| SLA de resolução em horas corridas por prioridade, com situação (no prazo, em risco, violado, cumprido, perdido) e painel | Implementada e evidenciada (modelo simples) |
+| SLA de primeira resposta e de resolução em minutos úteis por prioridade (spec 005), com plano gravado no chamado, cronômetros por ciclo, situação (no prazo, em risco, violado, cumprido, perdido) e painel; chamados anteriores mantêm o prazo em horas corridas | Implementada e evidenciada |
 | Mensagens, anexos (disco local) e histórico do chamado | Implementada e evidenciada |
 | Departamentos e setores (CRUD sem reativação) | Implementada e evidenciada |
 | Auditoria automática de alterações (interceptor EF) com consulta | Implementada e evidenciada |
 | Dashboards (contagem por status, volume por período, resumo dos próprios chamados) | Implementada e evidenciada |
 | Eventos de domínio | Mecanismo implementado; **quase nenhum consumidor** (1 handler, vazio) |
-| SLA completo (calendário útil, pausas, escalonamento, matriz impacto × urgência, relatórios) | Parcialmente implementada: o calendário útil está pronto (spec 004: calendários de expediente, feriados nacionais, tempo útil e calendário padrão "Expediente" em código), mas ainda não é usado pelos chamados; plano, cronômetros e monitoramento estão nas specs 005 e 006, e as demais fases seguem planejadas (`specs/_fontes/prompt-sla.md`) |
+| SLA completo (calendário útil, pausas, escalonamento, matriz impacto × urgência, relatórios) | Parcialmente implementada: calendário útil (spec 004) e plano com cronômetros de primeira resposta e resolução, usados pelos chamados novos (spec 005); o monitoramento que materializa a violação está na spec 006, e as demais fases seguem planejadas (`specs/_fontes/prompt-sla.md`) |
 
 ### 1.3 Maturidade e arquitetura predominante
 
@@ -143,6 +143,7 @@ erDiagram
     TICKET ||--o{ TICKET_HISTORY : "Cascade"
     AUDIT_LOG_ENTRY }o..o| USER : "sem FK (sobrevive ao usuário)"
     SLA_CALENDAR ||--o{ SLA_CALENDAR_HOLIDAY : "Cascade"
+    TICKET ||--o{ TICKET_SLA_TIMER : "Cascade"
 ```
 
 Fonte: `src/TickestPristine.Infrastructure/*/*Configuration.cs`. Pontos relevantes:
@@ -150,6 +151,7 @@ Fonte: `src/TickestPristine.Infrastructure/*/*Configuration.cs`. Pontos relevant
 - **[Fato]** `Ticket`, `TicketMessage` e `TicketAttachment` usam **exclusão lógica** (`DeletedAtUtc`) com filtro global do EF (`TicketConfiguration.cs:25`, `TicketMessageConfiguration.cs:16`, `TicketAttachmentConfiguration.cs:20`). `TicketHistory` é imutável e não tem filtro (`TicketHistoryConfiguration.cs:21`).
 - **[Fato]** Roles e permissões têm `Id` (Guid determinístico), mas os vínculos usam **chaves alternativas por nome/código** (`RoleConfiguration.cs:16`, `PermissionConfiguration.cs:16`, `RolePermissionConfiguration.cs:20-28`, `UserRoleConfiguration.cs:20-23`).
 - **[Fato, spec 004]** `SlaCalendar` (nome, fuso IANA, 24x7 e grade semanal em `jsonb`) e `SlaCalendarHoliday` (data e descrição, no máximo um feriado por calendário e data, índice único `(sla_calendar_id, date)`) são auditáveis. A grade é uma propriedade comum convertida para `jsonb`, para que a alteração dela entre na auditoria (`SlaCalendarConfiguration.cs`, `SlaCalendarHolidayConfiguration.cs`). Nenhum chamado referencia um calendário ainda.
+- **[Fato, spec 005]** O `Ticket` grava o plano de SLA aplicado (`TicketSlaPlan`: política, versão, calendário, metas em minutos e `IsLegacy`) numa coluna `jsonb` obrigatória, convertida como propriedade comum para entrar na auditoria (`TicketConfiguration.cs`). `TicketSlaTimer` (auditável, tabela `ticket_sla_timers`) é o cronômetro de um objetivo (`FirstResponse` ou `Resolution`) num ciclo, com início, alerta, prazo, conclusão e parada; índice único `(ticket_id, metric, cycle)`; `CompletedOnUtc` e `StoppedOnUtc` são os tokens de concorrência (`TicketSlaTimerConfiguration.cs`). Os chamados anteriores à spec ganharam, pela migration `20261025201353_Add_Ticket_Sla_Timers`, o plano "Legado (horas corridas)" no calendário "24 horas" e o cronômetro de resolução do ciclo 1 com os prazos que já tinham.
 - **[Fato]** `User` tem `Code` público único no formato `usr_<ULID>` (`UserCodes.cs:9-11`, `UserConfiguration.cs:20-22`).
 - **[Fato]** A role Administrador tem o token de concorrência sombra `Version` (`RoleConfiguration.cs:21`). `Ticket` tem token sombra mapeado em `xmin` (`TicketConfiguration.cs:29`). `RefreshToken.TokenHash` é token de concorrência (`RefreshTokenConfiguration.cs:19`).
 - **[Fato]** Os enums `TicketStatus`, `TicketPriority` e `TicketHistoryAction` são gravados **pelo nome** (texto), conforme alteração registrada no commit `b2028ae` (`TicketConfiguration.cs:21-23`, `TicketHistoryConfiguration.cs:15`, migration `20261022023422_Store_Ticket_Enums_As_Names.cs`). A API continua expondo os valores numéricos.
@@ -173,14 +175,14 @@ stateDiagram-v2
 
 - **[Fato]** "Ativo" significa Aberto ou Em andamento (`TicketStatusTransitions.cs:7`). `Update` e `Delete` recusam chamados inativos (`UpdateTicketCommandHandler.cs:42-45`, `DeleteTicketCommandHandler.cs:42-45`), e `Reopen` recusa chamados ativos (`ReopenTicketCommandHandler.cs:42-45`).
 - **[Fato]** **[Resolvido]** O fechamento é feito por `POST tickets/{id}/close`, que exige `tickets:manage` e aceita só chamados Resolvidos (`Tickets/Close/CloseTicketCommandHandler.cs`). Antes da revisão de 22/10, nenhuma requisição levava a "Fechado".
-- **[Fato]** A reabertura volta para Aberto e **não** limpa `ResolvedAtUtc`. O SLA fica congelado na primeira resolução (`UpdateTicketCommandHandler.cs:58-62`, `TicketSlaStatus.cs:3-6`).
+- **[Fato]** A reabertura volta para Aberto e **não** limpa `ResolvedAtUtc`. O `SlaStatus`, o `DueAtUtc` e o `SlaWarningAtUtc` do chamado ficam no primeiro ciclo de resolução (`TicketSlaStatus.cs:3-6`). **[Fato, spec 005]** A reabertura abre um novo ciclo de resolução, com a meta integral do plano, visível só no bloco `sla` (`ReopenTicketCommandHandler.cs`, `TicketSlaClock.StartResolutionCycle`).
 
 ### 2.6 Regras de negócio comprovadas
 
 | # | Regra | Evidência (código) | Teste relacionado |
 |---|---|---|---|
-| RN-01 | O SLA de resolução é contado em **horas corridas** desde a abertura: Urgente 4h, Alta 8h, Média 24h, Baixa 72h. O alerta "em risco" dispara aos 75% da janela. | `Application/Tickets/TicketSla.cs:13-28` | `tests/.../Tickets/TicketSlaTests.cs` |
-| RN-02 | Os prazos (`DueAtUtc` e `SlaWarningAtUtc`) são gravados na abertura e não mudam depois (a prioridade não é editável). | `CreateTicketCommandHandler.cs:82-83`, `TicketSla.cs:5-10` | `CreateTicketCommandHandlerTests.cs` |
+| RN-01 | **[Spec 005]** Os chamados novos recebem a política "Padrão" (versão 1), em minutos úteis do calendário "Expediente": Urgente 30 / 240, Alta 120 / 600, Média 240 / 1.200, Baixa 600 / 3.000 (primeira resposta / resolução). O alerta "em risco" vale aos 75% da meta em tempo útil. Os chamados anteriores ficam no plano "Legado (horas corridas)": Urgente 4h, Alta 8h, Média 24h, Baixa 72h, sem primeira resposta. | `Application/Tickets/TicketSla.cs` (`DefaultPlan`, `LegacyPlan`), `TicketSlaClock.cs` | `TicketSlaTests.cs`, `TicketSlaClockTests.cs`, `CreateTicketCommandHandlerTests.cs` |
+| RN-02 | O plano, os cronômetros do ciclo 1 e os prazos do chamado (`DueAtUtc` e `SlaWarningAtUtc`, iguais aos do cronômetro de resolução do ciclo 1) são gravados na abertura e não mudam com a política depois (a prioridade não é editável). | `CreateTicketCommandHandler.cs`, `TicketSlaClock.Start` | `CreateTicketCommandHandlerTests.cs`, `GetTicketSlaQueryHandlerTests.cs` |
 | RN-03 | Situação do SLA: com resolução, `Met` se resolvido até o prazo e `Missed` se depois. Sem resolução: cancelado é `NotApplicable`; após o prazo, `Breached`; após o alerta, `AtRisk`; senão `OnTime`. | `TicketSla.cs:34-57`; mesma regra em SQL em `TicketSlaFilters.cs:20-36` | `TicketSlaTests.cs`, `GetTicketsQueryHandlerTests.cs` |
 | RN-04 | Abrir um chamado em nome de outra pessoa exige `tickets:manage`. | `CreateTicketCommandHandler.cs:24-37` | `TicketsTests.cs:835` |
 | RN-05 | Solicitante, responsável e setor informados precisam existir e estar ativos. | `CreateTicketCommandHandler.cs:41-67` | `TicketsTests.cs:88,860` |
@@ -204,6 +206,7 @@ stateDiagram-v2
 | RN-23 | Só quem tem `tickets:manage` remove o responsável (deixa o chamado sem ninguém), e só em chamado ativo; a inatividade é conferida antes do responsável, então chamado inativo sem responsável também recebe `400 Tickets.NotActive`. Remover de chamado já sem responsável responde `204` sem gravar nada. O status não muda (um chamado Em andamento pode ficar sem responsável). A remoção grava o histórico `Unassigned` (responsável anterior em `oldValue`) e dispara `TicketUnassignedDomainEvent`; quem foi removido perde o acesso de participante. (Spec 001, 23/10/2026) | `Tickets/Unassign/UnassignTicketCommandHandler.cs`, `Endpoints/Tickets/Unassign.cs` | `UnassignTicketCommandHandlerTests.cs`, `TicketsTests.cs` (Unassign_*) |
 | RN-24 | Tempo útil (spec 004): só conta dentro das faixas de expediente do dia, em hora local do fuso do calendário, pulando dias sem faixa e feriados; durações em `TimeSpan` e instantes em UTC. A soma e a subtração terminam na borda da própria faixa quando o tempo acaba exatamente nela; duração zero devolve o próprio instante e negativa lança exceção; elas procuram tempo útil por no máximo 366 dias e lançam exceção depois disso (calendário mal configurado). O tempo entre dois instantes não tem esse limite. Num calendário 24x7, as contas são corridas. Ainda não é usado pelos chamados. | `Application/SlaCalendars/BusinessCalendar.cs` | `BusinessCalendarTests.cs` |
 | RN-25 | Calendário padrão "Expediente" (spec 004): segunda a sexta, 08:00–18:00, `America/Sao_Paulo`, sem expediente nos feriados nacionais calculados por ano (fixos, com o 20/11 a partir de 2024, e móveis pela Páscoa: Carnaval e Corpus Christi como pontos facultativos, Sexta-feira Santa como feriado). Fica em código, com Id reservado, e não existe no banco; nenhuma migration do SLA grava dados. | `DefaultSlaCalendar.cs`, `SlaCalendarIds.cs`, `BrazilianNationalHolidays.cs`, migration `20261025012628_Add_Sla_Calendars` | `BrazilianNationalHolidaysTests.cs`, `SlaCalendarsTests.cs` |
+| RN-26 | **[Spec 005]** Cronômetros: a primeira mensagem de quem não é o solicitante e tem `tickets:manage` conclui a primeira resposta (editar ou excluir a mensagem não reabre); resolver conclui a resolução do ciclo corrente e, se aberta, a primeira resposta; cancelar para os cronômetros em aberto (parado não conta como violação); fechar e Em andamento não mexem neles; reabrir abre um novo ciclo de resolução. Estado calculado na leitura, com um único instante: em aberto `Running`, `AtRisk` a partir do alerta e `Breached` a partir do prazo; concluído até o prazo (inclusive) `Met`, depois `Missed`; parado `Stopped`. Consumido em minutos úteis truncados; restante = meta − consumido, nunca negativo. Duas primeiras respostas simultâneas resultam numa única conclusão, e as duas mensagens são gravadas. | `TicketSlaClock.cs`, `UpdateTicketCommandHandler.cs`, `ReopenTicketCommandHandler.cs`, `PostTicketMessageCommandHandler.cs` | `TicketSlaClockTests.cs`, `PostTicketMessageCommandHandlerTests.cs`, `TicketsTests.cs` (PostMessage_*, Cancel_*, Reopen_*) |
 
 ### 2.7 Matriz de capacidades
 
@@ -221,11 +224,11 @@ Legenda de estado: **IE** = Implementada e evidenciada · **PI** = Parcialmente 
 | C-08 | Abertura de chamado | IE | `Tickets/Create/*`, `TicketsTests.cs` | Setor ativo | Na abertura, qualquer pessoa com `tickets:create` ainda pode indicar qualquer usuário ativo como responsável, sem a exigência de `tickets:manage` aplicada na atribuição posterior (Q-05). |
 | C-09 | Edição de chamado (descrição e status) | IE | `Tickets/Update/*` | — | Título, prioridade e setor não são editáveis (Q-06). O responsável muda por C-10, e o fechamento por C-25. |
 | C-10 | Atribuição ou reatribuição de responsável | IE | `Tickets/Assign/*`, `Endpoints/Tickets/Assign.cs`, `AssignTicketCommandHandlerTests.cs`, `TicketsTests.cs` (Assign_*) | `tickets:manage` do autor e do responsável | **[Resolvido]** (GAP-02). **[Resolvido em 23/10, spec 001]** O responsável pode ser removido por `DELETE tickets/{id}/assignee` (`Tickets/Unassign/*`, RN-23). |
-| C-11 | Reabertura | IE | `Tickets/Reopen/*`, testes | — | O SLA não é reiniciado (comportamento declarado). |
+| C-11 | Reabertura | IE | `Tickets/Reopen/*`, testes | — | **[Spec 005]** Abre um novo ciclo de resolução do SLA; o ciclo 1 e o `SlaStatus` do chamado não mudam. |
 | C-12 | Exclusão lógica de chamado | IE | `Tickets/Delete/*`, testes | — | Só funciona para chamados ativos. |
 | C-13 | Listagens e painéis (todos, meus, resumo, SLA, status, volume) | IE | `Tickets/Get*/*`, `TicketsTests.cs` | Dapper (volume) | O fuso fixo é `America/Sao_Paulo`. |
-| C-14 | SLA de resolução (modelo simples) | IE | `TicketSla.cs`, `TicketSlaFilters.cs`, testes | — | Não há horário útil, pausa nem notificação. |
-| C-15 | SLA completo (calendário, pausas, 1ª resposta, escalonamento, matriz, relatórios) | PI | Calendário útil pronto pela spec 004 (`Application/SlaCalendars/`, `Infrastructure/SlaCalendars/`, `BusinessCalendarTests.cs`, `SlaCalendarsTests.cs`). Plano em `specs/_fontes/prompt-sla.md` (cópia, em 23/10, do `prompt-sla-tickest.md`, que ficou na raiz do commit `b0e78b0` até 24/10/2026, quando foi removido por ser idêntico); próximas fases nas specs 005 e 006 | Outbox, job agendado | O calendário ainda não é usado pelos chamados (specs 005 e 006). Não há rota de calendário (Fase 3). A stack descrita no prompt diverge da real (ver 9.3). |
+| C-14 | SLA de primeira resposta e resolução, com plano e cronômetros (spec 005) | IE | `TicketSla.cs`, `TicketSlaClock.cs`, `TicketSlaFilters.cs`, `Tickets/GetSla/*`, `TicketSlaTimerConfiguration.cs`, testes | Calendário útil (spec 004) | Sem pausa, sem notificação; a violação ainda não é gravada (spec 006). |
+| C-15 | SLA completo (calendário, pausas, 1ª resposta, escalonamento, matriz, relatórios) | PI | Calendário útil (spec 004) e plano com cronômetros de primeira resposta e resolução (spec 005) prontos. Plano das fases em `specs/_fontes/prompt-sla.md`; o monitoramento da violação na spec 006 | Job agendado, Outbox | Faltam a violação materializada e o evento (spec 006), pausa, escalonamento, políticas configuráveis e o cadastro de calendários (Fase 3). A stack descrita no prompt diverge da real (ver 9.3). |
 | C-16 | Mensagens do chamado | IE | `TicketMessages/*`, testes | — | Não há distinção entre mensagem pública e nota interna. Aceita mensagens em chamados encerrados (Q-07). |
 | C-17 | Anexos | IE | `TicketAttachments/*`, `LocalFileStorage.cs`, testes | Disco local | O arquivo de um anexo excluído continua no disco. O armazenamento local não serve para várias instâncias (GAP-09). |
 | C-18 | Histórico do chamado | IE | `TicketHistories/*`, testes | — | `Reassigned` passou a ser gravado com os ids do responsável anterior e do novo; a descrição exibida não traz os nomes. A remoção do responsável grava `Unassigned` ("Responsável removido", spec 001). **[Resolvido em 23/10, spec 002]** A alteração da descrição grava `DescriptionChanged` ("Descrição alterada"), com o texto anterior e o novo. |
@@ -430,7 +433,7 @@ Fonte: `ApplicationDbContext.cs:57-108`, `DomainEventsDispatcher.cs:19-59`. **[F
 | Erros esperados como `Result`, não exceções | `SharedKernel/Result.cs`, `CustomResults.cs` | Aplicada de forma consistente. As exceções ficam para concorrência, unicidade e requisição malformada (`GlobalExceptionHandler.cs:19-81`). |
 | Permissões resolvidas no servidor a cada requisição, não carregadas no JWT | `TokenProvider.cs:22-29` | Permite revogação imediata, ao custo de consulta ou cache por requisição. |
 | Concorrência otimista (`xmin` em Ticket, `Version` na role Administrador, `TokenHash` em RefreshToken) | Configurações EF citadas em 2.4; `TicketConcurrencyTests.cs` | Os conflitos viram 409 no `GlobalExceptionHandler`. |
-| Prazos de SLA materializados na abertura | `TicketSla.cs:5-10` | Mudar a política não afeta chamados existentes. |
+| Plano e prazos de SLA materializados na abertura (spec 005) | `TicketSla.DefaultPlan`, `TicketSlaClock.Start`, `CreateTicketCommandHandler.cs` | Mudar a política não afeta chamados existentes. |
 | Texto do histórico derivado na leitura (não gravado) | `TicketHistoryDescriptions.cs:5-8`, migration `20261022022728` | Alteração registrada no commit `b2028ae`. |
 | Paginação por offset (listagens) e por cursor composto (data + id) para os subrecursos do chamado e a auditoria | `PaginationExtensions.cs` | Tamanho máximo de página: 100. |
 
@@ -510,6 +513,7 @@ Fonte: `ApplicationDbContext.cs:57-108`, `DomainEventsDispatcher.cs:19-59`. **[F
 | `GET tickets/mine`, `GET tickets/mine/summary` | `tickets:view-own` | — |
 | `GET tickets/sla-summary`, `GET tickets/stats/status`, `GET tickets/stats/volume` | `tickets:manage` | — |
 | `GET tickets/{id}` | Usuário ativo, e no handler: participante ou `tickets:manage` | — |
+| `GET tickets/{id}/sla` (spec 005) | Usuário ativo, e no handler: participante ou `tickets:manage` | — |
 | `PUT tickets/{id}`, `DELETE tickets/{id}`, `POST tickets/{id}/reopen` | Usuário ativo, e no handler: dono com `*-own` ou `tickets:manage` | — |
 | `POST tickets/{id}/close` | `tickets:manage` | — |
 | `PUT tickets/{id}/assignee`, `DELETE tickets/{id}/assignee` | `tickets:manage` | — |
@@ -526,9 +530,9 @@ Fonte: `src/TickestPristine.Web.Api/Endpoints/**`. O limite global (100 req/60 s
 
 ### 4.4 Entidades e DTOs relevantes
 
-- **Entidades**: `User`, `UserCredential`, `RefreshToken`, `UserRole`, `Role`, `Permission`, `RolePermission`, `Department`, `Sector`, `Ticket`, `TicketMessage`, `TicketAttachment`, `TicketHistory`, `AuditLogEntry` (`src/TickestPristine.Domain/**`).
-- **Objetos de valor**: **[Fato]** nenhum foi identificado. Valores como e-mail, prazos e nomes são tipos primitivos.
-- **Enums de negócio**: `TicketStatus` (1–5), `TicketPriority` (1–4), `TicketSlaStatus` (1–6), `TicketHistoryAction` (1–12; `Unassigned = 11` desde a spec 001 e `DescriptionChanged = 12` desde a spec 002).
+- **Entidades**: `User`, `UserCredential`, `RefreshToken`, `UserRole`, `Role`, `Permission`, `RolePermission`, `Department`, `Sector`, `Ticket`, `TicketMessage`, `TicketAttachment`, `TicketHistory`, `TicketSlaTimer` (spec 005), `AuditLogEntry`, `SlaCalendar`, `SlaCalendarHoliday` (`src/TickestPristine.Domain/**`).
+- **Objetos de valor**: **[Fato]** só o `TicketSlaPlan` (record imutável, gravado em `jsonb`; spec 005). Valores como e-mail, prazos e nomes são tipos primitivos.
+- **Enums de negócio**: `TicketStatus` (1–5), `TicketPriority` (1–4), `TicketSlaStatus` (1–6), `SlaMetric` (1–2) e `SlaObjectiveState` (1–7) (spec 005), `TicketHistoryAction` (1–12; `Unassigned = 11` desde a spec 001 e `DescriptionChanged = 12` desde a spec 002).
 - **DTOs**: um `*Response` por slice (ex.: `TicketSummaryResponse`, `TicketResponse`, `CurrentUserResponse`), mais `PagedResponse<T>` e `CursorPagedResponse<T>`.
 
 ### 4.5 Validação, erros e resultados
@@ -555,6 +559,7 @@ Fonte: `src/TickestPristine.Web.Api/Endpoints/**`. O limite global (100 req/60 s
 - **[Fato]** Cada caso de uso faz **um `SaveChangesAsync`**, ou seja, uma transação implícita. A exceção é a contagem de senhas erradas, gravada antes (`UserCredentialsVerifier.cs:67,80`).
 - **[Fato]** O upload grava o arquivo **antes** da transação e o apaga se o `SaveChanges` falhar (`UploadTicketAttachmentCommandHandler.cs:35,66-75`). Se o processo cair entre os dois passos, o arquivo fica órfão. **[Inferência]**
 - **[Fato]** A invalidação de cache de permissões acontece **depois** do commit e fora do `CancellationToken` da requisição (ex.: `AssignUserRolesCommandHandler.cs:91-94`).
+- **[Fato, spec 005]** Os cronômetros de SLA são gravados no mesmo `SaveChangesAsync` do chamado. Na publicação de mensagem, que não altera o chamado, a conclusão da primeira resposta usa `CompletedOnUtc` e `StoppedOnUtc` como tokens de concorrência: se outra mensagem concluir antes, o handler descarta só a mudança do cronômetro e os registros de auditoria da tentativa, e grava a mensagem (`PostTicketMessageCommandHandler.cs`; `TicketsTests.cs`, `PostMessage_Should_RecordBothMessagesAndSingleCompletion_WhenTwoAgentsAnswerAtOnce`).
 - **[Fato]** A unicidade é garantida por índices únicos (e-mail, código, nome de departamento/setor entre ativos, `TokenHash`, pares role/permissão e usuário/role). Uma colisão concorrente vira 409 (`GlobalExceptionHandler.cs:32-44`).
 
 ### 4.8 Configuração necessária para execução (sem valores sensíveis)
@@ -606,8 +611,8 @@ Fonte: `src/TickestPristine.Web.Api/Endpoints/**`. O limite global (100 req/60 s
 
 Descrito no diagrama 3.6.
 
-- **Regras**: RN-01, RN-02, RN-04, RN-05.
-- **Persistência**: `tickets`, `ticket_histories` (`Created`), `audit_log_entries`.
+- **Regras**: RN-01, RN-02, RN-04, RN-05, RN-26.
+- **Persistência**: `tickets` (com o plano de SLA), `ticket_sla_timers` (primeira resposta e resolução do ciclo 1; spec 005), `ticket_histories` (`Created`), `audit_log_entries`.
 - **Resposta**: `200` com o `Guid`.
 - **Erros**: 400 (validação), 403 (abertura em nome de outra pessoa sem `tickets:manage`), 404 (usuário ou setor inexistente ou inativo).
 - **Evidências**: `CreateTicketCommandHandlerTests.cs` (10), `TicketsTests.cs:68-135,835-900`.
@@ -618,7 +623,7 @@ Descrito no diagrama 3.6.
 1. **Objetivo**: avançar o atendimento.
 2. **Gatilho**: `PUT tickets/{id}` com `{ description, status }`.
 3. **Componentes**: endpoint → Validation → Logging → `UpdateTicketCommandHandler` → `TicketAccessGuard.EnsureOwnerOrManagerAsync` → `TicketStatusTransitions`.
-4. **Regras**: o chamado precisa estar ativo e a transição precisa ser válida. Na primeira ida a `Resolved`, grava `ResolvedAtUtc` (`UpdateTicketCommandHandler.cs:42-62`). **[Fato]** O dono com `tickets:update-own` passa pelo guard e pode mudar o status do próprio chamado, inclusive para Em andamento, Resolvido ou Cancelado, já que o handler não diferencia quem muda o status.
+4. **Regras**: o chamado precisa estar ativo e a transição precisa ser válida. Na primeira ida a `Resolved`, grava `ResolvedAtUtc` (`UpdateTicketCommandHandler.cs:42-62`). **[Fato, spec 005]** Resolver conclui os cronômetros em aberto; cancelar os para (RN-26). **[Fato]** O dono com `tickets:update-own` passa pelo guard e pode mudar o status do próprio chamado, inclusive para Em andamento, Resolvido ou Cancelado, já que o handler não diferencia quem muda o status.
 5. **Domínio**: `TicketUpdatedDomainEvent` e, se o status mudar, `TicketStatusChangedDomainEvent`.
 6. **Persistência**: `tickets` (com `xmin`), `ticket_histories` (`StatusChanged` com nomes dos enums, quando o status muda; `DescriptionChanged` com o texto anterior e o novo, quando a descrição muda pela comparação exata, ordinal; os dois quando ambos mudam; nenhum quando nada muda; spec 002), auditoria.
 7. **Resposta**: `204`.
@@ -629,13 +634,13 @@ Descrito no diagrama 3.6.
 ### 5.5 Reabrir chamado
 
 - **Gatilho**: `POST tickets/{id}/reopen`. **Regras**: o chamado precisa estar inativo e a transição para Aberto precisa ser válida. Exige o dono com `tickets:reopen-own` ou `tickets:manage` (`ReopenTicketCommandHandler.cs:30-50`).
-- **Efeitos**: status Aberto, histórico `Reopened` com os status antigo e novo, evento `TicketReopenedDomainEvent`. O SLA não é recalculado.
+- **Efeitos**: status Aberto, histórico `Reopened` com os status antigo e novo, evento `TicketReopenedDomainEvent`. Os prazos do chamado não são recalculados; **[spec 005]** abre um novo ciclo de resolução no `ticket_sla_timers`.
 - **Erros**: 400, 403, 404, 409 (`AlreadyActive`).
 - **Evidências**: `ReopenTicketCommandHandlerTests.cs` (8), `TicketsTests.cs:213,525,553,1023`.
 
 ### 5.6 Conversa e anexos do chamado
 
-- **Mensagens**: `POST tickets/{id}/messages` (participante ou `tickets:manage`), com limite de 4000 caracteres. Editar só o autor. Excluir: autor ou `tickets:manage` (exclusão lógica). Cada ação grava histórico. Evidências: `TicketMessages/*`, `TicketMessagesTests.cs` (15).
+- **Mensagens**: `POST tickets/{id}/messages` (participante ou `tickets:manage`), com limite de 4000 caracteres. Editar só o autor. Excluir: autor ou `tickets:manage` (exclusão lógica). Cada ação grava histórico. **[Spec 005]** A primeira mensagem de quem atende a fila conclui a primeira resposta do SLA (RN-26). Evidências: `TicketMessages/*`, `TicketMessagesTests.cs` (15), `PostTicketMessageCommandHandlerTests.cs`.
 - **Anexos**: `POST tickets/{id}/attachments` (`multipart`) segue a sequência validação → guard de visualização → grava o arquivo no disco → grava a linha e o histórico → em caso de falha, apaga o arquivo. O download repete o guard e abre o stream do disco. A exclusão é lógica: **o arquivo físico não é removido** (`DeleteTicketAttachmentCommandHandler.cs:45-57`). Evidências: `TicketAttachmentsTests.cs` (15), `UploadTicketAttachmentCommandHandlerTests.cs`.
 - **Lacunas**: não há restrição pelo status do chamado (é possível conversar e anexar em chamado cancelado ou fechado). Não há limite de quantidade ou de volume total por chamado. Não há tratamento para arquivo ausente no disco no download: `OpenReadAsync` lança `FileNotFoundException`, que vira 500. **[Inferência, não testado]**
 
@@ -644,7 +649,7 @@ Descrito no diagrama 3.6.
 - **Gatilhos**: `GET tickets?slaStatus=...&sort=DueDate`, `GET tickets/sla-summary?sectorId=`, `GET tickets/stats/status`, `GET tickets/stats/volume?groupBy=`, `GET tickets/mine/summary`.
 - **Regras**: RN-03, com a mesma lógica em memória (`TicketSla.GetStatus`) e em SQL (`TicketSlaFilters`). O resumo conta só chamados ativos com o relógio correndo (`TicketSlaSummaryResponse.cs:3-7`). O volume usa o horário de Brasília e preenche os períodos sem chamados com zero.
 - **Evidências**: `GetTicketsQueryHandlerTests.cs` (11), `GetTicketSlaSummaryQueryHandlerTests.cs`, `TicketsTests.cs:283-350,469-505,633-833` (inclui casos de fronteira de fuso).
-- **Lacunas**: o SLA é só de resolução, em horas corridas. Não há alerta ativo; a situação só é calculada na leitura.
+- **Lacunas**: o resumo e os filtros seguem o primeiro ciclo de resolução (`DueAtUtc` do chamado); a primeira resposta e os ciclos de reabertura aparecem só no bloco `sla` do chamado (`GET tickets/{id}` e `GET tickets/{id}/sla`; spec 005). Não há alerta ativo; a situação só é calculada na leitura, e a violação ainda não é gravada (spec 006).
 
 ### 5.8 Gestão de acesso (roles e usuários)
 

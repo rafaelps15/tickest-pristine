@@ -16,5 +16,6 @@ public sealed class Ticket : Entity, IAuditable
     public DateTime DueAtUtc { get; set; }
     public DateTime SlaWarningAtUtc { get; set; }
     public DateTime? ResolvedAtUtc { get; set; }
+    public TicketSlaPlan SlaPlan { get; set; }
     public DateTime? DeletedAtUtc { get; set; }
 }

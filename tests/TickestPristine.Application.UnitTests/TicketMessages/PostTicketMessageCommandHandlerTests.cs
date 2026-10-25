@@ -170,4 +170,108 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
 
         return ticket.Id;
     }
+
+    private static readonly Guid RequesterId = Guid.NewGuid();
+
+    // Abertura dos chamados dos testes da primeira resposta: segunda-feira, 26/10/2026, 08:10 em São Paulo.
+    private static readonly DateTime OpenedAtUtc = new(2026, 10, 26, 11, 10, 0, DateTimeKind.Utc);
+
+    private static PostTicketMessageCommandHandler CreateSlaHandler(TestDbContext context, Guid authorId, bool canManage, DateTime nowUtc)
+    {
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(authorId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(authorId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+            .Returns(canManage);
+
+        return new PostTicketMessageCommandHandler(context, userContext, permissionProvider, CreateClock(nowUtc));
+    }
+
+    private static Task<TicketSlaTimer> GetFirstResponseAsync(TestDbContext context, Guid ticketId) =>
+        context.TicketSlaTimers.AsNoTracking().SingleAsync(t => t.TicketId == ticketId && t.Metric == SlaMetric.FirstResponse);
+
+    [Fact]
+    public async Task Handle_Should_NotCompleteFirstResponse_WhenAuthorIsRequester()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Ticket ticket = await SeedTicketWithSlaAsync(context, RequesterId, OpenedAtUtc);
+        PostTicketMessageCommandHandler handler = CreateSlaHandler(context, RequesterId, canManage: true, OpenedAtUtc.AddMinutes(5));
+
+        // Act
+        Result<Guid> result = await handler.Handle(
+            new PostTicketMessageCommand { TicketId = ticket.Id, Content = "Any news?" },
+            CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        (await GetFirstResponseAsync(context, ticket.Id)).CompletedOnUtc.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Handle_Should_CompleteFirstResponse_WhenAgentWithManagePermissionAnswers()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Ticket ticket = await SeedTicketWithSlaAsync(context, RequesterId, OpenedAtUtc);
+        var agentId = Guid.NewGuid();
+        DateTime answeredAtUtc = OpenedAtUtc.AddMinutes(15);
+
+        // Act
+        Result<Guid> result = await CreateSlaHandler(context, agentId, canManage: true, answeredAtUtc).Handle(
+            new PostTicketMessageCommand { TicketId = ticket.Id, Content = "On my way." },
+            CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        TicketSlaTimer firstResponse = await GetFirstResponseAsync(context, ticket.Id);
+        firstResponse.CompletedOnUtc.ShouldBe(answeredAtUtc);
+        (firstResponse.CompletedOnUtc <= firstResponse.DueOnUtc).ShouldBeTrue();
+
+        (await context.TicketSlaTimers.AsNoTracking().SingleAsync(t => t.TicketId == ticket.Id && t.Metric == SlaMetric.Resolution))
+            .CompletedOnUtc.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Handle_Should_KeepFirstCompletion_WhenAnotherAgentAnswersLater()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Ticket ticket = await SeedTicketWithSlaAsync(context, RequesterId, OpenedAtUtc);
+        DateTime firstAnswerUtc = OpenedAtUtc.AddMinutes(15);
+        await CreateSlaHandler(context, Guid.NewGuid(), canManage: true, firstAnswerUtc).Handle(
+            new PostTicketMessageCommand { TicketId = ticket.Id, Content = "On my way." },
+            CancellationToken.None);
+
+        // Act
+        Result<Guid> result = await CreateSlaHandler(context, Guid.NewGuid(), canManage: true, OpenedAtUtc.AddMinutes(25)).Handle(
+            new PostTicketMessageCommand { TicketId = ticket.Id, Content = "Me too." },
+            CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        (await GetFirstResponseAsync(context, ticket.Id)).CompletedOnUtc.ShouldBe(firstAnswerUtc);
+        (await context.TicketMessages.CountAsync(m => m.TicketId == ticket.Id)).ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Handle_Should_NotCompleteFirstResponse_WhenAuthorLacksManagePermission()
+    {
+        // Arrange: um responsável anterior que perdeu tickets:manage, mas ainda pode publicar.
+        await using TestDbContext context = CreateDbContext();
+        Ticket ticket = await SeedTicketWithSlaAsync(context, RequesterId, OpenedAtUtc);
+        var formerAssigneeId = Guid.NewGuid();
+        ticket.AssignedToUserId = formerAssigneeId;
+        await context.SaveChangesAsync();
+
+        // Act
+        Result<Guid> result = await CreateSlaHandler(context, formerAssigneeId, canManage: false, OpenedAtUtc.AddMinutes(5)).Handle(
+            new PostTicketMessageCommand { TicketId = ticket.Id, Content = "I am no longer on this." },
+            CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        (await GetFirstResponseAsync(context, ticket.Id)).CompletedOnUtc.ShouldBeNull();
+    }
 }
