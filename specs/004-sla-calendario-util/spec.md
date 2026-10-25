@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-24
 branch: feat/SPEC-004-sla-business-calendar
-pr:
+pr: "#24"
 ---
 
 # 004 — SLA: calendário útil e feriados nacionais
@@ -176,7 +176,7 @@ Horários em hora local de `America/Sao_Paulo` (UTC−3); os testes convertem pa
 - **Revisão:** `ca-review` sobre `git diff origin/main..HEAD`: nenhum bloqueante e nenhuma violação de convenção. Lacunas menores de teste, não bloqueantes: o AC-14 confere a execução das consultas só pela ausência de erro, e o AC-15 confere a gravação no outro calendário só pela ausência de exceção. Veredito: aprovado.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 1.2 (SLA completo parcialmente implementado), 2.4 (entidades e relação dos calendários), 2.6 (RN-24 e RN-25), 2.7 (C-15 passa a PI), 3.8 (19 migrations e cache dos calendários), 4.5 (erro `SlaCalendars.NotFound` e exceções do cálculo), 6.2 (contagem de testes), 8 (E-46 a E-48) e 9.5 (complemento da Q-10).
 - **CI:** pendente: roda no PR.
-- **Entrega:**
+- **Entrega:** PR #24 (https://github.com/rafaelps15/tickest-pristine/pull/24), para a `main`; a spec fica `Entregue` quando o responsável mergear o PR.
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -200,3 +200,4 @@ Horários em hora local de `America/Sao_Paulo` (UTC−3); os testes convertem pa
 | 2026-10-25 | Em implementação | T-5 concluída: testes de integração dos AC-14 a AC-19 (`SlaCalendarsTests`, pelo `DbContext` e pelo provider resolvidos do `Services`) e unitários que faltavam do AC-12 (as 13 datas de 2026) e do AC-13 (2027). Rastreabilidade de todos os ACs com teste preenchida. |
 | 2026-10-25 | Em implementação | T-6 concluída: build sem avisos e 820 testes aprovados (50 de arquitetura, 494 unitários, 276 de integração); os testes do SLA atual passam sem alteração. Todas as tarefas feitas e todo AC com teste na rastreabilidade. Próximo passo: `spec-verify`. |
 | 2026-10-25 | Verificada | Verificação pela `spec-verify`: build sem avisos, 820 testes aprovados, auditoria 100% (saída 0), todos os 24 ACs cobertos por testes lidos e aprovados nesta execução, `ca-review` sem bloqueante; `SYSTEM_SPECIFICATION.md` atualizado. |
+| 2026-10-25 | Verificada | PR #24 aberto por Rafael Santos; campo `pr:` e linha "Entrega" preenchidos. |
