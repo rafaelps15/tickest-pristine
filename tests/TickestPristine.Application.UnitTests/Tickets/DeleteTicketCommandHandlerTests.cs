@@ -222,4 +222,29 @@ public sealed class DeleteTicketCommandHandlerTests : BaseHandlerTest
 
         return ticket.Id;
     }
+
+    [Fact]
+    public async Task Handle_Should_DequeueSlaTimersWithoutBreachOrStop_WhenTicketIsDeleted()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Ticket ticket = await SeedTicketWithSlaAsync(context, OwnerId, DefaultUtcNow);
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(OwnerId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.DeleteOwn, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var handler = new DeleteTicketCommandHandler(context, userContext, permissionProvider, CreateClock(DefaultUtcNow.AddMinutes(50)));
+
+        // Act
+        Result result = await handler.Handle(new DeleteTicketCommand(ticket.Id), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        List<TicketSlaTimer> timers = await context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id).ToListAsync();
+        timers.Count.ShouldBe(2);
+        timers.ShouldAllBe(t => t.NextActionOnUtc == null && t.BreachedOnUtc == null && t.StoppedOnUtc == null);
+    }
 }

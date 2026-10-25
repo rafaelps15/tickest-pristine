@@ -1,10 +1,13 @@
-using TickestPristine.Infrastructure.Database;
+﻿using TickestPristine.Infrastructure.Database;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
+using TickestPristine.Domain.Tickets;
+using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api;
 
 namespace TickestPristine.IntegrationTests;
@@ -56,6 +59,16 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
 
         // Os testes não usam os dados fictícios de desenvolvimento.
         builder.UseSetting("Seeding:SampleData", "false");
+
+        // O monitoramento do SLA alteraria cronômetros no meio dos outros testes da coleção: os testes chamam as voltas
+        // dele diretamente. Os eventos de violação ficam guardados para as asserções.
+        builder.UseSetting("SlaMonitor:Enabled", "false");
+
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton<SlaBreachEventRecorder>();
+            services.AddScoped<IDomainEventHandler<TicketSlaBreachedDomainEvent>, RecordingSlaBreachedDomainEventHandler>();
+        });
     }
 
     public async Task InitializeAsync()
