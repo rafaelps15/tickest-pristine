@@ -1,5 +1,4 @@
 using TickestPristine.Application.SlaCalendars;
-using TickestPristine.Domain.SlaCalendars;
 
 namespace TickestPristine.Application.UnitTests.SlaCalendars;
 
@@ -10,12 +9,6 @@ namespace TickestPristine.Application.UnitTests.SlaCalendars;
 public sealed class BusinessCalendarTests
 {
     private static readonly TimeZoneInfo SaoPaulo = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
-
-    private static readonly SlaWorkPeriod[] WeekdaysEightToSix =
-    [
-        .. new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday }
-            .Select(day => new SlaWorkPeriod(day, new TimeOnly(8, 0), new TimeOnly(18, 0)))
-    ];
 
     [Theory]
     [InlineData("2026-10-16 17:59", 30, "2026-10-19 08:29")] // AC-1: sexta para segunda.
@@ -125,7 +118,7 @@ public sealed class BusinessCalendarTests
     public void BusinessTimeBetween_Should_CountIntervalLongerThanSearchLimit_WhenCalendarHasNoHolidays()
     {
         // Arrange (AC-22: 399 dias, 57 semanas de 50 horas)
-        var calendar = new BusinessCalendar(WeekdaysEightToSix, SaoPaulo, is24x7: false, _ => new HashSet<DateOnly>());
+        var calendar = new BusinessCalendar(DefaultSlaCalendar.WorkSchedule, SaoPaulo, is24x7: false, _ => new HashSet<DateOnly>());
 
         // Act
         TimeSpan between = calendar.BusinessTimeBetween(At("2026-10-19 08:00"), At("2027-11-22 08:00"));
@@ -152,12 +145,7 @@ public sealed class BusinessCalendarTests
         subtractNegative.ShouldThrow<ArgumentOutOfRangeException>();
     }
 
-    // Grade "Expediente" com os feriados nacionais, a mesma do calendário padrão do REQ-2.
-    private static BusinessCalendar DefaultCalendar() => new(
-        WeekdaysEightToSix,
-        SaoPaulo,
-        is24x7: false,
-        year => BrazilianNationalHolidays.For(year).Select(h => h.Date).ToHashSet());
+    private static BusinessCalendar DefaultCalendar() => DefaultSlaCalendar.Create();
 
     private static DateTime Parse(string local) =>
         DateTime.ParseExact(local, "yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
