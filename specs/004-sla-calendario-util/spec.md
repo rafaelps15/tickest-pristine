@@ -1,17 +1,18 @@
 ---
 id: 004
 titulo: SLA — calendário útil e feriados nacionais
-status: Rascunho        # Rascunho | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Cancelada (transições: spec-status.md da skill spec-new)
+status: Aprovada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
-aprovada-em:
-branch:
+aprovada-em: 2026-10-24
+branch: feat/SPEC-004-sla-business-calendar
+pr:
 ---
 
 # 004 — SLA: calendário útil e feriados nacionais
 
 ## 1. Contexto
 - **Demanda:** BL-004 (identificador anterior; desde a spec 007, a demanda é identificada pela própria spec).
-- **Fonte:** `specs/_fontes/prompt-sla.md`, cópia byte a byte do `prompt-sla-tickest.md` (não versionado, mantido na raiz), feita em 2026-10-23 (SHA-256 `07ecd5f66563fc292fbdcf29c076f6f7ce43e79df683fe1e365ecca3975bd57f` nos dois arquivos). Os itens citados nesta spec (1.1, 1.8, regras 10 e 11) estão nessa cópia.
+- **Fonte:** `specs/_fontes/prompt-sla.md`, cópia byte a byte do `prompt-sla-tickest.md`, que ficava na raiz sem versionamento e saiu do repositório no PR #16; a cópia foi feita em 2026-10-23 (SHA-256 `07ecd5f66563fc292fbdcf29c076f6f7ce43e79df683fe1e365ecca3975bd57f`, conferido nos dois arquivos naquela data). Os itens citados nesta spec (1.1, 1.8, regras 10 e 11) estão nessa cópia.
 - **Pedido original:** `/spec-new` com o `prompt-sla-tickest.md` (não versionado) como pedido, escolhido no chat em 2026-10-23: "SLA, Fase 1". Por decisão no chat (DEC-1), a Fase 1 foi dividida em três specs; esta cobre o item **1.1 Calendário** do prompt:
   > Agregado `SlaCalendar`: `Id`, `Name`, `TimeZoneId`, `Is24x7`, `WorkSchedule` (lista de `DayOfWeek` + `Start` + `End`, como JSON), `Holidays` (entidade filha: `Date` como `DateOnly`, `Description`; índice único por calendário + data). Classe pura de domínio `BusinessCalendar` (construída a partir do `SlaCalendar`): `AddBusinessMinutes`, `SubtractBusinessMinutes`, `BusinessSecondsBetween`; percorre dia a dia em hora local, pulando dias sem faixas e feriados; limite de segurança de 366 dias. `Is24x7` = aritmética simples. Classe pura `BrazilianNationalHolidays.For(int year)` (fixos + móveis calculados pela Páscoa: Carnaval seg/ter, Sexta-feira Santa, Corpus Christi; inclui 20/11). `ISlaCalendarProvider.GetAsync(Guid calendarId, CancellationToken ct)` na Application; implementação na Infrastructure com `HybridCache` (ou o cache já usado) por 1 hora, com invalidação quando o calendário for alterado. Migration com seed do calendário padrão e feriados nacionais do ano corrente e do próximo.
 
@@ -36,19 +37,19 @@ branch:
 |---|---|---|
 | REQ-1 | O banco guarda calendários de SLA com nome, fuso (identificador IANA), indicador 24x7 e grade semanal de expediente (lista de faixas dia da semana + início + fim, gravada como JSON; um dia pode ter mais de uma faixa ou nenhuma). Os feriados ficam numa tabela filha (data e descrição), com no máximo um feriado por calendário e data. | pedido (1.1) |
 | REQ-2 | O calendário padrão "Expediente" (segunda a sexta, 08:00–18:00, `America/Sao_Paulo`, não 24x7, feriados de `BrazilianNationalHolidays` para qualquer ano) é definido em código, com um Id fixo reservado, e não existe no banco. A migration desta spec cria só a estrutura, sem gravar dados; nenhuma migration do SLA insere configuração padrão (DEC-7). | pedido (valores padrão); DEC-5; DEC-7 |
-| REQ-3 | Somar minutos úteis a um instante UTC devolve o instante UTC em que o último minuto útil é consumido, contando só o tempo dentro das faixas do dia em hora local e pulando dias sem faixa e feriados. Um início fora do expediente começa a contar na próxima faixa. Se o último minuto terminar exatamente no fim de uma faixa, o resultado é esse fim de faixa. | pedido (1.1, 1.8); DEC-9 |
-| REQ-4 | Subtrair minutos úteis de um instante UTC é a operação inversa: devolve o instante em que, contando para a frente, faltariam exatamente esses minutos úteis até o instante dado. | pedido (1.1, 1.8); DEC-9 |
-| REQ-5 | O cálculo de segundos úteis entre dois instantes UTC conta só o tempo dentro das faixas, sem feriados; se o fim não for posterior ao início, o resultado é zero. | pedido (1.1, 1.8) |
+| REQ-3 | Somar uma duração útil (`TimeSpan`, com precisão de segundos) a um instante UTC devolve o instante UTC em que o último segundo útil é consumido, contando só o tempo dentro das faixas do dia em hora local e pulando dias sem faixa e feriados. Um início fora do expediente começa a contar na próxima faixa. Se o tempo terminar exatamente no fim de uma faixa, o resultado é esse fim de faixa. Duração zero devolve o próprio instante; duração negativa lança `ArgumentOutOfRangeException`. | pedido (1.1, 1.8); DEC-9; DEC-11; DEC-16 |
+| REQ-4 | Subtrair uma duração útil (`TimeSpan`) de um instante UTC é a operação inversa: devolve o instante em que, contando para a frente, faltaria exatamente essa duração útil até o instante dado. Duração zero e negativa seguem a regra do REQ-3. | pedido (1.1, 1.8); DEC-9; DEC-11; DEC-16 |
+| REQ-5 | O tempo útil entre dois instantes UTC (`TimeSpan`) conta só o tempo dentro das faixas, sem feriados; se o fim não for posterior ao início, o resultado é zero. | pedido (1.1, 1.8); DEC-11 |
 | REQ-6 | Num calendário 24x7, as três operações usam aritmética corrida, sem grade nem feriados. | pedido (1.1, 1.8) |
-| REQ-7 | Os cálculos percorrem no máximo 366 dias. Ao passar do limite (ex.: calendário sem nenhuma faixa), lançam `InvalidOperationException`: calendário mal configurado é falha inesperada. | pedido (1.1); DEC-8 |
+| REQ-7 | A soma e a subtração percorrem no máximo 366 dias à procura de tempo útil. Ao passar do limite (ex.: calendário sem nenhuma faixa), lançam `InvalidOperationException`: calendário mal configurado é falha inesperada. O tempo útil entre dois instantes não tem esse limite: percorre só o intervalo dado, de qualquer tamanho, e num calendário sem faixa devolve zero. | pedido (1.1); DEC-8; DEC-12 |
 | REQ-8 | `BrazilianNationalHolidays.For(year)` devolve os feriados do ano: os fixos (01/01, 21/04, 01/05, 07/09, 12/10, 02/11, 15/11, 20/11, 25/12) e os móveis calculados pela Páscoa (Carnaval segunda e terça, Sexta-feira Santa, Corpus Christi), cada um com descrição em pt-BR. | pedido (1.1); Leis 662/1949, 6.802/1980 e 14.759/2023 para os fixos |
 | REQ-9 | `ISlaCalendarProvider.GetAsync(calendarId)` devolve o calendário pronto para os cálculos: para o Id do padrão, o calendário em código, sem ir ao banco; para os demais, o do banco, com grade e feriados. Calendário inexistente devolve falha `SlaCalendarErrors.NotFound`, sem exceção. | pedido (1.1); DEC-5; `CLAUDE.md` (padrão Result, `{Entity}Errors`) |
-| REQ-10 | O provider guarda os calendários do banco em cache por 1 hora e expõe `InvalidateAsync(calendarId)`, que faz a próxima leitura buscar de novo no banco. | pedido (1.1); DEC-6 |
-| REQ-11 | Inclusão, alteração e exclusão de calendário e de feriado no banco passam pela auditoria existente. | pedido (regra 11) |
+| REQ-10 | O provider guarda os calendários do banco em cache por 1 hora (cópia local de cada instância por 1 minuto, como o padrão do projeto) e expõe `InvalidateAsync(calendarId)`, que faz a próxima leitura buscar de novo no banco. O cache guarda uma cópia serializável dos dados (nome, fuso, 24x7, faixas e datas dos feriados), e o `BusinessCalendar` é montado depois da leitura. | pedido (1.1); DEC-6; DEC-13 |
+| REQ-11 | Inclusão, alteração e exclusão de calendário e de feriado no banco passam pela auditoria existente; a alteração só da grade também gera registro. | pedido (regra 11); DEC-15 |
 | REQ-12 | Nada muda no comportamento atual dos chamados nem no SLA de resolução atual: as specs 005 e 006 é que ligam o calendário aos chamados. | DEC-1 |
 
 ## 3. Critérios de aceitação
-Horários em hora local de `America/Sao_Paulo` (UTC−3); os testes convertem para UTC na entrada e na saída. "Calendário padrão" = o calendário em código do REQ-2; 12/10/2026 e 20/11/2026 são feriados nacionais e já fazem parte dele.
+Horários em hora local de `America/Sao_Paulo` (UTC−3); os testes convertem para UTC na entrada e na saída. "Calendário padrão" = o calendário em código do REQ-2; 12/10/2026 e 20/11/2026 são feriados nacionais e já fazem parte dele. As durações são `TimeSpan` (DEC-11): "30 minutos úteis" é a duração de 30 minutos.
 
 | ID | REQ | Dado | Quando | Então (resultado observável) |
 |---|---|---|---|---|
@@ -60,18 +61,21 @@ Horários em hora local de `America/Sao_Paulo` (UTC−3); os testes convertem pa
 | AC-6 | REQ-3 | o calendário padrão | soma 60 minutos úteis a sex 16/10/2026 17:00 | sex 16/10/2026 18:00 (fim de faixa, DEC-9) |
 | AC-7 | REQ-4 | o calendário padrão | subtrai 30 minutos úteis de seg 19/10/2026 08:10 | sex 16/10/2026 17:40 |
 | AC-8 | REQ-4 | o calendário padrão | subtrai 10 minutos úteis de seg 19/10/2026 08:10 | seg 19/10/2026 08:00 (início de faixa, DEC-9) |
-| AC-9 | REQ-5 | o calendário padrão | conta os segundos úteis entre sex 16/10/2026 17:00 e seg 19/10/2026 09:00; e entre seg 19/10/2026 09:00 e sex 16/10/2026 17:00 | 7200; e 0 |
-| AC-10 | REQ-6 | um calendário 24x7 com feriado em 17/10/2026 | soma 240 minutos a sex 16/10/2026 22:00; subtrai 240 minutos de sáb 17/10/2026 02:00; conta os segundos entre os dois | sáb 17/10/2026 02:00; sex 16/10/2026 22:00; 14400 |
-| AC-11 | REQ-7 | um calendário não 24x7 sem nenhuma faixa | soma 1 minuto útil a qualquer instante | lança `InvalidOperationException` (DEC-8) |
+| AC-9 | REQ-5 | o calendário padrão | calcula o tempo útil entre sex 16/10/2026 17:00 e seg 19/10/2026 09:00; e entre seg 19/10/2026 09:00 e sex 16/10/2026 17:00 | 2 horas (7.200 segundos); e zero |
+| AC-10 | REQ-6 | um calendário 24x7 com feriado em 17/10/2026 | soma 240 minutos a sex 16/10/2026 22:00; subtrai 240 minutos de sáb 17/10/2026 02:00; calcula o tempo entre os dois | sáb 17/10/2026 02:00; sex 16/10/2026 22:00; 4 horas |
+| AC-11 | REQ-7 | um calendário não 24x7 sem nenhuma faixa | soma 1 minuto útil a qualquer instante; subtrai 1 minuto útil; calcula o tempo útil entre sex 16/10/2026 08:00 e sex 23/10/2026 08:00 | a soma e a subtração lançam `InvalidOperationException` (DEC-8); o tempo útil é zero, sem exceção (DEC-12) |
 | AC-12 | REQ-8 | — | `BrazilianNationalHolidays.For(2026)` | 13 datas: as 9 fixas do REQ-8 em 2026 mais 16/02 e 17/02 (Carnaval), 03/04 (Sexta-feira Santa) e 04/06 (Corpus Christi), todas com descrição |
 | AC-13 | REQ-8 | — | `BrazilianNationalHolidays.For(2027)` | 13 datas, com os móveis em 08/02, 09/02, 26/03 e 27/05 |
-| AC-14 | REQ-1, REQ-2 | o banco migrado | lê as tabelas de calendário e de feriado | as duas existem e estão vazias |
+| AC-14 | REQ-1, REQ-2 | o banco migrado | lê as operações da migration `Add_Sla_Calendars` e consulta as tabelas de calendário e de feriado | a migration está aplicada e não tem operação de inserção de dados; as duas consultas executam; não há calendário com o Id `SlaCalendarIds.Default` (DEC-14) |
 | AC-15 | REQ-1 | um calendário gravado no banco com um feriado | grava um segundo feriado na mesma data do mesmo calendário | o `SaveChangesAsync` falha por violação de unicidade; a mesma data em outro calendário grava |
 | AC-16 | REQ-2, REQ-9 | o banco migrado, sem nenhum calendário | `GetAsync(SlaCalendarIds.Default)`; soma 30 minutos úteis a sex 09/10/2026 17:59 e a ter 24/12/2030 17:59 | sucesso; ter 13/10/2026 08:29 e qui 26/12/2030 08:29 (o feriado de 25/12/2030 vem do cálculo, sem dado no banco) |
 | AC-17 | REQ-9 | o banco migrado | `GetAsync` de um id inexistente | falha com o código `SlaCalendars.NotFound`, tipo `NotFound` e mensagem em pt-BR |
 | AC-18 | REQ-9, REQ-10 | um calendário gravado no banco (sábado 08:00–12:00, `America/Sao_Paulo`), já lido uma vez pelo provider | a primeira leitura soma 60 minutos úteis a sáb 17/10/2026 11:30; depois um feriado em 24/10/2026 é gravado direto no banco e o provider é lido de novo; depois `InvalidateAsync` e nova leitura, somando 60 minutos úteis a sáb 17/10/2026 11:30 nas duas | a primeira e a segunda leitura dão sáb 24/10/2026 08:30 (a segunda ainda sem o feriado, do cache); a terceira dá sáb 31/10/2026 08:30 |
-| AC-19 | REQ-11 | o banco migrado | inclui um calendário com um feriado e depois altera o nome dele | a auditoria tem os registros de inclusão do calendário e do feriado e o de alteração do calendário |
+| AC-19 | REQ-11 | o banco migrado | inclui um calendário com um feriado; depois altera o nome dele; depois altera só a grade (acrescenta uma faixa) | a auditoria tem os registros de inclusão do calendário e do feriado e dois de alteração do calendário: o primeiro com `Name` nas colunas alteradas, o segundo com `WorkSchedule` (DEC-15) |
 | AC-20 | REQ-12 | a mudança aplicada | `dotnet build TickestPristine.slnx` e `dotnet test TickestPristine.slnx` | 0 avisos; todos os testes passam, inclusive os do SLA atual (`TicketSlaTests`, `GetTicketsQueryHandlerTests`, `TicketsTests`) sem alteração |
+| AC-21 | REQ-3 | o calendário padrão | soma 22 minutos e 30 segundos úteis a seg 26/10/2026 08:10 | seg 26/10/2026 08:32:30 (o alerta de 75% da primeira resposta do Urgente na spec 005; DEC-11) |
+| AC-22 | REQ-5, REQ-7 | um calendário com a grade do padrão (segunda a sexta, 08:00–18:00, `America/Sao_Paulo`) e sem feriados | calcula o tempo útil entre seg 19/10/2026 08:00 e seg 22/11/2027 08:00 (399 dias, 57 semanas) | 2.850 horas, sem exceção (DEC-12) |
+| AC-23 | REQ-3, REQ-4 | o calendário padrão | soma duração zero a sáb 17/10/2026 10:00; soma e subtrai uma duração negativa (−1 minuto) | sáb 17/10/2026 10:00, o próprio instante; as duas lançam `ArgumentOutOfRangeException` (DEC-16) |
 
 ## 4. Decisões
 | ID | Pergunta | Opções | Decisão | Decidido por, em |
@@ -85,6 +89,13 @@ Horários em hora local de `America/Sao_Paulo` (UTC−3); os testes convertem pa
 | DEC-7 | O prompt pede seed do calendário padrão e dos feriados. Há seed? | (a) sem seed: nenhuma migration do SLA grava dados; (b) seed na migration; (c) semeador na inicialização | (a) sem seed, para todo o SLA. **Esclarecimento do alcance (2026-10-23):** "sem seed" proíbe a inserção automática de dados de configuração padrão (calendários, políticas, matrizes e regras de escalonamento); não proíbe migrations de dados de negócio existentes. A migração dos chamados já existentes, inclusive a inicialização dos dados de SLA deles, pode ser especificada na fase correspondente, com os requisitos e critérios dessa fase | Rafael Santos, 2026-10-23, no chat ("Não é pra ter seed para SLA"); esclarecimento por Rafael Santos, 2026-10-23, no chat |
 | DEC-8 | O que acontece quando o cálculo passa do limite de 366 dias? | (a) exceção `InvalidOperationException` (calendário mal configurado é falha inesperada; vai para o `GlobalExceptionHandler` ou para o log do job); (b) `Result` com falha `SlaCalendarErrors.NoBusinessTime`, propagado por quem chama | (a) exceção `InvalidOperationException`; a Fase 3 impede, por validação, salvar calendário sem faixa | Rafael Santos, 2026-10-23, no chat |
 | DEC-9 | Fronteira das faixas: quando o último minuto termina exatamente no fim da faixa (ou, na subtração, no início), o resultado é a borda da faixa ou a borda da próxima faixa (ex.: sexta 18:00 ou segunda 08:00)? | (a) a borda da própria faixa (sexta 18:00; segunda 08:00 na subtração); (b) a próxima faixa (segunda 08:00; sexta 18:00 na subtração) | (a) a borda da própria faixa: o prazo vence no instante em que o tempo acaba | Rafael Santos, 2026-10-23, no chat |
+| DEC-10 | A spec 005 cita `Sla/SlaCalendarIds.cs (spec 004)` e põe o próprio código em `Application/Sla/`; esta spec planeja `Application/SlaCalendars/`. Em que pasta fica o calendário? | (a) manter `SlaCalendars/` nesta spec e corrigir a referência da 005 quando ela for revisada; (b) mudar esta spec para `Application/Sla/` | (a) `Application/SlaCalendars/`: o calendário é um conceito próprio, e o plano desta spec já está todo nessa pasta. A correção da 005 fica para a revisão dela | Rafael Santos, 2026-10-24, no chat |
+| DEC-11 | O AC-4 da spec 005 espera o alerta às 08:32:30 (75% de 30 minutos = 22,5 minutos). Que tipo tem a duração dos cálculos? | (a) `TimeSpan`, com precisão de segundos; (b) minutos fracionários (`double`); (c) minutos inteiros | (a) `TimeSpan`. As operações são `AddBusinessTime(DateTime, TimeSpan)`, `SubtractBusinessTime(DateTime, TimeSpan)` e `BusinessTimeBetween(DateTime, DateTime)` → `TimeSpan`; os instantes seguem o padrão do projeto, `DateTime` em UTC (`IDateTimeProvider.UtcNow`, `Ticket.DueAtUtc`) | Rafael Santos, 2026-10-24, no chat ("use TimeSpan como tipo da duração"); tipo do instante pelo agente, seguindo o projeto |
+| DEC-12 | O limite de 366 dias vale também para o tempo útil entre dois instantes? (A spec 005 calcula o consumido de um cronômetro aberto até agora; um chamado aberto há mais de 366 dias lançaria exceção.) | (a) só para a soma e a subtração; (b) para as três operações | (a) só para a soma e a subtração; o tempo entre dois instantes percorre só o intervalo dado | Rafael Santos, 2026-10-24, no chat (opção 1 da validação final) |
+| DEC-13 | O `HybridCache` serializa os valores (no Redis opcional e na cópia local de tipos mutáveis), e o `BusinessCalendar` guarda uma função de feriados e um `TimeZoneInfo`. O que vai para o cache? | (a) uma cópia serializável dos dados, com o `BusinessCalendar` montado depois da leitura; (b) o próprio `BusinessCalendar` | (a). Expiração de 1 hora, e a cópia local de 1 minuto do padrão do projeto (`Infrastructure/DependencyInjection.cs`) | Rafael Santos, 2026-10-24, no chat (opção 1 da validação final) |
+| DEC-14 | Os testes de integração compartilham um banco sem limpeza entre eles; "tabelas vazias" depende da ordem dos testes. Como provar que a migration não grava dados? | (a) conferir as operações da migration e a ausência do Id padrão; (b) contar linhas | (a) | Rafael Santos, 2026-10-24, no chat (opção 1 da validação final) |
+| DEC-15 | Como mapear a grade para que a alteração dela entre na auditoria? (O interceptor lê só as propriedades da própria entidade; um JSON de tipos próprios do EF, `ToJson`, ficaria fora.) | (a) propriedade comum com conversor para `jsonb` e comparador de lista; (b) `OwnsMany(...).ToJson()` | (a) | Rafael Santos, 2026-10-24, no chat (opção 1 da validação final) |
+| DEC-16 | O que fazem a soma e a subtração com duração zero ou negativa? | (a) zero devolve o próprio instante; negativa lança `ArgumentOutOfRangeException`; (b) zero leva ao próximo início de faixa | (a) | Rafael Santos, 2026-10-24, no chat (opção 1 da validação final) |
 
 ## 5. Fora do escopo
 - Plano de SLA, cronômetros, mudanças em `Ticket`, migração dos chamados existentes, consultas de SLA (spec 005).
@@ -92,38 +103,39 @@ Horários em hora local de `America/Sao_Paulo` (UTC−3); os testes convertem pa
 - Endpoints de calendário (CRUD, faixas, feriados, importação de feriados) e calendário por setor (Fase 3). Nesta spec não há rota nova nem permissão nova; os calendários do banco só são gravados pelos testes.
 - Alterar o calendário padrão sem novo deploy (fica em código, DEC-5).
 - Validação da grade (faixas sobrepostas, fim antes do início): entra com os endpoints da Fase 3.
+- **Nota para a Fase 3:** o provider pode guardar em cache, por até 1 hora, também o resultado "não encontrado". O cadastro de calendários precisa chamar `InvalidateAsync` ao incluir, alterar ou excluir um calendário ou um feriado.
 - Feriados estaduais e municipais.
 - Conversores UTC em `ConfigureConventions` (item 1.5 do prompt, spec 005).
 - Outbox (DEC-4) e multi-tenancy (não existe no projeto).
 
 ## 6. Plano técnico
 - **Arquivos a criar ou alterar:**
-  - Domain, `src/TickestPristine.Domain/SlaCalendars/`: `SlaCalendar.cs` (`Entity`, `IAuditable`; `Id`, `Name`, `TimeZoneId`, `Is24x7`, `WorkSchedule`), `SlaWorkPeriod.cs` (`DayOfWeek`, `Start` e `End` como `TimeOnly`), `SlaCalendarHoliday.cs` (`Entity`, `IAuditable`; `Id`, `SlaCalendarId`, `Date` como `DateOnly`, `Description`), `SlaCalendarErrors.cs` (`NotFound`).
+  - Domain, `src/TickestPristine.Domain/SlaCalendars/`: `SlaCalendar.cs` (`Entity`, `IAuditable`; `Id`, `Name`, `TimeZoneId`, `Is24x7`, `WorkSchedule` como lista de `SlaWorkPeriod`), `SlaWorkPeriod.cs` (`DayOfWeek`, `Start` e `End` como `TimeOnly`), `SlaCalendarHoliday.cs` (`Entity`, `IAuditable`; `Id`, `SlaCalendarId`, `Date` como `DateOnly`, `Description`), `SlaCalendarErrors.cs` (`NotFound`).
   - Application, `src/TickestPristine.Application/SlaCalendars/`:
-    - `BusinessCalendar.cs`: classe imutável construída com a grade, o fuso, o indicador 24x7 e uma fonte de feriados por ano (`Func<int, IReadOnlySet<DateOnly>>`), para servir tanto a lista fixa do banco quanto o cálculo para qualquer ano do padrão; `AddBusinessMinutes`, `SubtractBusinessMinutes`, `BusinessSecondsBetween`.
+    - `BusinessCalendar.cs`: classe imutável construída com a grade, o fuso, o indicador 24x7 e uma fonte de feriados por ano (`Func<int, IReadOnlySet<DateOnly>>`), para servir tanto a lista fixa do banco quanto o cálculo para qualquer ano do padrão; `AddBusinessTime`, `SubtractBusinessTime` e `BusinessTimeBetween`, com durações em `TimeSpan` e instantes `DateTime` em UTC (DEC-11). Os nomes do prompt (`AddBusinessMinutes` e afins) foram trocados por causa do tipo da duração.
     - `BrazilianNationalHolidays.cs`: estática; Páscoa pelo algoritmo de Meeus/Jones/Butcher.
     - `DefaultSlaCalendar.cs`: grade "Expediente", fuso e `Create()` que monta o `BusinessCalendar` com os feriados de `BrazilianNationalHolidays`.
     - `SlaCalendarIds.cs`: `Default`, o Id fixo reservado.
   - `src/TickestPristine.Application/Abstractions/Sla/ISlaCalendarProvider.cs` (`GetAsync` → `Result<BusinessCalendar>`, `InvalidateAsync`). `IApplicationDbContext` ganha `SlaCalendars` e `SlaCalendarHolidays`.
-  - Infrastructure, `src/TickestPristine.Infrastructure/SlaCalendars/`: `SlaCalendarConfiguration.cs` (tabela `sla_calendars`; `WorkSchedule` como `jsonb`), `SlaCalendarHolidayConfiguration.cs` (tabela `sla_calendar_holidays`; FK com exclusão em cascata; índice único `(sla_calendar_id, date)`), `SlaCalendarProvider.cs` (Id padrão → `DefaultSlaCalendar`; demais → banco com `HybridCache`) e `SlaCalendarCacheKeys.cs`, no modelo de `PermissionProvider`; registro na DI; `ApplicationDbContext` com os dois `DbSet`.
+  - Infrastructure, `src/TickestPristine.Infrastructure/SlaCalendars/`: `SlaCalendarConfiguration.cs` (tabela `sla_calendars`; `WorkSchedule` como propriedade comum com conversor para `jsonb` e comparador de lista, e não `ToJson`, para que a alteração da grade entre na auditoria; DEC-15), `SlaCalendarHolidayConfiguration.cs` (tabela `sla_calendar_holidays`; FK com exclusão em cascata; índice único `(sla_calendar_id, date)`), `SlaCalendarProvider.cs` (Id padrão → `DefaultSlaCalendar`; demais → banco com `HybridCache`, guardando a cópia serializável `SlaCalendarSnapshot` e montando o `BusinessCalendar` depois da leitura, com expiração de 1 hora e cópia local de 1 minuto; DEC-13), `SlaCalendarSnapshot.cs` e `SlaCalendarCacheKeys.cs`, no modelo de `PermissionProvider`; registro na DI; `ApplicationDbContext` com os dois `DbSet`.
   - Migration `Add_Sla_Calendars` em `Database/Migrations/`, só com estrutura (sem `HasData`).
-  - Testes: `tests/TickestPristine.Application.UnitTests/SlaCalendars/BusinessCalendarTests.cs` (AC-1 a AC-11) e `BrazilianNationalHolidaysTests.cs` (AC-12, AC-13); `tests/TickestPristine.IntegrationTests/SlaCalendars/SlaCalendarsTests.cs` (AC-14 a AC-19, pelo `DbContext` e pelo provider resolvidos do `Services`, como em `RefreshTokenStorageTests`).
+  - Testes: `tests/TickestPristine.Application.UnitTests/SlaCalendars/BusinessCalendarTests.cs` (AC-1 a AC-11, AC-21 a AC-23) e `BrazilianNationalHolidaysTests.cs` (AC-12, AC-13); `tests/TickestPristine.IntegrationTests/SlaCalendars/SlaCalendarsTests.cs` (AC-14 a AC-19, pelo `DbContext` e pelo provider resolvidos do `Services`, como em `RefreshTokenStorageTests`).
 - **Contratos** (rotas, payloads, erros, eventos): nenhuma rota nova. Erro novo `SlaCalendars.NotFound` (tipo `NotFound`, "O calendário de SLA com o Id = '{id}' não foi encontrado"). Nenhum evento de domínio.
 - **Mudança no banco:** sim. Tabelas `sla_calendars` e `sla_calendar_holidays` e índice único, vazias. Nenhuma tabela existente muda.
 - **Riscos:**
   - R-1: Carnaval e Corpus Christi são pontos facultativos nacionais, não feriados legais. Entram no padrão porque o prompt pede; tirá-los exige mudar o código até a Fase 3.
   - R-2: mudar a grade ou os feriados do padrão exige novo deploy (DEC-5).
-  - R-3: o fuso é lido por `TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo")`; no Windows, o .NET converte o id IANA pelo ICU. Se o ICU não estiver disponível (modo invariante de globalização), a busca falha. Os testes rodam no Windows local e no Linux do CI e do container, o que expõe o problema se ele existir.
+  - R-3: o fuso é lido por `TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo")`; no Windows, o .NET converte o id IANA pelo ICU. Se o ICU não estiver disponível (modo invariante de globalização), a busca falha. Os testes rodam no Windows local e no Linux do CI (`ubuntu-latest`), mas não na imagem `aspnet:10.0` do Dockerfile, que nenhum teste exercita; esta spec é a primeira a usar `TimeZoneInfo` no .NET (o relatório de volume usa o fuso do PostgreSQL). Mitigação: conferir no deploy que a imagem resolve `America/Sao_Paulo` (base de fusos `tzdata` presente).
   - R-4: a grade é JSON; mudança de formato nas Fases 3 e seguintes exige migration de dados.
 
 ## 7. Tarefas
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
-| T-1 | Entidades `SlaCalendar`, `SlaCalendarHoliday`, `SlaWorkPeriod`, `SlaCalendarErrors`; configurações EF com `jsonb` e índice único, sem seed; `DbSet` no `IApplicationDbContext`/`ApplicationDbContext`; migration `Add_Sla_Calendars` | AC-14, AC-15, AC-19 | add-entity | [ ] |
+| T-1 | Entidades `SlaCalendar`, `SlaCalendarHoliday`, `SlaWorkPeriod`, `SlaCalendarErrors`; configurações EF com `jsonb` por conversor e comparador (DEC-15) e índice único, sem seed; `DbSet` no `IApplicationDbContext`/`ApplicationDbContext`; migration `Add_Sla_Calendars` | AC-14, AC-15, AC-19 | add-entity | [ ] |
 | T-2 | `BrazilianNationalHolidays` (fixos e móveis pela Páscoa) | AC-12, AC-13 | add-feature | [ ] |
-| T-3 | `BusinessCalendar`: soma, subtração e segundos úteis em hora local, 24x7, fonte de feriados por ano, limite de 366 dias (DEC-8) e fronteiras (DEC-9) | AC-1 a AC-11 | add-feature | [ ] |
-| T-4 | `SlaCalendarIds` e `DefaultSlaCalendar`; `ISlaCalendarProvider` e `SlaCalendarProvider` (padrão em código; banco com `HybridCache` de 1 hora e `InvalidateAsync`); registro na DI | AC-1 a AC-9, AC-16, AC-17, AC-18 | add-feature | [ ] |
-| T-5 | Testes unitários de `BusinessCalendar` e `BrazilianNationalHolidays`; testes de integração de tabelas vazias, unicidade, provider (padrão e banco), cache e auditoria | AC-1 a AC-19 | add-tests | [ ] |
+| T-3 | `BusinessCalendar`: soma, subtração e tempo útil em `TimeSpan` (DEC-11), em hora local, 24x7, fonte de feriados por ano, limite de 366 dias só na soma e na subtração (DEC-8, DEC-12), fronteiras (DEC-9) e duração zero ou negativa (DEC-16) | AC-1 a AC-11, AC-21 a AC-23 | add-feature | [ ] |
+| T-4 | `SlaCalendarIds` e `DefaultSlaCalendar`; `ISlaCalendarProvider` e `SlaCalendarProvider` (padrão em código; banco com `HybridCache` de 1 hora sobre a cópia `SlaCalendarSnapshot` e `InvalidateAsync`; DEC-13); registro na DI | AC-1 a AC-9, AC-16, AC-17, AC-18, AC-21 | add-feature | [ ] |
+| T-5 | Testes unitários de `BusinessCalendar` e `BrazilianNationalHolidays`; testes de integração da migration sem dados, unicidade, provider (padrão e banco), cache e auditoria | AC-1 a AC-19, AC-21 a AC-23 | add-tests | [ ] |
 | T-6 | Build e testes da solução, conferindo que nenhum teste existente do SLA atual mudou | AC-20 | add-tests | [ ] |
 
 ## 8. Rastreabilidade
@@ -149,6 +161,9 @@ Horários em hora local de `America/Sao_Paulo` (UTC−3); os testes convertem pa
 | AC-18 | | | |
 | AC-19 | | | |
 | AC-20 | | | |
+| AC-21 | | | |
+| AC-22 | | | |
+| AC-23 | | | |
 
 ## 9. Evidências de verificação
 - **Build:**
@@ -166,3 +181,7 @@ Horários em hora local de `America/Sao_Paulo` (UTC−3); os testes convertem pa
 | 2026-10-23 | Rascunho | DEC-8 (exceção ao passar de 366 dias) e DEC-9 (borda da própria faixa) decididas por Rafael Santos no chat; AC-6, AC-8, AC-11 e REQ-7 fechados. Nenhuma decisão em aberto; checklist de completude conferido. Aguardando aprovação. |
 | 2026-10-23 | Rascunho | Revisão autorizada por Rafael Santos no chat, sem transição de status: DEC-7 recebeu o esclarecimento do alcance ("sem seed" vale para configuração padrão, não para migração de dados de negócio existentes), mantida a decisão original; REQ-2 reescrito para o mesmo alcance, sem mudar o comportamento desta spec nem os ACs; vínculos acrescentados (`backlog: BL-004`, fonte versionada `specs/_fontes/prompt-sla.md` com o SHA-256, referência ao `specs/BACKLOG.md`); nota do §9 sobre a Q-10 ajustada ao registro já feito com o backlog. Checklist de completude conferido de novo. Aguardando aprovação. |
 | 2026-10-24 | Rascunho | Referência ao `SPEC-TICKEST.md` acrescentada no contexto (atende RF-50 e RF-51), a pedido de Rafael Santos no chat, seguindo a regra 0.2 daquele documento. Sem mudança de requisito, critério, decisão ou tarefa. |
+| 2026-10-24 | Em descoberta | Revisão pedida por Rafael Santos no chat (`/spec-new revise a spec 004`); a descoberta começou. |
+| 2026-10-24 | Em descoberta | Descoberta concluída: as referências de código do contexto e do plano foram conferidas e existem; o AC-28 do `SPEC-TICKEST.md` é coerente com esta spec. DEC-10 decidida (pasta `SlaCalendars/`). Frontmatter levado ao modelo atual (estados da spec 007, campo `pr:`) e branch definida (`feat/SPEC-004-sla-business-calendar`); fonte do §1 corrigida (o `prompt-sla-tickest.md` saiu da raiz no PR #16). Sem mudança de requisito, critério ou tarefa. Checklist de completude conferido. Aguardando aprovação. |
+| 2026-10-24 | Em descoberta | Validação final pedida por Rafael Santos no chat, com quatro problemas e três ressalvas; correções autorizadas por ele ("Opção (1): aplique P1 a P4 e as ressalvas a, b e c. Registre a d como nota para a Fase 3 e ignore a e."; "use TimeSpan como tipo da duração"). DEC-11 a DEC-16 registradas. REQ-3, REQ-4, REQ-5, REQ-7, REQ-10 e REQ-11 reescritos sem mudar o objetivo; AC-9, AC-10, AC-11, AC-14 e AC-19 ajustados; AC-21 a AC-23 acrescentados; plano, R-3, tarefas e rastreabilidade atualizados; nota para a Fase 3 em "Fora do escopo". Checklist de completude conferido. Aguardando aprovação. |
+| 2026-10-24 | Aprovada | Aprovada explicitamente por Rafael Santos no chat ("Aprovo a spec 004. Mantenha DateTime UTC, como está no projeto."). |
