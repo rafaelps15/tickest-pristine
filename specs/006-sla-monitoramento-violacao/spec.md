@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-25
 branch: feat/SPEC-006-sla-breach-monitor
-pr:
+pr: 26
 ---
 
 # 006 — SLA: monitoramento, violação materializada e eventos
@@ -198,7 +198,7 @@ Decisões técnicas tomadas pelo agente como arquiteto, por delegação de Rafae
 - **Revisão:** `ca-review` em 2026-10-25: nenhum achado bloqueante. O slice `Tickets/ProcessSlaBreaches/` segue o trio command/handler/validator, com o handler `internal sealed` e acesso só pelo `IApplicationDbContext`; sem serviço na Application (DEC-14); o serviço em background segue o modelo escolhido (DEC-17); nenhum comentário cita spec ou DEC; nenhum `DateTime.UtcNow` na Application. O teste de auditoria da spec 005 foi ajustado ao REQ-2 desta spec (a conclusão no prazo também zera o `NextActionOnUtc`).
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md`, citando a spec 006: 1.2 (capacidades de SLA), 2.4 (`BreachedOnUtc`, `NextActionOnUtc`, índice filtrado e migration), 2.6 (RN-27 nova), 2.7 (C-14 e C-15), 3.7 (o serviço em background, primeiro do projeto), 4.7 (concorrência entre o monitoramento e os handlers), 4.8 (configuração `SlaMonitor`) e 5.7 (painel de SLA).
 - **CI:**
-- **Entrega:**
+- **Entrega:** PR #26 (https://github.com/rafaelps15/tickest-pristine/pull/26), aberto em 2026-10-25 da branch `feat/SPEC-006-sla-breach-monitor` para a `main`; aguarda o CI e o merge do responsável.
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -214,3 +214,4 @@ Decisões técnicas tomadas pelo agente como arquiteto, por delegação de Rafae
 | 2026-10-25 | Em implementação | DEC-17 decidida por Rafael Santos no chat: o serviço em background refeito idêntico ao `GroupEventNotificationsProducerBackgroundService` do event-reminder (commit `5099067`), com a trava consultiva como única adição de comportamento. Ajuste registrado no estado atual, pela regra de ajuste aprovado no chat: REQ-3, REQ-7, REQ-8, REQ-11, AC-5, AC-12, AC-14 e AC-17, plano e T-4. O objetivo da spec não muda. |
 | 2026-10-25 | Em implementação | T-1 a T-7 feitas. DEC-18 (testes deslocam os cronômetros do próprio chamado, sem fixar o relógio da aplicação) tomada pelo agente por delegação de Rafael Santos. O teste de auditoria da spec 005 passou a conferir também o `NextActionOnUtc` na conclusão, efeito do REQ-2 desta spec. Build sem avisos e todos os testes aprovados. Próximo passo: `spec-verify`. |
 | 2026-10-25 | Verificada | Verificação pela `spec-verify`, executada pelo agente por delegação de Rafael Santos ("vc pode responder por mim"): build sem avisos, 904 testes aprovados, auditoria 100% (saída 0), os 19 critérios cobertos por testes aprovados nesta execução e conferidos no código (o AC-19 também por verificação descrita das rotas), sem achado bloqueante. `SYSTEM_SPECIFICATION.md` atualizado. Falta o PR (push e merge são do responsável). |
+| 2026-10-25 | Verificada | PR #26 aberto pelo agente, por delegação de Rafael Santos no chat, depois do push feito por ele. A spec passa a `Entregue` com o merge. |
