@@ -1371,7 +1371,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         TicketHistory history = await context.TicketHistories
-            .SingleAsync(h => h.TicketId == ticketId && h.Action == TicketHistoryAction.Reassigned);
+            .SingleAsync(h => h.TicketId == ticketId && h.Action == TicketHistoryAction.Assigned);
         history.OldValue.ShouldBeNull();
         history.NewValue.ShouldBe(adminId.ToString());
     }
@@ -1573,9 +1573,10 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     public async Task Unassign_Should_ShowRemovalInHistory()
     {
         // Arrange
-        (Guid ticketId, _) = await CreateTicketAssignedToAdminAsync();
+        (Guid ticketId, Guid adminId) = await CreateTicketAssignedToAdminAsync();
         HttpResponseMessage unassignResponse = await HttpClient.DeleteAsync($"tickets/{ticketId}/assignee");
         unassignResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        string adminName = GetFullName(adminId);
 
         // Act
         HttpResponseMessage response = await HttpClient.GetAsync($"tickets/{ticketId}/history");
@@ -1586,7 +1587,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         history.ShouldNotBeNull();
         history.ShouldContain(h =>
             h.Action == (int)TicketHistoryAction.Unassigned &&
-            h.Description == "Responsável removido");
+            h.Description == $"Responsável removido: {adminName}");
     }
 
     [Fact]
@@ -3253,5 +3254,294 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         List<TicketSlaBreachedDomainEvent> events = BreachEvents.For(ticketIds);
         events.Count.ShouldBe(6);
         events.Select(e => (e.TicketId, e.Metric)).Distinct().Count().ShouldBe(6);
+    }
+
+    [Fact]
+    public async Task Assign_Should_LetAgentAssignOnlyToSelf_WhenAgentLacksAssignPermission()
+    {
+        // Arrange: Beto e Ana com a role Atendente, que não tem tickets:assign
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        Guid anaId = GetUserId(await CreateAgentAsync());
+        AccessTokens betoTokens = await CreateAgentAsync();
+        Guid betoId = GetUserId(betoTokens);
+        Authenticate(betoTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage toOther = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}/assignee", new { assignedToUserId = anaId });
+        Guid? assigneeAfterOther = GetAssignee(ticketId);
+        HttpResponseMessage toSelf = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}/assignee", new { assignedToUserId = betoId });
+
+        // Assert
+        toOther.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        ProblemDto? problem = await toOther.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Tickets.CannotAssignToOthers");
+        problem.Detail.ShouldBe("Você só pode atribuir o chamado a você mesmo.");
+        assigneeAfterOther.ShouldBeNull();
+
+        toSelf.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        GetAssignee(ticketId).ShouldBe(betoId);
+    }
+
+    [Fact]
+    public async Task Migration_Should_GrantAdministrativeAssignPermissionOnlyToAdministrator_AndRunAgain()
+    {
+        // Arrange
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // Act: o vínculo já existe, então a migration roda de novo sem erro e sem duplicar
+        await context.Database.ExecuteSqlRawAsync(
+            Add_User_Sector_And_Tickets_Assign_Permission.InsertTicketsAssignPermissionSql);
+
+        // Assert
+        Domain.Roles.Permission permission = await context.Permissions.AsNoTracking()
+            .SingleAsync(p => p.Code == "tickets:assign");
+        permission.IsAdministrative.ShouldBeTrue();
+
+        List<string> roles = await context.RolePermissions.AsNoTracking()
+            .Where(rp => rp.PermissionCode == "tickets:assign")
+            .Select(rp => rp.RoleName)
+            .ToListAsync();
+        roles.ShouldContain(RoleNames.Administrator);
+        roles.Count(role => role == RoleNames.Administrator).ShouldBe(1);
+        roles.ShouldNotContain(RoleNames.Agent);
+        roles.ShouldNotContain(RoleNames.Collaborator);
+    }
+
+    [Fact]
+    public async Task Assign_Should_ValidateAssigneeInOrder_WhenAdministratorAssigns()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (Guid carlaId, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        Guid brunoId = GetUserId(await CreateAgentAsync());
+        (await HttpClient.PutAsync($"users/{brunoId}/deactivate", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+        Guid adminId = GetUserId(adminTokens);
+
+        // Act
+        HttpResponseMessage collaborator = await SendAssignAsync(ticketId, carlaId);
+        HttpResponseMessage inactive = await SendAssignAsync(ticketId, brunoId);
+        HttpResponseMessage missing = await SendAssignAsync(ticketId, Guid.NewGuid());
+        HttpResponseMessage self = await SendAssignAsync(ticketId, adminId);
+
+        // Assert
+        collaborator.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await collaborator.Content.ReadFromJsonAsync<ProblemDto>())!.Title.ShouldBe("Tickets.AssigneeNotAttendant");
+        inactive.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await inactive.Content.ReadFromJsonAsync<ProblemDto>())!.Title.ShouldBe("Users.NotFound");
+        missing.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await missing.Content.ReadFromJsonAsync<ProblemDto>())!.Title.ShouldBe("Users.NotFound");
+        self.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        GetAssignee(ticketId).ShouldBe(adminId);
+    }
+
+    [Fact]
+    public async Task Assign_Should_ReturnNotActiveAndRecordNothing_WhenTicketIsResolved()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        Guid anaId = GetUserId(await CreateAgentAsync());
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        await ResolveTicketAsync(ticketId);
+        int historyCount = GetHistoryAfterCreation(ticketId).Count;
+
+        // Act
+        HttpResponseMessage response = await SendAssignAsync(ticketId, anaId);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<ProblemDto>())!.Title.ShouldBe("Tickets.NotActive");
+        GetAssignee(ticketId).ShouldBeNull();
+        GetHistoryAfterCreation(ticketId).Count.ShouldBe(historyCount);
+    }
+
+    [Fact]
+    public async Task Assign_Should_RecordAssignedThenReassigned_AndShowNamesInHistoryInPageQuery()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (Guid anaId, string anaName) = await CreateNamedAgentAsync("Ana", "Souza");
+        (Guid betoId, string betoName) = await CreateNamedAgentAsync("Beto", "Lima");
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+        Guid adminId = GetUserId(adminTokens);
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        // Act
+        HttpResponseMessage toAna = await SendAssignAsync(ticketId, anaId);
+        HttpResponseMessage toBeto = await SendAssignAsync(ticketId, betoId);
+
+        // Assert: os fatos gravados
+        toAna.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        toBeto.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        var history = GetHistoryAfterCreation(ticketId).OrderBy(h => h.OccurredAtUtc).ToList();
+        history.Count.ShouldBe(2);
+        history[0].Action.ShouldBe(TicketHistoryAction.Assigned);
+        history[0].OldValue.ShouldBeNull();
+        history[0].NewValue.ShouldBe(anaId.ToString());
+        history[0].ChangedByUserId.ShouldBe(adminId);
+        history[0].OccurredAtUtc.Kind.ShouldBe(DateTimeKind.Utc);
+        history[1].Action.ShouldBe(TicketHistoryAction.Reassigned);
+        history[1].OldValue.ShouldBe(anaId.ToString());
+        history[1].NewValue.ShouldBe(betoId.ToString());
+        history[1].ChangedByUserId.ShouldBe(adminId);
+
+        // Arrange: Ana é desativada e o responsável é removido
+        (await HttpClient.PutAsync($"users/{anaId}/deactivate", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await HttpClient.DeleteAsync($"tickets/{ticketId}/assignee")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act: a página do histórico, contando os comandos que leem nomes de usuário
+        HttpResponseMessage response;
+        int nameQueries;
+        int pageQueriesWithNames;
+
+        using (var nameCounter = new EfCommandCounter(sql => sql.Contains("first_name", StringComparison.Ordinal)))
+        using (var pageCounter = new EfCommandCounter(sql =>
+            sql.Contains("ticket_histories", StringComparison.Ordinal) &&
+            sql.Contains("first_name", StringComparison.Ordinal)))
+        {
+            response = await HttpClient.GetAsync($"tickets/{ticketId}/history");
+            nameQueries = nameCounter.Count;
+            pageQueriesWithNames = pageCounter.Count;
+        }
+
+        // Assert: as descrições com os nomes, que vêm na própria consulta da página
+        response.EnsureSuccessStatusCode();
+        var descriptions = (await response.Content.ReadFromJsonAsync<CursorPageDto<TicketHistoryDto>>())!.Items
+            .Select(h => h.Description)
+            .ToList();
+        descriptions.ShouldContain($"Responsável definido: {anaName}");
+        descriptions.ShouldContain($"Responsável alterado de {anaName} para {betoName}");
+        descriptions.ShouldContain($"Responsável removido: {betoName}");
+        nameQueries.ShouldBe(1);
+        pageQueriesWithNames.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Assign_Should_RecordNothing_WhenAssigneeIsAlreadyTheCurrentOne()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        Guid anaId = GetUserId(await CreateAgentAsync());
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        (await SendAssignAsync(ticketId, anaId)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        HttpResponseMessage response = await SendAssignAsync(ticketId, anaId);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        GetHistoryAfterCreation(ticketId).ShouldHaveSingleItem().Action.ShouldBe(TicketHistoryAction.Assigned);
+    }
+
+    [Fact]
+    public async Task Assign_Should_ReturnNoContentAndConflict_WhenTwoAssignmentsRunAtOnce()
+    {
+        // Arrange
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        Guid anaId = GetUserId(await CreateAgentAsync());
+        Guid betoId = GetUserId(await CreateAgentAsync());
+        Guid ticketId = await CreateTicketAsync(sectorId);
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // Gatilho temporário que segura por um segundo a troca de responsável, com a linha bloqueada: a outra
+        // atribuição lê o mesmo chamado nesse intervalo e, ao gravar, encontra outra versão (conflito de concorrência).
+        await context.Database.ExecuteSqlRawAsync(DelayTicketAssigneeChangeSql);
+
+        HttpResponseMessage[] responses;
+
+        try
+        {
+            // Act
+            responses = await Task.WhenAll(SendAssignAsync(ticketId, anaId), SendAssignAsync(ticketId, betoId));
+        }
+        finally
+        {
+            await context.Database.ExecuteSqlRawAsync(DropDelayTicketAssigneeChangeSql);
+        }
+
+        // Assert
+        responses.Select(r => r.StatusCode).Order().ShouldBe([HttpStatusCode.NoContent, HttpStatusCode.Conflict]);
+        GetHistoryAfterCreation(ticketId).ShouldHaveSingleItem().Action.ShouldBe(TicketHistoryAction.Assigned);
+    }
+
+    private const string DelayTicketAssigneeChangeSql =
+        """
+        CREATE OR REPLACE FUNCTION public.test_delay_ticket_assignee_change() RETURNS trigger AS $$
+        BEGIN
+            PERFORM pg_sleep(1);
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        CREATE TRIGGER test_delay_ticket_assignee_change
+            BEFORE UPDATE ON public.tickets
+            FOR EACH ROW
+            WHEN (OLD.assigned_to_user_id IS DISTINCT FROM NEW.assigned_to_user_id)
+            EXECUTE FUNCTION public.test_delay_ticket_assignee_change();
+        """;
+
+    private const string DropDelayTicketAssigneeChangeSql =
+        """
+        DROP TRIGGER IF EXISTS test_delay_ticket_assignee_change ON public.tickets;
+        DROP FUNCTION IF EXISTS public.test_delay_ticket_assignee_change();
+        """;
+
+    /// <summary>
+    /// Atribuição com o token já configurado no <see cref="BaseIntegrationTest.HttpClient"/>.
+    /// </summary>
+    private Task<HttpResponseMessage> SendAssignAsync(Guid ticketId, Guid assignedToUserId) =>
+        HttpClient.PutAsJsonAsync($"tickets/{ticketId}/assignee", new { assignedToUserId });
+
+    private Guid? GetAssignee(Guid ticketId)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return context.Tickets.AsNoTracking().Where(t => t.Id == ticketId).Select(t => t.AssignedToUserId).Single();
+    }
+
+    /// <summary>
+    /// Atendente novo com nome próprio e um sobrenome único (para o nome completo não se repetir entre os testes);
+    /// deixa o administrador autenticado.
+    /// </summary>
+    private async Task<(Guid UserId, string FullName)> CreateNamedAgentAsync(string firstName, string lastName)
+    {
+        string uniqueLastName = $"{lastName}-{Guid.NewGuid():N}";
+        HttpResponseMessage registerResponse = await PostRegisterAsAdminAsync(new
+        {
+            email = UniqueEmail(),
+            firstName,
+            lastName = uniqueLastName,
+            password = "Password123!"
+        });
+        registerResponse.EnsureSuccessStatusCode();
+        Guid userId = await registerResponse.Content.ReadFromJsonAsync<Guid>();
+
+        await AuthenticateAsAdminAsync();
+        (await HttpClient.PutAsJsonAsync($"users/{userId}/roles", new { roleNames = new[] { RoleNames.Agent } }))
+            .EnsureSuccessStatusCode();
+
+        return (userId, $"{firstName} {uniqueLastName}");
+    }
+
+    private string GetFullName(Guid userId)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return context.Users.Where(u => u.Id == userId).Select(u => u.FirstName + " " + u.LastName).Single();
     }
 }

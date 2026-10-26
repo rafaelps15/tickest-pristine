@@ -51,6 +51,26 @@ public sealed class TicketHistoryEntriesTests
     }
 
     [Fact]
+    public void Assigned_Should_RecordNewAssigneeWithoutOldValue()
+    {
+        // Arrange
+        var ticketId = Guid.NewGuid();
+        var administratorId = Guid.NewGuid();
+        var assigneeId = Guid.NewGuid();
+
+        // Act
+        TicketHistory history = TicketHistoryEntries.Assigned(ticketId, administratorId, assigneeId, OccurredAtUtc);
+
+        // Assert
+        history.TicketId.ShouldBe(ticketId);
+        history.ChangedByUserId.ShouldBe(administratorId);
+        history.Action.ShouldBe(TicketHistoryAction.Assigned);
+        history.OldValue.ShouldBeNull();
+        history.NewValue.ShouldBe(assigneeId.ToString());
+        history.OccurredAtUtc.ShouldBe(OccurredAtUtc);
+    }
+
+    [Fact]
     public void Unassigned_Should_RecordPreviousAssigneeWithoutNewValue()
     {
         // Arrange

@@ -7,8 +7,6 @@ public sealed class TicketHistoryDescriptionsTests
 {
     [Theory]
     [InlineData(TicketHistoryAction.Created, "Chamado criado")]
-    [InlineData(TicketHistoryAction.Reassigned, "Responsável alterado")]
-    [InlineData(TicketHistoryAction.Unassigned, "Responsável removido")]
     [InlineData(TicketHistoryAction.DescriptionChanged, "Descrição alterada")]
     [InlineData(TicketHistoryAction.Reopened, "Chamado reaberto")]
     [InlineData(TicketHistoryAction.Deleted, "Chamado excluído")]
@@ -69,5 +67,75 @@ public sealed class TicketHistoryDescriptionsTests
 
         // Assert
         description.ShouldBe("Anexo 'comprovante.pdf' adicionado");
+    }
+
+    [Fact]
+    public void For_Should_NameOldAndNewAssignee_WhenReassigned()
+    {
+        // Arrange
+        string anaId = Guid.NewGuid().ToString();
+        string betoId = Guid.NewGuid().ToString();
+
+        // Act
+        string description = TicketHistoryDescriptions.For(
+            TicketHistoryAction.Reassigned,
+            anaId,
+            betoId,
+            "Ana Souza",
+            "Beto Lima");
+
+        // Assert
+        description.ShouldBe("Responsável alterado de Ana Souza para Beto Lima");
+    }
+
+    [Fact]
+    public void For_Should_NameNewAssignee_WhenAssignedOrReassignedWithoutPreviousAssignee()
+    {
+        // Arrange
+        string anaId = Guid.NewGuid().ToString();
+
+        // Act
+        string assigned = TicketHistoryDescriptions.For(TicketHistoryAction.Assigned, null, anaId, newUserName: "Ana Souza");
+        string legacyFirstAssignment = TicketHistoryDescriptions.For(
+            TicketHistoryAction.Reassigned,
+            null,
+            anaId,
+            newUserName: "Ana Souza");
+
+        // Assert
+        assigned.ShouldBe("Responsável definido: Ana Souza");
+        legacyFirstAssignment.ShouldBe("Responsável definido: Ana Souza");
+    }
+
+    [Fact]
+    public void For_Should_NameRemovedAssignee_WhenUnassigned()
+    {
+        // Arrange
+        string anaId = Guid.NewGuid().ToString();
+
+        // Act
+        string description = TicketHistoryDescriptions.For(TicketHistoryAction.Unassigned, anaId, null, oldUserName: "Ana Souza");
+
+        // Assert
+        description.ShouldBe("Responsável removido: Ana Souza");
+    }
+
+    [Fact]
+    public void For_Should_ShowRemovedUser_WhenAssigneeHasNoName()
+    {
+        // Arrange
+        string unknownUserId = Guid.NewGuid().ToString();
+
+        // Act
+        string unassigned = TicketHistoryDescriptions.For(TicketHistoryAction.Unassigned, unknownUserId, null);
+        string reassigned = TicketHistoryDescriptions.For(
+            TicketHistoryAction.Reassigned,
+            unknownUserId,
+            Guid.NewGuid().ToString(),
+            newUserName: "Beto Lima");
+
+        // Assert
+        unassigned.ShouldBe("Responsável removido: usuário removido");
+        reassigned.ShouldBe("Responsável alterado de usuário removido para Beto Lima");
     }
 }
