@@ -12,8 +12,9 @@ using TickestPristine.SharedKernel;
 namespace TickestPristine.Application.Tickets.Assign;
 
 /// <summary>
-/// Define o responsável por um chamado ativo: quem atende a fila (o endpoint exige <c>tickets:manage</c>) assume o
-/// chamado ou o passa para outro usuário ativo que também atende chamados. Atribuir ao responsável atual não muda nada.
+/// Define o responsável por um chamado ativo. Quem atende a fila (o endpoint exige <c>tickets:manage</c>) pode assumir
+/// o chamado; passá-lo para outra pessoa exige também <c>tickets:assign</c>. O responsável precisa ser um atendente
+/// elegível (<see cref="TicketAssigneeEligibility"/>). Atribuir ao responsável atual não muda nada.
 /// </summary>
 internal sealed class AssignTicketCommandHandler(
     IApplicationDbContext context,
@@ -24,6 +25,19 @@ internal sealed class AssignTicketCommandHandler(
 {
     public async Task<Result> Handle(AssignTicketCommand command, CancellationToken cancellationToken)
     {
+        if (command.AssignedToUserId != userContext.UserId)
+        {
+            bool canAssignToOthers = await permissionProvider.HasPermissionAsync(
+                userContext.UserId,
+                PermissionCodes.Tickets.Assign,
+                cancellationToken);
+
+            if (!canAssignToOthers)
+            {
+                return Result.Failure(TicketErrors.CannotAssignToOthers);
+            }
+        }
+
         Ticket? ticket = await context.Tickets.SingleOrDefaultAsync(t => t.Id == command.TicketId, cancellationToken);
 
         if (ticket is null)
@@ -45,14 +59,15 @@ internal sealed class AssignTicketCommandHandler(
             return Result.Failure(UserErrors.NotFound(command.AssignedToUserId));
         }
 
-        bool assigneeManagesTickets = await permissionProvider.HasPermissionAsync(
-            command.AssignedToUserId,
-            PermissionCodes.Tickets.Manage,
-            cancellationToken);
+        // Lida do banco, e não do cache de permissões: a lista de atendentes usa a mesma regra e não pode discordar.
+        bool assigneeIsAttendant = await context.Users
+            .Where(u => u.Id == command.AssignedToUserId)
+            .WhereEligibleAssignee(context)
+            .AnyAsync(cancellationToken);
 
-        if (!assigneeManagesTickets)
+        if (!assigneeIsAttendant)
         {
-            return Result.Failure(TicketErrors.AssigneeCannotManageTickets(command.AssignedToUserId));
+            return Result.Failure(TicketErrors.AssigneeNotAttendant(command.AssignedToUserId));
         }
 
         if (ticket.AssignedToUserId == command.AssignedToUserId)
@@ -70,12 +85,18 @@ internal sealed class AssignTicketCommandHandler(
             command.AssignedToUserId,
             userContext.UserId));
 
-        context.TicketHistories.Add(TicketHistoryEntries.Reassigned(
-            ticket.Id,
-            userContext.UserId,
-            previousAssignedToUserId,
-            command.AssignedToUserId,
-            dateTimeProvider.UtcNow));
+        context.TicketHistories.Add(previousAssignedToUserId is null
+            ? TicketHistoryEntries.Assigned(
+                ticket.Id,
+                userContext.UserId,
+                command.AssignedToUserId,
+                dateTimeProvider.UtcNow)
+            : TicketHistoryEntries.Reassigned(
+                ticket.Id,
+                userContext.UserId,
+                previousAssignedToUserId,
+                command.AssignedToUserId,
+                dateTimeProvider.UtcNow));
 
         await context.SaveChangesAsync(cancellationToken);
 

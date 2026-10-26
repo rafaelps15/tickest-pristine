@@ -54,7 +54,23 @@ public static class TicketHistoryEntries
             newStatus.ToString());
 
     /// <summary>
-    /// Troca de responsável: guarda os ids do anterior (nulo quando o chamado estava sem responsável) e do novo.
+    /// Primeira atribuição, com o chamado sem responsável: guarda só o id do novo responsável.
+    /// </summary>
+    public static TicketHistory Assigned(
+        Guid ticketId,
+        Guid? changedByUserId,
+        Guid newAssignedToUserId,
+        DateTime occurredAtUtc) =>
+        Create(
+            ticketId,
+            changedByUserId,
+            TicketHistoryAction.Assigned,
+            occurredAtUtc,
+            newValue: newAssignedToUserId.ToString());
+
+    /// <summary>
+    /// Troca de responsável: guarda os ids do anterior e do novo. Registros gravados antes da ação
+    /// <see cref="TicketHistoryAction.Assigned"/> têm o anterior nulo também na primeira atribuição.
     /// </summary>
     public static TicketHistory Reassigned(
         Guid ticketId,

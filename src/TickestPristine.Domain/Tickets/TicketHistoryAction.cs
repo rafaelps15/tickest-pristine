@@ -13,5 +13,6 @@ public enum TicketHistoryAction
     MessageEdited = 9,
     MessageRemoved = 10,
     Unassigned = 11,
-    DescriptionChanged = 12
+    DescriptionChanged = 12,
+    Assigned = 13
 }
