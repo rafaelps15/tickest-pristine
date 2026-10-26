@@ -220,6 +220,15 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         },
                         new
                         {
+                            Id = new Guid("3a8ecf50-4717-c01a-4e61-03f90e9369da"),
+                            Code = "tickets:assign",
+                            Description = "Definir outra pessoa como responsável por um chamado.",
+                            Group = "Chamados",
+                            IsAdministrative = true,
+                            Name = "Atribuir chamados"
+                        },
+                        new
+                        {
                             Id = new Guid("04762218-ca52-1659-e82b-3ff4091c368d"),
                             Code = "users:read",
                             Description = "Listar e consultar os colaboradores cadastrados.",
@@ -421,6 +430,12 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         {
                             Id = new Guid("b0513a1c-f631-a369-cdee-72ce420f2d87"),
                             PermissionCode = "tickets:manage",
+                            RoleName = "Administrador"
+                        },
+                        new
+                        {
+                            Id = new Guid("d7074855-9d42-a15a-a220-5868fe60f767"),
+                            PermissionCode = "tickets:assign",
                             RoleName = "Administrador"
                         },
                         new
@@ -1072,6 +1087,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("citext")
                         .HasColumnName("last_name");
 
+                    b.Property<Guid?>("SectorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sector_id");
+
                     b.HasKey("Id")
                         .HasName("pk_users");
 
@@ -1082,6 +1101,9 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasIndex("Email")
                         .IsUnique()
                         .HasDatabaseName("ix_users_email");
+
+                    b.HasIndex("SectorId")
+                        .HasDatabaseName("ix_users_sector_id");
 
                     b.HasIndex("FirstName", "LastName", "Id")
                         .HasDatabaseName("ix_users_first_name_last_name_id");
@@ -1302,6 +1324,15 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_refresh_tokens_users_user_id");
+                });
+
+            modelBuilder.Entity("TickestPristine.Domain.Users.User", b =>
+                {
+                    b.HasOne("TickestPristine.Domain.Sectors.Sector", null)
+                        .WithMany()
+                        .HasForeignKey("SectorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_users_sectors_sector_id");
                 });
 
             modelBuilder.Entity("TickestPristine.Domain.Users.UserCredential", b =>

@@ -1,4 +1,5 @@
-﻿using TickestPristine.Domain.Users;
+﻿using TickestPristine.Domain.Sectors;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -27,5 +28,14 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.IsActive)
             .IsRequired()
             .HasDefaultValue(true);
+
+        // Setor em que o usuário atende, opcional. Desativar o setor não apaga o vínculo (é exclusão lógica), e um setor
+        // com usuários vinculados não pode ser excluído fisicamente.
+        builder.HasOne<Sector>()
+            .WithMany()
+            .HasForeignKey(u => u.SectorId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(u => u.SectorId);
     }
 }

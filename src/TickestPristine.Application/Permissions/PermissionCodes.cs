@@ -12,6 +12,7 @@ public static class PermissionCodes
         public const string ViewOwn = "tickets:view-own";
         public const string UpdateOwn = "tickets:update-own";
         public const string Manage = "tickets:manage";
+        public const string Assign = "tickets:assign";
         public const string DeleteOwn = "tickets:delete-own";
         public const string ReopenOwn = "tickets:reopen-own";
     }
