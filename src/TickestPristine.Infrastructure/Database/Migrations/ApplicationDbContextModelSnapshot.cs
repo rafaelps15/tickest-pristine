@@ -909,6 +909,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTime?>("BreachedOnUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("breached_on_utc");
+
                     b.Property<Guid>("CalendarId")
                         .HasColumnType("uuid")
                         .HasColumnName("calendar_id");
@@ -931,6 +935,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("metric");
+
+                    b.Property<DateTime?>("NextActionOnUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_action_on_utc");
 
                     b.Property<DateTime>("StartedAtUtc")
                         .HasColumnType("timestamp with time zone")
@@ -955,6 +963,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_ticket_sla_timers");
+
+                    b.HasIndex("NextActionOnUtc")
+                        .HasDatabaseName("ix_ticket_sla_timers_next_action_on_utc")
+                        .HasFilter("next_action_on_utc IS NOT NULL");
 
                     b.HasIndex("TicketId", "Metric", "Cycle")
                         .IsUnique()

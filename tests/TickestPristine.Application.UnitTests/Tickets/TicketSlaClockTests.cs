@@ -204,4 +204,135 @@ public sealed class TicketSlaClockTests
         current.ShouldNotBeNull().Cycle.ShouldBe(2);
         TicketSlaClock.CurrentCycle([], SlaMetric.FirstResponse).ShouldBeNull();
     }
+
+    [Fact]
+    public void Start_Should_QueueEachTimerAtItsDeadline()
+    {
+        // Act
+        List<TicketSlaTimer> timers = TicketSlaClock.Start(Guid.NewGuid(), UrgentPlan, Calendar, SaoPaulo(8, 10));
+
+        // Assert
+        timers.ShouldAllBe(t => t.NextActionOnUtc == t.DueOnUtc && t.BreachedOnUtc == null);
+    }
+
+    [Fact]
+    public void Complete_Should_DequeueTimer_WhenCompletedUntilDeadline()
+    {
+        // Arrange
+        TicketSlaTimer resolution = UrgentResolution();
+
+        // Act
+        TicketSlaClock.Complete(resolution, SaoPaulo(12, 10));
+
+        // Assert
+        resolution.NextActionOnUtc.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Complete_Should_KeepTimerQueued_WhenCompletedAfterDeadline()
+    {
+        // Arrange
+        TicketSlaTimer resolution = UrgentResolution();
+
+        // Act
+        TicketSlaClock.Complete(resolution, SaoPaulo(12, 30));
+
+        // Assert
+        resolution.NextActionOnUtc.ShouldBe(resolution.DueOnUtc);
+        resolution.BreachedOnUtc.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Stop_Should_DequeueTimer()
+    {
+        // Arrange
+        TicketSlaTimer resolution = UrgentResolution();
+
+        // Act
+        TicketSlaClock.Stop(resolution, SaoPaulo(13, 0));
+
+        // Assert
+        resolution.NextActionOnUtc.ShouldBeNull();
+        resolution.BreachedOnUtc.ShouldBeNull();
+    }
+
+    [Fact]
+    public void ProcessDue_Should_RecordBreachAtDeadlineAndRaiseEvent_WhenTimerIsOpen()
+    {
+        // Arrange
+        TicketSlaTimer firstResponse = UrgentFirstResponse();
+
+        // Act
+        bool breached = TicketSlaClock.ProcessDue(firstResponse);
+
+        // Assert
+        breached.ShouldBeTrue();
+        firstResponse.BreachedOnUtc.ShouldBe(SaoPaulo(8, 40));
+        firstResponse.NextActionOnUtc.ShouldBeNull();
+        firstResponse.DomainEvents.ShouldHaveSingleItem().ShouldBe(
+            new TicketSlaBreachedDomainEvent(firstResponse.TicketId, SlaMetric.FirstResponse, 1, SaoPaulo(8, 40)));
+    }
+
+    [Fact]
+    public void ProcessDue_Should_RecordBreach_WhenTimerWasCompletedAfterDeadline()
+    {
+        // Arrange
+        TicketSlaTimer firstResponse = UrgentFirstResponse();
+        TicketSlaClock.Complete(firstResponse, SaoPaulo(8, 45));
+
+        // Act
+        bool breached = TicketSlaClock.ProcessDue(firstResponse);
+
+        // Assert
+        breached.ShouldBeTrue();
+        firstResponse.BreachedOnUtc.ShouldBe(SaoPaulo(8, 40));
+        firstResponse.CompletedOnUtc.ShouldBe(SaoPaulo(8, 45));
+        firstResponse.DomainEvents.ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public void ProcessDue_Should_OnlyDequeue_WhenTimerWasCompletedOnTimeOrStopped()
+    {
+        // Arrange
+        TicketSlaTimer completedOnTime = UrgentFirstResponse();
+        completedOnTime.CompletedOnUtc = SaoPaulo(8, 30);
+        completedOnTime.NextActionOnUtc = completedOnTime.DueOnUtc;
+        TicketSlaTimer stopped = UrgentResolution();
+        stopped.StoppedOnUtc = SaoPaulo(9, 0);
+
+        // Act
+        bool completedBreached = TicketSlaClock.ProcessDue(completedOnTime);
+        bool stoppedBreached = TicketSlaClock.ProcessDue(stopped);
+
+        // Assert
+        completedBreached.ShouldBeFalse();
+        stoppedBreached.ShouldBeFalse();
+        new[] { completedOnTime, stopped }.ShouldAllBe(t => t.BreachedOnUtc == null && t.NextActionOnUtc == null && !t.DomainEvents.Any());
+    }
+
+    [Fact]
+    public void StartResolutionCycle_Should_QueueNewCycleAtItsDeadline()
+    {
+        // Act: reaberto às 14:00; 240 minutos úteis terminam às 18:00, na borda da faixa.
+        TicketSlaTimer cycle = TicketSlaClock.StartResolutionCycle(Guid.NewGuid(), UrgentPlan, 2, Calendar, SaoPaulo(14, 0));
+
+        // Assert
+        cycle.NextActionOnUtc.ShouldBe(SaoPaulo(18, 0));
+    }
+
+    [Fact]
+    public void Dequeue_Should_ClearNextActionWithoutBreachOrStop()
+    {
+        // Arrange
+        TicketSlaTimer resolution = UrgentResolution();
+
+        // Act
+        TicketSlaClock.Dequeue(resolution);
+
+        // Assert
+        resolution.NextActionOnUtc.ShouldBeNull();
+        resolution.BreachedOnUtc.ShouldBeNull();
+        resolution.StoppedOnUtc.ShouldBeNull();
+        resolution.DomainEvents.ShouldBeEmpty();
+    }
 }

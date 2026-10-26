@@ -11,6 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage;
 using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Audit;
 using TickestPristine.Infrastructure.Database.Migrations;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Npgsql;
+using TickestPristine.Infrastructure.Tickets.SlaMonitoring;
 
 namespace TickestPristine.IntegrationTests.Tickets;
 
@@ -2436,7 +2441,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         List<AuditLogEntry> modified = [.. entries.Where(a => a.Action == "Modified")];
         modified.Count.ShouldBe(2);
-        modified.ShouldAllBe(a => a.AffectedColumns == nameof(TicketSlaTimer.CompletedOnUtc));
+        // A conclusão dentro do prazo também tira o cronômetro da fila do monitoramento (spec 006), no mesmo registro.
+        modified.ShouldAllBe(a => a.AffectedColumns == $"{nameof(TicketSlaTimer.CompletedOnUtc)},{nameof(TicketSlaTimer.NextActionOnUtc)}");
     }
 
     [Fact]
@@ -2596,4 +2602,656 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     private sealed record TicketIdDto(Guid Id);
 
     private sealed record TicketIdsPageDto(List<TicketIdDto> Items);
+
+    // ----- Monitoramento do SLA (spec 006) -----
+
+    private SlaBreachEventRecorder BreachEvents => Services.GetRequiredService<SlaBreachEventRecorder>();
+
+    private SlaMonitorBackgroundService CreateSlaMonitor(int batchSize = 200, ILogger<SlaMonitorBackgroundService>? logger = null) =>
+        new(
+            logger ?? NullLogger<SlaMonitorBackgroundService>.Instance,
+            Options.Create(new SlaMonitorSettings { BatchSize = batchSize, SleepTimeInMilliseconds = 1000 }),
+            Services,
+            Services.GetRequiredService<NpgsqlDataSource>());
+
+    // Uma volta do monitoramento, no instante real.
+    private async Task RunSlaMonitorAsync(int batchSize = 200, ILogger<SlaMonitorBackgroundService>? logger = null)
+    {
+        using SlaMonitorBackgroundService monitor = CreateSlaMonitor(batchSize, logger);
+
+        await monitor.ProcessSlaBreachesAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Leva para o passado os instantes dos cronômetros do chamado (início, alerta, prazo e próxima ação), como se ele
+    /// tivesse sido aberto antes: o cenário do teste fica vencido no instante real, sem mexer no relógio da aplicação.
+    /// </summary>
+    private async Task ShiftSlaTimersAsync(Guid ticketId, TimeSpan shift)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        await context.TicketSlaTimers
+            .Where(t => t.TicketId == ticketId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(t => t.StartedAtUtc, t => t.StartedAtUtc - shift)
+                .SetProperty(t => t.WarningOnUtc, t => t.WarningOnUtc - shift)
+                .SetProperty(t => t.DueOnUtc, t => t.DueOnUtc - shift)
+                .SetProperty(t => t.NextActionOnUtc, t => t.NextActionOnUtc - shift));
+    }
+
+    // A primeira resposta vence `overdue` antes de agora; a resolução continua no prazo.
+    private async Task MakeFirstResponseOverdueAsync(Guid ticketId, TimeSpan overdue)
+    {
+        DateTime firstResponseDue = GetTimers(ticketId).Single(t => t.Metric == SlaMetric.FirstResponse).DueOnUtc;
+
+        await ShiftSlaTimersAsync(ticketId, firstResponseDue - DateTime.UtcNow + overdue);
+    }
+
+    // Os dois cronômetros vencem antes de agora.
+    private async Task MakeAllSlaTimersOverdueAsync(Guid ticketId, TimeSpan overdue)
+    {
+        DateTime lastDue = GetTimers(ticketId).Max(t => t.DueOnUtc);
+
+        await ShiftSlaTimersAsync(ticketId, lastDue - DateTime.UtcNow + overdue);
+    }
+
+    // Processa o que estiver vencido no banco compartilhado, para os testes que contam lotes partirem de uma fila vazia.
+    private async Task DrainSlaQueueAsync()
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        for (int round = 0; round < 50; round++)
+        {
+            DateTime nowUtc = DateTime.UtcNow;
+
+            if (!await context.TicketSlaTimers.AnyAsync(t => t.NextActionOnUtc != null && t.NextActionOnUtc <= nowUtc))
+            {
+                return;
+            }
+
+            await RunSlaMonitorAsync(batchSize: 1000);
+        }
+    }
+
+    [Fact]
+    public async Task Create_Should_QueueSlaTimersAtDeadline_WithFilteredIndex()
+    {
+        // Arrange
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // Act
+        List<string> columns = await context.Database
+            .SqlQueryRaw<string>("SELECT column_name AS \"Value\" FROM information_schema.columns WHERE table_name = 'ticket_sla_timers'")
+            .ToListAsync();
+        string? indexDefinition = await context.Database
+            .SqlQueryRaw<string>("SELECT indexdef AS \"Value\" FROM pg_indexes WHERE indexname = 'ix_ticket_sla_timers_next_action_on_utc'")
+            .SingleOrDefaultAsync();
+
+        // Assert
+        columns.ShouldContain("breached_on_utc");
+        columns.ShouldContain("next_action_on_utc");
+        indexDefinition.ShouldNotBeNull();
+        indexDefinition.ShouldContain("WHERE (next_action_on_utc IS NOT NULL)");
+
+        List<TicketSlaTimer> timers = GetTimers(ticketId);
+        timers.Count.ShouldBe(2);
+        timers.ShouldAllBe(t => t.NextActionOnUtc == t.DueOnUtc && t.BreachedOnUtc == null);
+    }
+
+    [Fact]
+    public async Task SlaMonitor_Should_BreachOnlyOverdueFirstResponse_OnceWithEventAndAudit()
+    {
+        // Arrange
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+
+        // Act: antes do prazo, nada muda.
+        await RunSlaMonitorAsync();
+        List<TicketSlaTimer> beforeDue = GetTimers(ticketId);
+
+        // Depois do prazo da primeira resposta.
+        await MakeFirstResponseOverdueAsync(ticketId, TimeSpan.FromMinutes(1));
+        await RunSlaMonitorAsync();
+
+        // Assert
+        beforeDue.ShouldAllBe(t => t.BreachedOnUtc == null && t.NextActionOnUtc == t.DueOnUtc);
+
+        List<TicketSlaTimer> timers = GetTimers(ticketId);
+        TicketSlaTimer firstResponse = timers.Single(t => t.Metric == SlaMetric.FirstResponse);
+        firstResponse.BreachedOnUtc.ShouldBe(firstResponse.DueOnUtc);
+        firstResponse.NextActionOnUtc.ShouldBeNull();
+
+        TicketSlaTimer resolution = timers.Single(t => t.Metric == SlaMetric.Resolution);
+        resolution.BreachedOnUtc.ShouldBeNull();
+        resolution.NextActionOnUtc.ShouldBe(resolution.DueOnUtc);
+
+        TicketSlaBreachedDomainEvent breach = BreachEvents.For(ticketId).ShouldHaveSingleItem();
+        breach.ShouldBe(new TicketSlaBreachedDomainEvent(ticketId, SlaMetric.FirstResponse, 1, firstResponse.DueOnUtc));
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        AuditLogEntry audit = (await context.AuditLogs
+            .Where(a => a.EntityName == nameof(TicketSlaTimer) && a.EntityId == firstResponse.Id.ToString() && a.Action == "Modified")
+            .ToListAsync()).ShouldHaveSingleItem();
+        audit.UserId.ShouldBeNull();
+        audit.AffectedColumns!.Split(',').Order().ShouldBe([nameof(TicketSlaTimer.BreachedOnUtc), nameof(TicketSlaTimer.NextActionOnUtc)]);
+    }
+
+    [Fact]
+    public async Task SlaMonitor_Should_BreachBothTimersInDeadlineOrder_AndNothingMoreOnNextRun()
+    {
+        // Arrange
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        await MakeAllSlaTimersOverdueAsync(ticketId, TimeSpan.FromMinutes(5));
+
+        // Act
+        await RunSlaMonitorAsync();
+        List<TicketSlaTimer> afterFirstRun = GetTimers(ticketId);
+        await RunSlaMonitorAsync();
+
+        // Assert
+        afterFirstRun.ShouldAllBe(t => t.BreachedOnUtc == t.DueOnUtc && t.NextActionOnUtc == null);
+
+        List<TicketSlaBreachedDomainEvent> events = BreachEvents.For(ticketId);
+        events.Select(e => e.Metric).ShouldBe([SlaMetric.FirstResponse, SlaMetric.Resolution]);
+        events.Select(e => e.DueOnUtc).ShouldBe(afterFirstRun.OrderBy(t => t.Metric).Select(t => t.DueOnUtc));
+
+        GetTimers(ticketId).Select(t => (t.BreachedOnUtc, t.NextActionOnUtc))
+            .ShouldBe(afterFirstRun.Select(t => (t.BreachedOnUtc, t.NextActionOnUtc)));
+    }
+
+    [Fact]
+    public async Task SlaMonitor_Should_ProcessOneBatchPerRun_InNextActionOrder()
+    {
+        // Arrange: 7 primeiras respostas vencidas, a mais antiga primeiro.
+        await DrainSlaQueueAsync();
+
+        var ticketIds = new List<Guid>();
+
+        for (int index = 0; index < 7; index++)
+        {
+            (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+            // Minutos, e não horas: o prazo da resolução fica pelo menos 210 minutos depois e continua no futuro.
+            await MakeFirstResponseOverdueAsync(ticketId, TimeSpan.FromMinutes(8 - index));
+            ticketIds.Add(ticketId);
+        }
+
+        // Act & Assert: lotes de 3.
+        await RunSlaMonitorAsync(batchSize: 3);
+        BreachedFirstResponses(ticketIds).ShouldBe(ticketIds.Take(3));
+
+        await RunSlaMonitorAsync(batchSize: 3);
+        BreachedFirstResponses(ticketIds).ShouldBe(ticketIds.Take(6));
+
+        await RunSlaMonitorAsync(batchSize: 3);
+        BreachedFirstResponses(ticketIds).ShouldBe(ticketIds);
+
+        BreachEvents.For(ticketIds).Count.ShouldBe(7);
+    }
+
+    private List<Guid> BreachedFirstResponses(List<Guid> ticketIds) =>
+        [.. ticketIds.Where(id => GetTimers(id).Single(t => t.Metric == SlaMetric.FirstResponse).BreachedOnUtc != null)];
+
+    [Fact]
+    public async Task SlaMonitor_Should_BreachFirstResponseAnsweredLate_OnNextRunOnly()
+    {
+        // Arrange
+        (Guid ticketId, AccessTokens requesterTokens) = await CreateTicketAsRequesterAsync();
+        AccessTokens agentTokens = await CreateAgentAsync();
+        await MakeFirstResponseOverdueAsync(ticketId, TimeSpan.FromMinutes(5));
+
+        // Act: o Atendente responde depois do prazo, antes de o monitoramento passar.
+        (await SendMessageAsAsync(agentTokens, ticketId, "Sorry for the delay.")).StatusCode.ShouldBe(HttpStatusCode.OK);
+        TicketSlaTimer answered = GetTimers(ticketId).Single(t => t.Metric == SlaMetric.FirstResponse);
+        Authenticate(requesterTokens.AccessToken);
+        int stateAfterAnswer = (await GetSlaAsync(ticketId)).Objectives.Single(o => o.Metric == FirstResponse).State;
+        int eventsAfterAnswer = BreachEvents.For(ticketId).Count;
+
+        await RunSlaMonitorAsync();
+        TicketSlaTimer afterFirstRun = GetTimers(ticketId).Single(t => t.Metric == SlaMetric.FirstResponse);
+        await RunSlaMonitorAsync();
+
+        // Assert
+        stateAfterAnswer.ShouldBe(5); // Missed
+        answered.CompletedOnUtc.ShouldNotBeNull();
+        answered.BreachedOnUtc.ShouldBeNull();
+        answered.NextActionOnUtc.ShouldBe(answered.DueOnUtc);
+        eventsAfterAnswer.ShouldBe(0);
+
+        afterFirstRun.BreachedOnUtc.ShouldBe(answered.DueOnUtc);
+        afterFirstRun.NextActionOnUtc.ShouldBeNull();
+        afterFirstRun.CompletedOnUtc.ShouldBe(answered.CompletedOnUtc);
+        BreachEvents.For(ticketId).ShouldHaveSingleItem().Metric.ShouldBe(SlaMetric.FirstResponse);
+    }
+
+    [Fact]
+    public async Task SlaMonitor_Should_NotBreachCanceledTicket_EvenWhenOverdue()
+    {
+        // Arrange
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        await MakeAllSlaTimersOverdueAsync(ticketId, TimeSpan.FromMinutes(5));
+
+        // Act
+        await UpdateStatusAsync(ticketId, 5); // Canceled
+        await RunSlaMonitorAsync();
+
+        // Assert
+        GetTimers(ticketId).ShouldAllBe(t => t.StoppedOnUtc != null && t.BreachedOnUtc == null && t.NextActionOnUtc == null);
+        BreachEvents.For(ticketId).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task SlaMonitor_Should_LeaveTimersAlone_WhenAnsweredAndResolvedOnTime_AndQueueReopenedCycle()
+    {
+        // Arrange
+        (Guid ticketId, AccessTokens requesterTokens) = await CreateTicketAsRequesterAsync();
+        AccessTokens agentTokens = await CreateAgentAsync();
+
+        // Act: resposta e resolução antes dos prazos.
+        (await SendMessageAsAsync(agentTokens, ticketId, "On my way.")).StatusCode.ShouldBe(HttpStatusCode.OK);
+        TicketSlaTimer afterAnswer = GetTimers(ticketId).Single(t => t.Metric == SlaMetric.FirstResponse);
+
+        Authenticate(requesterTokens.AccessToken);
+        await UpdateStatusAsync(ticketId, 2); // InProgress
+        await UpdateStatusAsync(ticketId, 3); // Resolved
+        TicketSlaTimer afterResolve = GetTimers(ticketId).Single(t => t.Metric == SlaMetric.Resolution);
+
+        await RunSlaMonitorAsync();
+        List<TicketSlaTimer> afterRun = GetTimers(ticketId);
+
+        (await HttpClient.PostAsync($"tickets/{ticketId}/reopen", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Assert
+        afterAnswer.NextActionOnUtc.ShouldBeNull();
+        afterResolve.NextActionOnUtc.ShouldBeNull();
+        afterRun.ShouldAllBe(t => t.NextActionOnUtc == null && t.BreachedOnUtc == null);
+        BreachEvents.For(ticketId).ShouldBeEmpty();
+
+        List<TicketSlaTimer> timers = GetTimers(ticketId);
+        timers.Single(t => t.Metric == SlaMetric.Resolution && t.Cycle == 1).NextActionOnUtc.ShouldBeNull();
+        TicketSlaTimer secondCycle = timers.Single(t => t.Metric == SlaMetric.Resolution && t.Cycle == 2);
+        secondCycle.NextActionOnUtc.ShouldBe(secondCycle.DueOnUtc);
+    }
+
+    [Fact]
+    public async Task PostMessage_Should_CompleteFirstResponse_WhenMonitorBreachesItBeforeTheHandlerSaves()
+    {
+        // Arrange
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        AccessTokens agentTokens = await CreateAgentAsync();
+        await MakeFirstResponseOverdueAsync(ticketId, TimeSpan.FromMinutes(2));
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // Gatilho temporário que segura a gravação da mensagem: o handler já leu a primeira resposta em aberto, e o
+        // monitoramento grava a violação antes de o handler salvar a conclusão.
+        await context.Database.ExecuteSqlRawAsync(DelayInsertSql("ticket_messages"));
+
+        HttpResponseMessage response;
+
+        try
+        {
+            // Act
+            Task<HttpResponseMessage> post = SendMessageAsAsync(agentTokens, ticketId, "Sorry for the delay.");
+            await Task.Delay(TimeSpan.FromSeconds(1));
+            await RunSlaMonitorAsync();
+            response = await post;
+        }
+        finally
+        {
+            await context.Database.ExecuteSqlRawAsync(DropDelayInsertSql("ticket_messages"));
+        }
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        Guid messageId = await response.Content.ReadFromJsonAsync<Guid>();
+        DateTime messageAtUtc = await context.TicketMessages.Where(m => m.Id == messageId).Select(m => m.CreatedAtUtc).SingleAsync();
+
+        TicketSlaTimer firstResponse = GetTimers(ticketId).Single(t => t.Metric == SlaMetric.FirstResponse);
+        firstResponse.CompletedOnUtc.ShouldBe(messageAtUtc);
+        firstResponse.BreachedOnUtc.ShouldBe(firstResponse.DueOnUtc);
+        BreachEvents.For(ticketId).ShouldHaveSingleItem().Metric.ShouldBe(SlaMetric.FirstResponse);
+    }
+
+    [Fact]
+    public async Task Cancel_Should_StopTimersAndKeepBreach_WhenMonitorBreachesThemBeforeTheHandlerSaves()
+    {
+        // Arrange
+        (Guid ticketId, AccessTokens requesterTokens) = await CreateTicketAsRequesterAsync();
+        await MakeAllSlaTimersOverdueAsync(ticketId, TimeSpan.FromMinutes(2));
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // O histórico da mudança de status é gravado no mesmo SaveChanges: segurar a inserção dele deixa o
+        // monitoramento gravar a violação depois de o handler ler os cronômetros e antes de salvar a parada.
+        await context.Database.ExecuteSqlRawAsync(DelayInsertSql("ticket_histories"));
+
+        HttpResponseMessage response;
+
+        try
+        {
+            // Act
+            Task<HttpResponseMessage> cancel = SendStatusChangeAsAsync(requesterTokens, ticketId, 5); // Canceled
+            await Task.Delay(TimeSpan.FromSeconds(1));
+            await RunSlaMonitorAsync();
+            response = await cancel;
+        }
+        finally
+        {
+            await context.Database.ExecuteSqlRawAsync(DropDelayInsertSql("ticket_histories"));
+        }
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        GetTimers(ticketId).ShouldAllBe(t => t.StoppedOnUtc != null && t.BreachedOnUtc == t.DueOnUtc && t.NextActionOnUtc == null);
+        BreachEvents.For(ticketId).Count.ShouldBe(2);
+    }
+
+    private static string DelayInsertSql(string table) =>
+        $"""
+        CREATE OR REPLACE FUNCTION public.test_delay_insert() RETURNS trigger AS $$
+        BEGIN
+            PERFORM pg_sleep(3);
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        CREATE TRIGGER test_delay_insert BEFORE INSERT ON public.{table}
+            FOR EACH ROW EXECUTE FUNCTION public.test_delay_insert();
+        """;
+
+    private static string DropDelayInsertSql(string table) =>
+        $"""
+        DROP TRIGGER IF EXISTS test_delay_insert ON public.{table};
+        DROP FUNCTION IF EXISTS public.test_delay_insert();
+        """;
+
+    [Fact]
+    public async Task SlaMonitor_Should_RollBackBatchAndLogCritical_WhenSaveConflicts_AndProcessItOnNextRun()
+    {
+        // Arrange
+        await DrainSlaQueueAsync();
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        await MakeFirstResponseOverdueAsync(ticketId, TimeSpan.FromMinutes(1));
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // Gatilho temporário que descarta a primeira gravação de violação: o UPDATE não altera nenhuma linha, e o EF
+        // trata como conflito de concorrência (DbUpdateConcurrencyException).
+        await context.Database.ExecuteSqlRawAsync(SkipFirstBreachUpdateSql);
+        var logger = new TestLogger<SlaMonitorBackgroundService>();
+
+        try
+        {
+            // Act
+            await RunSlaMonitorAsync(logger: logger);
+            TicketSlaTimer afterFailure = GetTimers(ticketId).Single(t => t.Metric == SlaMetric.FirstResponse);
+            int eventsAfterFailure = BreachEvents.For(ticketId).Count;
+
+            await RunSlaMonitorAsync(logger: logger);
+
+            // Assert
+            afterFailure.BreachedOnUtc.ShouldBeNull();
+            afterFailure.NextActionOnUtc.ShouldBe(afterFailure.DueOnUtc);
+            eventsAfterFailure.ShouldBe(0);
+
+            TestLogEntry critical = logger.Entries.Where(e => e.Level == LogLevel.Critical).ShouldHaveSingleItem();
+            critical.Exception.ShouldBeOfType<DbUpdateConcurrencyException>();
+
+            TicketSlaTimer afterRetry = GetTimers(ticketId).Single(t => t.Metric == SlaMetric.FirstResponse);
+            afterRetry.BreachedOnUtc.ShouldBe(afterRetry.DueOnUtc);
+            BreachEvents.For(ticketId).ShouldHaveSingleItem();
+        }
+        finally
+        {
+            await context.Database.ExecuteSqlRawAsync(DropSkipFirstBreachUpdateSql);
+        }
+    }
+
+    private const string SkipFirstBreachUpdateSql =
+        """
+        CREATE SEQUENCE public.test_breach_updates START 1;
+
+        CREATE OR REPLACE FUNCTION public.test_skip_first_breach_update() RETURNS trigger AS $$
+        BEGIN
+            IF nextval('public.test_breach_updates') = 1 THEN
+                RETURN NULL;
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        CREATE TRIGGER test_skip_first_breach_update BEFORE UPDATE ON public.ticket_sla_timers
+            FOR EACH ROW
+            WHEN (OLD.breached_on_utc IS NULL AND NEW.breached_on_utc IS NOT NULL)
+            EXECUTE FUNCTION public.test_skip_first_breach_update();
+        """;
+
+    private const string DropSkipFirstBreachUpdateSql =
+        """
+        DROP TRIGGER IF EXISTS test_skip_first_breach_update ON public.ticket_sla_timers;
+        DROP FUNCTION IF EXISTS public.test_skip_first_breach_update();
+        DROP SEQUENCE IF EXISTS public.test_breach_updates;
+        """;
+
+    [Fact]
+    public async Task Migration_Should_QueueOpenLegacyTimersAndBreachLateOnes_WithoutDuplicating()
+    {
+        // Arrange: cronômetros como estavam antes da migration da spec 006 (sem violação nem próxima ação).
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        DateTime nowUtc = DateTime.UtcNow;
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Guid requesterId = await context.Users.Where(u => u.Email == AdminEmail).Select(u => u.Id).SingleAsync();
+
+        Guid openOverdue = AddLegacyTicket(context, requesterId, sectorId, nowUtc.AddHours(-5), TicketStatus.Open);
+        Guid openOnTime = AddLegacyTicket(context, requesterId, sectorId, nowUtc.AddHours(-1), TicketStatus.Open);
+        Guid resolvedOnTime = AddLegacyTicket(context, requesterId, sectorId, nowUtc.AddHours(-10), TicketStatus.Resolved, completedAfter: TimeSpan.FromHours(2));
+        Guid resolvedLate = AddLegacyTicket(context, requesterId, sectorId, nowUtc.AddHours(-10), TicketStatus.Resolved, completedAfter: TimeSpan.FromHours(5));
+        Guid canceled = AddLegacyTicket(context, requesterId, sectorId, nowUtc.AddHours(-5), TicketStatus.Canceled, stoppedAfter: TimeSpan.FromHours(1));
+        Guid deleted = AddLegacyTicket(context, requesterId, sectorId, nowUtc.AddHours(-5), TicketStatus.Open, deletedAtUtc: nowUtc.AddHours(-4));
+        await context.SaveChangesAsync();
+
+        Guid[] ticketIds = [openOverdue, openOnTime, resolvedOnTime, resolvedLate, canceled, deleted];
+
+        // Act: o preenchimento roda duas vezes, e depois uma volta do monitoramento.
+        await context.Database.ExecuteSqlRawAsync(Add_Sla_Breach_Monitoring.BackfillNextActionSql);
+        await context.Database.ExecuteSqlRawAsync(Add_Sla_Breach_Monitoring.BackfillBreachedSql);
+        List<TicketSlaTimer> afterFirstBackfill = LegacyTimers(ticketIds);
+
+        await context.Database.ExecuteSqlRawAsync(Add_Sla_Breach_Monitoring.BackfillNextActionSql);
+        await context.Database.ExecuteSqlRawAsync(Add_Sla_Breach_Monitoring.BackfillBreachedSql);
+        List<TicketSlaTimer> afterSecondBackfill = LegacyTimers(ticketIds);
+
+        await RunSlaMonitorAsync();
+
+        // Assert
+        TicketSlaTimer Timer(Guid id) => afterFirstBackfill.Single(t => t.TicketId == id);
+
+        Timer(openOverdue).NextActionOnUtc.ShouldBe(Timer(openOverdue).DueOnUtc);
+        Timer(openOnTime).NextActionOnUtc.ShouldBe(Timer(openOnTime).DueOnUtc);
+        Timer(resolvedLate).BreachedOnUtc.ShouldBe(Timer(resolvedLate).DueOnUtc);
+        Timer(resolvedLate).NextActionOnUtc.ShouldBeNull();
+
+        foreach (Guid id in new[] { resolvedOnTime, canceled, deleted })
+        {
+            Timer(id).NextActionOnUtc.ShouldBeNull();
+            Timer(id).BreachedOnUtc.ShouldBeNull();
+        }
+
+        afterSecondBackfill.Select(t => (t.TicketId, t.BreachedOnUtc, t.NextActionOnUtc))
+            .ShouldBe(afterFirstBackfill.Select(t => (t.TicketId, t.BreachedOnUtc, t.NextActionOnUtc)));
+
+        List<TicketSlaTimer> afterRun = LegacyTimers(ticketIds);
+        afterRun.Single(t => t.TicketId == openOverdue).BreachedOnUtc.ShouldBe(Timer(openOverdue).DueOnUtc);
+        afterRun.Single(t => t.TicketId == openOnTime).BreachedOnUtc.ShouldBeNull();
+
+        BreachEvents.For(ticketIds).ShouldHaveSingleItem().TicketId.ShouldBe(openOverdue);
+    }
+
+    private List<TicketSlaTimer> LegacyTimers(Guid[] ticketIds)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return [.. context.TicketSlaTimers.AsNoTracking().Where(t => ticketIds.Contains(t.TicketId)).OrderBy(t => t.TicketId)];
+    }
+
+    // Chamado Urgente no plano legado (4 h corridas), com o cronômetro de resolução como a migration da spec 005 grava.
+    private static Guid AddLegacyTicket(
+        ApplicationDbContext context,
+        Guid requesterId,
+        Guid sectorId,
+        DateTime createdAtUtc,
+        TicketStatus status,
+        TimeSpan? completedAfter = null,
+        TimeSpan? stoppedAfter = null,
+        DateTime? deletedAtUtc = null)
+    {
+        var ticketId = Guid.NewGuid();
+        DateTime dueAtUtc = createdAtUtc.AddHours(4);
+        DateTime warningAtUtc = createdAtUtc.AddHours(3);
+        DateTime? completedAtUtc = createdAtUtc + completedAfter;
+
+        context.Tickets.Add(new Ticket
+        {
+            Id = ticketId,
+            Title = "Legacy ticket",
+            Description = "Opened before the SLA monitoring",
+            Priority = TicketPriority.Urgent,
+            Status = status,
+            CreatedByUserId = requesterId,
+            SectorId = sectorId,
+            CreatedAtUtc = createdAtUtc,
+            DueAtUtc = dueAtUtc,
+            SlaWarningAtUtc = warningAtUtc,
+            ResolvedAtUtc = completedAtUtc,
+            DeletedAtUtc = deletedAtUtc,
+            SlaPlan = TicketSla.LegacyPlan(TicketPriority.Urgent)
+        });
+
+        context.TicketSlaTimers.Add(new TicketSlaTimer
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticketId,
+            Metric = SlaMetric.Resolution,
+            Cycle = 1,
+            TargetMinutes = 240,
+            CalendarId = SlaCalendarIds.Continuous,
+            StartedAtUtc = createdAtUtc,
+            WarningOnUtc = warningAtUtc,
+            DueOnUtc = dueAtUtc,
+            CompletedOnUtc = completedAtUtc,
+            StoppedOnUtc = createdAtUtc + stoppedAfter
+        });
+
+        return ticketId;
+    }
+
+    [Fact]
+    public async Task SlaMonitor_Should_KeepSlaReadings_BeforeAndAfterBreachIsRecorded()
+    {
+        // Arrange
+        (Guid ticketId, AccessTokens requesterTokens) = await CreateTicketAsRequesterAsync();
+        Guid sectorId = GetTicketSectorId(ticketId);
+        await MakeFirstResponseOverdueAsync(ticketId, TimeSpan.FromMinutes(1));
+
+        // Act
+        (SlaDto Sla, SlaSummaryDto Summary, Dictionary<int, List<Guid>> Listing) before = await ReadSlaViewsAsync(ticketId, sectorId, requesterTokens);
+        await RunSlaMonitorAsync();
+        (SlaDto Sla, SlaSummaryDto Summary, Dictionary<int, List<Guid>> Listing) after = await ReadSlaViewsAsync(ticketId, sectorId, requesterTokens);
+
+        // Assert: a violação gravada não muda nenhuma leitura.
+        GetTimers(ticketId).Single(t => t.Metric == SlaMetric.FirstResponse).BreachedOnUtc.ShouldNotBeNull();
+
+        after.Sla.Plan.ShouldBe(before.Sla.Plan);
+        after.Sla.Objectives.Select(o => (o.Metric, o.Cycle, o.State, o.DueAtUtc, o.CompletedAtUtc, o.StoppedAtUtc))
+            .ShouldBe(before.Sla.Objectives.Select(o => (o.Metric, o.Cycle, o.State, o.DueAtUtc, o.CompletedAtUtc, o.StoppedAtUtc)));
+        after.Summary.ShouldBe(before.Summary);
+
+        foreach ((int slaStatus, List<Guid> ids) in before.Listing)
+        {
+            after.Listing[slaStatus].ShouldBe(ids);
+        }
+    }
+
+    private async Task<(SlaDto Sla, SlaSummaryDto Summary, Dictionary<int, List<Guid>> Listing)> ReadSlaViewsAsync(
+        Guid ticketId,
+        Guid sectorId,
+        AccessTokens requesterTokens)
+    {
+        Authenticate(requesterTokens.AccessToken);
+        SlaDto sla = await GetSlaAsync(ticketId);
+
+        await AuthenticateAsAdminAsync();
+        (SlaSummaryDto summary, Dictionary<int, List<Guid>> listing) = await GetSlaViewsAsync(sectorId);
+
+        return (sla, summary, listing);
+    }
+
+    [Fact]
+    public async Task SlaMonitor_Should_IgnoreDeletedTicket()
+    {
+        // Arrange
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+
+        // Act
+        (await HttpClient.DeleteAsync($"tickets/{ticketId}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        List<TicketSlaTimer> afterDelete = GetTimers(ticketId);
+        await MakeAllSlaTimersOverdueAsync(ticketId, TimeSpan.FromMinutes(5));
+        await RunSlaMonitorAsync();
+
+        // Assert
+        afterDelete.ShouldAllBe(t => t.NextActionOnUtc == null && t.BreachedOnUtc == null && t.StoppedOnUtc == null);
+        GetTimers(ticketId).ShouldAllBe(t => t.NextActionOnUtc == null && t.BreachedOnUtc == null);
+        BreachEvents.For(ticketId).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task SlaMonitor_Should_BreachEachTimerOnce_WhenTwoInstancesRunAtOnce()
+    {
+        // Arrange: 3 chamados com os dois cronômetros vencidos.
+        var ticketIds = new List<Guid>();
+
+        for (int index = 0; index < 3; index++)
+        {
+            (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+            await MakeAllSlaTimersOverdueAsync(ticketId, TimeSpan.FromMinutes(5));
+            ticketIds.Add(ticketId);
+        }
+
+        // Act: com a trava nas mãos de outra instância, a volta não faz nada.
+        await using (NpgsqlConnection otherInstance = await Services.GetRequiredService<NpgsqlDataSource>().OpenConnectionAsync())
+        {
+            await using var lockCommand = new NpgsqlCommand("SELECT pg_advisory_lock(@key)", otherInstance);
+            lockCommand.Parameters.AddWithValue("key", SlaMonitorBackgroundService.AdvisoryLockKey);
+            await lockCommand.ExecuteScalarAsync();
+
+            await RunSlaMonitorAsync();
+        }
+
+        List<TicketSlaTimer> whileLocked = [.. ticketIds.SelectMany(GetTimers)];
+
+        // Duas voltas ao mesmo tempo, em escopos e conexões diferentes.
+        await Task.WhenAll(RunSlaMonitorAsync(), RunSlaMonitorAsync());
+
+        // Assert
+        whileLocked.ShouldAllBe(t => t.BreachedOnUtc == null);
+
+        List<TicketSlaTimer> timers = [.. ticketIds.SelectMany(GetTimers)];
+        timers.Count.ShouldBe(6);
+        timers.ShouldAllBe(t => t.BreachedOnUtc == t.DueOnUtc && t.NextActionOnUtc == null);
+
+        List<TicketSlaBreachedDomainEvent> events = BreachEvents.For(ticketIds);
+        events.Count.ShouldBe(6);
+        events.Select(e => (e.TicketId, e.Metric)).Distinct().Count().ShouldBe(6);
+    }
 }

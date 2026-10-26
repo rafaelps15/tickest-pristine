@@ -50,6 +50,13 @@ internal sealed class DeleteTicketCommandHandler(
 
         ticket.Raise(new TicketDeletedDomainEvent(ticket.Id));
 
+        // Os cronômetros do chamado excluído saem da fila do monitoramento, sem violação nem evento.
+        List<TicketSlaTimer> slaTimers = await context.TicketSlaTimers
+            .Where(t => t.TicketId == ticket.Id && t.NextActionOnUtc != null)
+            .ToListAsync(cancellationToken);
+
+        slaTimers.ForEach(TicketSlaClock.Dequeue);
+
         context.TicketHistories.Add(TicketHistoryEntries.Create(
             ticket.Id,
             userContext.UserId,
