@@ -12,11 +12,13 @@ internal sealed class GetOwn : IEndpoint
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         app.MapGet("tickets/mine", async (
+            OwnTicketStatusGroup? status,
+            string? search,
             [AsParameters] PageRequest paging,
             IQueryHandler<GetOwnTicketsQuery, PagedResponse<OwnTicketResponse>> handler,
             CancellationToken cancellationToken) =>
         {
-            var query = new GetOwnTicketsQuery(paging);
+            var query = new GetOwnTicketsQuery(status, search, paging);
 
             Result<PagedResponse<OwnTicketResponse>> result = await handler.Handle(query, cancellationToken);
 

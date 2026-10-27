@@ -13,6 +13,7 @@ using TickestPristine.Infrastructure.DomainEvents;
 using TickestPristine.Infrastructure.Notifications;
 using TickestPristine.Infrastructure.SlaCalendars;
 using TickestPristine.Infrastructure.Storage;
+using TickestPristine.Infrastructure.Tickets;
 using TickestPristine.Infrastructure.Time;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -133,7 +134,10 @@ public static class DependencyInjection
                 .UseNpgsql(serviceProvider.GetRequiredService<NpgsqlDataSource>(), npgsqlOptions =>
                     npgsqlOptions.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schemas.Default))
                 .UseSnakeCaseNamingConvention()
-                .AddInterceptors(serviceProvider.GetRequiredService<AuditLoggingInterceptor>())
+                // A última atividade do chamado é atualizada antes da auditoria, para entrar no registro de alteração dele.
+                .AddInterceptors(
+                    new TicketActivityInterceptor(),
+                    serviceProvider.GetRequiredService<AuditLoggingInterceptor>())
                 .UseSeeding((context, _) =>
                     serviceProvider.GetRequiredService<DatabaseSeeder>().Seed(context))
                 .UseAsyncSeeding((context, _, cancellationToken) =>
