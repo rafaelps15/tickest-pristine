@@ -17,4 +17,8 @@ public sealed record UserResponse
     public string? DepartmentName { get; init; }
 
     public bool? SectorIsActive { get; init; }
+
+    public bool PendingActivation { get; init; }
+
+    public DateTime? InvitationExpiresAtUtc { get; init; }
 }

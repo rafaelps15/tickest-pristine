@@ -5,7 +5,7 @@ using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Users.GetAll;
 
-internal sealed class GetUsersQueryHandler(IApplicationDbContext context)
+internal sealed class GetUsersQueryHandler(IApplicationDbContext context, IDateTimeProvider dateTimeProvider)
     : IQueryHandler<GetUsersQuery, PagedResponse<UserSummaryResponse>>
 {
     public async Task<Result<PagedResponse<UserSummaryResponse>>> Handle(GetUsersQuery query, CancellationToken cancellationToken)
@@ -13,6 +13,7 @@ internal sealed class GetUsersQueryHandler(IApplicationDbContext context)
         string? search = string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim();
         var createdFromUtc = query.CreatedFrom?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var createdUntilUtc = query.CreatedTo?.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        DateTime nowUtc = dateTimeProvider.UtcNow;
 
         PagedResponse<UserSummaryResponse> users = await context.Users
             .Where(u =>
@@ -50,6 +51,14 @@ internal sealed class GetUsersQueryHandler(IApplicationDbContext context)
                     .Where(s => s.Id == u.SectorId)
                     .Select(s => (bool?)s.IsActive)
                     .FirstOrDefault(),
+                // Conta pendente de ativação (spec 008): usuário ativo que ainda não definiu a senha. A expiração é a do
+                // convite ainda utilizável; nula quando ele expirou ou foi revogado.
+                PendingActivation = u.IsActive && !context.UserCredentials.Any(c => c.UserId == u.Id),
+                InvitationExpiresAtUtc = u.IsActive && !context.UserCredentials.Any(c => c.UserId == u.Id)
+                    ? context.UserInvitations
+                        .Where(i => i.UserId == u.Id && i.UsedAtUtc == null && i.RevokedAtUtc == null && i.ExpiresAtUtc > nowUtc)
+                        .Max(i => (DateTime?)i.ExpiresAtUtc)
+                    : null,
                 Roles = context.UserRoles
                     .Where(ur => ur.UserId == u.Id)
                     .Select(ur => new RoleSummaryResponse { Name = ur.RoleName })

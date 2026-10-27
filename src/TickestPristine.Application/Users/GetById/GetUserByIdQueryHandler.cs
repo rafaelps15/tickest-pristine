@@ -12,7 +12,8 @@ namespace TickestPristine.Application.Users.GetById;
 internal sealed class GetUserByIdQueryHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IPermissionProvider permissionProvider)
+    IPermissionProvider permissionProvider,
+    IDateTimeProvider dateTimeProvider)
     : IQueryHandler<GetUserByIdQuery, UserResponse>
 {
     public async Task<Result<UserResponse>> Handle(GetUserByIdQuery query, CancellationToken cancellationToken)
@@ -27,6 +28,8 @@ internal sealed class GetUserByIdQueryHandler(
         {
             return Result.Failure<UserResponse>(UserErrors.Unauthorized());
         }
+
+        DateTime nowUtc = dateTimeProvider.UtcNow;
 
         UserResponse? user = await context.Users
             .Where(u => u.Id == query.UserId)
@@ -50,7 +53,15 @@ internal sealed class GetUserByIdQueryHandler(
                 SectorIsActive = context.Sectors
                     .Where(s => s.Id == u.SectorId)
                     .Select(s => (bool?)s.IsActive)
-                    .FirstOrDefault()
+                    .FirstOrDefault(),
+                // Conta pendente de ativação (spec 008): usuário ativo que ainda não definiu a senha. A expiração é a do
+                // convite ainda utilizável; nula quando ele expirou ou foi revogado.
+                PendingActivation = u.IsActive && !context.UserCredentials.Any(c => c.UserId == u.Id),
+                InvitationExpiresAtUtc = u.IsActive && !context.UserCredentials.Any(c => c.UserId == u.Id)
+                    ? context.UserInvitations
+                        .Where(i => i.UserId == u.Id && i.UsedAtUtc == null && i.RevokedAtUtc == null && i.ExpiresAtUtc > nowUtc)
+                        .Max(i => (DateTime?)i.ExpiresAtUtc)
+                    : null
             })
             .SingleOrDefaultAsync(cancellationToken);
 

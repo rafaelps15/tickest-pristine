@@ -41,6 +41,7 @@ internal static class ValidationDisplayNames
         ["SectorId"] = "Setor",
         ["Status"] = "Status",
         ["TicketId"] = "Chamado",
+        ["Token"] = "Link de ativação",
         ["Title"] = "Título",
         ["UserId"] = "Usuário"
     };
