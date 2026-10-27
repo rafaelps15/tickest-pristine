@@ -72,11 +72,13 @@ public sealed class GetOwnTicketsQueryHandlerTests : BaseHandlerTest
     {
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(callerId);
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(NowUtc);
 
-        return new GetOwnTicketsQueryHandler(context, userContext);
+        return new GetOwnTicketsQueryHandler(context, userContext, dateTimeProvider);
     }
 
-    private static GetOwnTicketsQuery CreateQuery() => new(new PageRequest(1, 20));
+    private static GetOwnTicketsQuery CreateQuery() => new(null, null, new PageRequest(1, 20));
 
     private static async Task<Ticket> SeedTicketAsync(
         TestDbContext context,
@@ -93,7 +95,9 @@ public sealed class GetOwnTicketsQueryHandlerTests : BaseHandlerTest
             Status = status,
             CreatedByUserId = openedByUserId,
             SectorId = Guid.NewGuid(),
-            CreatedAtUtc = createdAtUtc
+            CreatedAtUtc = createdAtUtc,
+            // Como o interceptor faria na abertura: a última atividade começa na data de abertura.
+            LastActivityAtUtc = createdAtUtc
         };
 
         context.Tickets.Add(ticket);
