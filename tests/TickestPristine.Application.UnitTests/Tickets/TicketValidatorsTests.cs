@@ -126,6 +126,32 @@ public sealed class TicketValidatorsTests
     }
 
     [Fact]
+    public void ReopenValidator_Should_HaveError_WhenReasonExceedsMaxLength()
+    {
+        // Arrange
+        var command = new ReopenTicketCommand(Guid.NewGuid(), new string('a', 501));
+
+        // Act
+        TestValidationResult<ReopenTicketCommand> result = _reopenValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.Reason);
+    }
+
+    [Fact]
+    public void ReopenValidator_Should_NotHaveErrors_WhenReasonHasMaxLength()
+    {
+        // Arrange
+        var command = new ReopenTicketCommand(Guid.NewGuid(), new string('a', 500));
+
+        // Act
+        TestValidationResult<ReopenTicketCommand> result = _reopenValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
     public void ReopenValidator_Should_NotHaveErrors_WhenCommandIsValid()
     {
         // Arrange

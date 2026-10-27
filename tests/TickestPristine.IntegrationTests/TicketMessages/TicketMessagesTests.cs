@@ -334,8 +334,11 @@ public sealed class TicketMessagesTests(IntegrationTestWebAppFactory factory) : 
         Guid ticketId = await CreateTicketAsync(sectorId);
         Guid messageId = await PostMessageAsync(ticketId, "Original content");
 
+        // Só quem tem tickets:delete exclui o chamado (spec 016); a edição volta a ser do autor.
+        await AuthenticateAsAdminAsync();
         HttpResponseMessage deleteTicketResponse = await HttpClient.DeleteAsync($"tickets/{ticketId}");
         deleteTicketResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        Authenticate(tokens.AccessToken);
 
         // Act
         HttpResponseMessage response = await HttpClient.PutAsJsonAsync(

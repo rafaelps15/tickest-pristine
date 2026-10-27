@@ -178,6 +178,8 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
         Authenticate(tokens.AccessToken);
         Guid ticketId = await CreateTicketAsync(sectorId);
 
+        // Só quem atende a fila move o chamado para Em andamento (spec 016).
+        await AuthenticateAsAdminAsync();
         HttpResponseMessage updateResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
         {
             description = "The printer on the 3rd floor is not working",
@@ -311,9 +313,14 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
     {
         // Arrange
         Guid sectorId = await CreateSectorAsAdminAsync();
-        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
         Authenticate(tokens.AccessToken);
         Guid ticketId = await CreateTicketAsync(sectorId);
+
+        // Só quem tem tickets:delete exclui (spec 016).
+        AccessTokens administratorTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(administratorTokens.AccessToken);
+        Guid userId = GetUserId(administratorTokens);
 
         // Act
         HttpResponseMessage deleteResponse = await HttpClient.DeleteAsync($"tickets/{ticketId}");

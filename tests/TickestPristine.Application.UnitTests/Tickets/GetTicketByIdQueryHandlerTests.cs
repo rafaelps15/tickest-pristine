@@ -82,13 +82,76 @@ public sealed class GetTicketByIdQueryHandlerTests : BaseHandlerTest
         result.Value.Id.ShouldBe(ticket.Id);
     }
 
-    private static GetTicketByIdQueryHandler CreateHandler(TestDbContext context, Guid callerId, bool canManage)
+    [Fact]
+    public async Task Handle_Should_ReturnCanCancelWithinOwnerWindow_WhenCallerIsOwner()
+    {
+        // Arrange: chamado aberto 10 minutos antes da consulta
+        await using TestDbContext context = CreateDbContext();
+        Ticket ticket = await SeedTicketAsync(context, NowUtc.AddMinutes(-10));
+        GetTicketByIdQueryHandler handler = CreateHandler(context, ticket.CreatedByUserId, canManage: false, canEditOwn: true);
+
+        // Act
+        Result<TicketResponse> result = await handler.Handle(new GetTicketByIdQuery(ticket.Id), CancellationToken.None);
+
+        // Assert
+        result.Value.CanCancel.ShouldBeTrue();
+        result.Value.OwnerCancelDeadlineUtc.ShouldBe(ticket.CreatedAtUtc.AddMinutes(15));
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnCanCancelOnlyForCancelPermission_WhenOwnerWindowHasPassed()
+    {
+        // Arrange: chamado aberto 20 minutos antes da consulta
+        await using TestDbContext context = CreateDbContext();
+        Ticket ticket = await SeedTicketAsync(context, NowUtc.AddMinutes(-20));
+        GetTicketByIdQueryHandler ownerHandler = CreateHandler(context, ticket.CreatedByUserId, canManage: false, canEditOwn: true);
+        GetTicketByIdQueryHandler administratorHandler = CreateHandler(context, Guid.NewGuid(), canManage: true, canCancelAny: true);
+
+        // Act
+        Result<TicketResponse> asOwner = await ownerHandler.Handle(new GetTicketByIdQuery(ticket.Id), CancellationToken.None);
+        Result<TicketResponse> asAdministrator = await administratorHandler.Handle(new GetTicketByIdQuery(ticket.Id), CancellationToken.None);
+
+        // Assert
+        asOwner.Value.CanCancel.ShouldBeFalse();
+        asAdministrator.Value.CanCancel.ShouldBeTrue();
+        asOwner.Value.OwnerCancelDeadlineUtc.ShouldBe(ticket.CreatedAtUtc.AddMinutes(15));
+        asAdministrator.Value.OwnerCancelDeadlineUtc.ShouldBe(ticket.CreatedAtUtc.AddMinutes(15));
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnCannotCancel_WhenTicketIsInactive()
+    {
+        // Arrange: chamado cancelado dentro da janela do dono
+        await using TestDbContext context = CreateDbContext();
+        Ticket ticket = await SeedTicketAsync(context, NowUtc.AddMinutes(-5), TicketStatus.Canceled);
+        GetTicketByIdQueryHandler ownerHandler = CreateHandler(context, ticket.CreatedByUserId, canManage: false, canEditOwn: true);
+        GetTicketByIdQueryHandler administratorHandler = CreateHandler(context, Guid.NewGuid(), canManage: true, canCancelAny: true);
+
+        // Act
+        Result<TicketResponse> asOwner = await ownerHandler.Handle(new GetTicketByIdQuery(ticket.Id), CancellationToken.None);
+        Result<TicketResponse> asAdministrator = await administratorHandler.Handle(new GetTicketByIdQuery(ticket.Id), CancellationToken.None);
+
+        // Assert
+        asOwner.Value.CanCancel.ShouldBeFalse();
+        asAdministrator.Value.CanCancel.ShouldBeFalse();
+    }
+
+    private static GetTicketByIdQueryHandler CreateHandler(
+        TestDbContext context,
+        Guid callerId,
+        bool canManage,
+        bool canEditOwn = false,
+        bool canCancelAny = false)
     {
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(callerId);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         permissionProvider.HasPermissionAsync(callerId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(canManage);
+        permissionProvider.HasPermissionAsync(callerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
+            .Returns(canEditOwn);
+        permissionProvider.HasPermissionAsync(callerId, PermissionCodes.Tickets.Cancel, Arg.Any<CancellationToken>())
+            .Returns(canCancelAny);
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(NowUtc);
 
@@ -96,13 +159,17 @@ public sealed class GetTicketByIdQueryHandlerTests : BaseHandlerTest
     }
 
     /// <summary>
-    /// Chamado Urgente aberto 3,5 h antes de <see cref="NowUtc"/>: já passou do alerta (3 h) e não venceu (4 h).
+    /// Chamado Urgente aberto, por padrão, 3,5 h antes de <see cref="NowUtc"/>: já passou do alerta (3 h) e não venceu
+    /// (4 h).
     /// </summary>
-    private static async Task<Ticket> SeedTicketAsync(TestDbContext context)
+    private static async Task<Ticket> SeedTicketAsync(
+        TestDbContext context,
+        DateTime? openedAtUtc = null,
+        TicketStatus status = TicketStatus.Open)
     {
         User requester = CreateUser();
         var sector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = Guid.NewGuid(), IsActive = true };
-        DateTime createdAtUtc = NowUtc.AddHours(-3.5);
+        DateTime createdAtUtc = openedAtUtc ?? NowUtc.AddHours(-3.5);
 
         var ticket = new Ticket
         {
@@ -110,7 +177,7 @@ public sealed class GetTicketByIdQueryHandlerTests : BaseHandlerTest
             Title = "Printer is broken",
             Description = "Original description",
             Priority = TicketPriority.Urgent,
-            Status = TicketStatus.Open,
+            Status = status,
             CreatedByUserId = requester.Id,
             SectorId = sector.Id,
             CreatedAtUtc = createdAtUtc,

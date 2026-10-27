@@ -7,6 +7,8 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Infrastructure.Database;
 using System.Net.Http.Headers;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Audit;
@@ -161,7 +163,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
         {
             description = "Updated description",
-            status = 2 // InProgress
+            status = 1 // Open
         });
 
         // Assert
@@ -169,7 +171,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         TicketDetailDto? ticket = await HttpClient.GetFromJsonAsync<TicketDetailDto>($"tickets/{ticketId}");
         ticket!.Description.ShouldBe("Updated description");
-        ticket.Status.ShouldBe(2); // InProgress
+        ticket.Status.ShouldBe(1); // Open
     }
 
     [Fact]
@@ -199,19 +201,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         Authenticate(tokens.AccessToken);
         Guid ticketId = await CreateTicketAsync(sectorId);
 
-        HttpResponseMessage inProgressResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
-        {
-            description = "Looking into the printer",
-            status = 2 // InProgress
-        });
-        inProgressResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
-
-        HttpResponseMessage resolveResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
-        {
-            description = "Fixed the printer",
-            status = 3 // Resolved
-        });
-        resolveResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        await ResolveTicketAsync(ticketId);
 
         // Act
         HttpResponseMessage response = await HttpClient.GetAsync("tickets/mine");
@@ -231,19 +221,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         Authenticate(requesterTokens.AccessToken);
         Guid ticketId = await CreateTicketAsync(sectorId);
 
-        HttpResponseMessage inProgressResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
-        {
-            description = "Looking into the printer",
-            status = 2 // InProgress
-        });
-        inProgressResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
-
-        HttpResponseMessage resolveResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
-        {
-            description = "Fixed the printer",
-            status = 3 // Resolved
-        });
-        resolveResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        await ResolveTicketAsync(ticketId);
 
         await AuthenticateAsAdminAsync();
 
@@ -1393,6 +1371,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             status = 5 // Canceled
         });
         cancelResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        await AuthenticateAsAdminAsync();
 
         // Act
         HttpResponseMessage response = await HttpClient.DeleteAsync($"tickets/{ticketId}");
@@ -1818,6 +1797,380 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         ticket!.AssignedToUserId.ShouldBe(adminId);
     }
 
+    [Fact]
+    public async Task Cancel_Should_ReturnNoContentAndRecordHistory_WhenOwnerCancelsWithinWindow()
+    {
+        // Arrange: chamado de Maria aberto há 14 minutos ("às 9h14")
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        await SetOpenedAgoAsync(ticketId, TimeSpan.FromMinutes(14));
+
+        // Act
+        HttpResponseMessage response = await CancelAsync(ticketId);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        GetStoredStatus(ticketId).ShouldBe(TicketStatus.Canceled);
+        GetHistoryAfterCreation(ticketId).ShouldHaveSingleItem().Action.ShouldBe(TicketHistoryAction.StatusChanged);
+    }
+
+    [Fact]
+    public async Task Cancel_Should_ReturnCancelWindowExpiredAndChangeNothing_WhenOwnerCancelsAfterWindow()
+    {
+        // Arrange: chamado de Maria aberto há 16 minutos ("às 9h16")
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        await SetOpenedAgoAsync(ticketId, TimeSpan.FromMinutes(16));
+
+        // Act
+        HttpResponseMessage response = await CancelAsync(ticketId);
+
+        // Assert
+        await ShouldBeForbiddenAsync(response, "Tickets.CancelWindowExpired");
+        GetStoredStatus(ticketId).ShouldBe(TicketStatus.Open);
+        GetHistoryAfterCreation(ticketId).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Cancel_Should_ReturnCancelWindowExpired_WhenOwnerCancelsReopenedTicketAfterWindow()
+    {
+        // Arrange: cancelado e reaberto dentro da janela; depois, a abertura fica 20 minutos para trás ("às 9h20")
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        (await CancelAsync(ticketId)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await HttpClient.PostAsync($"tickets/{ticketId}/reopen", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        await SetOpenedAgoAsync(ticketId, TimeSpan.FromMinutes(20));
+
+        // Act
+        HttpResponseMessage response = await CancelAsync(ticketId);
+
+        // Assert
+        await ShouldBeForbiddenAsync(response, "Tickets.CancelWindowExpired");
+        GetStoredStatus(ticketId).ShouldBe(TicketStatus.Open);
+    }
+
+    [Fact]
+    public async Task Cancel_Should_AllowOnlyCancelPermission_WhenTicketIsTwoHoursOld()
+    {
+        // Arrange: Ana (Atendente, com tickets:manage e sem tickets:cancel) e o administrador
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        await SetOpenedAgoAsync(ticketId, TimeSpan.FromHours(2));
+        AccessTokens anaTokens = await CreateAgentAsync();
+
+        // Act
+        Authenticate(anaTokens.AccessToken);
+        HttpResponseMessage byAna = await CancelAsync(ticketId);
+        TicketStatus statusAfterAna = GetStoredStatus(ticketId);
+        await AuthenticateAsAdminAsync();
+        HttpResponseMessage byAdministrator = await CancelAsync(ticketId);
+
+        // Assert
+        await ShouldBeForbiddenAsync(byAna, "Tickets.CancelForbidden");
+        statusAfterAna.ShouldBe(TicketStatus.Open);
+        byAdministrator.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        GetStoredStatus(ticketId).ShouldBe(TicketStatus.Canceled);
+    }
+
+    [Fact]
+    public async Task Cancel_Should_ReturnNoContent_WhenRoleWasGrantedCancelPermission()
+    {
+        // Arrange: uma role com tickets:cancel, concedida pelo administrador, e um usuário só com ela
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        await SetOpenedAgoAsync(ticketId, TimeSpan.FromHours(2));
+
+        string roleName = await CreateTestRoleAsync();
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
+        await AuthenticateAsAdminAsync();
+        (await HttpClient.PutAsJsonAsync($"roles/{roleName}/permissions", new { permissionCodes = CancelPermissionOnly }))
+            .StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await HttpClient.PutAsJsonAsync($"users/{userId}/roles", new { roleNames = new[] { roleName } }))
+            .StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        Authenticate((await LoginAsync(email)).AccessToken);
+
+        // Act
+        HttpResponseMessage response = await CancelAsync(ticketId);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        GetStoredStatus(ticketId).ShouldBe(TicketStatus.Canceled);
+    }
+
+    [Fact]
+    public async Task Update_Should_ForbidStatusChangeButAllowDescriptionEdit_WhenOwnerUpdatesOwnTicket()
+    {
+        // Arrange
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+
+        // Act
+        HttpResponseMessage toInProgress = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = "The printer on the 3rd floor is not working",
+            status = 2 // InProgress
+        });
+        TicketStatus statusAfterAttempt = GetStoredStatus(ticketId);
+        HttpResponseMessage descriptionOnly = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = "The printer prints blank pages",
+            status = 1 // Open
+        });
+
+        // Assert
+        await ShouldBeForbiddenAsync(toInProgress, "Tickets.StatusChangeForbidden");
+        statusAfterAttempt.ShouldBe(TicketStatus.Open);
+        descriptionOnly.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        TicketDetailDto? ticket = await HttpClient.GetFromJsonAsync<TicketDetailDto>($"tickets/{ticketId}");
+        ticket!.Description.ShouldBe("The printer prints blank pages");
+        ticket.Status.ShouldBe(1); // Open
+    }
+
+    [Fact]
+    public async Task Delete_Should_AllowOnlyDeletePermission_WhenOwnerAgentAndAdministratorTry()
+    {
+        // Arrange
+        (Guid ticketId, AccessTokens mariaTokens) = await CreateTicketAsRequesterAsync();
+        AccessTokens anaTokens = await CreateAgentAsync();
+
+        // Act
+        Authenticate(mariaTokens.AccessToken);
+        HttpResponseMessage byMaria = await HttpClient.DeleteAsync($"tickets/{ticketId}");
+        Authenticate(anaTokens.AccessToken);
+        HttpResponseMessage byAna = await HttpClient.DeleteAsync($"tickets/{ticketId}");
+        bool deletedBeforeAdministrator = IsDeleted(ticketId);
+        await AuthenticateAsAdminAsync();
+        HttpResponseMessage byAdministrator = await HttpClient.DeleteAsync($"tickets/{ticketId}");
+
+        // Assert
+        byMaria.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        byAna.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        deletedBeforeAdministrator.ShouldBeFalse();
+        byAdministrator.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        IsDeleted(ticketId).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Migration_Should_ReplaceDeleteOwnWithCancelAndDelete_IncludingManualGrants()
+    {
+        // Arrange: o banco antes da migration, com tickets:delete-own também numa role criada à mão
+        string roleName = await CreateTestRoleAsync();
+
+        List<string> grantedBeforeMigration = [];
+
+        await ExecuteInScopeAsync(async context =>
+        {
+            IMigrator migrator = context.GetService<IMigrator>();
+            var migrations = context.Database.GetMigrations().ToList();
+            int index = migrations.FindIndex(m =>
+                m.EndsWith(nameof(Replace_Ticket_Delete_Own_With_Cancel_And_Delete_Permissions), StringComparison.Ordinal));
+
+            try
+            {
+                await migrator.MigrateAsync(migrations[index - 1]);
+                await context.Database.ExecuteSqlAsync(
+                    $"INSERT INTO public.role_permissions (id, role_name, permission_code) VALUES ({Guid.NewGuid()}, {roleName}, 'tickets:delete-own')");
+                grantedBeforeMigration = await context.RolePermissions.AsNoTracking()
+                    .Where(rp => rp.PermissionCode == "tickets:delete-own")
+                    .Select(rp => rp.RoleName)
+                    .ToListAsync();
+
+                // Act
+                await migrator.MigrateAsync(migrations[index]);
+            }
+            finally
+            {
+                // O banco é compartilhado pela coleção: volta à última migration, mesmo se o teste falhar no meio.
+                await migrator.MigrateAsync();
+            }
+        });
+
+        // Assert
+        grantedBeforeMigration.ShouldBe(
+            [RoleNames.Administrator, RoleNames.Agent, RoleNames.Collaborator, roleName],
+            ignoreOrder: true);
+
+        await ExecuteInScopeAsync(async context =>
+        {
+            (await context.Permissions.AnyAsync(p => p.Code == "tickets:delete-own")).ShouldBeFalse();
+            (await context.RolePermissions.AnyAsync(rp => rp.PermissionCode == "tickets:delete-own")).ShouldBeFalse();
+
+            foreach (string code in NewTicketPermissions)
+            {
+                (await context.Permissions.SingleAsync(p => p.Code == code)).IsAdministrative.ShouldBeTrue();
+                (await context.RolePermissions.Where(rp => rp.PermissionCode == code).Select(rp => rp.RoleName).ToListAsync())
+                    .ShouldBe([RoleNames.Administrator]);
+            }
+        });
+    }
+
+    [Fact]
+    public async Task Reopen_Should_PostTrimmedReasonAsMessage_WhenReasonIsGiven()
+    {
+        // Arrange
+        (Guid ticketId, AccessTokens mariaTokens) = await CreateTicketAsRequesterAsync();
+        await ResolveTicketAsync(ticketId);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
+            $"tickets/{ticketId}/reopen",
+            new { reason = "  A impressora parou de novo.  " });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        GetStoredStatus(ticketId).ShouldBe(TicketStatus.Open);
+
+        TicketMessage message = GetMessages(ticketId).ShouldHaveSingleItem();
+        message.Content.ShouldBe("A impressora parou de novo.");
+        message.AuthorUserId.ShouldBe(GetUserId(mariaTokens));
+
+        var actions = GetHistoryAfterCreation(ticketId).Select(h => h.Action).ToList();
+        actions.ShouldContain(TicketHistoryAction.Reopened);
+        actions.ShouldContain(TicketHistoryAction.MessageAdded);
+    }
+
+    [Fact]
+    public async Task Reopen_Should_SkipBlankReasonAndRejectLongReason_WhenReasonIsMissingBlankOrTooLong()
+    {
+        // Arrange
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        await ResolveTicketAsync(ticketId);
+
+        // Act: sem corpo, com motivo em branco e com 501 caracteres, resolvendo de novo entre as tentativas
+        HttpResponseMessage withoutBody = await HttpClient.PostAsync($"tickets/{ticketId}/reopen", null);
+        await ResolveTicketAsync(ticketId);
+        HttpResponseMessage blankReason = await HttpClient.PostAsJsonAsync($"tickets/{ticketId}/reopen", new { reason = "   " });
+        await ResolveTicketAsync(ticketId);
+        HttpResponseMessage longReason = await HttpClient.PostAsJsonAsync(
+            $"tickets/{ticketId}/reopen",
+            new { reason = new string('a', 501) });
+
+        // Assert
+        withoutBody.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        blankReason.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        longReason.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        GetStoredStatus(ticketId).ShouldBe(TicketStatus.Resolved);
+        GetMessages(ticketId).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task GetById_And_GetOwn_Should_ReturnCanCancelForCaller_WithinAndAfterOwnerWindow()
+    {
+        // Arrange: chamado de Maria aberto há 10 minutos ("às 9h10")
+        (Guid ticketId, AccessTokens mariaTokens) = await CreateTicketAsRequesterAsync();
+        await SetOpenedAgoAsync(ticketId, TimeSpan.FromMinutes(10));
+
+        // Act: Maria às 9h10; depois a abertura fica 20 minutos para trás ("às 9h20"), Maria e o administrador
+        CancelInfoDto earlyDetail = (await HttpClient.GetFromJsonAsync<CancelInfoDto>($"tickets/{ticketId}"))!;
+        CancelInfoDto earlyItem = await GetOwnCancelInfoAsync(ticketId);
+
+        await SetOpenedAgoAsync(ticketId, TimeSpan.FromMinutes(20));
+        CancelInfoDto lateDetail = (await HttpClient.GetFromJsonAsync<CancelInfoDto>($"tickets/{ticketId}"))!;
+        CancelInfoDto lateItem = await GetOwnCancelInfoAsync(ticketId);
+
+        await AuthenticateAsAdminAsync();
+        CancelInfoDto administratorDetail = (await HttpClient.GetFromJsonAsync<CancelInfoDto>($"tickets/{ticketId}"))!;
+        Authenticate(mariaTokens.AccessToken);
+
+        // Assert
+        earlyDetail.CanCancel.ShouldBeTrue();
+        earlyItem.CanCancel.ShouldBeTrue();
+        lateDetail.CanCancel.ShouldBeFalse();
+        lateItem.CanCancel.ShouldBeFalse();
+        administratorDetail.CanCancel.ShouldBeTrue();
+
+        DateTime expectedDeadline = lateDetail.CreatedAtUtc.AddMinutes(15);
+        lateDetail.OwnerCancelDeadlineUtc.ShouldBe(expectedDeadline);
+        lateItem.OwnerCancelDeadlineUtc.ShouldBe(expectedDeadline);
+        administratorDetail.OwnerCancelDeadlineUtc.ShouldBe(expectedDeadline);
+        earlyDetail.OwnerCancelDeadlineUtc.ShouldBe(earlyDetail.CreatedAtUtc.AddMinutes(15));
+    }
+
+    [Fact]
+    public async Task GetById_Should_ReturnCannotCancel_WhenTicketIsCanceled()
+    {
+        // Arrange
+        (Guid ticketId, AccessTokens mariaTokens) = await CreateTicketAsRequesterAsync();
+        (await CancelAsync(ticketId)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        CancelInfoDto asMaria = (await HttpClient.GetFromJsonAsync<CancelInfoDto>($"tickets/{ticketId}"))!;
+        await AuthenticateAsAdminAsync();
+        CancelInfoDto asAdministrator = (await HttpClient.GetFromJsonAsync<CancelInfoDto>($"tickets/{ticketId}"))!;
+        Authenticate(mariaTokens.AccessToken);
+
+        // Assert
+        asMaria.CanCancel.ShouldBeFalse();
+        asAdministrator.CanCancel.ShouldBeFalse();
+    }
+
+    private static readonly string[] CancelPermissionOnly = ["tickets:cancel"];
+
+    private static readonly string[] NewTicketPermissions = ["tickets:cancel", "tickets:delete"];
+
+    private async Task<HttpResponseMessage> CancelAsync(Guid ticketId) =>
+        await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = "The printer on the 3rd floor is not working",
+            status = 5 // Canceled
+        });
+
+    /// <summary>
+    /// Desloca a abertura do chamado para o passado: a API de teste usa o relógio real, e a janela de cancelamento conta
+    /// da abertura (spec 016).
+    /// </summary>
+    private async Task SetOpenedAgoAsync(Guid ticketId, TimeSpan ago)
+    {
+        DateTime openedAtUtc = DateTime.UtcNow - ago;
+
+        await ExecuteInScopeAsync(context => context.Database.ExecuteSqlAsync(
+            $"UPDATE public.tickets SET created_at_utc = {openedAtUtc} WHERE id = {ticketId}"));
+    }
+
+    private TicketStatus GetStoredStatus(Guid ticketId)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return context.Tickets.IgnoreQueryFilters().Where(t => t.Id == ticketId).Select(t => t.Status).Single();
+    }
+
+    private bool IsDeleted(Guid ticketId)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return context.Tickets.IgnoreQueryFilters().Where(t => t.Id == ticketId).Select(t => t.DeletedAtUtc != null).Single();
+    }
+
+    private List<TicketMessage> GetMessages(Guid ticketId)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return context.TicketMessages.AsNoTracking().Where(m => m.TicketId == ticketId).ToList();
+    }
+
+    private async Task ExecuteInScopeAsync(Func<ApplicationDbContext, Task> action)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        await action(context);
+    }
+
+    private async Task<CancelInfoDto> GetOwnCancelInfoAsync(Guid ticketId)
+    {
+        PagedCancelInfoDto? page = await HttpClient.GetFromJsonAsync<PagedCancelInfoDto>("tickets/mine?pageSize=100");
+
+        return page!.Items.Single(t => t.Id == ticketId);
+    }
+
+    private static async Task ShouldBeForbiddenAsync(HttpResponseMessage response, string code)
+    {
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await response.Content.ReadFromJsonAsync<ProblemDto>())!.Title.ShouldBe(code);
+    }
+
+    private sealed record CancelInfoDto(Guid Id, DateTime CreatedAtUtc, bool CanCancel, DateTime OwnerCancelDeadlineUtc);
+
+    private sealed record PagedCancelInfoDto(List<CancelInfoDto> Items, int TotalCount);
+
     /// <summary>
     /// Abre um chamado como um solicitante novo e o atribui ao administrador, que fica com o token configurado.
     /// </summary>
@@ -1869,23 +2222,45 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     /// <summary>
-    /// Leva o chamado de Aberto a Resolvido pela API, com o token já configurado (dono ou quem gerencia chamados).
+    /// Leva o chamado de Aberto a Resolvido pela API, como administrador, e devolve o token que estava configurado: desde
+    /// a spec 016, só quem atende a fila move o chamado para Em Andamento e Resolvido.
     /// </summary>
     private async Task ResolveTicketAsync(Guid ticketId)
     {
-        HttpResponseMessage inProgressResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        await RunAsAdministratorAsync(async () =>
         {
-            description = "Looking into the printer",
-            status = 2 // InProgress
-        });
-        inProgressResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+            HttpResponseMessage inProgressResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+            {
+                description = "Looking into the printer",
+                status = 2 // InProgress
+            });
+            inProgressResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
-        HttpResponseMessage resolveResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
-        {
-            description = "Fixed the printer",
-            status = 3 // Resolved
+            HttpResponseMessage resolveResponse = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+            {
+                description = "Fixed the printer",
+                status = 3 // Resolved
+            });
+            resolveResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
         });
-        resolveResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+    }
+
+    /// <summary>
+    /// Executa a ação autenticado como administrador e volta ao token que estava configurado.
+    /// </summary>
+    private async Task RunAsAdministratorAsync(Func<Task> action)
+    {
+        AuthenticationHeaderValue? previous = HttpClient.DefaultRequestHeaders.Authorization;
+        await AuthenticateAsAdminAsync();
+
+        try
+        {
+            await action();
+        }
+        finally
+        {
+            HttpClient.DefaultRequestHeaders.Authorization = previous;
+        }
     }
 
     private static readonly TimeZoneInfo BrasiliaTimeZone = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
@@ -2103,14 +2478,21 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         return await HttpClient.SendAsync(request);
     }
 
+    /// <summary>
+    /// Troca o status do chamado como administrador (que atende a fila e tem <c>tickets:cancel</c>) e volta ao token que
+    /// estava configurado.
+    /// </summary>
     private async Task UpdateStatusAsync(Guid ticketId, int status)
     {
-        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        await RunAsAdministratorAsync(async () =>
         {
-            description = "The printer on the 3rd floor is not working",
-            status
+            HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+            {
+                description = "The printer on the 3rd floor is not working",
+                status
+            });
+            response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
         });
-        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
     }
 
     private Guid GetTicketSectorId(Guid ticketId)
@@ -2479,7 +2861,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     public async Task UpdateStatus_Should_ReturnNoContentAndConflict_WhenTwoStatusChangesRunAtOnce()
     {
         // Arrange
-        (Guid ticketId, AccessTokens requesterTokens) = await CreateTicketAsRequesterAsync();
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        AccessTokens administratorTokens = await LoginAsync(AdminEmail, AdminPassword);
 
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -2494,8 +2877,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         {
             // Act
             responses = await Task.WhenAll(
-                SendStatusChangeAsAsync(requesterTokens, ticketId, 2), // InProgress
-                SendStatusChangeAsAsync(requesterTokens, ticketId, 5)); // Canceled
+                SendStatusChangeAsAsync(administratorTokens, ticketId, 2), // InProgress
+                SendStatusChangeAsAsync(administratorTokens, ticketId, 5)); // Canceled
         }
         finally
         {
@@ -3408,6 +3791,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     {
         // Arrange
         (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        await AuthenticateAsAdminAsync();
 
         // Act
         (await HttpClient.DeleteAsync($"tickets/{ticketId}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);

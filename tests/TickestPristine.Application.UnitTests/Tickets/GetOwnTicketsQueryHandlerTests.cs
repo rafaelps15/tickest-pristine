@@ -1,5 +1,7 @@
 using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Pagination;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Tickets.GetOwn;
 using TickestPristine.Application.UnitTests.Abstractions;
@@ -204,14 +206,86 @@ public sealed class GetOwnTicketsQueryHandlerTests : BaseHandlerTest
         result.Value.Items.Select(t => t.Id).ShouldBe([a.Id, c.Id, b.Id]);
     }
 
-    private static GetOwnTicketsQueryHandler CreateHandler(TestDbContext context, Guid callerId)
+    [Fact]
+    public async Task Handle_Should_ReturnCanCancelOnlyWithinOwnerWindow_WhenCallerIsOwner()
+    {
+        // Arrange: chamado aberto às 9h00; a janela do dono vai até 9h15
+        await using TestDbContext context = CreateDbContext();
+        var openedAtUtc = new DateTime(2026, 10, 5, 9, 0, 0, DateTimeKind.Utc);
+        Ticket ticket = await SeedTicketAsync(context, OwnerId, TicketStatus.Open, openedAtUtc);
+
+        // Act
+        Result<PagedResponse<OwnTicketResponse>> at0910 = await CreateHandler(context, OwnerId, openedAtUtc.AddMinutes(10))
+            .Handle(CreateQuery(), CancellationToken.None);
+        Result<PagedResponse<OwnTicketResponse>> at0920 = await CreateHandler(context, OwnerId, openedAtUtc.AddMinutes(20))
+            .Handle(CreateQuery(), CancellationToken.None);
+
+        // Assert
+        OwnTicketResponse early = at0910.Value.Items.ShouldHaveSingleItem();
+        early.CanCancel.ShouldBeTrue();
+        early.OwnerCancelDeadlineUtc.ShouldBe(openedAtUtc.AddMinutes(15));
+
+        OwnTicketResponse late = at0920.Value.Items.ShouldHaveSingleItem();
+        late.CanCancel.ShouldBeFalse();
+        late.OwnerCancelDeadlineUtc.ShouldBe(openedAtUtc.AddMinutes(15));
+        late.Id.ShouldBe(ticket.Id);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnCanCancelAfterWindow_WhenCallerHasCancelPermission()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        var openedAtUtc = new DateTime(2026, 10, 5, 9, 0, 0, DateTimeKind.Utc);
+        await SeedTicketAsync(context, OwnerId, TicketStatus.Open, openedAtUtc);
+
+        GetOwnTicketsQueryHandler handler = CreateHandler(context, OwnerId, openedAtUtc.AddHours(2), canCancelAny: true);
+
+        // Act
+        Result<PagedResponse<OwnTicketResponse>> result = await handler.Handle(CreateQuery(), CancellationToken.None);
+
+        // Assert
+        result.Value.Items.ShouldHaveSingleItem().CanCancel.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnCannotCancel_WhenTicketIsInactive()
+    {
+        // Arrange: chamado cancelado dentro da janela, consultado por quem tem tickets:cancel
+        await using TestDbContext context = CreateDbContext();
+        var openedAtUtc = new DateTime(2026, 10, 5, 9, 0, 0, DateTimeKind.Utc);
+        await SeedTicketAsync(context, OwnerId, TicketStatus.Canceled, openedAtUtc);
+
+        GetOwnTicketsQueryHandler handler = CreateHandler(context, OwnerId, openedAtUtc.AddMinutes(5), canCancelAny: true);
+
+        // Act
+        Result<PagedResponse<OwnTicketResponse>> result = await handler.Handle(CreateQuery(), CancellationToken.None);
+
+        // Assert
+        result.Value.Items.ShouldHaveSingleItem().CanCancel.ShouldBeFalse();
+    }
+
+    /// <summary>
+    /// Handler para quem consulta, por padrão um Colaborador: pode editar os próprios chamados (tickets:update-own) e
+    /// não tem tickets:cancel.
+    /// </summary>
+    private static GetOwnTicketsQueryHandler CreateHandler(
+        TestDbContext context,
+        Guid callerId,
+        DateTime? nowUtc = null,
+        bool canCancelAny = false)
     {
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(callerId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(callerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
+            .Returns(true);
+        permissionProvider.HasPermissionAsync(callerId, PermissionCodes.Tickets.Cancel, Arg.Any<CancellationToken>())
+            .Returns(canCancelAny);
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
-        dateTimeProvider.UtcNow.Returns(NowUtc);
+        dateTimeProvider.UtcNow.Returns(nowUtc ?? NowUtc);
 
-        return new GetOwnTicketsQueryHandler(context, userContext, dateTimeProvider);
+        return new GetOwnTicketsQueryHandler(context, userContext, permissionProvider, dateTimeProvider);
     }
 
     private static GetOwnTicketsQuery CreateQuery(OwnTicketStatusGroup? statusGroup = null, string? search = null) =>
