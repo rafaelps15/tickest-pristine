@@ -1,11 +1,11 @@
 ---
 id: 011
 titulo: Anexos — conteúdo verificado, limites explícitos, arquivo ausente e remoção física
-status: Rascunho        # Rascunho | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Cancelada (transições: spec-status.md da skill spec-new)
+status: Em implementação        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
-aprovada-em:
+aprovada-em: 2026-10-27
 branch: feat/SPEC-011-attachment-hardening
-backlog:
+pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 011 — Anexos: conteúdo verificado, limites explícitos, arquivo ausente e remoção física
@@ -18,6 +18,7 @@ backlog:
 - **Fatos do repositório que afetam a fonte:**
   - A exclusão funciona no backend e tem testes de integração; a "exclusão sem efeito" relatada não foi reproduzida aqui e fica para investigação no front (seção 5).
   - Não há nenhum serviço em segundo plano (`BackgroundService`) na solução; uma rotina de limpeza seria a primeira, e o modelo de implantação (uma ou várias instâncias) ainda não está decidido (Q-11). Ver DEC-1.
+  - **[Revisão de 2026-10-27]** O fato acima mudou: a spec 006 criou o primeiro `BackgroundService` (`Infrastructure/Tickets/SlaMonitoring/SlaMonitorBackgroundService.cs`). A DEC-1 (a) não depende dele e continua sem rotina nova. O código de anexos não mudou desde 2026-10-22, e `TicketAttachmentsTests` continua com 15 testes (AC-14).
   - DOCX e XLSX são ZIP por dentro: a assinatura sozinha não distingue um do outro nem de um ZIP comum.
 
 ## 2. Requisitos
@@ -43,12 +44,12 @@ backlog:
 | AC-3 | REQ-2 | — | envio de 10 MB + 1 byte direto à API | 400 com a mensagem de tamanho; nada gravado |
 | AC-4 | REQ-3 | — | envio com corpo de 12 MB | 413 em Problem Details com a mensagem do REQ-3 |
 | AC-5 | REQ-4 | usuário ativo | `GET ticket-attachments/policy` | 200 com 10485760, 20, 104857600 e os 11 tipos com suas extensões |
-| AC-6 | REQ-5 | chamado com 20 anexos; outro com 95 MB em anexos | envia mais um anexo de 1 MB em cada; depois exclui um anexo do primeiro e envia de novo | 400 `TicketAttachments.TicketLimitReached` nos dois; depois da exclusão, 200 |
+| AC-6 | REQ-5 | chamado com 20 anexos; outro a menos de 1 MB do limite de 100 MB | envia mais um anexo de 1 MB em cada; depois exclui um anexo do primeiro e envia de novo | 400 `TicketAttachments.TicketLimitReached` nos dois; depois da exclusão, 200 |
 | AC-7 | REQ-6 | — | envio com nome `../../a.png` e com nome contendo `\u0007` | 400 nos dois |
 | AC-8 | REQ-7 | anexo com a linha no banco e o arquivo apagado do armazenamento | o participante baixa o anexo | 404 `TicketAttachments.FileMissing`; log de erro com o id do anexo |
 | AC-9 | REQ-8 | um anexo PDF | o participante baixa | cabeçalhos `Content-Disposition: attachment; filename=...` e `X-Content-Type-Options: nosniff` |
-| AC-10 | REQ-9 | anexo excluído que cumpre a condição da DEC-1 | a remoção física roda | o arquivo não existe mais no armazenamento; `PurgedAtUtc` preenchido; rodar de novo não gera erro |
-| AC-11 | REQ-9 | `IFileStorage.DeleteAsync` do teste lança exceção | a remoção física roda | a exclusão lógica continua; `PurgedAtUtc` continua nulo; log de erro |
+| AC-10 | `tests/TickestPristine.IntegrationTests/TicketAttachments/TicketAttachmentsTests.cs` › `Delete_Should_RemoveStoredFileAndSetPurgedAt_EvenWhenFileIsAlreadyGone`; `tests/TickestPristine.Application.UnitTests/TicketAttachments/TicketAttachmentDeletedDomainEventHandlerTests.cs` › `Handle_Should_DeleteFileAndSetPurgedAt_WhenAttachmentIsDeleted`, `Handle_Should_DoNothing_WhenFileWasAlreadyPurged` | Pela DEC-1 (a), a remoção roda logo depois do commit da exclusão, no handler do `TicketAttachmentDeletedDomainEvent`: o arquivo some da pasta e `PurgedAtUtc` é preenchido; com o arquivo já ausente, a exclusão responde 204 e também preenche `PurgedAtUtc`. Processar de novo o mesmo evento não chama o armazenamento nem gera erro. | |
+| AC-11 | `tests/TickestPristine.Application.UnitTests/TicketAttachments/TicketAttachmentDeletedDomainEventHandlerTests.cs` › `Handle_Should_KeepPurgedAtNullAndPropagateFailure_WhenFileDeletionFails`; `tests/TickestPristine.IntegrationTests/Database/DomainEventsDispatcherTests.cs` › `DispatchAsync_Should_LogErrorAndRunOtherHandlers_WhenHandlerFails` | Com o `DeleteAsync` lançando exceção, o anexo continua excluído (`DeletedAtUtc` gravado), `PurgedAtUtc` continua nulo e a falha sobe do handler; o despacho dos eventos registra um `Error` com o handler, o evento e a exceção, não lança e segue para os demais handlers, de modo que a exclusão responde com sucesso. | |
 | AC-12 | REQ-10 | anexo enviado pelo Colaborador A | B (sem `tickets:manage`) exclui; A exclui; A exclui de novo; A lista os anexos; A baixa o excluído | 403; 204 e histórico `AttachmentRemoved`; 404; lista sem ele; 404 |
 | AC-13 | REQ-11 | — | 31 uploads do mesmo usuário em 10 minutos; 61 exclusões em 1 minuto | o 31º e a 61ª recebem 429 |
 | AC-14 | todos | a mudança aplicada | `dotnet build TickestPristine.slnx` e `dotnet test TickestPristine.slnx` | 0 avisos; todos os testes passam, inclusive os 15 de `TicketAttachmentsTests` |
@@ -61,6 +62,7 @@ backlog:
 | DEC-3 | Limite por arquivo | (a) manter 10 MB; (b) outro valor | (a) | Rafael Santos, 2026-10-24, no chat, delegando a escolha ("encontre as melhores soluções") |
 | DEC-4 | Antivírus no envio | (a) fora desta spec; (b) incluir ClamAV agora | (a) | Rafael Santos, 2026-10-24, no chat, delegando a escolha ("encontre as melhores soluções") |
 | DEC-5 | Bloquear anexos em chamados Resolvidos, Fechados ou Cancelados (Q-07) | (a) fora desta spec; (b) incluir | (a) | Rafael Santos, 2026-10-24, no chat, delegando a escolha ("encontre as melhores soluções") |
+| DEC-6 | Como responder o 413 em Problem Details (REQ-3) sem montar a resposta à mão no endpoint, como pede a skill `add-feature` | (a) o endpoint volta a vincular `IFormFile` e só mapeia; o 413 vai para o `GlobalExceptionHandler`, e `RouteHandlerOptions.ThrowOnBadRequest` fica ligado em todos os ambientes (em produção, corpo malformado em qualquer rota passa a responder 400 em Problem Details, como já acontece em Development); (b) o endpoint lê o formulário e o 413 sai por um `Error` com um `ErrorType` novo no `SharedKernel`, mapeado no `CustomResults`; (c) manter o endpoint lendo o formulário, com o Problem Details montado à mão, como desvio declarado | (a). Arquivos fora do plano técnico original: `Web.Api/DependencyInjection.cs` e `Web.Api/Infrastructure/GlobalExceptionHandler.cs` | Rafael Santos, 2026-10-27, no chat ("A"), depois da revisão das skills que apontou o desvio |
 
 ## 5. Fora do escopo
 - Front Angular (RF-01.1 a RF-01.6 e RF-03.3 da fonte): confirmação antes de excluir, carregamento, remoção da lista só depois do 204, 404 tratado como "já removido", mensagens, uso do `GET ticket-attachments/policy` e validação de tamanho antes do envio.
@@ -73,7 +75,7 @@ backlog:
   - Domain: `Tickets/TicketAttachment.cs` (`PurgedAtUtc`); `Tickets/TicketAttachmentErrors.cs` (`ContentMismatch`, `TicketLimitReached`, `FileMissing`).
   - Application: `TicketAttachments/TicketAttachmentContentInspector.cs` (assinaturas e verificação de pacote Office com `System.IO.Compression.ZipArchive`); `TicketAttachmentLimits.cs` (limites por chamado); `Upload/UploadTicketAttachmentCommandHandler.cs` (inspeção antes de gravar, contagem e soma do chamado); `Upload/UploadTicketAttachmentCommandValidator.cs` (nome do arquivo); `Download/GetTicketAttachmentContentQueryHandler.cs` (arquivo ausente); `Delete/DeleteTicketAttachmentCommandHandler.cs` (remoção física, se DEC-1 = a); `GetPolicy/*` (query e resposta).
   - Infrastructure: `Storage/LocalFileStorage.cs` (`OpenReadAsync` sinaliza ausência de forma tratável); configuração de `PurgedAtUtc`; migration `Add_Ticket_Attachment_Purged_At`.
-  - Web.Api: `Endpoints/TicketAttachments/Upload.cs` (413 em Problem Details; rate limit), `Download.cs` (`Content-Disposition`), `Delete.cs` (rate limit), `GetPolicy.cs` (nova rota); políticas de rate limit novas.
+  - Web.Api: `Endpoints/TicketAttachments/Upload.cs` (rate limit), `Infrastructure/GlobalExceptionHandler.cs` (413 em Problem Details, DEC-6), `DependencyInjection.cs` (`ThrowOnBadRequest`, DEC-6), `Download.cs` (`Content-Disposition`), `Delete.cs` (rate limit), `GetPolicy.cs` (nova rota); políticas de rate limit novas.
   - Testes: `tests/TickestPristine.Application.UnitTests/TicketAttachments/` (inspetor, upload, download, exclusão); `tests/TickestPristine.IntegrationTests/TicketAttachments/TicketAttachmentsTests.cs` (amostras de arquivo em `TestData/`).
 - **Contratos:** `GET ticket-attachments/policy` (nova, 200); `POST tickets/{id}/attachments` ganha 400 `TicketAttachments.ContentMismatch` e `TicketAttachments.TicketLimitReached`, 413 em Problem Details e 429; `GET ticket-attachments/{id}/download` ganha 404 `TicketAttachments.FileMissing` e `Content-Disposition: attachment`; `DELETE ticket-attachments/{id}` ganha 429.
 - **Mudança no banco:** sim. Coluna `ticket_attachments.purged_at_utc` (nula).
@@ -85,33 +87,33 @@ backlog:
 ## 7. Tarefas
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
-| T-1 | `PurgedAtUtc`, erros novos, migration | AC-10 | add-entity | [ ] |
-| T-2 | `TicketAttachmentContentInspector` e uso no upload; validação do nome; tamanho real | AC-1, AC-2, AC-3, AC-7 | add-feature | [ ] |
-| T-3 | Limites por chamado e `GET ticket-attachments/policy` | AC-5, AC-6 | add-feature | [ ] |
-| T-4 | 413 em Problem Details no upload | AC-4 | add-feature | [ ] |
-| T-5 | Download: arquivo ausente e `Content-Disposition` | AC-8, AC-9 | add-feature | [ ] |
-| T-6 | Remoção física conforme DEC-1 | AC-10, AC-11 | add-feature | [ ] |
-| T-7 | Rate limit de upload e exclusão | AC-13 | add-feature | [ ] |
-| T-8 | Testes unitários e de integração dos ACs, com amostras de arquivo | AC-1 a AC-13 | add-tests | [ ] |
-| T-9 | Build e testes da solução | AC-12, AC-14 | add-tests | [ ] |
+| T-1 | `PurgedAtUtc`, erros novos, migration | AC-10 | add-entity | [x] |
+| T-2 | `TicketAttachmentContentInspector` e uso no upload; validação do nome; tamanho real | AC-1, AC-2, AC-3, AC-7 | add-feature | [x] |
+| T-3 | Limites por chamado e `GET ticket-attachments/policy` | AC-5, AC-6 | add-feature | [x] |
+| T-4 | 413 em Problem Details no upload | AC-4 | add-feature | [x] |
+| T-5 | Download: arquivo ausente e `Content-Disposition` | AC-8, AC-9 | add-feature | [x] |
+| T-6 | Remoção física conforme DEC-1 | AC-10, AC-11 | add-feature | [x] |
+| T-7 | Rate limit de upload e exclusão | AC-13 | add-feature | [x] |
+| T-8 | Testes unitários e de integração dos ACs, com amostras de arquivo | AC-1 a AC-13 | add-tests | [x] |
+| T-9 | Build e testes da solução | AC-12, AC-14 | add-tests | [x] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | | | |
-| AC-2 | | | |
-| AC-3 | | | |
-| AC-4 | | | |
-| AC-5 | | | |
-| AC-6 | | | |
-| AC-7 | | | |
-| AC-8 | | | |
-| AC-9 | | | |
-| AC-10 | | | |
-| AC-11 | | | |
-| AC-12 | | | |
-| AC-13 | | | |
-| AC-14 | | | |
+| AC-1 | `tests/TickestPristine.IntegrationTests/TicketAttachments/TicketAttachmentsTests.cs` › `Upload_Should_AcceptOnlyContentMatchingDeclaredType`; `tests/TickestPristine.Application.UnitTests/TicketAttachments/UploadTicketAttachmentCommandHandlerTests.cs` › `Handle_Should_ReturnContentMismatchAndStoreNothing_WhenContentDoesNotMatchContentType` | Pela API, na ordem do critério: executável como `foto.png` → 400 `TicketAttachments.ContentMismatch`; PNG real → 200; ZIP como `planilha.xlsx` → 400; XLSX real → 200; TXT com bytes nulos → 400. A pasta de anexos só ganha os 2 arquivos aceitos e o chamado só tem as 2 linhas; o unitário confere que o armazenamento não é chamado. | |
+| AC-2 | `tests/TickestPristine.Application.UnitTests/TicketAttachments/TicketAttachmentContentInspectorTests.cs` › `MatchesAsync_Should_ReturnTrue_WhenContentMatchesContentType`, `MatchesAsync_Should_ReturnFalse_WhenContentDoesNotMatchContentType` (11 casos cada), `MatchesAsync_Should_ReturnFalse_WhenOfficePackageIsCorrupted`, `MatchesAsync_Should_IgnoreContentTypeParametersAndCase`, `MatchesAsync_Should_ReturnFalse_WhenTextIsEmpty`, `MatchesAsync_Should_RestoreStreamPosition` | Um exemplo válido e um inválido de cada um dos 11 tipos (DOCX com pacote do Excel, XLSX com ZIP comum, DOC com pacote ZIP), mais pacote corrompido, tipo com parâmetros e a posição do fluxo restaurada para a gravação. | |
+| AC-3 | `tests/TickestPristine.IntegrationTests/TicketAttachments/TicketAttachmentsTests.cs` › `Upload_Should_RejectFileOneByteOverMaxSize_WithoutStoringIt`; `tests/TickestPristine.Application.UnitTests/TicketAttachments/TicketAttachmentValidatorsTests.cs` › `UploadValidator_Should_HaveError_WhenFileExceedsMaxSize` | Um PDF de 10 MB + 1 byte (dentro do limite do corpo) recebe 400 com "O arquivo excede o tamanho máximo permitido de 10 MB."; nenhum arquivo novo na pasta e nenhuma linha. O tamanho validado é o `IFormFile.Length`, medido pelo servidor. | |
+| AC-4 | `tests/TickestPristine.IntegrationTests/TicketAttachments/TicketAttachmentsTests.cs` › `Upload_Should_ReturnPayloadTooLargeProblem_WhenBodyExceedsLimit` | Corpo de 12 MB recebe 413 em Problem Details (`status` 413 e a mensagem do REQ-3, pelo `GlobalExceptionHandler`); nenhum arquivo gravado. Substitui o antigo `Upload_Should_RejectBodyBeforeValidation_WhenBodyExceedsLimit`, que esperava 400. | |
+| AC-5 | `tests/TickestPristine.IntegrationTests/TicketAttachments/TicketAttachmentsTests.cs` › `GetPolicy_Should_ReturnLimitsAndAllowedTypes`, `GetPolicy_Should_ReturnUnauthorized_WhenNoTokenProvided`; `tests/TickestPristine.Application.UnitTests/TicketAttachments/GetTicketAttachmentPolicyQueryHandlerTests.cs` › `Handle_Should_ReturnLimitsAndAllowedTypesUsedByValidation` | A rota devolve 200 com 10485760, 20, 104857600 e os 11 tipos, na ordem, com as extensões (JPEG com `.jpg` e `.jpeg`); sem token, 401. O unitário confere que cada tipo e extensão informados são aceitos pela validação do envio. | |
+| AC-6 | `tests/TickestPristine.IntegrationTests/TicketAttachments/TicketAttachmentsTests.cs` › `Upload_Should_ReturnTicketLimitReached_WhenTicketHasMaxAttachmentsOrMaxTotalSize`; `tests/TickestPristine.Application.UnitTests/TicketAttachments/UploadTicketAttachmentCommandHandlerTests.cs` › `Handle_Should_ReturnTicketLimitReached_WhenTicketAlreadyHasMaxAttachments`, `Handle_Should_ReturnTicketLimitReached_WhenTotalSizeWouldExceedLimit`, `Handle_Should_UploadAttachment_WhenTotalSizeReachesLimitExactly`, `Handle_Should_NotCountDeletedAttachments_WhenCheckingTicketLimits` | Chamado com 20 anexos e chamado a 0,5 MB do limite de 100 MB: o envio de 1 MB recebe 400 `TicketAttachments.TicketLimitReached` nos dois, sem linha nova; depois de excluir um anexo do primeiro, o envio recebe 200. (Critério ajustado em 2026-10-27; ver o histórico.) | |
+| AC-7 | `tests/TickestPristine.IntegrationTests/TicketAttachments/TicketAttachmentsTests.cs` › `Upload_Should_RejectFileNameWithPathOrControlCharacters` (`../../a.png` e `alerta.png`); `tests/TickestPristine.Application.UnitTests/TicketAttachments/TicketAttachmentValidatorsTests.cs` › `UploadValidator_Should_HaveError_WhenFileNameHasInvalidCharacters` | Os dois nomes recebem 400 com "O nome do arquivo contém caracteres inválidos." e nada é gravado; o validator recusa também `..` sem barra (`relatorio..pdf`). | |
+| AC-8 | `tests/TickestPristine.IntegrationTests/TicketAttachments/TicketAttachmentsTests.cs` › `Download_Should_ReturnFileMissing_WhenFileIsNotInStorage`; `tests/TickestPristine.Application.UnitTests/TicketAttachments/GetTicketAttachmentContentQueryHandlerTests.cs` › `Handle_Should_ReturnFileMissingAndLogError_WhenFileIsNotInStorage` | Com o arquivo apagado do disco, o download recebe 404 `TicketAttachments.FileMissing`; o unitário confere um único registro `Error` com o id do anexo. | |
+| AC-9 | `tests/TickestPristine.IntegrationTests/TicketAttachments/TicketAttachmentsTests.cs` › `Download_Should_SendAttachmentContentDispositionAndNoSniff` | O download de um PDF traz `Content-Disposition: attachment` com o nome original (inclusive com acento, em `filename*`) e `X-Content-Type-Options: nosniff`. | |
+| AC-10 | `tests/TickestPristine.IntegrationTests/TicketAttachments/TicketAttachmentsTests.cs` › `Delete_Should_RemoveStoredFileAndSetPurgedAt_EvenWhenFileIsAlreadyGone`; `tests/TickestPristine.Application.UnitTests/TicketAttachments/DeleteTicketAttachmentCommandHandlerTests.cs` › `Handle_Should_DeleteFileAndSetPurgedAt_AfterSoftDelete` | Pela DEC-1 (a), a remoção roda na exclusão: o arquivo some da pasta e `PurgedAtUtc` é preenchido; com o arquivo já ausente, a exclusão responde 204 e também preenche `PurgedAtUtc` (sem erro). O unitário confere a chamada ao armazenamento com a chave do anexo. | |
+| AC-11 | `tests/TickestPristine.Application.UnitTests/TicketAttachments/DeleteTicketAttachmentCommandHandlerTests.cs` › `Handle_Should_KeepSoftDeleteAndLogError_WhenFileDeletionFails` | Com o `DeleteAsync` lançando exceção, a exclusão responde sucesso, `DeletedAtUtc` e o histórico `AttachmentRemoved` ficam gravados, `PurgedAtUtc` continua nulo e há um registro `Error` com o id do anexo e a exceção. | |
+| AC-12 | `tests/TickestPristine.IntegrationTests/TicketAttachments/TicketAttachmentsTests.cs` › `Delete_Should_KeepCurrentRules_ForOtherUserUploaderRepeatedDeletionListAndDownload`; os testes existentes `Delete_Should_*` e `tests/TickestPristine.Application.UnitTests/TicketAttachments/DeleteTicketAttachmentCommandHandlerTests.cs` | B (sem `tickets:manage`) recebe 403; A recebe 204 e o chamado ganha um histórico `AttachmentRemoved`; a segunda exclusão recebe 404; a listagem não traz o anexo; o download dele recebe 404. | |
+| AC-13 | `tests/TickestPristine.IntegrationTests/TicketAttachments/TicketAttachmentsTests.cs` › `Upload_Should_ReturnTooManyRequests_WhenUploadLimitIsExceeded`, `Delete_Should_ReturnTooManyRequests_WhenDeleteLimitIsExceeded` | Com os limites padrão (30 envios por 10 min e 60 exclusões por min, por usuário), os 30 primeiros envios e as 60 primeiras exclusões passam pela política (404, por usarem ids inexistentes), e o 31º envio e a 61ª exclusão recebem 429. | |
+| AC-14 | `dotnet build TickestPristine.slnx` e `dotnet test TickestPristine.slnx` | Build com 0 avisos e 0 erros; 1.024 testes aprovados e 0 com falha (50 de arquitetura, 627 unitários, 347 de integração, entre eles os 27 de `TicketAttachmentsTests`) na execução de 2026-10-27, a refazer na `spec-verify`. | |
 
 ## 9. Evidências de verificação
 - **Build:**
@@ -126,3 +128,8 @@ backlog:
 |---|---|---|
 | 2026-10-24 | Rascunho | Criada a partir de `specs/_fontes/anexos-chamados.md`, a pedido de Rafael Santos no chat. DEC-1 a DEC-5 em aberto, com recomendação; na DEC-1 a recomendação difere da fonte (apagar na hora em vez de 30 dias), pelo motivo registrado na decisão. |
 | 2026-10-24 | Rascunho | DEC-1 a DEC-5 decididas pela opção recomendada: Rafael Santos delegou a escolha no chat ("encontre as melhores soluções"). DEC-1: arquivo apagado na hora da exclusão. Checklist de completude atendido; aguarda aprovação explícita. |
+| 2026-10-27 | Aprovada | Aprovação explícita de Rafael Santos no chat ("aprovo a spec 011"). Checklist de completude conferido: todo REQ com AC, nenhuma DEC em aberto, nenhum `[SUPOSIÇÃO]`, toda tarefa ligada a ACs. Frontmatter no modelo da spec 007 (campo `pr:` no lugar de `backlog:`) e fato sobre `BackgroundService` atualizado; REQs, ACs e DECs sem mudança. |
+| 2026-10-27 | Em implementação | `/spec-implement 011` na branch `feat/SPEC-011-attachment-hardening`, criada a partir da `origin/main`; Rafael Santos pediu a execução contínua de todas as tarefas, com as escolhas técnicas delegadas, e os commits ficam para depois do diff e do ok. |
+| 2026-10-27 | Em implementação | T-1 a T-9 implementadas; os commits aguardam o ok de Rafael Santos. Escolhas técnicas feitas pela delegação, dentro do plano: o verificador de conteúdo lê os primeiros 8 KB e, para DOCX e XLSX, só o índice do pacote (`ZipArchive.CreateAsync`, sem descompactar), devolvendo o fluxo à posição inicial; os limites por chamado são conferidos antes da inspeção, contando só os anexos não excluídos (o limite de 100 MB aceita exatamente 100 MB); o 413 em Problem Details fica no `GlobalExceptionHandler` (DEC-6), que reconhece o corpo acima do limite da própria rota (`IRequestSizeLimitMetadata`, lido do `IExceptionHandlerFeature`) pelo 413 do Kestrel ou, no TestServer, pelo `Content-Length` acima do limite; na primeira versão, o endpoint lia o formulário e montava o Problem Details à mão, desvio da skill `add-feature` corrigido pela DEC-6; `IFileStorage.OpenReadAsync` devolve nulo para arquivo ausente; a remoção física fica no `TicketAttachmentDeletedDomainEventHandler` (pasta `Delete/`), a partir do evento que a exclusão já dispara, no padrão da skill `add-feature`: o `DomainEventsDispatcher` o executa depois do commit, sem o cancelamento da requisição, e registra no log a falha sem derrubar a resposta; ele grava `PurgedAtUtc` num `SaveChangesAsync` próprio, sem histórico (o `AttachmentRemoved` já está no da exclusão), e o `DeleteTicketAttachmentCommandHandler` não mudou. Na primeira versão, a remoção estava num método privado do handler do command, com try/catch próprio; Rafael Santos apontou no chat que isso não seguia o padrão das skills ("esse codigo PurgeFileAsync dentro do command handler não segue o padrão das minhas skillls"), e ela foi movida para o handler do evento; as políticas de rate limit `attachment-upload` e `attachment-delete` ficam em `RateLimiting:AttachmentUpload` e `RateLimiting:AttachmentDelete`, no padrão das existentes; o `RecordingLogger` dos testes unitários é cópia idêntica do da spec 008, para não conflitar no merge. **Ajuste de AC pendente de aprovação:** o AC-6 aprovado diz que um chamado com 95 MB que recebe 1 MB responde 400, mas 96 MB não passa do limite de 100 MB do REQ-5; o teste usa um chamado a 0,5 MB do limite. Proposta: trocar no AC-6 "outro com 95 MB em anexos" por "outro a menos de 1 MB do limite de 100 MB". O teste `Upload_Should_RejectBodyBeforeValidation_WhenBodyExceedsLimit` (um dos 15 citados no AC-14) foi substituído pelo do AC-4, que exige 413. A migration `Add_Ticket_Attachment_Purged_At` e a da spec 008 alteram o mesmo `ApplicationDbContextModelSnapshot`: a segunda a entrar na `main` precisa regenerar o snapshot. |
+| 2026-10-27 | Em implementação | Revisão de conformidade com as skills, pedida por Rafael Santos no chat ("verifique se todo codigo que vc criou segue minhas skills!"): o upload montava o Problem Details do 413 à mão (corrigido pela DEC-6, opção escolhida por ele: "A"); três testes sem `When{Condition}` no nome foram renomeados; dois testes do upload passaram a comparar o erro exato; o teste de 401 da política ganhou o Arrange; o endpoint da política monta a query numa variável, como no modelo. O `GlobalExceptionHandler` responde com `application/json`, como nos demais erros dele, e não `application/problem+json`. |
+| 2026-10-27 | Em implementação | Ajuste do AC-6 aprovado por Rafael Santos no chat ("ok, aprovo o ajuste do AC-6"): "outro com 95 MB em anexos" passou a "outro a menos de 1 MB do limite de 100 MB", porque 95 MB mais um anexo de 1 MB não passa do limite de 100 MB do REQ-5. O REQ-5 não mudou. |
