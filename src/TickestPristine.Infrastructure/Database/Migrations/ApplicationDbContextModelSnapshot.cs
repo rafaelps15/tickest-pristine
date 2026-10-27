@@ -792,6 +792,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("file_size_bytes");
 
+                    b.Property<DateTime?>("PurgedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("purged_at_utc");
+
                     b.Property<string>("StorageKey")
                         .IsRequired()
                         .HasMaxLength(500)

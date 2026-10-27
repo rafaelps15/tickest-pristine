@@ -44,17 +44,25 @@ internal sealed class LocalFileStorage(IOptions<FileStorageOptions> options) : I
         return storageKey;
     }
 
-    public Task<Stream> OpenReadAsync(string storageKey, CancellationToken cancellationToken)
+    public Task<Stream?> OpenReadAsync(string storageKey, CancellationToken cancellationToken)
     {
-        Stream fileStream = new FileStream(
-            ResolveContainedPath(storageKey),
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            BufferSize,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        try
+        {
+            Stream fileStream = new FileStream(
+                ResolveContainedPath(storageKey),
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                BufferSize,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
 
-        return Task.FromResult(fileStream);
+            return Task.FromResult<Stream?>(fileStream);
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+        {
+            // Arquivo apagado do disco com a linha ainda no banco: quem chama decide a resposta.
+            return Task.FromResult<Stream?>(null);
+        }
     }
 
     public Task DeleteAsync(string storageKey, CancellationToken cancellationToken)

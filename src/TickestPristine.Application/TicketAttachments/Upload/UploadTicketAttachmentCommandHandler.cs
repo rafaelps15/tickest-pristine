@@ -6,10 +6,17 @@ using TickestPristine.Application.Abstractions.Storage;
 using TickestPristine.Application.Authorization;
 using TickestPristine.Application.TicketHistories;
 using TickestPristine.Domain.Tickets;
+using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.TicketAttachments.Upload;
 
+/// <summary>
+/// Grava o anexo de um participante do chamado. Antes de gravar, confere os limites do chamado
+/// (<see cref="TicketAttachmentLimits.MaxAttachmentsPerTicket"/> anexos e
+/// <see cref="TicketAttachmentLimits.MaxTotalBytesPerTicket"/> bytes somados, contando só os não excluídos) e se o
+/// conteúdo corresponde ao tipo declarado; uma recusa não grava arquivo nem linha.
+/// </summary>
 internal sealed class UploadTicketAttachmentCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
@@ -30,6 +37,27 @@ internal sealed class UploadTicketAttachmentCommandHandler(
         if (access.IsFailure)
         {
             return Result.Failure<Guid>(access.Error);
+        }
+
+        // O filtro global exclui os anexos excluídos: só os que continuam no chamado contam para o limite.
+        var usage = await context.TicketAttachments
+            .Where(a => a.TicketId == command.TicketId)
+            .GroupBy(a => a.TicketId)
+            .Select(g => new { Count = g.Count(), TotalBytes = g.Sum(a => a.FileSizeBytes) })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (usage is not null &&
+            (usage.Count >= TicketAttachmentLimits.MaxAttachmentsPerTicket ||
+             usage.TotalBytes + command.FileSizeBytes > TicketAttachmentLimits.MaxTotalBytesPerTicket))
+        {
+            return Result.Failure<Guid>(TicketAttachmentErrors.TicketLimitReached(
+                TicketAttachmentLimits.MaxAttachmentsPerTicket,
+                TicketAttachmentLimits.MaxTotalBytesPerTicket / (1024 * 1024)));
+        }
+
+        if (!await TicketAttachmentContentInspector.MatchesAsync(command.Content, command.ContentType, cancellationToken))
+        {
+            return Result.Failure<Guid>(TicketAttachmentErrors.ContentMismatch);
         }
 
         string storageKey = await fileStorage.SaveAsync(command.Content, command.FileName, cancellationToken);

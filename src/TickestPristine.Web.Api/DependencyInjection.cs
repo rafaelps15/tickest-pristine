@@ -11,6 +11,10 @@ public static class DependencyInjection
         services.AddExceptionHandler<GlobalExceptionHandler>();
         services.AddProblemDetails();
 
+        // Corpo ou parâmetros que não puderam ser lidos viram exceção em todos os ambientes, e não só em Development:
+        // assim chegam ao GlobalExceptionHandler e respondem em Problem Details (spec 011, DEC-6).
+        services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
+
         return services;
     }
 }

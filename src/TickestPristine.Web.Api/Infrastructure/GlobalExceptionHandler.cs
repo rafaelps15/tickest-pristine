@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -40,6 +41,21 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
                 Type = "https://tools.ietf.org/html/rfc7231#section-6.5.8",
                 Title = "Registro duplicado",
                 Detail = "Já existe um registro com os mesmos dados. Atualize a tela e tente novamente."
+            };
+        }
+        else if (exception is BadHttpRequestException tooLarge && IsRequestBodyTooLarge(httpContext, tooLarge))
+        {
+            // Corpo acima do limite da rota: o Kestrel recusa com 413; o limite do multipart (o único aplicado pelo
+            // TestServer) recusa com 400. Os dois são o mesmo erro do cliente. A única rota com limite próprio é o envio
+            // de anexos (spec 011).
+            logger.LogWarning(exception, "Corpo da requisição acima do limite da rota");
+
+            problemDetails = new ProblemDetails
+            {
+                Status = StatusCodes.Status413PayloadTooLarge,
+                Type = "https://tools.ietf.org/html/rfc7231#section-6.5.11",
+                Title = "Anexo muito grande",
+                Detail = "O arquivo excede o tamanho máximo permitido para anexos. O limite é de 10 MB."
             };
         }
         else if (exception is BadHttpRequestException badRequest)
@@ -85,5 +101,20 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
         await httpContext.Response.WriteAsJsonAsync(problemDetails, cancellationToken);
 
         return true;
+    }
+
+    /// <summary>
+    /// Indica se a leitura falhou porque o corpo passou do limite declarado na própria rota
+    /// (<see cref="IRequestSizeLimitMetadata"/>), pelo status 413 ou pelo tamanho informado no <c>Content-Length</c>.
+    /// Rotas sem limite próprio ficam com a resposta genérica de requisição inválida. O middleware de exceções limpa o
+    /// endpoint do contexto antes de chamar este handler: a rota original vem do <see cref="IExceptionHandlerFeature"/>.
+    /// </summary>
+    private static bool IsRequestBodyTooLarge(HttpContext httpContext, BadHttpRequestException exception)
+    {
+        long? routeLimit = httpContext.Features.Get<IExceptionHandlerFeature>()?.Endpoint?.Metadata
+            .GetMetadata<IRequestSizeLimitMetadata>()?.MaxRequestBodySize;
+
+        return routeLimit is not null &&
+            (exception.StatusCode == StatusCodes.Status413PayloadTooLarge || httpContext.Request.ContentLength > routeLimit);
     }
 }
