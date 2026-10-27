@@ -1,7 +1,7 @@
 ---
 id: 013
 titulo: Setor do usuário nas respostas de consulta de usuários
-status: Em implementação        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
 aprovada-em: 2026-10-26
 branch: feat/SPEC-013-user-sector-in-responses                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
@@ -127,18 +127,19 @@ Dados comuns: setor TI ativo, no departamento Tecnologia; Ana (ativa, com setor 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAll_Should_ReturnSectorFields_ForUsersWithAndWithoutSector`; `GetUsersQueryHandlerTests` › `Handle_Should_ReturnSectorAndDepartment_WhenUserHasSector`, `Handle_Should_ReturnNullSector_WhenUserHasNoSector` | Pela API, `GET users?search=` com o marcador do cenário devolve Ana e Eva nessa ordem, total 2; Ana com setor TI, departamento e `sectorIsActive` = `true`, Eva com os quatro campos nulos. | |
-| AC-2 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetById_Should_ReturnSectorFields_WhenCallerIsAdminOrSelf`; `GetUserByIdQueryHandlerTests` › `Handle_Should_ReturnSectorAndDepartment_WhenUserHasSector`, `Handle_Should_ReturnNullSector_WhenUserHasNoSector` | O administrador e a própria Ana recebem os quatro campos do setor TI em `GET users/{id}`; um Atendente (sem `users:read`) recebe 403. | |
-| AC-3 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAllAndGetById_Should_ReturnInactiveSector_WhenSectorIsDeactivated`; `GetUsersQueryHandlerTests` e `GetUserByIdQueryHandlerTests` › `Handle_Should_ReturnInactiveSector_WhenSectorIsDeactivated` | Depois de `DELETE sectors/{TI}` (204), as duas rotas continuam trazendo o setor TI e o departamento, com `sectorIsActive` = `false`. | |
-| AC-4 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAllAndGetById_Should_FollowSectorChanges` | Grava o setor TI em Eva por `PUT users/{id}/sector` e as duas rotas passam a mostrá-lo; remove com `null` e as duas voltam aos quatro campos nulos. | |
-| AC-5 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetCurrentAndGetByEmail_Should_NotExposeSectorFields` | Com Ana vinculada ao setor TI, os JSONs de `GET users/me` e de `GET users/by-email` não têm nenhuma das propriedades `sectorId`, `sectorName`, `departmentName` e `sectorIsActive`. | |
-| AC-6 | `dotnet build TickestPristine.slnx` e `dotnet test TickestPristine.slnx` | Build com 0 avisos; 970 testes aprovados (50 de arquitetura, 587 unitários, 333 de integração) na execução de 2026-10-26, a refazer na `spec-verify`. | |
+| AC-1 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAll_Should_ReturnSectorFields_ForUsersWithAndWithoutSector`; `GetUsersQueryHandlerTests` › `Handle_Should_ReturnSectorAndDepartment_WhenUserHasSector`, `Handle_Should_ReturnNullSector_WhenUserHasNoSector` | Pela API, `GET users?search=` com o marcador do cenário devolve Ana e Eva nessa ordem, total 2; Ana com setor TI, departamento e `sectorIsActive` = `true`, Eva com os quatro campos nulos.  | Aprovado em 2026-10-26 |
+| AC-2 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetById_Should_ReturnSectorFields_WhenCallerIsAdminOrSelf`; `GetUserByIdQueryHandlerTests` › `Handle_Should_ReturnSectorAndDepartment_WhenUserHasSector`, `Handle_Should_ReturnNullSector_WhenUserHasNoSector` | O administrador e a própria Ana recebem os quatro campos do setor TI em `GET users/{id}`; um Atendente (sem `users:read`) recebe 403.  | Aprovado em 2026-10-26 |
+| AC-3 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAllAndGetById_Should_ReturnInactiveSector_WhenSectorIsDeactivated`; `GetUsersQueryHandlerTests` e `GetUserByIdQueryHandlerTests` › `Handle_Should_ReturnInactiveSector_WhenSectorIsDeactivated` | Depois de `DELETE sectors/{TI}` (204), as duas rotas continuam trazendo o setor TI e o departamento, com `sectorIsActive` = `false`.  | Aprovado em 2026-10-26 |
+| AC-4 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAllAndGetById_Should_FollowSectorChanges` | Grava o setor TI em Eva por `PUT users/{id}/sector` e as duas rotas passam a mostrá-lo; remove com `null` e as duas voltam aos quatro campos nulos.  | Aprovado em 2026-10-26 |
+| AC-5 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetCurrentAndGetByEmail_Should_NotExposeSectorFields` | Com Ana vinculada ao setor TI, os JSONs de `GET users/me` e de `GET users/by-email` não têm nenhuma das propriedades `sectorId`, `sectorName`, `departmentName` e `sectorIsActive`.  | Aprovado em 2026-10-26 |
+| AC-6 | `dotnet build TickestPristine.slnx` e `dotnet test TickestPristine.slnx` | Build com 0 avisos; 970 testes aprovados (50 de arquitetura, 587 unitários, 333 de integração) na execução de 2026-10-26, a refazer na `spec-verify`.  | Aprovado em 2026-10-26 |
 
 ## 9. Evidências de verificação
-- **Build:**
-- **Testes:**
-- **Revisão:**
-- **Documentação atualizada:**
+- **Build:** `dotnet build TickestPristine.slnx` em 2026-10-26: 0 avisos, 0 erros.
+- **Testes:** `dotnet test TickestPristine.slnx --no-build --logger trx` em 2026-10-26: 970 aprovados, 0 com falha (ArchitectureTests 50/50, Application.UnitTests 587/587, IntegrationTests 333/333). Os 11 testes da rastreabilidade (5 de integração e 6 unitários, com 3 nomes repetidos nas duas classes de handler) aparecem como aprovados no relatório TRX dessa execução. Auditoria `python scripts/auditoria_sdd.py .`: 100% (`CONFORME`), código de saída 0.
+- **Revisão:** `ca-review` sobre `origin/main...HEAD` (os 9 arquivos do plano técnico): nenhum achado bloqueante e nenhuma violação de convenção (DTOs de cada slice, `.Select` direto no DTO, handlers `internal sealed`, textos em pt-BR, testes no padrão Arrange/Act/Assert). Observação não bloqueante: o `GetBacklogAttendantsQueryHandlerTests` (spec 009) tem um `SeedSectorAsync` privado próprio, que agora convive com o auxiliar do `BaseHandlerTest`; unificar fica para uma mudança à parte. Fora do escopo e sem revisão: `specs/012-dominio-rico-estilo-milan/` e `specs/_fontes/contratos-central-atendimento.md`, não versionados.
+- **Limitações da verificação:** no caso sem setor (Eva), o DTO do teste não distingue um campo `null` de um campo ausente no JSON; a presença é coberta pelo item com setor, do mesmo tipo de resposta, e a API não omite nulos (sem opções de JSON configuradas). Os cenários de integração usam um marcador único no e-mail e no nome do departamento, porque o banco dos testes é compartilhado.
+- **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 2.6 (RN-29: leitura do setor em `GET users` e `GET users/{id}`) e 2.7 (C-05). A seção 4.4 não cita os campos dos DTOs de usuário e não muda. Achado fora do escopo: a 4.4 ainda descreve `TicketHistoryAction` como 1–12, sem o `Assigned = 13` da spec 009.
 - **CI:**
 - **Entrega:**
 
@@ -152,3 +153,4 @@ Dados comuns: setor TI ativo, no departamento Tecnologia; Ana (ativa, com setor 
 | 2026-10-26 | Aprovada | Detalhamento do plano técnico a pedido de Rafael Santos no chat (escolha "Detalhar a spec 013"): análise de concorrência, contrato, desempenho e segurança; tabela de rotas; árvore de arquivos; testes previstos por AC. Sem mudança de REQ, AC, DEC ou escopo, então a aprovação continua valendo. |
 | 2026-10-26 | Em implementação | `/spec-implement 013` na branch `feat/SPEC-013-user-sector-in-responses`, já com o merge do PR #27 (spec 009) na base, como pede a DEC-5. |
 | 2026-10-26 | Em implementação | T-1 a T-4 implementadas (T-1 commitada em `1564131`), com o build e todos os testes aprovados. Os cenários de integração usam um marcador único no e-mail e no nome do departamento ("Tecnologia-<marcador>"), porque o banco dos testes é compartilhado e o nome do departamento é único entre os ativos. Os commits de T-2 a T-4 aguardam o ok de Rafael Santos. |
+| 2026-10-26 | Verificada | `spec-verify`: build com 0 avisos; 970 testes aprovados e 0 com falha na execução de 2026-10-26; auditoria 100% com código de saída 0; os 6 ACs conferidos teste a teste (Dado, Quando e Então), todos aprovados nessa execução; `ca-review` sem achado bloqueante; `SYSTEM_SPECIFICATION.md` atualizado (2.6 e 2.7). Pendências não bloqueantes: o CI, que roda no PR, e a 4.4 desatualizada pela spec 009. |
