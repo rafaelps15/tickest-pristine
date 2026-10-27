@@ -228,6 +228,29 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         (await context.Users.SingleAsync(u => u.Id == userId)).IsActive.ShouldBeFalse();
     }
 
+    [Fact]
+    public async Task Handle_Should_RevokeUsableInvitations_WhenUserIsPendingActivation()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid userId = await SeedUserAsync(context, isActive: true);
+        UserInvitation invitation = await ResendUserInvitationCommandHandlerTests.SeedInvitationAsync(
+            context, userId, "token-do-convite", DefaultUtcNow.AddHours(-1));
+
+        var handler = new DeactivateUserCommandHandler(
+            context,
+            CallerContext(),
+            Substitute.For<IPermissionProvider>(),
+            CreateClock());
+
+        // Act
+        Result result = await handler.Handle(new DeactivateUserCommand(userId), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        (await context.UserInvitations.SingleAsync(i => i.Id == invitation.Id)).RevokedAtUtc.ShouldBe(DefaultUtcNow);
+    }
+
     private static async Task GrantPermissionAsync(TestDbContext context, Guid userId, string permissionCode)
     {
         string roleName = $"Role-{Guid.NewGuid():N}";

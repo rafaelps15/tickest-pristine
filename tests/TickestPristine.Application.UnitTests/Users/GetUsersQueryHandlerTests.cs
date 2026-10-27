@@ -20,7 +20,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
         User inactive = AddUser(context, "Bruno", "bruno@tickestpristine.dev", isActive: false);
         await context.SaveChangesAsync();
 
-        var handler = new GetUsersQueryHandler(context);
+        var handler = new GetUsersQueryHandler(context, CreateClock());
 
         // Act
         Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(AllUsers, CancellationToken.None);
@@ -41,7 +41,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
         AddUser(context, "Bruno", "bruno@tickestpristine.dev", isActive: false);
         await context.SaveChangesAsync();
 
-        var handler = new GetUsersQueryHandler(context);
+        var handler = new GetUsersQueryHandler(context, CreateClock());
 
         // Act
         Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(
@@ -61,7 +61,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
         User inactive = AddUser(context, "Bruno", "bruno@tickestpristine.dev", isActive: false);
         await context.SaveChangesAsync();
 
-        var handler = new GetUsersQueryHandler(context);
+        var handler = new GetUsersQueryHandler(context, CreateClock());
 
         // Act
         Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(
@@ -82,7 +82,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
         AddUser(context, "Pedro", "pedro@tickestpristine.dev", isActive: true);
         await context.SaveChangesAsync();
 
-        var handler = new GetUsersQueryHandler(context);
+        var handler = new GetUsersQueryHandler(context, CreateClock());
 
         // Act
         Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(
@@ -108,7 +108,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
         after.CreatedAtUtc = new DateTime(2026, 10, 3, 0, 0, 0, DateTimeKind.Utc);
         await context.SaveChangesAsync();
 
-        var handler = new GetUsersQueryHandler(context);
+        var handler = new GetUsersQueryHandler(context, CreateClock());
 
         // Act
         Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(
@@ -127,7 +127,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
         AddUser(context, "Ana", "ana@tickestpristine.dev", isActive: true);
         await context.SaveChangesAsync();
 
-        var handler = new GetUsersQueryHandler(context);
+        var handler = new GetUsersQueryHandler(context, CreateClock());
 
         // Act
         Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(
@@ -150,7 +150,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
         User third = AddUser(context, "Carla", "carla@tickestpristine.dev", isActive: true);
         await context.SaveChangesAsync();
 
-        var handler = new GetUsersQueryHandler(context);
+        var handler = new GetUsersQueryHandler(context, CreateClock());
 
         // Act
         Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(
@@ -175,7 +175,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = role.Name });
         await context.SaveChangesAsync();
 
-        var handler = new GetUsersQueryHandler(context);
+        var handler = new GetUsersQueryHandler(context, CreateClock());
 
         // Act
         Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(AllUsers, CancellationToken.None);
@@ -193,7 +193,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
         User user = AddUser(context, "Ana", "ana@tickestpristine.dev", isActive: true);
         await context.SaveChangesAsync();
 
-        var handler = new GetUsersQueryHandler(context);
+        var handler = new GetUsersQueryHandler(context, CreateClock());
 
         // Act
         Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(AllUsers, CancellationToken.None);
@@ -212,7 +212,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
         user.SectorId = sector.Id;
         await context.SaveChangesAsync();
 
-        var handler = new GetUsersQueryHandler(context);
+        var handler = new GetUsersQueryHandler(context, CreateClock());
 
         // Act
         Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(AllUsers, CancellationToken.None);
@@ -234,7 +234,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
         User user = AddUser(context, "Eva", "eva@tickestpristine.dev", isActive: true);
         await context.SaveChangesAsync();
 
-        var handler = new GetUsersQueryHandler(context);
+        var handler = new GetUsersQueryHandler(context, CreateClock());
 
         // Act
         Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(AllUsers, CancellationToken.None);
@@ -257,7 +257,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
         user.SectorId = sector.Id;
         await context.SaveChangesAsync();
 
-        var handler = new GetUsersQueryHandler(context);
+        var handler = new GetUsersQueryHandler(context, CreateClock());
 
         // Act
         Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(AllUsers, CancellationToken.None);
@@ -268,6 +268,55 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
         response.SectorName.ShouldBe("TI");
         response.DepartmentName.ShouldBe("Tecnologia");
         response.SectorIsActive.ShouldBe(false);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnPendingActivationWithInvitationExpiration_WhenUserHasNoCredential()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        User pending = AddUser(context, "Ana", "ana@tickestpristine.dev", isActive: true);
+        User activated = AddUser(context, "Beto", "beto@tickestpristine.dev", isActive: true);
+        context.UserCredentials.Add(new UserCredential { Id = Guid.NewGuid(), UserId = activated.Id, PasswordHash = "hash" });
+        await context.SaveChangesAsync();
+        UserInvitation invitation = await ResendUserInvitationCommandHandlerTests.SeedInvitationAsync(
+            context, pending.Id, "token-do-convite", DefaultUtcNow.AddHours(-1));
+
+        var handler = new GetUsersQueryHandler(context, CreateClock());
+
+        // Act
+        Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(AllUsers, CancellationToken.None);
+
+        // Assert
+        UserSummaryResponse pendingResponse = result.Value.Items.Single(u => u.Id == pending.Id);
+        pendingResponse.PendingActivation.ShouldBeTrue();
+        pendingResponse.InvitationExpiresAtUtc.ShouldBe(invitation.ExpiresAtUtc);
+
+        UserSummaryResponse activatedResponse = result.Value.Items.Single(u => u.Id == activated.Id);
+        activatedResponse.PendingActivation.ShouldBeFalse();
+        activatedResponse.InvitationExpiresAtUtc.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnNullInvitationExpiration_WhenPendingUserInvitationIsExpiredOrRevoked()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        User expired = AddUser(context, "Ana", "ana@tickestpristine.dev", isActive: true);
+        User revoked = AddUser(context, "Beto", "beto@tickestpristine.dev", isActive: true);
+        await context.SaveChangesAsync();
+        await ResendUserInvitationCommandHandlerTests.SeedInvitationAsync(
+            context, expired.Id, "token-vencido", DefaultUtcNow.AddHours(-73));
+        await ResendUserInvitationCommandHandlerTests.SeedInvitationAsync(
+            context, revoked.Id, "token-revogado", DefaultUtcNow.AddHours(-1), revoked: true);
+
+        var handler = new GetUsersQueryHandler(context, CreateClock());
+
+        // Act
+        Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(AllUsers, CancellationToken.None);
+
+        // Assert
+        result.Value.Items.ShouldAllBe(u => u.PendingActivation && u.InvitationExpiresAtUtc == null);
     }
 
     private static User AddUser(TestDbContext context, string firstName, string email, bool isActive)

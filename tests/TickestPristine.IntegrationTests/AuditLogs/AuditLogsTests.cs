@@ -125,7 +125,7 @@ public sealed class AuditLogsTests(IntegrationTestWebAppFactory factory) : BaseI
     }
 
     [Fact]
-    public async Task Register_Should_AuditCredentialWithoutPasswordHash()
+    public async Task Activation_Should_AuditCredentialWithoutPasswordHash()
     {
         // Arrange
         Guid userId = await RegisterUserAsync(UniqueEmail());
@@ -137,14 +137,15 @@ public sealed class AuditLogsTests(IntegrationTestWebAppFactory factory) : BaseI
             .Select(c => c.Id)
             .SingleAsync();
 
-        Guid adminId = await AuthenticateAsAdminAsync();
+        await AuthenticateAsAdminAsync();
 
         // Act
         List<AuditLogDto> history = await GetHistoryAsync("UserCredential", credentialId);
 
-        // Assert: o cadastro é feito pelo administrador, que fica registrado como autor da inclusão.
+        // Assert: a credencial nasce na ativação da conta (spec 008), feita pelo próprio titular numa rota anônima;
+        // por isso a inclusão não tem autor autenticado.
         AuditLogDto added = history.ShouldHaveSingleItem();
-        added.UserId.ShouldBe(adminId);
+        added.UserId.ShouldBeNull();
         ReadValue(added.NewValues, "UserId").ShouldBe(userId.ToString());
         ReadValue(added.NewValues, "PasswordHash").ShouldBeNull();
     }

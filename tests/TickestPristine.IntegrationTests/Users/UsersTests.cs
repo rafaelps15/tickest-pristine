@@ -41,15 +41,14 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
-    public async Task Register_Should_ReturnBadRequest_WhenPasswordIsWeak()
+    public async Task Register_Should_ReturnBadRequest_WhenEmailIsInvalid()
     {
-        // Arrange
+        // Arrange: o cadastro não recebe senha (spec 008); a política de senha vale na ativação
         var request = new
         {
-            email = UniqueEmail(),
+            email = "sem-arroba",
             firstName = "Test",
-            lastName = "User",
-            password = "password123"
+            lastName = "User"
         };
 
         // Act
