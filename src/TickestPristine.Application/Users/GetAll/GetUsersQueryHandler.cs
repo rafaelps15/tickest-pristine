@@ -35,6 +35,21 @@ internal sealed class GetUsersQueryHandler(IApplicationDbContext context)
                 IsActive = u.IsActive,
                 CreatedAtUtc = u.CreatedAtUtc,
                 DeactivatedAtUtc = u.DeactivatedAtUtc,
+                // Setor opcional: sem setor, as subconsultas não encontram nada e os campos vêm nulos; o setor
+                // desativado continua aparecendo, com SectorIsActive = false.
+                SectorId = u.SectorId,
+                SectorName = context.Sectors
+                    .Where(s => s.Id == u.SectorId)
+                    .Select(s => s.Name)
+                    .FirstOrDefault(),
+                DepartmentName = context.Departments
+                    .Where(d => context.Sectors.Any(s => s.Id == u.SectorId && s.DepartmentId == d.Id))
+                    .Select(d => d.Name)
+                    .FirstOrDefault(),
+                SectorIsActive = context.Sectors
+                    .Where(s => s.Id == u.SectorId)
+                    .Select(s => (bool?)s.IsActive)
+                    .FirstOrDefault(),
                 Roles = context.UserRoles
                     .Where(ur => ur.UserId == u.Id)
                     .Select(ur => new RoleSummaryResponse { Name = ur.RoleName })
