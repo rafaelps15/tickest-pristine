@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-27
 branch: feat/SPEC-015-own-tickets-listing                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: "#32"                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 015 — "Meus Chamados" com responsável, setor, prazo, última atividade, filtro e busca
@@ -183,7 +183,7 @@ Dados comuns: setor Helpdesk; Maria (solicitante, com `tickets:view-own`); Ana (
 - **Revisão:** `ca-review` sobre `origin/main...HEAD` (T-6, sem mudança de código depois dela): **aprovada, sem achados bloqueantes** nem violações de convenção. Não bloqueantes: o `UPDATE` da última atividade feito depois do commit (mensagens e anexos, DEC-11) não passa pela auditoria; o teste do AC-9 exercita a migration pelo `IMigrator`, e não por HTTP.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` (na T-5, conferido nesta verificação): 2.4 (`LastActivityAtUtc` e o índice novo), 2.6 (RN-31), 2.7 (C-13), 4.3.1 (`status` e `search` em `GET tickets/mine`) e 4.7 (concorrência, DEC-11).
 - **CI:**
-- **Entrega:** <PR #n (o mesmo do campo `pr:`); a spec fica `Entregue` quando o responsável mergear o PR na `main`>
+- **Entrega:** PR #32 (https://github.com/rafaelps15/tickest-pristine/pull/32); a spec fica `Entregue` quando o responsável mergear o PR na `main`.
 
 ## 10. Histórico
 | Data | Status | Observação |
