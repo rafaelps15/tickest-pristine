@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-27
 branch: feat/SPEC-011-attachment-hardening
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: "#31"                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 011 — Anexos: conteúdo verificado, limites explícitos, arquivo ausente e remoção física
@@ -122,7 +122,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 - **Revisão:** `ca-review` sobre `origin/main...HEAD` (arquivos do plano técnico e os da DEC-6): **aprovada, sem achados bloqueantes** nem violações de convenção, depois da revisão de conformidade com as skills registrada no histórico. Limites entre camadas respeitados; slices no padrão Command/Handler/Validator e Query/Handler/Response; erros em `TicketAttachmentErrors` com textos em pt-BR; endpoints só com mapeamento, `.WithTags` e `.RequireAuthorization()`; remoção física no handler do evento de domínio; datas pelo `IDateTimeProvider`. Pontos não bloqueantes: os limites por chamado são conferidos sem trava (dois envios simultâneos no limite podem passar dele por um anexo); `PurgedAtUtc` é gravado sem registro de histórico, porque o `AttachmentRemoved` já está no da exclusão; o `ThrowOnBadRequest` ligado muda a resposta de corpo malformado em produção para Problem Details em todas as rotas (DEC-6); o 413 sai com `application/json`, como os demais erros do `GlobalExceptionHandler`.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md`: 1.4 (risco dos anexos), 2.6 (RN-09), 2.7 (C-17), 4.3.1 (`GET ticket-attachments/policy` e rate limits de envio e exclusão), 4.6 (conteúdo dos arquivos e `ThrowOnBadRequest`), 4.8 (`RateLimiting:AttachmentUpload` e `AttachmentDelete`), 5.6 (anexos), 6.5 (segurança), 7.1 (GAP-08 resolvido), 7.2 (GAP-09 parcialmente resolvido), 8 (E-27), 9.4 (download com arquivo ausente, agora validado) e 9.5 (Q-08, conforme a DEC-1).
 - **CI:**
-- **Entrega:**
+- **Entrega:** PR #31 (https://github.com/rafaelps15/tickest-pristine/pull/31); a spec fica `Entregue` quando o responsável mergear o PR na `main`.
 
 ## 10. Histórico
 | Data | Status | Observação |
