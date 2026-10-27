@@ -33,6 +33,7 @@ internal static class ValidationDisplayNames
         ["Password"] = "Senha",
         ["PermissionCodes"] = "Permissões",
         ["Priority"] = "Prioridade",
+        ["Reason"] = "Motivo",
         ["RefreshToken"] = "Refresh token",
         ["RequesterId"] = "Solicitante",
         ["ResponsibleUserId"] = "Responsável",

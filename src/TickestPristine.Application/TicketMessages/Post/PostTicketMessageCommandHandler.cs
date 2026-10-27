@@ -36,24 +36,7 @@ internal sealed class PostTicketMessageCommandHandler(
 
         DateTime nowUtc = dateTimeProvider.UtcNow;
 
-        var message = new TicketMessage
-        {
-            Id = Guid.NewGuid(),
-            TicketId = command.TicketId,
-            AuthorUserId = userContext.UserId,
-            Content = command.Content,
-            CreatedAtUtc = nowUtc
-        };
-
-        message.Raise(new TicketMessagePostedDomainEvent(message.Id, message.TicketId, message.AuthorUserId));
-
-        context.TicketMessages.Add(message);
-
-        context.TicketHistories.Add(TicketHistoryEntries.Create(
-            message.TicketId,
-            message.AuthorUserId,
-            TicketHistoryAction.MessageAdded,
-            nowUtc));
+        TicketMessage message = TicketMessageEntries.Add(context, command.TicketId, userContext.UserId, command.Content, nowUtc);
 
         TicketSlaTimer? firstResponse = await CompleteFirstResponseAsync(command.TicketId, nowUtc, cancellationToken);
 

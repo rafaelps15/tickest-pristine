@@ -21,5 +21,16 @@ public sealed class TicketResponse
     public DateTime SlaWarningAtUtc { get; set; }
     public DateTime? ResolvedAtUtc { get; set; }
     public TicketSlaStatus SlaStatus { get; set; }
+
+    /// <summary>
+    /// Se quem consulta pode cancelar o chamado agora (spec 016).
+    /// </summary>
+    public bool CanCancel { get; set; }
+
+    /// <summary>
+    /// Até quando o dono pode cancelar o próprio chamado: a abertura mais a janela da política de cancelamento.
+    /// </summary>
+    public DateTime OwnerCancelDeadlineUtc { get; set; }
+
     public TicketSlaResponse Sla { get; set; }
 }

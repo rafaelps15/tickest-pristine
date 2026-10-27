@@ -7,6 +7,7 @@ using TickestPristine.Application.Authorization;
 using TickestPristine.Application.TicketHistories;
 using TickestPristine.Application.Permissions;
 using TickestPristine.Application.SlaCalendars;
+using TickestPristine.Application.TicketMessages;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -86,6 +87,14 @@ internal sealed class ReopenTicketCommandHandler(
             nowUtc,
             oldValue: previousStatus.ToString(),
             newValue: TicketStatus.Open.ToString()));
+
+        // Com motivo, a mensagem de quem reabriu entra no mesmo SaveChanges da reabertura: as duas ou nenhuma.
+        string? reason = command.Reason?.Trim();
+
+        if (!string.IsNullOrEmpty(reason))
+        {
+            TicketMessageEntries.Add(context, ticket.Id, userContext.UserId, reason, nowUtc);
+        }
 
         await context.SaveChangesAsync(cancellationToken);
 

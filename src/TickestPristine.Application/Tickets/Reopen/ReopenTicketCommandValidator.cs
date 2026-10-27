@@ -7,5 +7,6 @@ internal sealed class ReopenTicketCommandValidator : AbstractValidator<ReopenTic
     public ReopenTicketCommandValidator()
     {
         RuleFor(c => c.TicketId).NotEmpty();
+        RuleFor(c => c.Reason).MaximumLength(500);
     }
 }
