@@ -120,19 +120,19 @@ Dados comuns: setor TI ativo, no departamento Tecnologia; Ana (ativa, com setor 
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
 | T-1 | `GET users`: os quatro campos no `UserSummaryResponse` e no `.Select` do `GetUsersQueryHandler` | AC-1, AC-3, AC-4 | add-feature | [x] |
-| T-2 | `GET users/{id}`: os quatro campos no `UserResponse` e no `.Select` do `GetUserByIdQueryHandler` | AC-2, AC-3, AC-4 | add-feature | [ ] |
-| T-3 | Testes unitários e de integração dos ACs, incluindo a ausência dos campos em `GET users/me` e `GET users/by-email` | AC-1 a AC-5 | add-tests | [ ] |
-| T-4 | Build e testes da solução | AC-6 | add-tests | [ ] |
+| T-2 | `GET users/{id}`: os quatro campos no `UserResponse` e no `.Select` do `GetUserByIdQueryHandler` | AC-2, AC-3, AC-4 | add-feature | [x] |
+| T-3 | Testes unitários e de integração dos ACs, incluindo a ausência dos campos em `GET users/me` e `GET users/by-email` | AC-1 a AC-5 | add-tests | [x] |
+| T-4 | Build e testes da solução | AC-6 | add-tests | [x] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | | | |
-| AC-2 | | | |
-| AC-3 | | | |
-| AC-4 | | | |
-| AC-5 | | | |
-| AC-6 | | | |
+| AC-1 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAll_Should_ReturnSectorFields_ForUsersWithAndWithoutSector`; `GetUsersQueryHandlerTests` › `Handle_Should_ReturnSectorAndDepartment_WhenUserHasSector`, `Handle_Should_ReturnNullSector_WhenUserHasNoSector` | Pela API, `GET users?search=` com o marcador do cenário devolve Ana e Eva nessa ordem, total 2; Ana com setor TI, departamento e `sectorIsActive` = `true`, Eva com os quatro campos nulos. | |
+| AC-2 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetById_Should_ReturnSectorFields_WhenCallerIsAdminOrSelf`; `GetUserByIdQueryHandlerTests` › `Handle_Should_ReturnSectorAndDepartment_WhenUserHasSector`, `Handle_Should_ReturnNullSector_WhenUserHasNoSector` | O administrador e a própria Ana recebem os quatro campos do setor TI em `GET users/{id}`; um Atendente (sem `users:read`) recebe 403. | |
+| AC-3 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAllAndGetById_Should_ReturnInactiveSector_WhenSectorIsDeactivated`; `GetUsersQueryHandlerTests` e `GetUserByIdQueryHandlerTests` › `Handle_Should_ReturnInactiveSector_WhenSectorIsDeactivated` | Depois de `DELETE sectors/{TI}` (204), as duas rotas continuam trazendo o setor TI e o departamento, com `sectorIsActive` = `false`. | |
+| AC-4 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAllAndGetById_Should_FollowSectorChanges` | Grava o setor TI em Eva por `PUT users/{id}/sector` e as duas rotas passam a mostrá-lo; remove com `null` e as duas voltam aos quatro campos nulos. | |
+| AC-5 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetCurrentAndGetByEmail_Should_NotExposeSectorFields` | Com Ana vinculada ao setor TI, os JSONs de `GET users/me` e de `GET users/by-email` não têm nenhuma das propriedades `sectorId`, `sectorName`, `departmentName` e `sectorIsActive`. | |
+| AC-6 | `dotnet build TickestPristine.slnx` e `dotnet test TickestPristine.slnx` | Build com 0 avisos; 970 testes aprovados (50 de arquitetura, 587 unitários, 333 de integração) na execução de 2026-10-26, a refazer na `spec-verify`. | |
 
 ## 9. Evidências de verificação
 - **Build:**
@@ -151,3 +151,4 @@ Dados comuns: setor TI ativo, no departamento Tecnologia; Ana (ativa, com setor 
 | 2026-10-26 | Aprovada | Aprovação explícita de Rafael Santos no chat ("sim"), em resposta ao pedido de aprovação da spec 013. Checklist de completude conferido: todo REQ com AC, nenhuma DEC em aberto, nenhum `[SUPOSIÇÃO]`, toda tarefa ligada a ACs. A implementação começa depois do merge do PR da spec 009 (DEC-5). |
 | 2026-10-26 | Aprovada | Detalhamento do plano técnico a pedido de Rafael Santos no chat (escolha "Detalhar a spec 013"): análise de concorrência, contrato, desempenho e segurança; tabela de rotas; árvore de arquivos; testes previstos por AC. Sem mudança de REQ, AC, DEC ou escopo, então a aprovação continua valendo. |
 | 2026-10-26 | Em implementação | `/spec-implement 013` na branch `feat/SPEC-013-user-sector-in-responses`, já com o merge do PR #27 (spec 009) na base, como pede a DEC-5. |
+| 2026-10-26 | Em implementação | T-1 a T-4 implementadas (T-1 commitada em `1564131`), com o build e todos os testes aprovados. Os cenários de integração usam um marcador único no e-mail e no nome do departamento ("Tecnologia-<marcador>"), porque o banco dos testes é compartilhado e o nome do departamento é único entre os ativos. Os commits de T-2 a T-4 aguardam o ok de Rafael Santos. |
