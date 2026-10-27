@@ -175,13 +175,154 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         await fileStorage.Received(1).DeleteAsync("generated-storage-key.pdf", Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Handle_Should_ReturnContentMismatchAndStoreNothing_WhenContentDoesNotMatchContentType()
+    {
+        // Arrange: executável (assinatura "MZ") declarado como PDF
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context);
+        IFileStorage fileStorage = Substitute.For<IFileStorage>();
+        UploadTicketAttachmentCommandHandler handler = CreateHandler(context, fileStorage);
+        UploadTicketAttachmentCommand command = ValidCommand(ticketId);
+        command.Content = new MemoryStream([0x4D, 0x5A, 0x90, 0x00]);
+
+        // Act
+        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketAttachmentErrors.ContentMismatch);
+        await fileStorage.DidNotReceive().SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        (await context.TicketAttachments.AnyAsync()).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnTicketLimitReached_WhenTicketAlreadyHasMaxAttachments()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context);
+        await SeedAttachmentsAsync(context, ticketId, TicketAttachmentLimits.MaxAttachmentsPerTicket, sizeBytes: 1024);
+        IFileStorage fileStorage = Substitute.For<IFileStorage>();
+        UploadTicketAttachmentCommandHandler handler = CreateHandler(context, fileStorage);
+
+        // Act
+        Result<Guid> result = await handler.Handle(ValidCommand(ticketId), CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketAttachmentErrors.TicketLimitReached(
+            TicketAttachmentLimits.MaxAttachmentsPerTicket,
+            TicketAttachmentLimits.MaxTotalBytesPerTicket / (1024 * 1024)));
+        await fileStorage.DidNotReceive().SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        (await context.TicketAttachments.CountAsync()).ShouldBe(TicketAttachmentLimits.MaxAttachmentsPerTicket);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnTicketLimitReached_WhenTotalSizeWouldExceedLimit()
+    {
+        // Arrange: faltam 1.023 bytes para o limite do chamado, e o anexo novo tem 1.024
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context);
+        await SeedAttachmentsAsync(context, ticketId, 1, sizeBytes: TicketAttachmentLimits.MaxTotalBytesPerTicket - 1023);
+        UploadTicketAttachmentCommandHandler handler = CreateHandler(context, Substitute.For<IFileStorage>());
+
+        // Act
+        Result<Guid> result = await handler.Handle(ValidCommand(ticketId), CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketAttachmentErrors.TicketLimitReached(
+            TicketAttachmentLimits.MaxAttachmentsPerTicket,
+            TicketAttachmentLimits.MaxTotalBytesPerTicket / (1024 * 1024)));
+    }
+
+    [Fact]
+    public async Task Handle_Should_UploadAttachment_WhenTotalSizeReachesLimitExactly()
+    {
+        // Arrange: o anexo novo completa exatamente o limite do chamado
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context);
+        await SeedAttachmentsAsync(context, ticketId, 1, sizeBytes: TicketAttachmentLimits.MaxTotalBytesPerTicket - 1024);
+        IFileStorage fileStorage = Substitute.For<IFileStorage>();
+        fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("key.pdf");
+        UploadTicketAttachmentCommandHandler handler = CreateHandler(context, fileStorage);
+
+        // Act
+        Result<Guid> result = await handler.Handle(ValidCommand(ticketId), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_Should_NotCountDeletedAttachments_WhenCheckingTicketLimits()
+    {
+        // Arrange: o chamado tem o máximo de anexos, mas um deles foi excluído
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context);
+        await SeedAttachmentsAsync(context, ticketId, TicketAttachmentLimits.MaxAttachmentsPerTicket - 1, sizeBytes: 1024);
+        await SeedAttachmentsAsync(context, ticketId, 1, sizeBytes: 1024, deleted: true);
+        IFileStorage fileStorage = Substitute.For<IFileStorage>();
+        fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("key.pdf");
+        UploadTicketAttachmentCommandHandler handler = CreateHandler(context, fileStorage);
+
+        // Act
+        Result<Guid> result = await handler.Handle(ValidCommand(ticketId), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+    }
+
+    private static UploadTicketAttachmentCommandHandler CreateHandler(TestDbContext context, IFileStorage fileStorage)
+    {
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(CreatorId);
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
+
+        return new UploadTicketAttachmentCommandHandler(
+            context,
+            userContext,
+            Substitute.For<IPermissionProvider>(),
+            dateTimeProvider,
+            fileStorage);
+    }
+
+    private static async Task SeedAttachmentsAsync(
+        TestDbContext context,
+        Guid ticketId,
+        int count,
+        long sizeBytes,
+        bool deleted = false)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            context.TicketAttachments.Add(new TicketAttachment
+            {
+                Id = Guid.NewGuid(),
+                TicketId = ticketId,
+                UploadedByUserId = CreatorId,
+                FileName = $"anexo-{i}.pdf",
+                ContentType = "application/pdf",
+                FileSizeBytes = sizeBytes,
+                StorageKey = $"{Guid.NewGuid():N}.pdf",
+                UploadedAtUtc = DateTime.UtcNow,
+                DeletedAtUtc = deleted ? DateTime.UtcNow : null
+            });
+        }
+
+        await context.SaveChangesAsync();
+    }
+
     private static UploadTicketAttachmentCommand ValidCommand(Guid ticketId) => new()
     {
         TicketId = ticketId,
         FileName = "report.pdf",
         ContentType = "application/pdf",
         FileSizeBytes = 1024,
-        Content = new MemoryStream([1, 2, 3])
+        // Começa com a assinatura de PDF: o conteúdo é conferido contra o tipo declarado.
+        Content = new MemoryStream("%PDF-1.7 conteúdo de teste"u8.ToArray())
     };
 
     private static async Task<Guid> SeedTicketAsync(TestDbContext context)

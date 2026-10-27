@@ -344,7 +344,8 @@ public sealed class TicketHistoriesTests(IntegrationTestWebAppFactory factory) :
 #pragma warning disable CA2000
     private static MultipartFormDataContent BuildPdfContent()
     {
-        var fileContent = new ByteArrayContent(Encoding.UTF8.GetBytes("test file content"));
+        // Começa com a assinatura de PDF: o conteúdo do anexo é conferido contra o tipo declarado (spec 011).
+        var fileContent = new ByteArrayContent(Encoding.UTF8.GetBytes("%PDF-1.7 test file content"));
         fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
 
         return new MultipartFormDataContent { { fileContent, "file", "report.pdf" } };

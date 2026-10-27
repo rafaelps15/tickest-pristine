@@ -7,6 +7,8 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace TickestPristine.Application.UnitTests.TicketAttachments;
 
@@ -24,7 +26,12 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests : BaseHandlerTes
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
 
-        var handler = new GetTicketAttachmentContentQueryHandler(context, userContext, permissionProvider, fileStorage);
+        var handler = new GetTicketAttachmentContentQueryHandler(
+            context,
+            userContext,
+            permissionProvider,
+            fileStorage,
+            NullLogger<GetTicketAttachmentContentQueryHandler>.Instance);
         var query = new GetTicketAttachmentContentQuery(Guid.NewGuid());
 
         // Act
@@ -50,7 +57,12 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests : BaseHandlerTes
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
 
-        var handler = new GetTicketAttachmentContentQueryHandler(context, userContext, permissionProvider, fileStorage);
+        var handler = new GetTicketAttachmentContentQueryHandler(
+            context,
+            userContext,
+            permissionProvider,
+            fileStorage,
+            NullLogger<GetTicketAttachmentContentQueryHandler>.Instance);
         var query = new GetTicketAttachmentContentQuery(attachmentId);
 
         // Act
@@ -77,7 +89,12 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests : BaseHandlerTes
             .Returns(false);
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
 
-        var handler = new GetTicketAttachmentContentQueryHandler(context, userContext, permissionProvider, fileStorage);
+        var handler = new GetTicketAttachmentContentQueryHandler(
+            context,
+            userContext,
+            permissionProvider,
+            fileStorage,
+            NullLogger<GetTicketAttachmentContentQueryHandler>.Instance);
         var query = new GetTicketAttachmentContentQuery(attachmentId);
 
         // Act
@@ -103,7 +120,12 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests : BaseHandlerTes
         Stream expectedContent = new MemoryStream([1, 2, 3]);
         fileStorage.OpenReadAsync("storage-key.pdf", Arg.Any<CancellationToken>()).Returns(expectedContent);
 
-        var handler = new GetTicketAttachmentContentQueryHandler(context, userContext, permissionProvider, fileStorage);
+        var handler = new GetTicketAttachmentContentQueryHandler(
+            context,
+            userContext,
+            permissionProvider,
+            fileStorage,
+            NullLogger<GetTicketAttachmentContentQueryHandler>.Instance);
         var query = new GetTicketAttachmentContentQuery(attachmentId);
 
         // Act
@@ -134,7 +156,12 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests : BaseHandlerTes
         Stream expectedContent = new MemoryStream([1, 2, 3]);
         fileStorage.OpenReadAsync("storage-key.pdf", Arg.Any<CancellationToken>()).Returns(expectedContent);
 
-        var handler = new GetTicketAttachmentContentQueryHandler(context, userContext, permissionProvider, fileStorage);
+        var handler = new GetTicketAttachmentContentQueryHandler(
+            context,
+            userContext,
+            permissionProvider,
+            fileStorage,
+            NullLogger<GetTicketAttachmentContentQueryHandler>.Instance);
         var query = new GetTicketAttachmentContentQuery(attachmentId);
 
         // Act
@@ -143,6 +170,40 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests : BaseHandlerTes
         // Assert
         result.IsSuccess.ShouldBeTrue();
         result.Value.Content.ShouldBeSameAs(expectedContent);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnFileMissingAndLogError_WhenFileIsNotInStorage()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid attachmentId = await SeedAttachmentAsync(context);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(CreatorId);
+        IFileStorage fileStorage = Substitute.For<IFileStorage>();
+        fileStorage.OpenReadAsync("storage-key.pdf", Arg.Any<CancellationToken>()).Returns((Stream?)null);
+        var logger = new RecordingLogger<GetTicketAttachmentContentQueryHandler>();
+
+        var handler = new GetTicketAttachmentContentQueryHandler(
+            context,
+            userContext,
+            Substitute.For<IPermissionProvider>(),
+            fileStorage,
+            logger);
+
+        // Act
+        Result<TicketAttachmentResponse> result = await handler.Handle(
+            new GetTicketAttachmentContentQuery(attachmentId),
+            CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketAttachmentErrors.FileMissing(attachmentId));
+
+        RecordedLogEntry error = logger.Entries.ShouldHaveSingleItem();
+        error.Level.ShouldBe(LogLevel.Error);
+        error.Message.ShouldContain(attachmentId.ToString());
     }
 
     private static async Task<Guid> SeedAttachmentAsync(TestDbContext context)
