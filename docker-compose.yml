@@ -30,3 +30,12 @@ services:
       - ACCEPT_EULA=Y
     ports:
       - 8090:80
+
+  # Servidor SMTP de desenvolvimento: guarda os e-mails enviados (convites de ativação) sem entregá-los.
+  # Interface em http://localhost:8025.
+  mailpit:
+    image: axllent/mailpit:v1.31.5
+    container_name: tickestpristine-mailpit
+    ports:
+      - 1025:1025
+      - 8025:8025

@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Json;
+using System.Text.Json;
 using TickestPristine.Application.Users;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Roles;
@@ -39,6 +40,15 @@ public abstract class BaseIntegrationTest
 
     protected static string UniqueEmail() => $"test-{Guid.NewGuid():N}@example.com";
 
+    /// <summary>
+    /// Mensagens enviadas pela API nos testes (o envio real é trocado no <see cref="IntegrationTestWebAppFactory"/>).
+    /// </summary>
+    protected CapturingEmailSender EmailSender => Services.GetRequiredService<CapturingEmailSender>();
+
+    /// <summary>
+    /// Cadastra o usuário pelo administrador e ativa a conta com o token do e-mail de convite, definindo a senha
+    /// <c>Password123!</c>: depois disso, o usuário já faz login, como antes do cadastro sem senha (spec 008, DEC-12).
+    /// </summary>
     protected async Task<Guid> RegisterUserAsync(string email)
     {
         var request = new
@@ -57,7 +67,8 @@ public abstract class BaseIntegrationTest
 
     /// <summary>
     /// Envia o cadastro como o administrador, que tem <c>users:create</c>. O token vai só nesta requisição, sem trocar
-    /// o token que o teste configurou no <see cref="HttpClient"/>.
+    /// o token que o teste configurou no <see cref="HttpClient"/>. O cadastro não recebe mais senha (spec 008): quando o
+    /// pedido traz <c>password</c>, o auxiliar ativa a conta com ela, pelo token do e-mail de convite (DEC-12).
     /// </summary>
     protected async Task<HttpResponseMessage> PostRegisterAsAdminAsync(object request)
     {
@@ -68,6 +79,31 @@ public abstract class BaseIntegrationTest
             Content = JsonContent.Create(request)
         };
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _adminAccessToken);
+
+        HttpResponseMessage response = await HttpClient.SendAsync(message);
+
+        JsonElement body = JsonSerializer.SerializeToElement(request);
+
+        if (response.IsSuccessStatusCode &&
+            body.TryGetProperty("email", out JsonElement email) &&
+            body.TryGetProperty("password", out JsonElement password))
+        {
+            (await ActivateAccountAsync(EmailSender.LatestTokenFor(email.GetString()!), password.GetString()!))
+                .EnsureSuccessStatusCode();
+        }
+
+        return response;
+    }
+
+    /// <summary>
+    /// Ativa a conta pelo token do convite (rota anônima), sem trocar o token configurado no <see cref="HttpClient"/>.
+    /// </summary>
+    protected async Task<HttpResponseMessage> ActivateAccountAsync(string token, string newPassword)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, "users/activation")
+        {
+            Content = JsonContent.Create(new { token, newPassword })
+        };
 
         return await HttpClient.SendAsync(message);
     }

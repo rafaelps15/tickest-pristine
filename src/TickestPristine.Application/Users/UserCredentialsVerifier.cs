@@ -46,6 +46,10 @@ internal static class UserCredentialsVerifier
 
         if (credential is null)
         {
+            // Conta pendente de ativação (spec 008): mesmo tempo de uma conferência de senha, para o tempo de resposta
+            // não revelar quem foi convidado.
+            _ = passwordHasher.Hash(password);
+
             return Result.Failure<VerifiedCredentials>(UserErrors.InvalidCredentials);
         }
 

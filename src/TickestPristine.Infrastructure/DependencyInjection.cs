@@ -1,6 +1,7 @@
 ﻿using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Application.Abstractions.Notifications;
 using TickestPristine.Application.Abstractions.Sla;
 using TickestPristine.Application.Abstractions.Storage;
 using TickestPristine.Infrastructure.Audit;
@@ -9,6 +10,7 @@ using TickestPristine.Infrastructure.Authorization;
 using TickestPristine.Infrastructure.Database;
 using TickestPristine.Infrastructure.Database.Seeding;
 using TickestPristine.Infrastructure.DomainEvents;
+using TickestPristine.Infrastructure.Notifications;
 using TickestPristine.Infrastructure.SlaCalendars;
 using TickestPristine.Infrastructure.Storage;
 using TickestPristine.Infrastructure.Time;
@@ -19,6 +21,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Npgsql;
 using TickestPristine.SharedKernel;
 using TickestPristine.Infrastructure.Tickets.SlaMonitoring;
@@ -86,6 +89,21 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services.AddHostedService<SlaMonitorBackgroundService>();
+
+        // E-mails do sistema (spec 008): servidor e remetente obrigatórios, e o endereço da tela de ativação validado
+        // na inicialização.
+        services.AddOptions<EmailOptions>()
+            .BindConfiguration(EmailOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        services.AddSingleton<IValidateOptions<InvitationOptions>, InvitationOptionsValidator>();
+        services.AddOptions<InvitationOptions>()
+            .BindConfiguration(InvitationOptions.SectionName)
+            .ValidateOnStart();
+
+        services.AddScoped<IEmailSender, SmtpEmailSender>();
+        services.AddSingleton<IActivationLinkBuilder, ActivationLinkBuilder>();
 
         return services;
     }

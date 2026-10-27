@@ -61,6 +61,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(UserErrors.InvalidCredentials);
         passwordHasher.DidNotReceive().Verify(Arg.Any<string>(), Arg.Any<string>());
+        // Conta pendente de ativação (spec 008): gasta o tempo de um hash, como o e-mail inexistente.
+        passwordHasher.Received(1).Hash(Password);
         await tokenProvider.DidNotReceive().CreateAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
     }
 

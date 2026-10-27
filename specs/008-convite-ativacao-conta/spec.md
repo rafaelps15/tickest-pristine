@@ -1,11 +1,11 @@
 ---
 id: 008
 titulo: Convite por e-mail e ativação da conta pelo próprio usuário
-status: Rascunho        # Rascunho | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Cancelada (transições: spec-status.md da skill spec-new)
+status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
-aprovada-em:
+aprovada-em: 2026-10-26
 branch: feat/SPEC-008-user-invitation-activation
-backlog:
+pr: "#30"                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 008 — Convite por e-mail e ativação da conta pelo próprio usuário
@@ -15,18 +15,21 @@ backlog:
 - **Fonte:** `specs/_fontes/gestao-acessos-onboarding.md` (gravado em 2026-10-24, SHA-256 `b1984631232f9615a91e55c46e7d7f204a9b9eae71caa75bddd788ed0d4f81eb`). Os identificadores RF-xx, RNF-xx, N-xx e D-xx citados nesta spec são dessa fonte.
 - **Recorte desta spec (DEC-1):** a fonte é uma especificação de produto inteira (pré-cadastro com CPF e matrícula, perfil RH, convite, ativação, login por matrícula, recuperação de senha, perfil do colaborador, ciclo de vida, LGPD, MFA). Ela não cabe numa spec só. Esta spec cobre o núcleo de maior risco: **nenhuma senha definida por terceiros** (R-02, L-01). O administrador cadastra o usuário sem senha, o sistema envia um convite por e-mail com link de uso único, e o próprio usuário define a senha (RF-01.6, RF-02.1 a RF-02.5, RF-03, N-01).
 - **Referências:**
-  - `SYSTEM_SPECIFICATION.md`: 2.6 (RN-12, RN-16, RN-19), 2.7 (C-01 "não há convite por e-mail", C-21 "não há mecanismo de envio"), 4.3.1 (rotas de `users`), 4.6 (senhas e tempo constante no login), 7.1 (GAP-05: eventos em memória, sem outbox).
-  - `specs/BACKLOG.md`: BL-015 (outbox, ainda sem spec) e BL-021 (revogação do access token).
+  - `SYSTEM_SPECIFICATION.md`: 2.6 (RN-12, RN-16, RN-19, RN-29), 2.7 (C-01 "não há convite por e-mail", C-02 e GAP-14 "o access token continua válido até expirar", C-21 "não há mecanismo de envio"), 4.3.1 (rotas de `users`), 4.6 (senhas e tempo constante no login), 7.1 (GAP-05: eventos em memória, sem outbox).
+  - Specs 009 e 013 (entregues em 2026-10-26): `User.SectorId` e os campos de setor em `UserSummaryResponse` e `GetById/UserResponse`, os mesmos DTOs que o REQ-11 altera.
   - Código: `src/TickestPristine.Application/Users/Register/*` (cadastro atual, com senha definida por quem cadastra), `Users/UserCredentialsVerifier.cs` (login, bloqueio por tentativas), `Users/UserPasswords.cs`, `Users/RefreshTokenHasher.cs` (modelo do hash do token), `Users/Activate/*` e `Users/Deactivate/*`, `Domain/Users/UserCredential.cs` e `RefreshToken.cs`, `Infrastructure/Audit/AuditLoggingInterceptor.cs` (`ExcludedProperties`), `Infrastructure/Database/Seeding/AdminUserSeeder.cs`, `Web.Api/Endpoints/Users/Register.cs` e `Login.cs`, `Web.Api/Infrastructure/RateLimitingPolicies.cs`.
 - **Fatos do repositório que afetam a fonte:**
   - O cadastro já não é público: `POST users/register` exige `users:create` (GAP-03 resolvido). Atende R-01.
   - O cadastro recebe a senha no corpo e a grava; quem cadastra conhece a senha do usuário. É exatamente o risco L-01 da fonte.
-  - Não existe envio de e-mail no sistema (C-21), nem outbox (GAP-05, BL-015). A fonte pede outbox (RF-01.6, RNF-IDP-02): ver DEC-3.
+  - Não existe envio de e-mail no sistema (C-21), nem outbox (GAP-05). A fonte pede outbox (RF-01.6, RNF-IDP-02): ver DEC-3.
   - Não existe estado "pendente de ativação". O usuário tem só `IsActive` e `DeactivatedAtUtc`; a credencial fica em `UserCredential`, com `MustChangePassword` usado hoje só pelo administrador inicial (RN-16).
   - Quando o usuário existe mas não tem credencial, `UserCredentialsVerifier` devolve `InvalidCredentials` **sem** gastar o tempo de um hash. Hoje isso nunca acontece; com contas pendentes, o tempo de resposta revelaria quem foi convidado (RF-04.3). Tratado no REQ-9.
   - O bloqueio por tentativas (5 em 15 min) já existe (RF-05.1). O login já distingue `LockedOut`, `Deactivated` e `PasswordChangeRequired` depois da senha correta, ao contrário da RF-04.3: fica fora desta spec (DEC-1).
   - O `AuditLoggingInterceptor` audita entidades `IAuditable` e já exclui `PasswordHash` da serialização. O hash do token de convite precisa da mesma exclusão (REQ-12).
   - Não há role RH: as roles fixas são Administrador, Atendente e Colaborador (`RoleNames.cs`). Quem tem `users:create` cadastra.
+  - **[Revisão de 2026-10-26]** Os testes de integração cadastram usuários por `BaseIntegrationTest.RegisterUserAsync`, `RegisterAndLoginAsync` e `PostRegisterAsAdminAsync`: 213 chamadas em 13 arquivos. O `BaseIntegrationTest.InsertUserAsync` (spec 009) grava usuários sem `UserCredential`, que pela DEC-4 passam a contar como pendentes de ativação; nenhum deles faz login, então nada muda para esses testes.
+  - **[Revisão de 2026-10-26]** No front (`tickest-pristine-front`), `shared/entities/create-user-data.ts` tem o campo `password`, enviado pela tela `users/feature-register`: a quebra de contrato da DEC-5 atinge essa tela.
+  - **[Revisão de 2026-10-26]** O `specs/BACKLOG.md` não existe mais (spec 007): as demandas futuras citadas aqui como BL-015 e BL-021 correspondem às lacunas GAP-05 e GAP-14 do `SYSTEM_SPECIFICATION.md`.
 
 ## 2. Requisitos
 | ID | Requisito | Fonte |
@@ -75,7 +78,7 @@ backlog:
 |---|---|---|---|---|
 | DEC-1 | Como dividir a fonte em specs? | (a) série: **esta spec** (convite e ativação); depois, uma spec para cada tema, numeradas quando forem criadas: recuperação de senha por e-mail (RF-06, N-03, N-04); login por e-mail ou código e mensagem única de falha (RF-04.1, RF-04.3); dados cadastrais do colaborador (CPF, cargo, telefone, endereço, contato de emergência, foto; RF-01, RF-08, RNF-LGPD); perfil RH e matriz da seção 5; o restante da fonte (política de senha de 12 caracteres, Argon2id, suspensão separada da desativação, idempotency-key, MFA, notificações N-05 a N-07) vira demandas do backlog; (b) uma spec só com tudo; (c) outra divisão | (a) — cada spec fica testável sozinha, e esta spec resolve o risco L-01 sem depender de CPF, RH ou LGPD | Rafael Santos, 2026-10-24, no chat, delegando a escolha ("encontre as melhores soluções") |
 | DEC-2 | Como enviar e-mail? | (a) SMTP com MailKit, abstraído por `IEmailSender` na Application; em Development, o Mailpit no `docker-compose.yml` para ver os e-mails; (b) API de um provedor (SendGrid, Amazon SES) já na primeira entrega | (a) — qualquer provedor aceita SMTP, e trocar depois é só configuração | Rafael Santos, 2026-10-24, no chat, delegando a escolha ("encontre as melhores soluções") |
-| DEC-3 | A fonte pede outbox (RF-01.6, RNF-IDP-02), que não existe (BL-015). Como enviar sem ela? | (a) o handler envia depois do `SaveChangesAsync`; falha vai para o log e o administrador reenvia (REQ-4, REQ-5); quando a BL-015 existir, o envio migra para a outbox; (b) fazer a BL-015 antes desta spec; (c) handler de evento de domínio em memória (o evento carregaria o token em claro) | (a) — o reenvio cobre a falha, e o token não passa por evento que um dia será persistido | Rafael Santos, 2026-10-24, no chat, delegando a escolha ("encontre as melhores soluções") |
+| DEC-3 | A fonte pede outbox (RF-01.6, RNF-IDP-02), que não existe (GAP-05). Como enviar sem ela? | (a) o handler envia depois do `SaveChangesAsync`; falha vai para o log e o administrador reenvia (REQ-4, REQ-5); quando houver outbox (GAP-05), o envio migra para ela; (b) fazer a outbox (GAP-05) antes desta spec; (c) handler de evento de domínio em memória (o evento carregaria o token em claro) | (a) — o reenvio cobre a falha, e o token não passa por evento que um dia será persistido | Rafael Santos, 2026-10-24, no chat, delegando a escolha ("encontre as melhores soluções") |
 | DEC-4 | Como representar "pendente de ativação"? | (a) derivado: usuário ativo sem `UserCredential`; nenhuma coluna nova em `users`; o login já falha sem credencial; (b) nova coluna de status na entidade `User` com os seis estados da fonte (seção 3) | (a) — menor mudança; os estados SUSPENSA e CONVITE_EXPIRADO da fonte não entram agora (o expirado é derivado da data do convite, sem rotina) | Rafael Santos, 2026-10-24, no chat, delegando a escolha ("encontre as melhores soluções") |
 | DEC-5 | O cadastro atual com senha some? | (a) sim: o contrato de `POST users/register` perde o campo `password` (quebra o front Angular, que precisa mudar junto); (b) senha opcional: sem senha, convite; com senha, como hoje | (a) — com (b), o risco L-01 continua aberto | Rafael Santos, 2026-10-24, no chat, delegando a escolha ("encontre as melhores soluções") |
 | DEC-6 | Política de senha na ativação | (a) a atual (`StrongPassword`: 6 caracteres, maiúscula e especial); a de 12 caracteres da fonte (RNF-SEG-02) fica para outra spec e vale para todos os fluxos de uma vez; (b) já a da fonte, só na ativação | (a) — política diferente por fluxo confunde o usuário | Rafael Santos, 2026-10-24, no chat, delegando a escolha ("encontre as melhores soluções") |
@@ -83,6 +86,7 @@ backlog:
 | DEC-8 | Endereço do link de ativação (o front fica em outro repositório) | (a) configuração `Invitations:ActivationUrl` (ex.: `https://tickest.exemplo/ativar-conta`), validada na inicialização, e o token vai no fragmento `#token=`; (b) rota fixa no código | (a), com o valor padrão `/ativar-conta` documentado para o front; a URL fica na configuração, então mudar a rota no front não exige deploy da API | Rafael Santos, 2026-10-24, no chat, delegando a escolha ("encontre as melhores soluções") |
 | DEC-9 | O administrador inicial também passa a ser convidado? | (a) não: continua pelo seed com senha provisória (RN-16), porque não há e-mail garantido no primeiro deploy; (b) sim | (a) | Rafael Santos, 2026-10-24, no chat, delegando a escolha ("encontre as melhores soluções") |
 | DEC-10 | Quem reenvia e quem cancela convite | (a) reenviar exige `users:create`; cancelar é a desativação que já existe (`users:deactivate`), sem rota nova; (b) permissões novas (`users:invite`) | (a) | Rafael Santos, 2026-10-24, no chat, delegando a escolha ("encontre as melhores soluções") |
+| DEC-12 | Como os testes de integração existentes passam a criar usuários | (a) os auxiliares do `BaseIntegrationTest` cadastram sem senha e ativam a conta com o token do e-mail capturado, com a mesma assinatura (213 chamadas em 13 arquivos não mudam); (b) trocar cada chamada por um auxiliar novo; (c) gravar a credencial direto no banco nos testes | (a): a mudança fica num lugar só e os testes continuam passando pelo fluxo real de convite e ativação; (c) esconderia o fluxo novo | Rafael Santos, 2026-10-26, no chat, delegando as escolhas técnicas ("Decide for me: minor details [...] missing technical defaults") |
 | DEC-11 | Item do backlog e branch | (a) item novo no `specs/BACKLOG.md`; (b) sem backlog, branch `<tipo>/SPEC-NNN-slug` | (b): o backlog sai do repositório (decisão de Rafael Santos registrada na spec 007, fluxo spec-first). Branch `feat/SPEC-008-user-invitation-activation`; vale quando a spec 007 for entregue | Rafael Santos, 2026-10-24 (pedido da spec 007) |
 
 ## 5. Fora do escopo
@@ -92,7 +96,7 @@ backlog:
 - Login por código e mensagem única para todas as falhas de login (RF-04.1, RF-04.3, exceto o tempo do REQ-9): spec de login (DEC-1).
 - Correção do e-mail de acesso de conta pendente (RF-02.4): hoje não há rota de alteração de e-mail; entra com a spec de dados cadastrais.
 - Estados SUSPENSA e BLOQUEADA como estados da conta, bloqueio progressivo (RF-05.2), desbloqueio manual (RF-05.5).
-- Política de senha da fonte (RNF-SEG-02), Argon2id (RNF-SEG-01), MFA (RNF-SEG-09), `Idempotency-Key` (RNF-IDP-01), outbox (BL-015), revogação do access token (BL-021).
+- Política de senha da fonte (RNF-SEG-02), Argon2id (RNF-SEG-01), MFA (RNF-SEG-09), `Idempotency-Key` (RNF-IDP-01), outbox (GAP-05), revogação do access token (GAP-14).
 - Telas: o front Angular fica em outro repositório; ele precisa da tela de ativação e de remover o campo de senha do cadastro (DEC-5).
 
 ## 6. Plano técnico
@@ -125,52 +129,53 @@ backlog:
   - R-1: a mudança de contrato do cadastro quebra o front até ele ser atualizado (DEC-5).
   - R-2: sem outbox, um e-mail pode se perder; mitigado pelo reenvio e pelo `pendingActivation` na listagem (DEC-3).
   - R-3: o link depende da URL do front configurada; URL errada gera convites inúteis. A validação na inicialização exige URL absoluta HTTPS fora de Development.
-  - R-4: os testes de integração que criam usuários pelo cadastro com senha precisam de um helper novo (cadastrar e ativar), o que mexe em vários arquivos de teste.
+  - R-4: os testes de integração cadastram usuários com senha em 213 chamadas, em 13 arquivos. Mitigação (DEC-12): os auxiliares do `BaseIntegrationTest` (`RegisterUserAsync`, `RegisterAndLoginAsync`, `PostRegisterAsAdminAsync`) passam a cadastrar sem senha e a ativar a conta com o token do e-mail capturado, mantendo a assinatura; as chamadas não mudam. Só os testes que conferem o próprio cadastro (`UsersTests` › `Register_*`) são reescritos.
 
 ## 7. Tarefas
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
-| T-1 | Entidade `UserInvitation`, eventos e erros; configuração EF com índices; `DbSet`; exclusão do `TokenHash` na auditoria; migration `Add_User_Invitations` | AC-3, AC-16 | add-entity | [ ] |
-| T-2 | `IEmailSender`, `EmailMessage`, `SmtpEmailSender` (MailKit), opções de e-mail e de convite com validação; Mailpit no compose; modelo do e-mail N-01 | AC-4, AC-5 | add-feature | [ ] |
-| T-3 | `UserInvitations` (geração, hash, revogação, validade, limite, envio com tratamento de falha) | AC-1, AC-3, AC-4, AC-5, AC-6, AC-8 | add-feature | [ ] |
-| T-4 | Cadastro sem senha: command, validator, handler e endpoint `Register` | AC-1, AC-2, AC-4, AC-5 | add-feature | [ ] |
-| T-5 | Reenvio de convite: slice `ResendInvitation` e endpoint | AC-6, AC-7, AC-8 | add-feature | [ ] |
-| T-6 | Ativação: slice `ActivateAccount` com consumo condicional e endpoint anônimo com rate limit | AC-9, AC-10, AC-11, AC-12, AC-17 | add-feature | [ ] |
-| T-7 | Desativação revoga convites; hash fictício no `UserCredentialsVerifier` sem credencial | AC-13, AC-14 | add-feature | [ ] |
-| T-8 | `pendingActivation` e `invitationExpiresAtUtc` nas consultas de usuário | AC-14, AC-15 | add-feature | [ ] |
-| T-9 | Testes unitários e de integração dos ACs; helper de testes "cadastrar e ativar"; ajuste dos testes existentes que cadastram com senha | AC-1 a AC-18 | add-tests | [ ] |
-| T-10 | Build e testes da solução | AC-19 | add-tests | [ ] |
+| T-1 | Entidade `UserInvitation`, eventos e erros; configuração EF com índices; `DbSet`; exclusão do `TokenHash` na auditoria; migration `Add_User_Invitations` | AC-3, AC-16 | add-entity | [x] |
+| T-2 | `IEmailSender`, `EmailMessage`, `SmtpEmailSender` (MailKit), opções de e-mail e de convite com validação; Mailpit no compose; modelo do e-mail N-01 | AC-4, AC-5 | add-feature | [x] |
+| T-3 | `UserInvitations` (geração, hash, revogação, validade, limite, envio com tratamento de falha) | AC-1, AC-3, AC-4, AC-5, AC-6, AC-8 | add-feature | [x] |
+| T-4 | Cadastro sem senha: command, validator, handler e endpoint `Register` | AC-1, AC-2, AC-4, AC-5 | add-feature | [x] |
+| T-5 | Reenvio de convite: slice `ResendInvitation` e endpoint | AC-6, AC-7, AC-8 | add-feature | [x] |
+| T-6 | Ativação: slice `ActivateAccount` com consumo condicional e endpoint anônimo com rate limit | AC-9, AC-10, AC-11, AC-12, AC-17 | add-feature | [x] |
+| T-7 | Desativação revoga convites; hash fictício no `UserCredentialsVerifier` sem credencial | AC-13, AC-14 | add-feature | [x] |
+| T-8 | `pendingActivation` e `invitationExpiresAtUtc` nas consultas de usuário | AC-14, AC-15 | add-feature | [x] |
+| T-9 | Testes unitários e de integração dos ACs; auxiliares do `BaseIntegrationTest` passam a cadastrar e ativar (DEC-12); reescrita dos testes `Register_*` | AC-1 a AC-18 | add-tests | [x] |
+| T-10 | Build e testes da solução | AC-19 | add-tests | [x] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | | | |
-| AC-2 | | | |
-| AC-3 | | | |
-| AC-4 | | | |
-| AC-5 | | | |
-| AC-6 | | | |
-| AC-7 | | | |
-| AC-8 | | | |
-| AC-9 | | | |
-| AC-10 | | | |
-| AC-11 | | | |
-| AC-12 | | | |
-| AC-13 | | | |
-| AC-14 | | | |
-| AC-15 | | | |
-| AC-16 | | | |
-| AC-17 | | | |
-| AC-18 | | | |
-| AC-19 | | | |
+| AC-1 | `tests/TickestPristine.IntegrationTests/Users/UserInvitationsTests.cs` › `Register_Should_CreatePendingUserWithInvitationAndNoCredential`; `tests/TickestPristine.Application.UnitTests/Users/RegisterUserCommandHandlerTests.cs` › `Handle_Should_CreatePendingUserWithInvitationAndRaiseDomainEvents_WhenValid` | Pela API, o cadastro sem senha devolve 200 com o Id; no banco, o usuário está ativo com a role Colaborador, sem `UserCredential`, e com um convite que expira 72 h depois da criação. | Aprovado — 2026-10-27, execução da spec-verify |
+| AC-2 | `tests/TickestPristine.IntegrationTests/Users/UserInvitationsTests.cs` › `Register_Should_IgnorePasswordFieldAndCreateNoCredential` | O cadastro com o campo `password` no corpo responde 200 e não cria credencial. | Aprovado — 2026-10-27, execução da spec-verify |
+| AC-3 | `tests/TickestPristine.IntegrationTests/Users/UserInvitationsTests.cs` › `Invitation_Should_StoreOnlySha256OfTokenAndKeepItOutOfAudit`; `tests/TickestPristine.Application.UnitTests/Users/RegisterUserCommandHandlerTests.cs` › `Handle_Should_SendInvitationEmailWithLinkWhoseTokenMatchesStoredHash` | A coluna guarda 64 caracteres hexadecimais iguais ao SHA-256 do token do e-mail, sem o token; os registros de auditoria do convite não contêm o hash, o token nem a propriedade `TokenHash`. | Aprovado — 2026-10-27, execução da spec-verify |
+| AC-4 | `tests/TickestPristine.IntegrationTests/Users/UserInvitationsTests.cs` › `Register_Should_SendInvitationEmailWithNameCodeLinkAndExpiration` | Um e-mail capturado para o endereço cadastrado, com o nome, o código `usr_…`, o link `…/ativar-conta#token=<token>` e a expiração no horário de Brasília; o corpo não tem "senha:" seguida de valor nem o hash. | Aprovado — 2026-10-27, execução da spec-verify |
+| AC-5 | `tests/TickestPristine.IntegrationTests/Users/UserInvitationsTests.cs` › `Register_Should_KeepUserAndInvitation_WhenEmailSendingFails`; `tests/TickestPristine.Application.UnitTests/Users/RegisterUserCommandHandlerTests.cs` › `Handle_Should_KeepUserAndLogErrorWithoutToken_WhenEmailSendingFails` | Com o envio falhando, o cadastro responde 200 e o usuário e o convite ficam gravados; o teste unitário confere um único registro `Error` que cita o usuário e não contém o token. | Aprovado — 2026-10-27, execução da spec-verify |
+| AC-6 | `tests/TickestPristine.IntegrationTests/Users/UserInvitationsTests.cs` › `ResendInvitation_Should_RevokePreviousIssueNewOneAndSendEmail`; `tests/TickestPristine.Application.UnitTests/Users/ResendUserInvitationCommandHandlerTests.cs` › `Handle_Should_RevokePreviousInvitationIssueNewOneAndSendEmail_WhenUserIsPending` | O reenvio responde 204, revoga o convite anterior, cria um novo cujo hash bate com o novo e-mail, e a ativação com o token antigo recebe `Users.InvalidActivationToken`. | Aprovado — 2026-10-27, execução da spec-verify |
+| AC-7 | `tests/TickestPristine.IntegrationTests/Users/UserInvitationsTests.cs` › `ResendInvitation_Should_RejectActivatedDeactivatedAndMissingUsers`; `tests/TickestPristine.Application.UnitTests/Users/ResendUserInvitationCommandHandlerTests.cs` › `Handle_Should_ReturnAlreadyActivated_WhenUserHasCredential`, `Handle_Should_ReturnInvitationUserDeactivated_WhenUserIsDeactivated`, `Handle_Should_ReturnNotFound_WhenUserDoesNotExist` | 409 `Users.AlreadyActivated` para quem já ativou, 409 `Users.InvitationUserDeactivated` para o desativado e 404 para o id inexistente. | Aprovado — 2026-10-27, execução da spec-verify |
+| AC-8 | `tests/TickestPristine.IntegrationTests/Users/UserInvitationsTests.cs` › `ResendInvitation_Should_ReturnLimitReached_AfterFiveInvitationsIn24Hours`; `tests/TickestPristine.Application.UnitTests/Users/ResendUserInvitationCommandHandlerTests.cs` › `Handle_Should_ReturnInvitationLimitReached_WhenFiveInvitationsWereIssuedInTheLast24Hours`, `Handle_Should_IgnoreInvitationsOlderThan24Hours_WhenCountingTheLimit` | Depois de cinco convites (cadastro e quatro reenvios), o sexto recebe 409 `Users.InvitationLimitReached`, sem convite nem e-mail novos; convites com mais de 24 h não contam. | Aprovado — 2026-10-27, execução da spec-verify |
+| AC-9 | `tests/TickestPristine.IntegrationTests/Users/UserInvitationsTests.cs` › `Activation_Should_CreateCredentialMarkInvitationUsedAndAllowLogin`; `tests/TickestPristine.Application.UnitTests/Users/ActivateUserAccountCommandHandlerTests.cs` › `Handle_Should_CreateCredentialAndMarkInvitationUsed_WhenTokenIsValid` | A ativação responde 204 com corpo vazio; a credencial existe com `MustChangePassword = false`, o convite tem `UsedAtUtc` e o login com a nova senha devolve tokens. | Aprovado — 2026-10-27, execução da spec-verify |
+| AC-10 | `tests/TickestPristine.IntegrationTests/Users/UserInvitationsTests.cs` › `Activation_Should_ReturnSameError_ForExpiredUsedRevokedUnknownAndDeactivatedUserTokens`; `tests/TickestPristine.Application.UnitTests/Users/ActivateUserAccountCommandHandlerTests.cs` › `Handle_Should_ReturnInvalidActivationToken_*` | Tokens expirado, usado, revogado, inexistente e de usuário desativado recebem o mesmo 400 `Users.InvalidActivationToken` com a mesma mensagem, sem criar credencial. O expirado é simulado gravando `ExpiresAtUtc` no passado (equivale a avançar o relógio além de 72 h); o desativado é gravado direto no banco, para o convite continuar não revogado e o teste exercitar a conferência do usuário inativo. | Aprovado — 2026-10-27, execução da spec-verify |
+| AC-11 | `tests/TickestPristine.IntegrationTests/Users/UserInvitationsTests.cs` › `Activation_Should_RejectWeakPasswordAndKeepInvitationUsable`; `UserValidatorsTests` › `ActivateAccountValidator_Should_*` | Senha fraca (`abc`) recebe 400 de validação, e o mesmo token ainda ativa a conta com uma senha forte. | Aprovado — 2026-10-27, execução da spec-verify |
+| AC-12 | `tests/TickestPristine.IntegrationTests/Users/UserInvitationsTests.cs` › `Activation_Should_CreateSingleCredential_WhenTwoActivationsRunAtOnce` | Com um gatilho que segura o uso do convite, duas ativações simultâneas dão exatamente uma 204 e a outra 400 ou 409, e o usuário fica com uma só credencial. | Aprovado — 2026-10-27, execução da spec-verify |
+| AC-13 | `tests/TickestPristine.IntegrationTests/Users/UserInvitationsTests.cs` › `Login_Should_ReturnInvalidCredentials_WhenAccountIsPendingActivation`; `tests/TickestPristine.Application.UnitTests/Users/LoginUserCommandHandlerTests.cs` › `Handle_Should_ReturnInvalidCredentials_WhenCredentialDoesNotExist` | O login de uma conta pendente recebe o mesmo Problem Details de um e-mail inexistente (`Users.InvalidCredentials`); o teste unitário confere que o hasher foi chamado. | Aprovado — 2026-10-27, execução da spec-verify |
+| AC-14 | `tests/TickestPristine.IntegrationTests/Users/UserInvitationsTests.cs` › `Deactivation_Should_RevokeInvitation_AndReactivationKeepAccountPendingWithoutInvitation`; `tests/TickestPristine.Application.UnitTests/Users/DeactivateUserCommandHandlerTests.cs` › `Handle_Should_RevokeUsableInvitations_WhenUserIsPendingActivation` | A desativação revoga o convite; depois da reativação, `pendingActivation = true` e `invitationExpiresAtUtc` nulo, e o token antigo recebe `Users.InvalidActivationToken`. | Aprovado — 2026-10-27, execução da spec-verify |
+| AC-15 | `tests/TickestPristine.IntegrationTests/Users/UserInvitationsTests.cs` › `GetByIdAndGetAll_Should_ShowPendingActivationAndInvitationExpiration`; `tests/TickestPristine.Application.UnitTests/Users/GetUsersQueryHandlerTests.cs` e `GetUserByIdQueryHandlerTests.cs` › `Handle_Should_ReturnPendingActivationWithInvitationExpiration_WhenUserHasNoCredential` (e os casos de convite vencido, revogado e de usuário com credencial) | Nas duas rotas, o pendente traz `pendingActivation = true` e a expiração do convite; o ativado traz `false` e nulo. | Aprovado — 2026-10-27, execução da spec-verify |
+| AC-16 | `tests/TickestPristine.IntegrationTests/Users/UserInvitationsTests.cs` › `Invitations_Should_BeAuditedOnIssueRevocationAndUse_WithoutTokenHash` | Emissão, reemissão e uso geram duas inclusões e duas alterações (`RevokedAtUtc` e `UsedAtUtc`) na auditoria, nenhuma com o hash ou a propriedade `TokenHash`. | Aprovado — 2026-10-27, execução da spec-verify |
+| AC-17 | `tests/TickestPristine.IntegrationTests/Users/UserInvitationsTests.cs` › `Activation_Should_ReturnTooManyRequests_WhenAuthenticationLimitIsExceeded` | Com a política `authentication` no padrão (10 por 60 s), as dez primeiras ativações recebem 400 e a 11ª recebe 429. | Aprovado — 2026-10-27, execução da spec-verify |
+| AC-18 | `tests/TickestPristine.IntegrationTests/Seeding/DatabaseSeedingTests.cs` (sem alteração); `IntegrationTestWebAppFactory` › `CompleteAdministratorFirstAccessAsync` | O seed continua criando o administrador com senha provisória: o primeiro acesso dos testes troca a senha em `users/login/new-password`, e os testes de seed passam sem alteração. | Aprovado — 2026-10-27, execução da spec-verify |
+| AC-19 | `dotnet build TickestPristine.slnx` e `dotnet test TickestPristine.slnx` | Build com 0 avisos; 1.011 testes aprovados (50 de arquitetura, 611 unitários, 350 de integração) na execução da `spec-verify`. | Aprovado — 2026-10-27: build 0 avisos e 0 erros; 1.011 aprovados, 0 com falha |
 
 ## 9. Evidências de verificação
-- **Build:**
-- **Testes:**
-- **Revisão:**
-- **Documentação atualizada:** a atualizar pela `spec-verify`: `SYSTEM_SPECIFICATION.md` 2.6 (nova regra do convite), 2.7 (C-01, C-21), 4.3.1 (rotas novas e contrato do cadastro), 5.8 (fluxo de cadastro e ativação), 4.8 (configurações `Email` e `Invitations`).
+- **Build:** `dotnet build TickestPristine.slnx` em 2026-10-27: 0 avisos, 0 erros.
+- **Testes:** `dotnet test TickestPristine.slnx --logger trx` em 2026-10-27, com o Docker ligado: 1.011 aprovados e 0 com falha (50 de arquitetura, 611 unitários e 350 de integração). Todos os testes citados na rastreabilidade aparecem como `Passed` nos relatórios TRX dessa execução.
+- **Auditoria:** `python scripts/auditoria_sdd.py .` em 2026-10-27: score 100,0%, CONFORME, 0 falhas críticas, código de saída 0.
+- **Revisão:** `ca-review` sobre `origin/main...HEAD` (arquivos do plano técnico): **aprovada, sem achados bloqueantes** nem violações de convenção. Limites entre camadas respeitados; slices `Register`, `ResendInvitation` e `ActivateAccount` no padrão Command/Handler/Validator; erros em `UserErrors` com textos em pt-BR; `ResendInvitation` com `HasPermission(users:create)` e `PrivilegeEscalationGuard`; `ActivateAccount` anônima com rate limit `authentication`; datas pelo `IDateTimeProvider`; eventos de domínio disparados antes do `SaveChangesAsync`; o `LoggingDecorator` registra só o nome do command (o token e a senha não vão para o log). Lacunas de teste, não bloqueantes e fora dos ACs: o `ResendUserInvitationCommandValidator` e o `InvitationOptionsValidator` (URL absoluta, sem fragmento, HTTPS fora de Development; mitigação do R-3) não têm testes próprios. Desvio do plano técnico já registrado no histórico de 2026-10-27: o consumo do convite usa tokens de concorrência em vez de `ExecuteUpdateAsync`; o AC-12 comprova o efeito.
+- **Documentação atualizada:** `SYSTEM_SPECIFICATION.md`: 2.6 (RN-30 nova), 2.7 (C-01, C-20 e C-21, esta passando de IND para PI), 4.3.1 (rotas `POST users/{id}/invitation` e `POST users/activation`, cadastro sem senha), 4.6 (tempo do login de conta pendente, token do convite, `TokenHash` fora da auditoria), 4.7 (envio depois do commit e concorrência da ativação), 4.8 (`Email:*` e `Invitations:ActivationUrl`) e 5.8 (fluxo de cadastro e ativação).
 - **CI:**
-- **Entrega:**
+- **Entrega:** PR #30 (https://github.com/rafaelps15/tickest-pristine/pull/30); a spec fica `Entregue` quando o responsável mergear o PR na `main`.
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -178,3 +183,8 @@ backlog:
 | 2026-10-24 | Rascunho | Criada como 007 a partir de `specs/_fontes/gestao-acessos-onboarding.md`, a pedido de Rafael Santos no chat. Decisões DEC-1 a DEC-11 em aberto, com recomendação; checklist de completude não atendido enquanto houver DEC em aberto. |
 | 2026-10-24 | Rascunho | Renumerada de 007 para 008: o número 007 ficou com a spec do fluxo spec-first. DEC-11 resolvida pela decisão de tirar o backlog do repositório; DEC-1 sem números fixos para as próximas specs. |
 | 2026-10-24 | Rascunho | DEC-1 a DEC-10 decididas pela opção recomendada: Rafael Santos delegou a escolha no chat ("encontre as melhores soluções"). DEC-8 com rota padrão `/ativar-conta`. Checklist de completude atendido; aguarda aprovação explícita. |
+| 2026-10-26 | Em descoberta | Revisão pedida por Rafael Santos no chat (`/spec-new 008`), antes da aprovação: fatos atualizados depois das specs 004 a 007, 009 e 013 (sem `specs/BACKLOG.md`: BL-015 e BL-021 trocados por GAP-05 e GAP-14; DTOs de usuário com os campos de setor; 213 chamadas aos auxiliares de cadastro nos testes; quebra do cadastro no front confirmada); DEC-12 nova (auxiliares de teste), pela delegação das escolhas técnicas; R-4 e T-9 ajustados; frontmatter no modelo da spec 007. REQs e ACs sem mudança. Checklist de completude atendido; aguarda aprovação explícita. |
+| 2026-10-26 | Aprovada | Aprovação explícita de Rafael Santos no chat ("aprove"), em resposta ao pedido de aprovação da spec 008 que incluía o pacote `MailKit`, o `mailpit` no `docker-compose.yml`, as seções `Email` e `Invitations` no `appsettings.Development.json` e a quebra do contrato de `POST users/register` (DEC-5). Checklist de completude conferido: todo REQ com AC, nenhuma DEC em aberto, nenhum `[SUPOSIÇÃO]`, toda tarefa ligada a ACs. |
+| 2026-10-26 | Em implementação | `/spec-implement 008` na branch `feat/SPEC-008-user-invitation-activation`; Rafael Santos pediu a execução contínua de todas as tarefas, com as escolhas técnicas delegadas, e os commits ficam para depois do diff e do ok. |
+| 2026-10-27 | Em implementação | T-1 a T-10 implementadas, com o build e todos os testes aprovados; os commits aguardam o ok de Rafael Santos. Escolhas técnicas feitas pela delegação: MailKit 4.17.0 com o `System.Security.Cryptography.Pkcs` fixado em 10.0.13 (a 10.0.0 trazida pelo MimeKit tem as vulnerabilidades GHSA-846f-f764-76mx e GHSA-2fmv-rv2c-59x7; o MailKit 4.18.2, que já a corrige, tinha 3 dias); Mailpit `v1.31.5`; uso e revogação do convite como tokens de concorrência (mesmo padrão do `TicketSlaTimer`), com o índice único de `user_credentials.user_id` como segunda barreira; o hash do token reaproveita o `RefreshTokenHasher`; a auditoria da credencial passa a ter autor nulo, porque ela nasce na ativação anônima (`AuditLogsTests` ajustado); o teste de cadastro com senha fraca virou o de e-mail inválido, e os de senha do validator de cadastro passaram para o validator de ativação. |
+| 2026-10-27 | Verificada | `spec-verify` aprovada: build com 0 avisos; 1.011 testes aprovados e 0 com falha; auditoria SDD 100% (código de saída 0); AC-1 a AC-19 cobertos por testes que exercitam o comportamento descrito e passaram nesta execução; `ca-review` sem achados bloqueantes (lacunas de teste não bloqueantes no validator do reenvio e no `InvitationOptionsValidator`). `SYSTEM_SPECIFICATION.md` atualizado (2.6, 2.7, 4.3.1, 4.6, 4.7, 4.8, 5.8). Riscos que continuam: R-1 (o front precisa remover a senha do cadastro e criar a tela `/ativar-conta`) e a configuração obrigatória de `Email` e `Invitations` fora de Development. |

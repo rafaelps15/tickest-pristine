@@ -68,6 +68,22 @@ public static class UserErrors
         "Users.PasswordChangeRequired",
         "É preciso definir uma nova senha antes de acessar o sistema.");
 
+    public static readonly Error InvalidActivationToken = Error.Problem(
+        "Users.InvalidActivationToken",
+        "Link inválido ou expirado. Solicite um novo convite ao administrador.");
+
+    public static readonly Error AlreadyActivated = Error.Conflict(
+        "Users.AlreadyActivated",
+        "A conta deste usuário já foi ativada.");
+
+    public static readonly Error InvitationUserDeactivated = Error.Conflict(
+        "Users.InvitationUserDeactivated",
+        "O usuário está desativado. Reative-o antes de enviar um novo convite.");
+
+    public static Error InvitationLimitReached(int maxInvitations, int windowInHours) => Error.Conflict(
+        "Users.InvitationLimitReached",
+        $"Este usuário já recebeu {maxInvitations} convites nas últimas {windowInHours} horas. Tente de novo mais tarde.");
+
     public static readonly Error PasswordChangeNotRequired = Error.Conflict(
         "Users.PasswordChangeNotRequired",
         "Não há troca de senha pendente para este usuário.");

@@ -2,5 +2,7 @@
 
 namespace TickestPristine.Application.Users.Register;
 
-public sealed record RegisterUserCommand(string Email, string FirstName, string LastName, string Password)
-    : ICommand<Guid>;
+/// <summary>
+/// Cadastra um usuário sem senha: ele recebe um convite por e-mail e define a própria senha na ativação.
+/// </summary>
+public sealed record RegisterUserCommand(string Email, string FirstName, string LastName) : ICommand<Guid>;

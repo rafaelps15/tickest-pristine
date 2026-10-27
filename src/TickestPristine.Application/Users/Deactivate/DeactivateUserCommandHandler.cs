@@ -60,6 +60,9 @@ internal sealed class DeactivateUserCommandHandler(
         user.IsActive = false;
         user.DeactivatedAtUtc = dateTimeProvider.UtcNow;
 
+        // Conta pendente: o convite deixa de valer. Reativar não devolve o convite; o administrador reenvia.
+        await UserInvitations.RevokeAllAsync(context, user.Id, user.DeactivatedAtUtc.Value, cancellationToken);
+
         user.Raise(new UserDeactivatedDomainEvent(user.Id));
 
         // Encerra as sessões abertas: sem isso, uma reativação faria os refresh tokens anteriores voltarem a valer.
