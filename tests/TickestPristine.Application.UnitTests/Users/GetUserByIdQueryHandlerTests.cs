@@ -3,6 +3,7 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Permissions;
 using TickestPristine.Application.Users.GetById;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Users;
 using TickestPristine.Application.Users;
 
@@ -129,5 +130,85 @@ public sealed class GetUserByIdQueryHandlerTests : BaseHandlerTest
         // Assert
         result.IsSuccess.ShouldBeTrue();
         result.Value.Id.ShouldBe(user.Id);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnSectorAndDepartment_WhenUserHasSector()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Sector sector = await SeedSectorAsync(context, "TI", "Tecnologia");
+        User user = CreateUser();
+        user.SectorId = sector.Id;
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+
+        GetUserByIdQueryHandler handler = CreateSelfHandler(context, user.Id);
+
+        // Act
+        Result<UserResponse> result = await handler.Handle(new GetUserByIdQuery(user.Id), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.SectorId.ShouldBe(sector.Id);
+        result.Value.SectorName.ShouldBe("TI");
+        result.Value.DepartmentName.ShouldBe("Tecnologia");
+        result.Value.SectorIsActive.ShouldBe(true);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnNullSector_WhenUserHasNoSector()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        await SeedSectorAsync(context, "TI", "Tecnologia");
+        User user = CreateUser();
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+
+        GetUserByIdQueryHandler handler = CreateSelfHandler(context, user.Id);
+
+        // Act
+        Result<UserResponse> result = await handler.Handle(new GetUserByIdQuery(user.Id), CancellationToken.None);
+
+        // Assert
+        result.Value.SectorId.ShouldBeNull();
+        result.Value.SectorName.ShouldBeNull();
+        result.Value.DepartmentName.ShouldBeNull();
+        result.Value.SectorIsActive.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnInactiveSector_WhenSectorIsDeactivated()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Sector sector = await SeedSectorAsync(context, "TI", "Tecnologia", isActive: false);
+        User user = CreateUser();
+        user.SectorId = sector.Id;
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+
+        GetUserByIdQueryHandler handler = CreateSelfHandler(context, user.Id);
+
+        // Act
+        Result<UserResponse> result = await handler.Handle(new GetUserByIdQuery(user.Id), CancellationToken.None);
+
+        // Assert
+        result.Value.SectorId.ShouldBe(sector.Id);
+        result.Value.SectorName.ShouldBe("TI");
+        result.Value.DepartmentName.ShouldBe("Tecnologia");
+        result.Value.SectorIsActive.ShouldBe(false);
+    }
+
+    /// <summary>
+    /// Handler em que quem consulta é o próprio usuário, que sempre pode ler o próprio perfil.
+    /// </summary>
+    private static GetUserByIdQueryHandler CreateSelfHandler(TestDbContext context, Guid userId)
+    {
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(userId);
+
+        return new GetUserByIdQueryHandler(context, userContext, Substitute.For<IPermissionProvider>());
     }
 }

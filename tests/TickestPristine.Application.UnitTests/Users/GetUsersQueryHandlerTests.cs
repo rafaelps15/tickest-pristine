@@ -2,6 +2,7 @@ using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Users.GetAll;
 using TickestPristine.Domain.Roles;
+using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Users;
 
 namespace TickestPristine.Application.UnitTests.Users;
@@ -199,6 +200,74 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
 
         // Assert
         result.Value.Items.Single(u => u.Id == user.Id).Roles.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnSectorAndDepartment_WhenUserHasSector()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Sector sector = await SeedSectorAsync(context, "TI", "Tecnologia");
+        User user = AddUser(context, "Ana", "ana@tickestpristine.dev", isActive: true);
+        user.SectorId = sector.Id;
+        await context.SaveChangesAsync();
+
+        var handler = new GetUsersQueryHandler(context);
+
+        // Act
+        Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(AllUsers, CancellationToken.None);
+
+        // Assert
+        UserSummaryResponse response = result.Value.Items.Single(u => u.Id == user.Id);
+        response.SectorId.ShouldBe(sector.Id);
+        response.SectorName.ShouldBe("TI");
+        response.DepartmentName.ShouldBe("Tecnologia");
+        response.SectorIsActive.ShouldBe(true);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnNullSector_WhenUserHasNoSector()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        await SeedSectorAsync(context, "TI", "Tecnologia");
+        User user = AddUser(context, "Eva", "eva@tickestpristine.dev", isActive: true);
+        await context.SaveChangesAsync();
+
+        var handler = new GetUsersQueryHandler(context);
+
+        // Act
+        Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(AllUsers, CancellationToken.None);
+
+        // Assert
+        UserSummaryResponse response = result.Value.Items.Single(u => u.Id == user.Id);
+        response.SectorId.ShouldBeNull();
+        response.SectorName.ShouldBeNull();
+        response.DepartmentName.ShouldBeNull();
+        response.SectorIsActive.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnInactiveSector_WhenSectorIsDeactivated()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Sector sector = await SeedSectorAsync(context, "TI", "Tecnologia", isActive: false);
+        User user = AddUser(context, "Ana", "ana@tickestpristine.dev", isActive: true);
+        user.SectorId = sector.Id;
+        await context.SaveChangesAsync();
+
+        var handler = new GetUsersQueryHandler(context);
+
+        // Act
+        Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(AllUsers, CancellationToken.None);
+
+        // Assert
+        UserSummaryResponse response = result.Value.Items.Single(u => u.Id == user.Id);
+        response.SectorId.ShouldBe(sector.Id);
+        response.SectorName.ShouldBe("TI");
+        response.DepartmentName.ShouldBe("Tecnologia");
+        response.SectorIsActive.ShouldBe(false);
     }
 
     private static User AddUser(TestDbContext context, string firstName, string email, bool isActive)
