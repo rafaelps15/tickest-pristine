@@ -482,6 +482,151 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
+    public async Task GetOwn_Should_ReturnAssigneeSectorDueAndSlaFields_LikeGetAll()
+    {
+        // Arrange: um chamado de Maria atribuído ao administrador e outro sem responsável, no mesmo setor
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (Guid requesterId, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid assignedId = await CreateTicketAsync(sectorId);
+        Guid unassignedId = await CreateTicketAsync(sectorId);
+
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(adminTokens.AccessToken);
+        (await HttpClient.PutAsJsonAsync($"tickets/{assignedId}/assignee", new { assignedToUserId = GetUserId(adminTokens) }))
+            .StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        PagedTicketsDto? general = await HttpClient.GetFromJsonAsync<PagedTicketsDto>($"tickets?requesterId={requesterId}");
+        string sectorName = await GetSectorNameAsync(sectorId);
+
+        // Act
+        Authenticate(requesterTokens.AccessToken);
+        PagedOwnTicketItemsDto? page = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>("tickets/mine");
+
+        // Assert
+        OwnTicketItemDto assigned = page!.Items.Single(t => t.Id == assignedId);
+        TicketSummaryDto sameInGetAll = general!.Items.Single(t => t.Id == assignedId);
+        assigned.AssignedToName.ShouldBe("Admin Master");
+        assigned.SectorId.ShouldBe(sectorId);
+        assigned.SectorName.ShouldBe(sectorName);
+        assigned.DueAtUtc.ShouldBe(sameInGetAll.DueAtUtc);
+        assigned.SlaStatus.ShouldBe(sameInGetAll.SlaStatus);
+        assigned.Title.ShouldBe("Printer is broken");
+        assigned.Description.ShouldBe("The printer on the 3rd floor is not working");
+        assigned.Priority.ShouldBe(2); // Medium
+        assigned.OpenedByUserId.ShouldBe(requesterId);
+
+        page.Items.Single(t => t.Id == unassignedId).AssignedToName.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task GetOwn_Should_FilterByStatusGroup_WhenStatusIsGiven()
+    {
+        // Arrange: um chamado de Maria em cada status
+        (Guid requesterId, Guid sectorId) = await CreateRequesterAndSectorAsync();
+        foreach (TicketStatus status in Enum.GetValues<TicketStatus>())
+        {
+            await InsertOwnTicketAsync(requesterId, sectorId, status, "Printer is broken", DateTime.UtcNow.AddHours(-1));
+        }
+
+        // Act
+        PagedOwnTicketItemsDto? active = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>("tickets/mine?status=Active");
+        PagedOwnTicketItemsDto? finished = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>("tickets/mine?status=Finished");
+        PagedOwnTicketItemsDto? all = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>("tickets/mine");
+        HttpResponseMessage invalid = await HttpClient.GetAsync("tickets/mine?status=xyz");
+
+        // Assert
+        active!.Items.Select(t => t.Status).Order().ShouldBe([1, 2]); // Open, InProgress
+        finished!.Items.Select(t => t.Status).Order().ShouldBe([3, 4, 5]); // Resolved, Closed, Canceled
+        all!.TotalCount.ShouldBe(5);
+        invalid.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task GetOwn_Should_SearchTitleIgnoringCase_WhenSearchIsGiven()
+    {
+        // Arrange
+        (Guid requesterId, Guid sectorId) = await CreateRequesterAndSectorAsync();
+        Guid printerId = await InsertOwnTicketAsync(requesterId, sectorId, TicketStatus.Open, "Impressora não imprime", DateTime.UtcNow.AddHours(-1));
+        Guid emailId = await InsertOwnTicketAsync(requesterId, sectorId, TicketStatus.Open, "Acesso ao e-mail", DateTime.UtcNow.AddHours(-2));
+
+        // Act
+        PagedOwnTicketItemsDto? byUpperCase = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>("tickets/mine?search=IMPRESS");
+        PagedOwnTicketItemsDto? bySpaces = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>("tickets/mine?search=%20%20e-mail%20%20");
+        PagedOwnTicketItemsDto? byBlank = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>("tickets/mine?search=%20%20%20");
+
+        // Assert
+        byUpperCase!.Items.ShouldHaveSingleItem().Id.ShouldBe(printerId);
+        bySpaces!.Items.ShouldHaveSingleItem().Id.ShouldBe(emailId);
+        byBlank!.Items.Select(t => t.Id).ShouldBe([printerId, emailId], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task GetOwn_Should_PageFilteredResultsByLastActivity_WhenTicketGetsNewMessage()
+    {
+        // Arrange: A, B e C abertos nessa ordem; depois, uma mensagem nova em A
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+        Guid a = await CreateTicketAsync(sectorId);
+        Guid b = await CreateTicketAsync(sectorId);
+        Guid c = await CreateTicketAsync(sectorId);
+        (await PostMessageAsync(a, "Alguma novidade?")).EnsureSuccessStatusCode();
+
+        // Act
+        PagedOwnTicketItemsDto? firstPage = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>(
+            "tickets/mine?status=Active&pageSize=2");
+        PagedOwnTicketItemsDto? secondPage = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>(
+            "tickets/mine?status=Active&pageSize=2&page=2");
+
+        // Assert
+        firstPage!.Items.Select(t => t.Id).ShouldBe([a, c]);
+        firstPage.TotalCount.ShouldBe(3);
+        secondPage!.Items.Select(t => t.Id).ShouldBe([b]);
+    }
+
+    [Fact]
+    public async Task GetOwn_Should_ReturnOnlyCallerTickets_WhenOtherUserHasTicketWithSameTitle()
+    {
+        // Arrange: Paulo e Maria com chamados de mesmo título
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens paulo) = await RegisterAndLoginAsync();
+        Authenticate(paulo.AccessToken);
+        Guid paulosTicketId = await CreateTicketAsync(sectorId);
+        (_, AccessTokens maria) = await RegisterAndLoginAsync();
+        Authenticate(maria.AccessToken);
+        Guid mariasTicketId = await CreateTicketAsync(sectorId);
+
+        // Act
+        PagedOwnTicketItemsDto? page = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>(
+            "tickets/mine?search=Printer");
+
+        // Assert
+        page!.Items.ShouldHaveSingleItem().Id.ShouldBe(mariasTicketId);
+        page.Items.ShouldNotContain(t => t.Id == paulosTicketId);
+    }
+
+    [Fact]
+    public async Task GetOwn_Should_ReturnForbidden_WithoutViewOwnPermission()
+    {
+        // Arrange: usuário sem nenhuma role, portanto sem tickets:view-own
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
+        AccessTokens userTokens = await LoginAsync(email);
+
+        await AuthenticateAsAdminAsync();
+        (await HttpClient.PutAsJsonAsync($"users/{userId}/roles", new { roleNames = Array.Empty<string>() }))
+            .StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        Authenticate(userTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/mine");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public async Task GetSlaSummary_Should_ReturnForbidden_WhenCallerLacksManagePermission()
     {
         // Arrange
@@ -1796,6 +1941,66 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         await context.SaveChangesAsync();
     }
+
+    /// <summary>
+    /// Chamado do solicitante gravado direto no banco, com o status e o título escolhidos (pela API, o chamado nasce
+    /// Aberto) e a última atividade igual à abertura, como o interceptor faria.
+    /// </summary>
+    private async Task<Guid> InsertOwnTicketAsync(
+        Guid requesterId,
+        Guid sectorId,
+        TicketStatus status,
+        string title,
+        DateTime createdAtUtc)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var ticket = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Title = title,
+            Description = "The printer on the 3rd floor is not working",
+            Priority = TicketPriority.Medium,
+            Status = status,
+            CreatedByUserId = requesterId,
+            SectorId = sectorId,
+            CreatedAtUtc = createdAtUtc,
+            LastActivityAtUtc = createdAtUtc,
+            DueAtUtc = createdAtUtc.AddHours(8),
+            SlaWarningAtUtc = createdAtUtc.AddHours(6),
+            SlaPlan = TicketSla.LegacyPlan(TicketPriority.Medium)
+        };
+
+        context.Tickets.Add(ticket);
+        await context.SaveChangesAsync();
+
+        return ticket.Id;
+    }
+
+    private async Task<string> GetSectorNameAsync(Guid sectorId)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return await context.Sectors.Where(s => s.Id == sectorId).Select(s => s.Name).SingleAsync();
+    }
+
+    private sealed record OwnTicketItemDto(
+        Guid Id,
+        string Title,
+        string Description,
+        int Priority,
+        int Status,
+        Guid OpenedByUserId,
+        string? AssignedToName,
+        Guid SectorId,
+        string SectorName,
+        DateTime DueAtUtc,
+        int SlaStatus,
+        DateTime LastActivityAtUtc);
+
+    private sealed record PagedOwnTicketItemsDto(List<OwnTicketItemDto> Items, int TotalCount);
 
     private sealed record TicketDto(Guid Id, string Title, string Description, int Priority, int Status);
 
