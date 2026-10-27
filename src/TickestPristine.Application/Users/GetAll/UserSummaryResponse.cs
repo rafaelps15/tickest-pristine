@@ -9,6 +9,10 @@ public sealed record UserSummaryResponse
     public bool IsActive { get; init; }
     public DateTime CreatedAtUtc { get; init; }
     public DateTime? DeactivatedAtUtc { get; init; }
+    public Guid? SectorId { get; init; }
+    public string? SectorName { get; init; }
+    public string? DepartmentName { get; init; }
+    public bool? SectorIsActive { get; init; }
     public List<RoleSummaryResponse> Roles { get; init; } = [];
 }
 

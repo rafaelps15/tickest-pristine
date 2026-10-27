@@ -1,5 +1,7 @@
 ﻿using TickestPristine.Application.Roles;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Roles;
+using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
@@ -136,6 +138,37 @@ public abstract class BaseHandlerTest
     /// Role com qualquer nome, como as que já existem no banco além das fixas de <see cref="RoleNames"/>.
     /// </summary>
     protected static Role CreateRole(string name) => new() { Id = Guid.NewGuid(), Name = name };
+
+    /// <summary>
+    /// Setor num departamento novo, gravados no banco, para os testes que leem o setor do usuário.
+    /// </summary>
+    protected static async Task<Sector> SeedSectorAsync(
+        TestDbContext context,
+        string sectorName,
+        string departmentName,
+        bool isActive = true)
+    {
+        var department = new Department
+        {
+            Id = Guid.NewGuid(),
+            Name = departmentName,
+            Description = departmentName,
+            IsActive = true
+        };
+        var sector = new Sector
+        {
+            Id = Guid.NewGuid(),
+            Name = sectorName,
+            IsActive = isActive,
+            DepartmentId = department.Id
+        };
+
+        context.Departments.Add(department);
+        context.Sectors.Add(sector);
+        await context.SaveChangesAsync();
+
+        return sector;
+    }
 
     /// <summary>
     /// Dá ao usuário uma role nova com as permissões informadas, gravada no banco (como a elegibilidade de atendente

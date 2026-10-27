@@ -2007,4 +2007,148 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         return await context.Users.Where(u => u.Id == userId).Select(u => u.SectorId).SingleAsync();
     }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnSectorFields_ForUsersWithAndWithoutSector()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string token = NewToken();
+        Guid itSectorId = await InsertSectorAsync("TI", $"Tecnologia-{token}");
+        Guid anaId = await InsertUserAsync("Ana", "Souza", $"ana.{token}@example.com", itSectorId);
+        Guid evaId = await InsertUserAsync("Eva", "Prado", $"eva.{token}@example.com");
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"users?search={token}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        PagedDto<UserSectorDto>? page = await response.Content.ReadFromJsonAsync<PagedDto<UserSectorDto>>();
+        page!.TotalCount.ShouldBe(2);
+        page.Items.Select(u => u.Id).ShouldBe([anaId, evaId]);
+        page.Items[0].ShouldBe(new UserSectorDto(anaId, itSectorId, "TI", $"Tecnologia-{token}", true));
+        page.Items[1].ShouldBe(new UserSectorDto(evaId, null, null, null, null));
+    }
+
+    [Fact]
+    public async Task GetById_Should_ReturnSectorFields_WhenCallerIsAdminOrSelf()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string token = NewToken();
+        Guid itSectorId = await InsertSectorAsync("TI", $"Tecnologia-{token}");
+        string anaEmail = $"ana.{token}@example.com";
+        Guid anaId = await RegisterUserAsync(anaEmail);
+        (await HttpClient.PutAsJsonAsync($"users/{anaId}/sector", new { sectorId = itSectorId })).EnsureSuccessStatusCode();
+        var expected = new UserSectorDto(anaId, itSectorId, "TI", $"Tecnologia-{token}", true);
+        AccessTokens agentTokens = await CreateAgentAsync();
+
+        // Act
+        await AuthenticateAsAdminAsync();
+        UserSectorDto? asAdmin = await HttpClient.GetFromJsonAsync<UserSectorDto>($"users/{anaId}");
+        Authenticate((await LoginAsync(anaEmail)).AccessToken);
+        UserSectorDto? asSelf = await HttpClient.GetFromJsonAsync<UserSectorDto>($"users/{anaId}");
+        Authenticate(agentTokens.AccessToken);
+        HttpResponseMessage asAgent = await HttpClient.GetAsync($"users/{anaId}");
+
+        // Assert
+        asAdmin.ShouldBe(expected);
+        asSelf.ShouldBe(expected);
+        asAgent.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetAllAndGetById_Should_ReturnInactiveSector_WhenSectorIsDeactivated()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string token = NewToken();
+        Guid itSectorId = await InsertSectorAsync("TI", $"Tecnologia-{token}");
+        Guid anaId = await InsertUserAsync("Ana", "Souza", $"ana.{token}@example.com", itSectorId);
+        (await HttpClient.DeleteAsync($"sectors/{itSectorId}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        var expected = new UserSectorDto(anaId, itSectorId, "TI", $"Tecnologia-{token}", false);
+
+        // Act
+        PagedDto<UserSectorDto>? page = await HttpClient.GetFromJsonAsync<PagedDto<UserSectorDto>>($"users?search={token}");
+        UserSectorDto? byId = await HttpClient.GetFromJsonAsync<UserSectorDto>($"users/{anaId}");
+
+        // Assert
+        page!.Items.ShouldHaveSingleItem().ShouldBe(expected);
+        byId.ShouldBe(expected);
+    }
+
+    [Fact]
+    public async Task GetAllAndGetById_Should_FollowSectorChanges()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string token = NewToken();
+        Guid itSectorId = await InsertSectorAsync("TI", $"Tecnologia-{token}");
+        Guid evaId = await InsertUserAsync("Eva", "Prado", $"eva.{token}@example.com");
+        var withSector = new UserSectorDto(evaId, itSectorId, "TI", $"Tecnologia-{token}", true);
+        var withoutSector = new UserSectorDto(evaId, null, null, null, null);
+
+        // Act
+        (await HttpClient.PutAsJsonAsync($"users/{evaId}/sector", new { sectorId = itSectorId })).EnsureSuccessStatusCode();
+        UserSectorDto afterSetInList = (await HttpClient.GetFromJsonAsync<PagedDto<UserSectorDto>>($"users?search={token}"))!
+            .Items.Single();
+        UserSectorDto? afterSetById = await HttpClient.GetFromJsonAsync<UserSectorDto>($"users/{evaId}");
+
+        (await HttpClient.PutAsJsonAsync($"users/{evaId}/sector", new { sectorId = (Guid?)null })).EnsureSuccessStatusCode();
+        UserSectorDto afterRemoveInList = (await HttpClient.GetFromJsonAsync<PagedDto<UserSectorDto>>($"users?search={token}"))!
+            .Items.Single();
+        UserSectorDto? afterRemoveById = await HttpClient.GetFromJsonAsync<UserSectorDto>($"users/{evaId}");
+
+        // Assert
+        afterSetInList.ShouldBe(withSector);
+        afterSetById.ShouldBe(withSector);
+        afterRemoveInList.ShouldBe(withoutSector);
+        afterRemoveById.ShouldBe(withoutSector);
+    }
+
+    [Fact]
+    public async Task GetCurrentAndGetByEmail_Should_NotExposeSectorFields()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string token = NewToken();
+        Guid itSectorId = await InsertSectorAsync("TI", $"Tecnologia-{token}");
+        string anaEmail = $"ana.{token}@example.com";
+        Guid anaId = await RegisterUserAsync(anaEmail);
+        (await HttpClient.PutAsJsonAsync($"users/{anaId}/sector", new { sectorId = itSectorId })).EnsureSuccessStatusCode();
+
+        // Act
+        string byEmail = await HttpClient.GetStringAsync($"users/by-email?email={Uri.EscapeDataString(anaEmail)}");
+        Authenticate((await LoginAsync(anaEmail)).AccessToken);
+        string current = await HttpClient.GetStringAsync("users/me");
+
+        // Assert
+        PropertyNames(byEmail).ShouldNotContain(name => SectorPropertyNames.Contains(name));
+        PropertyNames(current).ShouldNotContain(name => SectorPropertyNames.Contains(name));
+    }
+
+    /// <summary>
+    /// Os campos de setor que só `GET users` e `GET users/{id}` expõem (spec 013).
+    /// </summary>
+    private static readonly string[] SectorPropertyNames = ["sectorId", "sectorName", "departmentName", "sectorIsActive"];
+
+    /// <summary>
+    /// Nomes das propriedades do objeto JSON na raiz da resposta.
+    /// </summary>
+    private static List<string> PropertyNames(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+
+        return document.RootElement.EnumerateObject().Select(property => property.Name).ToList();
+    }
+
+    /// <summary>
+    /// Id e campos de setor de um usuário, como `GET users` (cada item) e `GET users/{id}` devolvem.
+    /// </summary>
+    private sealed record UserSectorDto(
+        Guid Id,
+        Guid? SectorId,
+        string? SectorName,
+        string? DepartmentName,
+        bool? SectorIsActive);
 }

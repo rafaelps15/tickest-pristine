@@ -9,4 +9,12 @@ public sealed record UserResponse
     public string FirstName { get; init; }
 
     public string LastName { get; init; }
+
+    public Guid? SectorId { get; init; }
+
+    public string? SectorName { get; init; }
+
+    public string? DepartmentName { get; init; }
+
+    public bool? SectorIsActive { get; init; }
 }
