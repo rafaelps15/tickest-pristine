@@ -1,6 +1,7 @@
 using TickestPristine.Application.Users.Activate;
 using TickestPristine.Application.Users.AssignRoles;
 using TickestPristine.Application.Users.ChangePassword;
+using TickestPristine.Application.Users.ChangeSector;
 using TickestPristine.Application.Users.ChangeRequiredPassword;
 using TickestPristine.Application.Users.Deactivate;
 using TickestPristine.Application.Users.Login;
@@ -29,6 +30,7 @@ public sealed class UserValidatorsTests
     private readonly DeactivateUserCommandValidator _deactivateValidator = new();
     private readonly ActivateUserCommandValidator _activateValidator = new();
     private readonly LogoutUserCommandValidator _logoutValidator = new();
+    private readonly ChangeUserSectorCommandValidator _changeSectorValidator = new();
 
     [Fact]
     public void RegisterValidator_Should_HaveError_WhenEmailIsInvalid()
@@ -672,6 +674,45 @@ public sealed class UserValidatorsTests
 
         // Act
         TestValidationResult<ChangeRequiredUserPasswordCommand> result = _changeRequiredPasswordValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void ChangeSectorValidator_Should_HaveError_WhenUserIdIsEmpty()
+    {
+        // Arrange
+        var command = new ChangeUserSectorCommand(Guid.Empty, Guid.NewGuid());
+
+        // Act
+        TestValidationResult<ChangeUserSectorCommand> result = _changeSectorValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.UserId);
+    }
+
+    [Fact]
+    public void ChangeSectorValidator_Should_HaveError_WhenSectorIdIsEmpty()
+    {
+        // Arrange
+        var command = new ChangeUserSectorCommand(Guid.NewGuid(), Guid.Empty);
+
+        // Act
+        TestValidationResult<ChangeUserSectorCommand> result = _changeSectorValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.SectorId);
+    }
+
+    [Fact]
+    public void ChangeSectorValidator_Should_NotHaveErrors_WhenSectorIdIsNull()
+    {
+        // Arrange
+        var command = new ChangeUserSectorCommand(Guid.NewGuid(), null);
+
+        // Act
+        TestValidationResult<ChangeUserSectorCommand> result = _changeSectorValidator.TestValidate(command);
 
         // Assert
         result.ShouldNotHaveAnyValidationErrors();

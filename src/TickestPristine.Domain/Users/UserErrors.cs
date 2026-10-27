@@ -16,6 +16,14 @@ public static class UserErrors
         "Users.CannotManagePrivilegedUser",
         $"Você não pode desativar nem reativar quem tem permissões administrativas que você não possui: {string.Join(", ", permissionNames)}");
 
+    public static readonly Error ReadForbidden = Error.Forbidden(
+        "Users.ReadForbidden",
+        "Você não tem permissão para buscar usuários.");
+
+    public static Error InvalidSearchTerm(int minLength, int maxLength) => Error.Problem(
+        "Users.InvalidSearchTerm",
+        $"O termo de busca deve ter entre {minLength} e {maxLength} caracteres.");
+
     public static readonly Error LockedOut = Error.Forbidden(
         "Users.LockedOut",
         "Muitas tentativas de login sem sucesso. A conta está bloqueada por alguns minutos; tente de novo mais tarde.");

@@ -8,14 +8,31 @@ namespace TickestPristine.Application.TicketHistories;
 /// </summary>
 internal static class TicketHistoryDescriptions
 {
-    public static string For(TicketHistoryAction action, string? oldValue, string? newValue) =>
+    /// <summary>
+    /// Nome exibido no lugar de um responsável que não corresponde a nenhum usuário.
+    /// </summary>
+    public const string RemovedUserName = "usuário removido";
+
+    /// <param name="oldUserName">Nome completo do responsável anterior, nos registros de responsável.</param>
+    /// <param name="newUserName">Nome completo do novo responsável, nos registros de responsável.</param>
+    public static string For(
+        TicketHistoryAction action,
+        string? oldValue,
+        string? newValue,
+        string? oldUserName = null,
+        string? newUserName = null) =>
         action switch
         {
             TicketHistoryAction.Created => "Chamado criado",
             TicketHistoryAction.StatusChanged =>
                 $"Status alterado de {GetStatusDisplayName(oldValue)} para {GetStatusDisplayName(newValue)}",
-            TicketHistoryAction.Reassigned => "Responsável alterado",
-            TicketHistoryAction.Unassigned => "Responsável removido",
+            TicketHistoryAction.Assigned => $"Responsável definido: {newUserName ?? RemovedUserName}",
+            // Registros antigos têm Reassigned com o anterior nulo também na primeira atribuição.
+            TicketHistoryAction.Reassigned when oldValue is null =>
+                $"Responsável definido: {newUserName ?? RemovedUserName}",
+            TicketHistoryAction.Reassigned =>
+                $"Responsável alterado de {oldUserName ?? RemovedUserName} para {newUserName ?? RemovedUserName}",
+            TicketHistoryAction.Unassigned => $"Responsável removido: {oldUserName ?? RemovedUserName}",
             TicketHistoryAction.DescriptionChanged => "Descrição alterada",
             TicketHistoryAction.Reopened => "Chamado reaberto",
             TicketHistoryAction.Deleted => "Chamado excluído",

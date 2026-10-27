@@ -1,7 +1,11 @@
 using System.Net.Http.Headers;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Json;
+using TickestPristine.Application.Users;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Roles;
+using TickestPristine.Domain.Sectors;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Infrastructure.Database;
@@ -116,5 +120,76 @@ public abstract class BaseIntegrationTest
         await context.SaveChangesAsync();
 
         return name;
+    }
+
+    /// <summary>
+    /// Usuário gravado direto no banco, com as roles informadas e sem senha (não faz login): para os testes que só
+    /// precisam dele em consultas e atribuições.
+    /// </summary>
+    protected async Task<Guid> InsertUserAsync(
+        string firstName,
+        string lastName,
+        string email,
+        Guid? sectorId = null,
+        bool isActive = true,
+        params string[] roleNames)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = email,
+            FirstName = firstName,
+            LastName = lastName,
+            Code = UserCodes.New(),
+            IsActive = isActive,
+            CreatedAtUtc = DateTime.UtcNow,
+            DeactivatedAtUtc = isActive ? null : DateTime.UtcNow,
+            SectorId = sectorId
+        };
+
+        context.Users.Add(user);
+        context.UserRoles.AddRange(roleNames.Select(roleName => new UserRole
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            RoleName = roleName
+        }));
+        await context.SaveChangesAsync();
+
+        return user.Id;
+    }
+
+    /// <summary>
+    /// Setor ativo num departamento novo, gravados direto no banco. O nome do departamento precisa ser único entre os
+    /// ativos.
+    /// </summary>
+    protected async Task<Guid> InsertSectorAsync(string sectorName, string departmentName)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var department = new Department
+        {
+            Id = Guid.NewGuid(),
+            Name = departmentName,
+            Description = "A department created by tests",
+            IsActive = true
+        };
+        var sector = new Sector
+        {
+            Id = Guid.NewGuid(),
+            Name = sectorName,
+            IsActive = true,
+            DepartmentId = department.Id
+        };
+
+        context.Departments.Add(department);
+        context.Sectors.Add(sector);
+        await context.SaveChangesAsync();
+
+        return sector.Id;
     }
 }

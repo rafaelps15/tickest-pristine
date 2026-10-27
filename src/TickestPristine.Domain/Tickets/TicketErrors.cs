@@ -20,7 +20,11 @@ public static class TicketErrors
         "Tickets.InvalidStatusTransition",
         $"Não é possível alterar o status do chamado de '{TicketStatusNames.GetDisplayName(from)}' para '{TicketStatusNames.GetDisplayName(to)}'");
 
-    public static Error AssigneeCannotManageTickets(Guid userId) => Error.Problem(
-        "Tickets.AssigneeCannotManageTickets",
+    public static Error AssigneeNotAttendant(Guid userId) => Error.Problem(
+        "Tickets.AssigneeNotAttendant",
         $"O usuário com o Id = '{userId}' não atende chamados e não pode ser o responsável");
+
+    public static readonly Error CannotAssignToOthers = Error.Forbidden(
+        "Tickets.CannotAssignToOthers",
+        "Você só pode atribuir o chamado a você mesmo.");
 }

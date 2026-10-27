@@ -2,6 +2,7 @@ using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Permissions;
+using TickestPristine.Application.TicketHistories;
 using TickestPristine.Application.TicketHistories.GetAll;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
@@ -107,6 +108,47 @@ public sealed class GetTicketHistoryQueryHandlerTests : BaseHandlerTest
         // Assert
         result.IsSuccess.ShouldBeTrue();
         result.Value.Items.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Handle_Should_DescribeAssigneesByName_IncludingDeactivatedAndRemovedUsers()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketWithHistoryAsync(context);
+
+        User ana = CreateUser(isActive: false);
+        ana.FirstName = "Ana";
+        ana.LastName = "Souza";
+        User beto = CreateUser();
+        beto.FirstName = "Beto";
+        beto.LastName = "Lima";
+        context.Users.AddRange(ana, beto);
+
+        var removedUserId = Guid.NewGuid();
+        DateTime occurredAtUtc = DateTime.UtcNow.AddMinutes(5);
+        context.TicketHistories.AddRange(
+            TicketHistoryEntries.Assigned(ticketId, CreatorId, ana.Id, occurredAtUtc),
+            TicketHistoryEntries.Reassigned(ticketId, CreatorId, ana.Id, beto.Id, occurredAtUtc.AddMinutes(1)),
+            TicketHistoryEntries.Unassigned(ticketId, CreatorId, removedUserId, occurredAtUtc.AddMinutes(2)));
+        await context.SaveChangesAsync();
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(CreatorId);
+        var handler = new GetTicketHistoryQueryHandler(context, userContext, Substitute.For<IPermissionProvider>());
+        var query = new GetTicketHistoryQuery(ticketId, new CursorPageRequest(null, null, 20));
+
+        // Act
+        Result<CursorPagedResponse<TicketHistoryResponse>> result = await handler.Handle(query, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Items.Take(3).Select(h => h.Description).ShouldBe(
+        [
+            "Responsável removido: usuário removido",
+            "Responsável alterado de Ana Souza para Beto Lima",
+            "Responsável definido: Ana Souza"
+        ]);
     }
 
     private static async Task<Guid> SeedTicketWithHistoryAsync(TestDbContext context)

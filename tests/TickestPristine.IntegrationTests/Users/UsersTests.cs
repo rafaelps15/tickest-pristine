@@ -1,16 +1,26 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Application.Permissions;
+using TickestPristine.Application.Roles;
+using TickestPristine.Application.Users;
 using TickestPristine.Domain.Roles;
+using TickestPristine.Domain.Users;
+using TickestPristine.IntegrationTests.Tickets;
 using TickestPristine.Infrastructure.Database;
 
 namespace TickestPristine.IntegrationTests.Users;
 
 public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
+    private readonly IntegrationTestWebAppFactory _factory = factory;
+
     [Fact]
     public async Task Register_Should_ReturnUserId()
     {
@@ -1543,4 +1553,458 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         string LastName,
         List<RoleSummaryDto> Roles,
         List<string> Permissions);
+
+    [Fact]
+    public async Task ChangeSector_Should_SetRejectDeactivatedAndRemoveSector_WhenCallerIsAdmin()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string token = NewToken();
+        Guid itSectorId = await InsertSectorAsync("TI", $"Tecnologia-{token}");
+        Guid deactivatedSectorId = await InsertSectorAsync("X", $"Outro-{token}");
+        (await HttpClient.DeleteAsync($"sectors/{deactivatedSectorId}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        Guid anaId = await InsertUserAsync("Ana", "Souza", $"ana.{token}@example.com");
+
+        // Act
+        HttpResponseMessage setResponse = await HttpClient.PutAsJsonAsync($"users/{anaId}/sector", new { sectorId = itSectorId });
+        Guid? afterSet = await GetSectorIdAsync(anaId);
+        HttpResponseMessage deactivatedResponse = await HttpClient.PutAsJsonAsync(
+            $"users/{anaId}/sector",
+            new { sectorId = deactivatedSectorId });
+        Guid? afterDeactivated = await GetSectorIdAsync(anaId);
+        HttpResponseMessage removeResponse = await HttpClient.PutAsJsonAsync(
+            $"users/{anaId}/sector",
+            new { sectorId = (Guid?)null });
+        Guid? afterRemove = await GetSectorIdAsync(anaId);
+
+        // Assert
+        setResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        afterSet.ShouldBe(itSectorId);
+
+        deactivatedResponse.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await deactivatedResponse.Content.ReadFromJsonAsync<ProblemDto>())!.Title.ShouldBe("Sectors.NotFound");
+        afterDeactivated.ShouldBe(itSectorId);
+
+        removeResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        afterRemove.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task ChangeSector_Should_KeepUserSector_WhenSectorIsDeactivated()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string token = NewToken();
+        Guid itSectorId = await InsertSectorAsync("TI", $"Tecnologia-{token}");
+        Guid anaId = await InsertUserAsync("Ana", "Souza", $"ana.{token}@example.com");
+        (await HttpClient.PutAsJsonAsync($"users/{anaId}/sector", new { sectorId = itSectorId })).EnsureSuccessStatusCode();
+
+        // Act
+        HttpResponseMessage deactivateResponse = await HttpClient.DeleteAsync($"sectors/{itSectorId}");
+
+        // Assert
+        deactivateResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await GetSectorIdAsync(anaId)).ShouldBe(itSectorId);
+    }
+
+    [Fact]
+    public async Task ChangeSector_Should_ReturnForbidden_WhenCallerLacksUpdatePermission()
+    {
+        // Arrange
+        string token = NewToken();
+        Guid itSectorId = await InsertSectorAsync("TI", $"Tecnologia-{token}");
+        Guid anaId = await InsertUserAsync("Ana", "Souza", $"ana.{token}@example.com");
+        AccessTokens agentTokens = await CreateAgentAsync();
+        Authenticate(agentTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"users/{anaId}/sector", new { sectorId = itSectorId });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await GetSectorIdAsync(anaId)).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task GetAttendants_Should_ReturnReadForbidden_WhenCallerManagesTicketsButLacksReadPermission()
+    {
+        // Arrange
+        AccessTokens agentTokens = await CreateAgentAsync();
+        Authenticate(agentTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("users/attendants");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Users.ReadForbidden");
+        problem.Detail.ShouldBe("Você não tem permissão para buscar usuários.");
+    }
+
+    [Fact]
+    public async Task GetAttendants_Should_ReturnOnlyEligibleUsersByNameWithSixFields()
+    {
+        // Arrange
+        AttendantScenario scenario = await CreateAttendantScenarioAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"users/attendants?searchTerm={scenario.Token}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        PagedDto<AttendantDto>? page = await response.Content.ReadFromJsonAsync<PagedDto<AttendantDto>>();
+        page!.Items.Select(a => a.Id).ShouldBe([scenario.Ana, scenario.Beto, scenario.Caio, scenario.Davi, scenario.Eva]);
+        page.TotalCount.ShouldBe(5);
+
+        AttendantDto ana = page.Items[0];
+        ana.FullName.ShouldBe("Ana Souza");
+        ana.Email.ShouldBe($"ana.{scenario.Token}@example.com");
+        ana.SectorId.ShouldBe(scenario.ItSectorId);
+        ana.SectorName.ShouldBe("TI");
+        ana.DepartmentName.ShouldBe($"Tecnologia-{scenario.Token}");
+
+        AttendantDto eva = page.Items[4];
+        eva.SectorId.ShouldBeNull();
+        eva.SectorName.ShouldBeNull();
+        eva.DepartmentName.ShouldBeNull();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        json.RootElement.GetProperty("items")[0].EnumerateObject().Select(p => p.Name)
+            .ShouldBe(["id", "fullName", "email", "sectorId", "sectorName", "departmentName"], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task GetAttendants_Should_FollowManagePermissionOfEachRole()
+    {
+        // Arrange
+        AttendantScenario scenario = await CreateAttendantScenarioAsync();
+
+        // Act: a role dos atendentes perde tickets:manage
+        (await HttpClient.PutAsJsonAsync(
+            $"roles/{scenario.AttendantRole}/permissions",
+            new { permissionCodes = new[] { PermissionCodes.Tickets.Create } })).EnsureSuccessStatusCode();
+        List<Guid> withoutAttendantRole = await GetAttendantIdsAsync($"searchTerm={scenario.Token}");
+
+        // Act: a role dos colaboradores ganha tickets:manage
+        (await HttpClient.PutAsJsonAsync(
+            $"roles/{scenario.CollaboratorRole}/permissions",
+            new { permissionCodes = new[] { PermissionCodes.Tickets.Create, PermissionCodes.Tickets.Manage } }))
+            .EnsureSuccessStatusCode();
+        List<Guid> withCollaboratorRole = await GetAttendantIdsAsync($"searchTerm={scenario.Token}");
+
+        // Assert
+        withoutAttendantRole.ShouldBe([scenario.Davi]);
+        withCollaboratorRole.ShouldBe([scenario.Carla, scenario.Davi]);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(101)]
+    public async Task GetAttendants_Should_ReturnBadRequest_WhenSearchTermLengthIsOutOfRange(int length)
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"users/attendants?searchTerm={new string('a', length)}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task GetAttendants_Should_MatchEveryWordWithoutCaseInAnyField()
+    {
+        // Arrange
+        AttendantScenario scenario = await CreateAttendantScenarioAsync();
+        string token = scenario.Token;
+
+        // Act
+        List<Guid> upperCase = await GetAttendantIdsAsync($"searchTerm={Uri.EscapeDataString($"ANA {token}")}");
+        List<Guid> department = await GetAttendantIdsAsync($"searchTerm={Uri.EscapeDataString($"tecnolog {token}")}");
+        List<Guid> fullName = await GetAttendantIdsAsync($"searchTerm={Uri.EscapeDataString($"ana souza {token}")}");
+        List<Guid> wordsOfDifferentUsers = await GetAttendantIdsAsync($"searchTerm={Uri.EscapeDataString($"souza lima {token}")}");
+        List<Guid> likeWildcards = await GetAttendantIdsAsync($"searchTerm={Uri.EscapeDataString($"%% {token}")}");
+
+        // Assert
+        upperCase.ShouldBe([scenario.Ana]);
+        department.ShouldBe([scenario.Ana, scenario.Beto]);
+        fullName.ShouldBe([scenario.Ana]);
+        wordsOfDifferentUsers.ShouldBeEmpty();
+        likeWildcards.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task GetAttendants_Should_AdjustPageSizeWithoutError_WhenPagingIsMissingOrOutOfRange()
+    {
+        // Arrange: 120 atendentes com o mesmo marcador no e-mail
+        await AuthenticateAsAdminAsync();
+        string token = NewToken();
+        string attendantRole = await CreateRoleWithPermissionsAsync(PermissionCodes.Tickets.Manage);
+
+        using (IServiceScope scope = Services.CreateScope())
+        {
+            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            for (int i = 0; i < 120; i++)
+            {
+                var user = new User
+                {
+                    Id = Guid.NewGuid(),
+                    Email = $"attendant{i}.{token}@example.com",
+                    FirstName = $"Attendant{i:D3}",
+                    LastName = "Test",
+                    Code = UserCodes.New(),
+                    IsActive = true,
+                    CreatedAtUtc = DateTime.UtcNow
+                };
+                context.Users.Add(user);
+                context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = attendantRole });
+            }
+
+            await context.SaveChangesAsync();
+        }
+
+        // Act
+        PagedDto<AttendantDto> withoutPageSize = await GetAttendantsPageAsync($"searchTerm={token}");
+        PagedDto<AttendantDto> fifty = await GetAttendantsPageAsync($"searchTerm={token}&pageSize=50");
+        PagedDto<AttendantDto> aboveMaximum = await GetAttendantsPageAsync($"searchTerm={token}&pageSize=500");
+        PagedDto<AttendantDto> pageZero = await GetAttendantsPageAsync($"searchTerm={token}&page=0");
+
+        // Assert
+        withoutPageSize.Items.Count.ShouldBe(20);
+        fifty.Items.Count.ShouldBe(50);
+        aboveMaximum.Items.Count.ShouldBe(100);
+        pageZero.Page.ShouldBe(1);
+        pageZero.Items.Count.ShouldBe(20);
+        new[] { withoutPageSize, fifty, aboveMaximum, pageZero }.ShouldAllBe(page => page.TotalCount == 120);
+    }
+
+    [Fact]
+    public async Task GetAttendants_Should_PutPrioritySectorFirst()
+    {
+        // Arrange
+        AttendantScenario scenario = await CreateAttendantScenarioAsync();
+
+        // Act
+        List<Guid> ids = await GetAttendantIdsAsync(
+            $"searchTerm={scenario.Token}&prioritySectorId={scenario.FinanceSectorId}");
+
+        // Assert
+        ids.ShouldBe([scenario.Caio, scenario.Ana, scenario.Beto, scenario.Davi, scenario.Eva]);
+    }
+
+    [Fact]
+    public async Task GetAttendants_Should_ReturnEmptyPage_WhenFiltersMatchNobody()
+    {
+        // Arrange
+        AttendantScenario scenario = await CreateAttendantScenarioAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync(
+            $"users/attendants?searchTerm={Uri.EscapeDataString($"caio {scenario.Token}")}&sectorId={scenario.ItSectorId}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        PagedDto<AttendantDto>? page = await response.Content.ReadFromJsonAsync<PagedDto<AttendantDto>>();
+        page!.Items.ShouldBeEmpty();
+        page.TotalCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task GetAttendantsAndAssign_Should_IgnoreCachedPermissions_WhenRoleLosesManagePermission()
+    {
+        // Arrange: Beto atende chamados e já tem as permissões em cache
+        AttendantScenario scenario = await CreateAttendantScenarioAsync();
+        string betoEmail = $"beto2.{scenario.Token}@example.com";
+        HttpResponseMessage registerResponse = await PostRegisterAsAdminAsync(new
+        {
+            email = betoEmail,
+            firstName = "Beto",
+            lastName = "Lima",
+            password = "Password123!"
+        });
+        registerResponse.EnsureSuccessStatusCode();
+        Guid betoId = await registerResponse.Content.ReadFromJsonAsync<Guid>();
+        (await HttpClient.PutAsJsonAsync($"users/{betoId}/roles", new { roleNames = new[] { scenario.AttendantRole } }))
+            .EnsureSuccessStatusCode();
+
+        AccessTokens betoTokens = await LoginAsync(betoEmail);
+        Authenticate(betoTokens.AccessToken);
+        (await HttpClient.GetAsync("users/me")).EnsureSuccessStatusCode();
+
+        await AuthenticateAsAdminAsync();
+        (await GetAttendantIdsAsync($"searchTerm={Uri.EscapeDataString(betoEmail)}")).ShouldBe([betoId]);
+        Guid ticketId = await CreateTicketAsync(scenario.ItSectorId);
+
+        // Act
+        (await HttpClient.PutAsJsonAsync(
+            $"roles/{scenario.AttendantRole}/permissions",
+            new { permissionCodes = new[] { PermissionCodes.Tickets.Create } })).EnsureSuccessStatusCode();
+        List<Guid> attendants = await GetAttendantIdsAsync($"searchTerm={scenario.Token}");
+        HttpResponseMessage assignResponse = await HttpClient.PutAsJsonAsync(
+            $"tickets/{ticketId}/assignee",
+            new { assignedToUserId = betoId });
+
+        // Assert
+        attendants.ShouldNotContain(betoId);
+        assignResponse.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await assignResponse.Content.ReadFromJsonAsync<ProblemDto>())!.Title.ShouldBe("Tickets.AssigneeNotAttendant");
+    }
+
+    [Fact]
+    public void GetAttendants_Should_HaveNoRateLimitPolicyOfItsOwn()
+    {
+        // Arrange
+        EndpointDataSource endpoints = Services.GetRequiredService<EndpointDataSource>();
+
+        // Act
+        RouteEndpoint endpoint = endpoints.Endpoints
+            .OfType<RouteEndpoint>()
+            .Single(e => e.RoutePattern.RawText == "users/attendants");
+
+        // Assert
+        endpoint.Metadata.GetMetadata<EnableRateLimitingAttribute>().ShouldBeNull();
+        endpoint.Metadata.GetMetadata<DisableRateLimitingAttribute>().ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task GetAttendants_Should_ReturnTooManyRequests_WhenGlobalLimitIsExceeded()
+    {
+        // Arrange: a API com o limite global padrão (100 requisições por 60 s por usuário)
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+        using var limitedFactory = new WebApplicationFactoryWithSetting(_factory, "RateLimiting:Global:PermitLimit", "100");
+        using HttpClient client = limitedFactory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminTokens.AccessToken);
+
+        var statusCodes = new List<HttpStatusCode>();
+
+        // Act
+        for (int i = 0; i < 101; i++)
+        {
+            using HttpResponseMessage response = await client.GetAsync("users/attendants?pageSize=1");
+            statusCodes.Add(response.StatusCode);
+        }
+
+        // Assert
+        statusCodes.Take(100).ShouldAllBe(statusCode => statusCode == HttpStatusCode.OK);
+        statusCodes[100].ShouldBe(HttpStatusCode.TooManyRequests);
+    }
+
+    private sealed record AttendantDto(
+        Guid Id,
+        string FullName,
+        string Email,
+        Guid? SectorId,
+        string? SectorName,
+        string? DepartmentName);
+
+    /// <summary>
+    /// Usuários dos critérios da spec 009, com um marcador único no e-mail: as buscas pelo marcador isolam o cenário
+    /// dos usuários de outros testes. As roles do cenário são de teste, no papel de Atendente e Colaborador, porque as
+    /// roles fixas são compartilhadas por todos os testes; o Davi tem uma role de teste no papel de Administrador, porque
+    /// outros testes contam com um único administrador ativo.
+    /// </summary>
+    private sealed record AttendantScenario(
+        string Token,
+        Guid ItSectorId,
+        Guid FinanceSectorId,
+        string AttendantRole,
+        string CollaboratorRole,
+        Guid Ana,
+        Guid Beto,
+        Guid Caio,
+        Guid Bruno,
+        Guid Carla,
+        Guid Davi,
+        Guid Eva);
+
+    /// <summary>
+    /// Monta o <see cref="AttendantScenario"/> e deixa o administrador autenticado.
+    /// </summary>
+    private async Task<AttendantScenario> CreateAttendantScenarioAsync()
+    {
+        await AuthenticateAsAdminAsync();
+        string token = NewToken();
+
+        string attendantRole = await CreateRoleWithPermissionsAsync(PermissionCodes.Tickets.Create, PermissionCodes.Tickets.Manage);
+        string collaboratorRole = await CreateRoleWithPermissionsAsync(PermissionCodes.Tickets.Create);
+        string administratorRole = await CreateRoleWithPermissionsAsync(PermissionCodes.Tickets.Manage, PermissionCodes.Tickets.Assign);
+        Guid itSectorId = await InsertSectorAsync("TI", $"Tecnologia-{token}");
+        Guid financeSectorId = await InsertSectorAsync("Financeiro", $"Controladoria-{token}");
+
+        return new AttendantScenario(
+            token,
+            itSectorId,
+            financeSectorId,
+            attendantRole,
+            collaboratorRole,
+            Ana: await InsertUserAsync("Ana", "Souza", $"ana.{token}@example.com", itSectorId, true, attendantRole),
+            Beto: await InsertUserAsync("Beto", "Lima", $"beto.{token}@example.com", itSectorId, true, attendantRole),
+            Caio: await InsertUserAsync("Caio", "Melo", $"caio.{token}@example.com", financeSectorId, true, attendantRole),
+            Bruno: await InsertUserAsync("Bruno", "Alves", $"bruno.{token}@example.com", itSectorId, false, attendantRole),
+            Carla: await InsertUserAsync("Carla", "Dias", $"carla.{token}@example.com", itSectorId, true, collaboratorRole),
+            Davi: await InsertUserAsync("Davi", "Rocha", $"davi.{token}@example.com", null, true, administratorRole),
+            Eva: await InsertUserAsync("Eva", "Prado", $"eva.{token}@example.com", null, true, attendantRole));
+    }
+
+    /// <summary>
+    /// Marcador único do cenário, só com caracteres hexadecimais: não contém nenhum nome nem palavra buscada.
+    /// </summary>
+    private static string NewToken() => Guid.NewGuid().ToString("N")[..12];
+
+    private async Task AuthenticateAsAdminAsync()
+    {
+        AccessTokens tokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(tokens.AccessToken);
+    }
+
+    /// <summary>
+    /// Usuário novo com a role Atendente (que tem <c>tickets:manage</c> e não tem <c>users:read</c>).
+    /// </summary>
+    private async Task<AccessTokens> CreateAgentAsync()
+    {
+        string email = UniqueEmail();
+        Guid agentId = await RegisterUserAsync(email);
+
+        await AuthenticateAsAdminAsync();
+        (await HttpClient.PutAsJsonAsync($"users/{agentId}/roles", new { roleNames = new[] { RoleNames.Agent } }))
+            .EnsureSuccessStatusCode();
+
+        return await LoginAsync(email);
+    }
+
+    private async Task<Guid> CreateTicketAsync(Guid sectorId)
+    {
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("tickets", new
+        {
+            title = "Printer is broken",
+            description = "The printer on the 3rd floor is not working",
+            priority = 2,
+            sectorId
+        });
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<Guid>();
+    }
+
+    private async Task<PagedDto<AttendantDto>> GetAttendantsPageAsync(string queryString)
+    {
+        HttpResponseMessage response = await HttpClient.GetAsync($"users/attendants?{queryString}");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        return (await response.Content.ReadFromJsonAsync<PagedDto<AttendantDto>>())!;
+    }
+
+    private async Task<List<Guid>> GetAttendantIdsAsync(string queryString) =>
+        (await GetAttendantsPageAsync(queryString)).Items.Select(a => a.Id).ToList();
+
+    private async Task<Guid?> GetSectorIdAsync(Guid userId)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return await context.Users.Where(u => u.Id == userId).Select(u => u.SectorId).SingleAsync();
+    }
 }

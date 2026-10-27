@@ -15,6 +15,17 @@ internal static class UserValidationRules
     /// </summary>
     public const int EmailMaxLength = 254;
 
+    /// <summary>
+    /// Tamanho aceito do termo de busca de atendentes, depois do Trim.
+    /// </summary>
+    public const int SearchTermMinLength = 2;
+    public const int SearchTermMaxLength = 100;
+
+    /// <summary>
+    /// Palavras do termo de busca de atendentes que entram no filtro; as demais são ignoradas.
+    /// </summary>
+    public const int SearchTermMaxWords = 5;
+
     private const string StrengthRequirementsMessage =
         "A senha precisa ter pelo menos 6 caracteres, incluindo uma letra maiúscula e um caractere especial (como !, @, # ou $).";
 

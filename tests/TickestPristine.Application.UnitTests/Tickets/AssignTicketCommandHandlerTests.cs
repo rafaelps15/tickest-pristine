@@ -18,7 +18,7 @@ public sealed class AssignTicketCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        AssignTicketCommandHandler handler = CreateHandler(context, Substitute.For<IPermissionProvider>());
+        AssignTicketCommandHandler handler = CreateHandler(context, PermissionProviderWithAssign());
         var command = new AssignTicketCommand(Guid.NewGuid(), Guid.NewGuid());
 
         // Act
@@ -37,9 +37,9 @@ public sealed class AssignTicketCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        User assignee = await SeedUserAsync(context);
+        User assignee = await SeedAttendantAsync(context);
         Guid ticketId = await SeedTicketAsync(context, status);
-        AssignTicketCommandHandler handler = CreateHandler(context, PermissionProviderWithManage(assignee.Id));
+        AssignTicketCommandHandler handler = CreateHandler(context, PermissionProviderWithAssign());
 
         // Act
         Result result = await handler.Handle(new AssignTicketCommand(ticketId, assignee.Id), CancellationToken.None);
@@ -47,6 +47,7 @@ public sealed class AssignTicketCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(TicketErrors.NotActive(ticketId));
+        (await context.TicketHistories.AnyAsync(h => h.TicketId == ticketId)).ShouldBeFalse();
     }
 
     [Fact]
@@ -54,9 +55,9 @@ public sealed class AssignTicketCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        User assignee = await SeedUserAsync(context, isActive: false);
+        User assignee = await SeedAttendantAsync(context, isActive: false);
         Guid ticketId = await SeedTicketAsync(context, TicketStatus.Open);
-        AssignTicketCommandHandler handler = CreateHandler(context, PermissionProviderWithManage(assignee.Id));
+        AssignTicketCommandHandler handler = CreateHandler(context, PermissionProviderWithAssign());
 
         // Act
         Result result = await handler.Handle(new AssignTicketCommand(ticketId, assignee.Id), CancellationToken.None);
@@ -67,11 +68,66 @@ public sealed class AssignTicketCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnAssigneeCannotManageTickets_WhenAssigneeLacksManagePermission()
+    public async Task Handle_Should_ReturnUserNotFound_WhenAssigneeDoesNotExist()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, TicketStatus.Open);
+        AssignTicketCommandHandler handler = CreateHandler(context, PermissionProviderWithAssign());
+        var missingUserId = Guid.NewGuid();
+
+        // Act
+        Result result = await handler.Handle(new AssignTicketCommand(ticketId, missingUserId), CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.NotFound(missingUserId));
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnAssigneeNotAttendant_WhenAssigneeLacksManagePermission()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
         User assignee = await SeedUserAsync(context);
+        await GrantPermissionsAsync(context, assignee.Id, PermissionCodes.Tickets.Create);
+        Guid ticketId = await SeedTicketAsync(context, TicketStatus.Open);
+        AssignTicketCommandHandler handler = CreateHandler(context, PermissionProviderWithAssign());
+
+        // Act
+        Result result = await handler.Handle(new AssignTicketCommand(ticketId, assignee.Id), CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketErrors.AssigneeNotAttendant(assignee.Id));
+        (await context.Tickets.SingleAsync(t => t.Id == ticketId)).AssignedToUserId.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnAssigneeNotAttendant_WhenCachedPermissionsStillSayAssigneeManagesTickets()
+    {
+        // Arrange: o cache de permissões ainda diz que o responsável atende chamados, mas o banco não
+        await using TestDbContext context = CreateDbContext();
+        User assignee = await SeedUserAsync(context);
+        Guid ticketId = await SeedTicketAsync(context, TicketStatus.Open);
+        IPermissionProvider permissionProvider = PermissionProviderWithAssign();
+        permissionProvider.HasPermissionAsync(assignee.Id, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+            .Returns(true);
+        AssignTicketCommandHandler handler = CreateHandler(context, permissionProvider);
+
+        // Act
+        Result result = await handler.Handle(new AssignTicketCommand(ticketId, assignee.Id), CancellationToken.None);
+
+        // Assert
+        result.Error.ShouldBe(TicketErrors.AssigneeNotAttendant(assignee.Id));
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnCannotAssignToOthers_WhenCallerLacksAssignPermission()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        User assignee = await SeedAttendantAsync(context);
         Guid ticketId = await SeedTicketAsync(context, TicketStatus.Open);
         AssignTicketCommandHandler handler = CreateHandler(context, Substitute.For<IPermissionProvider>());
 
@@ -80,19 +136,60 @@ public sealed class AssignTicketCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(TicketErrors.AssigneeCannotManageTickets(assignee.Id));
+        result.Error.ShouldBe(TicketErrors.CannotAssignToOthers);
         (await context.Tickets.SingleAsync(t => t.Id == ticketId)).AssignedToUserId.ShouldBeNull();
+        (await context.TicketHistories.AnyAsync(h => h.TicketId == ticketId)).ShouldBeFalse();
     }
 
     [Fact]
-    public async Task Handle_Should_AssignTicketRecordHistoryAndRaiseDomainEvent_WhenAssigneeManagesTickets()
+    public async Task Handle_Should_AssignToCaller_WhenCallerIsAttendantWithoutAssignPermission()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        User assignee = await SeedUserAsync(context);
+        await SeedAttendantAsync(context, id: AgentId);
+        Guid ticketId = await SeedTicketAsync(context, TicketStatus.Open);
+        AssignTicketCommandHandler handler = CreateHandler(context, Substitute.For<IPermissionProvider>());
+
+        // Act
+        Result result = await handler.Handle(new AssignTicketCommand(ticketId, AgentId), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        (await context.Tickets.SingleAsync(t => t.Id == ticketId)).AssignedToUserId.ShouldBe(AgentId);
+    }
+
+    [Fact]
+    public async Task Handle_Should_RecordAssigned_WhenTicketHasNoAssignee()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        User assignee = await SeedAttendantAsync(context);
+        Guid ticketId = await SeedTicketAsync(context, TicketStatus.Open);
+        AssignTicketCommandHandler handler = CreateHandler(context, PermissionProviderWithAssign());
+
+        // Act
+        Result result = await handler.Handle(new AssignTicketCommand(ticketId, assignee.Id), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticketId);
+        history.Action.ShouldBe(TicketHistoryAction.Assigned);
+        history.ChangedByUserId.ShouldBe(AgentId);
+        history.OldValue.ShouldBeNull();
+        history.NewValue.ShouldBe(assignee.Id.ToString());
+        history.OccurredAtUtc.ShouldBe(DefaultUtcNow);
+    }
+
+    [Fact]
+    public async Task Handle_Should_AssignTicketRecordReassignedAndRaiseDomainEvent_WhenTicketHasAnotherAssignee()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        User assignee = await SeedAttendantAsync(context);
         var previousAssigneeId = Guid.NewGuid();
         Guid ticketId = await SeedTicketAsync(context, TicketStatus.InProgress, previousAssigneeId);
-        AssignTicketCommandHandler handler = CreateHandler(context, PermissionProviderWithManage(assignee.Id));
+        AssignTicketCommandHandler handler = CreateHandler(context, PermissionProviderWithAssign());
 
         // Act
         Result result = await handler.Handle(new AssignTicketCommand(ticketId, assignee.Id), CancellationToken.None);
@@ -120,9 +217,9 @@ public sealed class AssignTicketCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        User assignee = await SeedUserAsync(context);
+        User assignee = await SeedAttendantAsync(context);
         Guid ticketId = await SeedTicketAsync(context, TicketStatus.Open, assignee.Id);
-        AssignTicketCommandHandler handler = CreateHandler(context, PermissionProviderWithManage(assignee.Id));
+        AssignTicketCommandHandler handler = CreateHandler(context, PermissionProviderWithAssign());
 
         // Act
         Result result = await handler.Handle(new AssignTicketCommand(ticketId, assignee.Id), CancellationToken.None);
@@ -133,10 +230,13 @@ public sealed class AssignTicketCommandHandlerTests : BaseHandlerTest
         (await context.TicketHistories.AnyAsync(h => h.TicketId == ticketId)).ShouldBeFalse();
     }
 
-    private static IPermissionProvider PermissionProviderWithManage(Guid userId)
+    /// <summary>
+    /// Provedor em que quem chama tem <c>tickets:assign</c> e pode atribuir o chamado a outra pessoa.
+    /// </summary>
+    private static IPermissionProvider PermissionProviderWithAssign()
     {
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        permissionProvider.HasPermissionAsync(userId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+        permissionProvider.HasPermissionAsync(AgentId, PermissionCodes.Tickets.Assign, Arg.Any<CancellationToken>())
             .Returns(true);
 
         return permissionProvider;
@@ -147,15 +247,27 @@ public sealed class AssignTicketCommandHandlerTests : BaseHandlerTest
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(AgentId);
 
-        return new AssignTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
+        return new AssignTicketCommandHandler(context, userContext, permissionProvider, CreateClock());
     }
 
-    private static async Task<User> SeedUserAsync(TestDbContext context, bool isActive = true)
+    private static async Task<User> SeedUserAsync(TestDbContext context, bool isActive = true, Guid? id = null)
     {
         User user = CreateUser(isActive);
+        user.Id = id ?? user.Id;
 
         context.Users.Add(user);
         await context.SaveChangesAsync();
+
+        return user;
+    }
+
+    /// <summary>
+    /// Usuário com uma role que tem <c>tickets:manage</c>, gravada no banco.
+    /// </summary>
+    private static async Task<User> SeedAttendantAsync(TestDbContext context, bool isActive = true, Guid? id = null)
+    {
+        User user = await SeedUserAsync(context, isActive, id);
+        await GrantPermissionsAsync(context, user.Id, PermissionCodes.Tickets.Manage);
 
         return user;
     }

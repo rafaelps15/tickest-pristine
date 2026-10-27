@@ -12,4 +12,5 @@ public sealed class User : Entity, IAuditable
     public bool IsActive { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public DateTime? DeactivatedAtUtc { get; set; }
+    public Guid? SectorId { get; set; }
 }

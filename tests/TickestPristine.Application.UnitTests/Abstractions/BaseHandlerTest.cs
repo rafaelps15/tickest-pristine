@@ -138,6 +138,26 @@ public abstract class BaseHandlerTest
     protected static Role CreateRole(string name) => new() { Id = Guid.NewGuid(), Name = name };
 
     /// <summary>
+    /// Dá ao usuário uma role nova com as permissões informadas, gravada no banco (como a elegibilidade de atendente
+    /// lê, sem o cache de permissões).
+    /// </summary>
+    protected static async Task GrantPermissionsAsync(TestDbContext context, Guid userId, params string[] permissionCodes)
+    {
+        Role role = CreateRole($"Role-{Guid.NewGuid():N}");
+
+        context.Roles.Add(role);
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = userId, RoleName = role.Name });
+        context.RolePermissions.AddRange(permissionCodes.Select(code => new RolePermission
+        {
+            Id = Guid.NewGuid(),
+            RoleName = role.Name,
+            PermissionCode = code
+        }));
+
+        await context.SaveChangesAsync();
+    }
+
+    /// <summary>
     /// Provedor em que nenhum calendário existe, para os caminhos de falha do calendário do plano.
     /// </summary>
     protected static ISlaCalendarProvider CreateMissingSlaCalendarProvider()

@@ -1,10 +1,11 @@
 ---
 id: 009
 titulo: Consulta de atendentes e atribuição de responsável pelo Administrador
-status: Aprovada        # Rascunho | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Cancelada (transições: spec-status.md da skill spec-new)
+status: Verificada        # Rascunho | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Cancelada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
 aprovada-em: 2026-10-24
 branch: feat/SPEC-009-attendant-lookup-assignment
+pr: "#27"
 backlog:
 ---
 
@@ -42,7 +43,7 @@ backlog:
 | REQ-8 | `PUT tickets/{id}/assignee` continua exigindo `tickets:manage`. Atribuir o chamado a si mesmo basta com ela; atribuir a **outra pessoa** exige também a nova permissão `tickets:assign`, administrativa, concedida pela migration só à role Administrador; sem ela, 403 `Tickets.CannotAssignToOthers` ("Você só pode atribuir o chamado a você mesmo."). `tickets:assign` não concede `users:read`, e vice-versa. | RF-03.1; DEC-4 |
 | REQ-9 | O responsável precisa ser atendente elegível (REQ-3); senão, 400 `Tickets.AssigneeNotAttendant`. As demais validações e a ordem atual se mantêm: chamado inexistente 404, chamado fora do Backlog 400 `Tickets.NotActive`, responsável inexistente ou inativo 404. | RF-03.2; DEC-1, DEC-3 |
 | REQ-10 | A atribuição sem responsável anterior grava a ação de histórico `Assigned`; com anterior diferente, `Reassigned`. As duas guardam anterior (`oldValue`), novo (`newValue`), executor e data e hora UTC, no mesmo `SaveChangesAsync` da troca. | RF-03.5, RF-04.1, RF-04.2 |
-| REQ-11 | A descrição das entradas `Assigned`, `Reassigned` e `Unassigned` no `GET tickets/{id}/history` mostra os nomes dos responsáveis (ex.: "Responsável alterado de Ana Souza para Beto Lima"), inclusive de usuários desativados. Os nomes de uma página do histórico são buscados numa única consulta. Id que não corresponda a usuário aparece como "usuário removido". | RF-04.3; DEC-11 |
+| REQ-11 | A descrição das entradas `Assigned`, `Reassigned` e `Unassigned` no `GET tickets/{id}/history` mostra os nomes dos responsáveis (ex.: "Responsável alterado de Ana Souza para Beto Lima"), inclusive de usuários desativados. Os nomes vêm na própria consulta da página do histórico, sem consulta à parte. Id que não corresponda a usuário aparece como "usuário removido". | RF-04.3; DEC-11 |
 | REQ-12 | Comportamentos atuais mantidos: atribuir ao responsável atual = 204 sem gravar; concorrência = 409 (`xmin`); a atribuição não se restringe ao setor do chamado. | RF-03.3, RF-03.4, RF-03.6; DEC-5 |
 | REQ-13 | `GET users/attendants` fica coberto pelo rate limit global (100 requisições por 60 s por usuário), sem política própria. | RNF-03; DEC-9 |
 
@@ -67,7 +68,7 @@ Dados comuns: Ana (Atendente, ativa, setor TI do depto. Tecnologia), Beto (Atend
 | AC-14 | REQ-9 | chamado Aberto | Davi (Administrador) atribui Carla; Bruno; um id inexistente; ele mesmo | 400 `Tickets.AssigneeNotAttendant`; 404 `Users.NotFound`; 404 `Users.NotFound`; 204 |
 | AC-15 | REQ-9 | chamado Resolvido | Administrador atribui Ana | 400 `Tickets.NotActive`, nada gravado |
 | AC-16 | REQ-10 | chamado Aberto sem responsável | Administrador atribui Ana; depois Beto | 204 e 204; histórico com `Assigned` (`oldValue` nulo, `newValue` Ana, executor Davi) e depois `Reassigned` (`oldValue` Ana, `newValue` Beto) |
-| AC-17 | REQ-11 | o histórico do AC-16, com Ana desativada depois, e uma remoção de responsável | `GET tickets/{id}/history` | as descrições citam Ana e Beto pelo nome completo; o teste de integração confirma que a página fez uma única consulta de nomes (contador de comandos do EF) |
+| AC-17 | REQ-11 | o histórico do AC-16, com Ana desativada depois, e uma remoção de responsável | `GET tickets/{id}/history` | as descrições citam Ana e Beto pelo nome completo; o teste de integração confirma que só a consulta da página lê nomes de usuário (contador de comandos do EF) |
 | AC-18 | REQ-12 | chamado com responsável Ana | Administrador atribui Ana de novo; e, em outro chamado, duas atribuições simultâneas | 204 sem entrada nova; uma 204 e uma 409, com uma só entrada nova |
 | AC-19 | REQ-3, REQ-9 | Beto na lista de elegíveis e com as permissões já em cache (uma chamada autenticada antes) | o Administrador tira `tickets:manage` da role Atendente e, no mesmo minuto, consulta a lista e atribui um chamado a Beto | Beto não aparece na lista, e a atribuição recebe 400 `Tickets.AssigneeNotAttendant` |
 | AC-21 | REQ-13 | — | revisão do endpoint `Endpoints/Users/GetAttendants.cs` e teste de integração com 101 chamadas do mesmo usuário em 60 s | o endpoint não chama `RequireRateLimiting`; a 101ª chamada recebe 429 do limite global |
@@ -86,7 +87,7 @@ Dados comuns: Ana (Atendente, ativa, setor TI do depto. Tecnologia), Beto (Atend
 | DEC-8 | Limite da página | (a) o padrão do sistema (20, máximo 100, ajuste sem erro); (b) máximo 50 com 400, como a fonte | (a): todas as listagens se comportam igual, e o front não precisa tratar um 400 que nenhuma outra rota dá | Rafael Santos, 2026-10-24, no chat, delegando a escolha ("Na spec 009 atue como arquiteto .net e encontre a melhor solução") |
 | DEC-9 | Rate limit próprio da consulta | (a) só o global; (b) política de 60 por minuto | (a): o global já é por usuário e mais restrito que o uso real do autocomplete com espera de 300 ms; uma política a mais é configuração sem ganho | Rafael Santos, 2026-10-24, no chat, delegando a escolha ("Na spec 009 atue como arquiteto .net e encontre a melhor solução") |
 | DEC-10 | Onde mora a regra de elegibilidade | (a) uma expressão única na Application (`TicketAssigneeEligibility`), traduzida em `EXISTS` pelo EF, usada pela consulta e pela atribuição, sempre no banco; (b) consulta no banco e atribuição pelo `IPermissionProvider` em cache | (a): a lista e a atribuição nunca discordam, e a regra fica num lugar só | Rafael Santos, 2026-10-24, no chat, delegando a escolha ("Na spec 009 atue como arquiteto .net e encontre a melhor solução") |
-| DEC-11 | Como mostrar nomes no histórico | (a) depois de buscar a página, juntar os ids de usuário das linhas de responsável e buscá-los numa consulta; (b) gravar os nomes no histórico | (a): o histórico continua guardando só fatos (ids), vale também para os registros antigos e mostra o nome atual da pessoa | Rafael Santos, 2026-10-24, no chat, delegando a escolha ("Na spec 009 atue como arquiteto .net e encontre a melhor solução") |
+| DEC-11 | Como mostrar nomes no histórico | (a) depois de buscar a página, juntar os ids de usuário das linhas de responsável e buscá-los numa consulta; (b) gravar os nomes no histórico; (c) subconsultas no `.Select` da própria página, só nas linhas de responsável | (c), no lugar de (a): o handler fica no padrão das skills (filtro, `AfterCursor`, `.Select` direto no DTO e `ToCursorPagedListAsync`), sem passo em memória depois da página; o histórico continua guardando só fatos (ids) e mostra o nome atual da pessoa. Custo aceito: a comparação do id com o texto gravado não usa índice, numa página de no máximo 100 linhas | Rafael Santos, 2026-10-24, no chat, delegando a escolha (a); trocada por (c) por Rafael Santos em 2026-10-26, no chat ("GetTicketHistoryQueryHandler está fora do padrão pré estabelecido nas skills", escolhendo a opção "Subconsulta no Select") |
 
 ## 5. Fora do escopo
 - Front Angular (modal `AssignResponsibleModalComponent`, RF-05 da fonte): repositório separado. Este repositório entrega os contratos da seção 6.
@@ -103,15 +104,15 @@ Dados comuns: Ana (Atendente, ativa, setor TI do depto. Tecnologia), Beto (Atend
   - Application:
     - `Permissions/PermissionCodes.cs` e `PermissionCatalog.cs`: `tickets:assign` ("Atribuir chamados", administrativa).
     - `Users/ChangeSector/*` (command, validator, handler com `PrivilegeEscalationGuard`).
-    - `Tickets/TicketAssigneeEligibility.cs`: `Expression<Func<User, bool>>` montada com o `IApplicationDbContext` — `u.IsActive && context.UserRoles.Any(ur => ur.UserId == u.Id && context.RolePermissions.Any(rp => rp.RoleName == ur.RoleName && rp.PermissionCode == PermissionCodes.Tickets.Manage))` —, que o EF traduz em `EXISTS` aninhados, apoiados nos índices únicos de `user_roles` e `role_permissions`.
-    - `Users/GetAttendants/*` (`GetBacklogAttendantsQuery`, validator, handler, `AttendantLookupDto`): checagem de `users:read` pelo `IPermissionProvider` (a permissão de quem consulta pode vir do cache); `Where(TicketAssigneeEligibility)`; junção à esquerda com `Sectors` e `Departments`; um `Where` por palavra do termo com `Contains` nos cinco campos; `OrderBy(x => x.SectorId == prioritySectorId ? 0 : 1)` seguido de nome, sobrenome e `Id`; projeção no DTO antes do `ToPagedListAsync`.
-    - `Tickets/Assign/AssignTicketCommandHandler.cs`: elegibilidade do responsável por `context.Users.AnyAsync(TicketAssigneeEligibility ...)` no lugar do `IPermissionProvider`; `tickets:assign` do executor (cache aceitável) exigida quando o responsável não é ele; ação `Assigned`/`Reassigned`.
-    - `TicketHistories/TicketHistoryEntries.cs` (`Assigned`); `TicketHistoryDescriptions.For` ganha um parâmetro com o dicionário id → nome; `GetTicketHistoryQueryHandler` busca a página, junta os ids das linhas `Assigned`, `Reassigned` e `Unassigned` e faz uma consulta `Users.Where(u => ids.Contains(u.Id))`, montando as descrições em memória.
+    - `Tickets/TicketAssigneeEligibility.cs`: filtro `WhereEligibleAssignee` em `IQueryable<User>`, no formato do `TicketSlaFilters`, que recebe o `IApplicationDbContext` — `u.IsActive && context.UserRoles.Any(ur => ur.UserId == u.Id && context.RolePermissions.Any(rp => rp.RoleName == ur.RoleName && rp.PermissionCode == PermissionCodes.Tickets.Manage))` —, que o EF traduz em `EXISTS` aninhados, apoiados nos índices únicos de `user_roles` e `role_permissions`.
+    - `Users/GetAttendants/*` (`GetBacklogAttendantsQuery`, handler e `AttendantResponse`): o tamanho do termo é conferido no próprio handler (400 `Users.InvalidSearchTerm`), porque query não tem validator no padrão das skills, e os limites ficam em `Users/UserValidationRules.cs` (`SearchTermMinLength`, `SearchTermMaxLength`, `SearchTermMaxWords`); checagem de `users:read` pelo `IPermissionProvider` (a permissão de quem consulta pode vir do cache); `WhereEligibleAssignee`; junção à esquerda com `Sectors` e `Departments`; um `Where` por palavra do termo com `Contains` nos cinco campos; `OrderBy(x => x.SectorId == prioritySectorId ? 0 : 1)` seguido de nome, sobrenome e `Id`; projeção no DTO antes do `ToPagedListAsync`.
+    - `Tickets/Assign/AssignTicketCommandHandler.cs`: elegibilidade do responsável por `context.Users.Where(...).WhereEligibleAssignee(context).AnyAsync(...)` no lugar do `IPermissionProvider`; `tickets:assign` do executor (cache aceitável) exigida quando o responsável não é ele; ação `Assigned`/`Reassigned`.
+    - `TicketHistories/TicketHistoryEntries.cs` (`Assigned`); `TicketHistoryDescriptions.For` ganha os nomes do responsável anterior e do novo; no `GetTicketHistoryQueryHandler`, o `.Select` da página passa a eles subconsultas em `Users`, só nas linhas `Assigned`, `Reassigned` e `Unassigned` (DEC-11).
   - Infrastructure: `Users/UserConfiguration.cs` (FK opcional, `OnDelete(Restrict)`, índice); `Roles/RolePermissionConfiguration.cs` (vínculo Administrador × `tickets:assign`); migration `Add_User_Sector_And_Tickets_Assign_Permission`, com `INSERT ... ON CONFLICT DO NOTHING` para a permissão e o vínculo.
   - Web.Api: `Endpoints/Users/GetAttendants.cs` (`GET users/attendants`), `Endpoints/Users/ChangeSector.cs` (`PUT users/{id}/sector`, `users:update`), `Endpoints/Tickets/Assign.cs` (continua `HasPermission(tickets:manage)`), `Endpoints/Tickets/Permissions.cs`.
   - Testes: unitários em `tests/TickestPristine.Application.UnitTests/Users/` e `Tickets/`; integração em `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` e `Tickets/TicketsTests.cs`; ajuste dos testes `Assign_*` que usam Atendente como executor.
 - **Contratos:**
-  - `GET users/attendants?searchTerm&sectorId&prioritySectorId&page&pageSize` → 200 `PagedResponse<AttendantLookupDto>`; 400; 401; 403 `Users.ReadForbidden`; 429.
+  - `GET users/attendants?searchTerm&sectorId&prioritySectorId&page&pageSize` → 200 `PagedResponse<AttendantResponse>`; 400 (`Users.InvalidSearchTerm`); 401; 403 `Users.ReadForbidden`; 429.
   - `PUT users/{id}/sector` `{ sectorId }` → 204; 400; 401; 403; 404 (`Users.NotFound`, `Sectors.NotFound`); 409.
   - `PUT tickets/{id}/assignee` → continua com `tickets:manage`; atribuir a outra pessoa exige `tickets:assign` (403 `Tickets.CannotAssignToOthers`); erro `Tickets.AssigneeNotAttendant` substitui `Tickets.AssigneeCannotManageTickets`.
   - Evento novo `UserSectorChangedDomainEvent(UserId, OldSectorId, NewSectorId)`.
@@ -125,45 +126,46 @@ Dados comuns: Ana (Atendente, ativa, setor TI do depto. Tecnologia), Beto (Atend
 ## 7. Tarefas
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
-| T-1 | `User.SectorId`, configuração, evento; permissão `tickets:assign` no catálogo e na role Administrador; migration com `ON CONFLICT` | AC-1, AC-2, AC-13 | add-entity | [ ] |
-| T-2 | Slice `ChangeSector` e endpoint `PUT users/{id}/sector` | AC-1, AC-2, AC-3 | add-feature | [ ] |
-| T-3 | `TicketAssigneeEligibility`; slice `GetAttendants` (permissão no handler, elegibilidade, busca por palavras, ordenação, paginação) e endpoint | AC-4 a AC-11, AC-19, AC-21 | add-feature | [ ] |
-| T-4 | Atribuição: elegibilidade pela expressão compartilhada, `tickets:assign` para atribuir a outra pessoa, `Assigned`/`Reassigned`; descrições do histórico com nomes em lote | AC-12, AC-14 a AC-19 | add-feature | [ ] |
-| T-5 | Testes unitários e de integração dos ACs; ajuste dos testes `Assign_*` em que o Atendente atribui a outra pessoa | AC-1 a AC-19 | add-tests | [ ] |
-| T-6 | Build e testes da solução | AC-20 | add-tests | [ ] |
+| T-1 | `User.SectorId`, configuração, evento; permissão `tickets:assign` no catálogo e na role Administrador; migration com `ON CONFLICT` | AC-1, AC-2, AC-13 | add-entity | [x] |
+| T-2 | Slice `ChangeSector` e endpoint `PUT users/{id}/sector` | AC-1, AC-2, AC-3 | add-feature | [x] |
+| T-3 | `TicketAssigneeEligibility`; slice `GetAttendants` (permissão no handler, elegibilidade, busca por palavras, ordenação, paginação) e endpoint | AC-4 a AC-11, AC-19, AC-21 | add-feature | [x] |
+| T-4 | Atribuição: elegibilidade pela expressão compartilhada, `tickets:assign` para atribuir a outra pessoa, `Assigned`/`Reassigned`; descrições do histórico com nomes em lote | AC-12, AC-14 a AC-19 | add-feature | [x] |
+| T-5 | Testes unitários e de integração dos ACs; ajuste dos testes `Assign_*` em que o Atendente atribui a outra pessoa | AC-1 a AC-19 | add-tests | [x] |
+| T-6 | Build e testes da solução | AC-20 | add-tests | [x] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | | | |
-| AC-2 | | | |
-| AC-3 | | | |
-| AC-4 | | | |
-| AC-5 | | | |
-| AC-6 | | | |
-| AC-7 | | | |
-| AC-8 | | | |
-| AC-9 | | | |
-| AC-10 | | | |
-| AC-11 | | | |
-| AC-12 | | | |
-| AC-13 | | | |
-| AC-14 | | | |
-| AC-15 | | | |
-| AC-16 | | | |
-| AC-17 | | | |
-| AC-18 | | | |
-| AC-19 | | | |
-| AC-20 | | | |
-| AC-21 | | | |
+| AC-1 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `ChangeSector_Should_SetRejectDeactivatedAndRemoveSector_WhenCallerIsAdmin`; `ChangeUserSectorCommandHandlerTests` › `Handle_Should_SetSectorAndRaiseDomainEvent_WhenSectorIsActive`, `Handle_Should_ReturnSectorNotFoundAndKeepSector_WhenSectorIsDeactivated`, `Handle_Should_RemoveSector_WhenSectorIdIsNull` | Pela API, o administrador grava TI (204), tenta o setor desativado (404 `Sectors.NotFound`, o banco continua com TI) e remove o setor (204, `sector_id` nulo).  | Aprovado em 2026-10-26 |
+| AC-2 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `ChangeSector_Should_KeepUserSector_WhenSectorIsDeactivated` | Desativa o setor TI pela API e confere no banco que o `sector_id` de Ana continua TI.  | Aprovado em 2026-10-26 |
+| AC-3 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `ChangeSector_Should_ReturnForbidden_WhenCallerLacksUpdatePermission` | Um usuário com a role Atendente chama a rota e recebe 403, e o setor não muda.  | Aprovado em 2026-10-26 |
+| AC-4 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAttendants_Should_ReturnReadForbidden_WhenCallerManagesTicketsButLacksReadPermission`; `GetBacklogAttendantsQueryHandlerTests` › `Handle_Should_ReturnReadForbidden_WhenCallerLacksReadPermission` | Um Atendente (com `tickets:manage`, sem `users:read`) recebe 403 com `title` `Users.ReadForbidden` e o `detail` exato.  | Aprovado em 2026-10-26 |
+| AC-5 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAttendants_Should_ReturnOnlyEligibleUsersByNameWithSixFields`; `GetBacklogAttendantsQueryHandlerTests` › `Handle_Should_ReturnOnlyActiveUsersWithManagePermissionOrderedByName` | Com os usuários comuns (isolados por um marcador no e-mail; Davi com uma role de teste no papel de Administrador), a lista vem como Ana, Beto, Caio, Davi e Eva, sem Bruno e Carla, com Eva sem setor e só os seis campos no JSON.  | Aprovado em 2026-10-26 |
+| AC-6 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAttendants_Should_FollowManagePermissionOfEachRole` | Roles de teste no papel de Atendente e Colaborador (as fixas são compartilhadas entre os testes): sem `tickets:manage` na primeira, só Davi aparece; com `tickets:manage` na segunda, Carla passa a aparecer.  | Aprovado em 2026-10-26 |
+| AC-7 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAttendants_Should_ReturnBadRequest_WhenSearchTermLengthIsOutOfRange`; `GetBacklogAttendantsQueryHandlerTests` › `Handle_Should_ReturnInvalidSearchTerm_WhenTrimmedTermIsOutOfRange`, `Handle_Should_AcceptSearchTerm_WhenTermIsAbsentOrTrimmedTermHasValidLength` | Pela API, termos com 1 e com 101 caracteres recebem 400; no handler, o termo com 1 caractere, só com espaços ou com 101 caracteres é recusado, e o ausente, o vazio e o de 100 caracteres depois do `Trim` são aceitos.  | Aprovado em 2026-10-26 |
+| AC-8 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAttendants_Should_MatchEveryWordWithoutCaseInAnyField` | Contra o PostgreSQL: "ANA" acha Ana, "tecnolog" acha Ana e Beto pelo departamento, "ana souza" acha Ana, e "souza lima" e "%%" voltam vazios (cada busca leva também o marcador do cenário).  | Aprovado em 2026-10-26 |
+| AC-9 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAttendants_Should_AdjustPageSizeWithoutError_WhenPagingIsMissingOrOutOfRange` | Com 120 atendentes: sem `pageSize` vêm 20, com 50 vêm 50, com 500 vêm 100 e com `page=0` vem a página 1; todas com 200 e total 120.  | Aprovado em 2026-10-26 |
+| AC-10 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAttendants_Should_PutPrioritySectorFirst`; `GetBacklogAttendantsQueryHandlerTests` › `Handle_Should_PutPrioritySectorFirst_WhenPrioritySectorIdIsGiven` | Com `prioritySectorId` = Financeiro, a ordem é Caio, Ana, Beto, Davi e Eva.  | Aprovado em 2026-10-26 |
+| AC-11 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAttendants_Should_ReturnEmptyPage_WhenFiltersMatchNobody`; `GetBacklogAttendantsQueryHandlerTests` › `Handle_Should_FilterBySectorAndEveryWord_WhenFiltersAreCombined` | "caio" com `sectorId` = TI devolve 200, lista vazia e total 0.  | Aprovado em 2026-10-26 |
+| AC-12 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Assign_Should_LetAgentAssignOnlyToSelf_WhenAgentLacksAssignPermission`; `AssignTicketCommandHandlerTests` › `Handle_Should_ReturnCannotAssignToOthers_WhenCallerLacksAssignPermission`, `Handle_Should_AssignToCaller_WhenCallerIsAttendantWithoutAssignPermission` | Beto, com a role Atendente real, recebe 403 `Tickets.CannotAssignToOthers` ao atribuir a Ana (o responsável continua nulo) e 204 ao assumir o chamado.  | Aprovado em 2026-10-26 |
+| AC-13 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Migration_Should_GrantAdministrativeAssignPermissionOnlyToAdministrator_AndRunAgain` | Roda de novo o SQL da migration sem erro e confere que `tickets:assign` é administrativa, aparece uma única vez no Administrador e não está no Atendente nem no Colaborador.  | Aprovado em 2026-10-26 |
+| AC-14 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Assign_Should_ValidateAssigneeInOrder_WhenAdministratorAssigns`; `AssignTicketCommandHandlerTests` › `Handle_Should_ReturnAssigneeNotAttendant_WhenAssigneeLacksManagePermission`, `Handle_Should_ReturnUserNotFound_*` | O administrador recebe 400 `Tickets.AssigneeNotAttendant` para Carla, 404 `Users.NotFound` para Bruno (desativado) e para um id inexistente, e 204 ao atribuir a si mesmo.  | Aprovado em 2026-10-26 |
+| AC-15 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Assign_Should_ReturnNotActiveAndRecordNothing_WhenTicketIsResolved` | Num chamado Resolvido, recebe 400 `Tickets.NotActive`, sem responsável e sem nenhuma entrada nova no histórico.  | Aprovado em 2026-10-26 |
+| AC-16 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Assign_Should_RecordAssignedThenReassigned_AndShowNamesInHistoryInPageQuery`; `AssignTicketCommandHandlerTests` › `Handle_Should_RecordAssigned_WhenTicketHasNoAssignee` | Duas atribuições (204 e 204) gravam `Assigned` (anterior nulo, novo Ana, executor o administrador, data UTC) e depois `Reassigned` (Ana → Beto).  | Aprovado em 2026-10-26 |
+| AC-17 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Assign_Should_RecordAssignedThenReassigned_AndShowNamesInHistoryInPageQuery`; `GetTicketHistoryQueryHandlerTests` › `Handle_Should_DescribeAssigneesByName_IncludingDeactivatedAndRemovedUsers` | Com Ana desativada e o responsável removido, o `GET tickets/{id}/history` cita Ana e Beto pelo nome completo, e o `EfCommandCounter` mostra que um único comando lê nomes de usuário e que esse comando é a consulta da página.  | Aprovado em 2026-10-26 |
+| AC-18 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Assign_Should_RecordNothing_WhenAssigneeIsAlreadyTheCurrentOne`, `Assign_Should_ReturnNoContentAndConflict_WhenTwoAssignmentsRunAtOnce` | Reatribuir a Ana dá 204 sem entrada nova; duas atribuições simultâneas (um gatilho segura a primeira) dão 204 e 409, com uma só entrada `Assigned`.  | Aprovado em 2026-10-26 |
+| AC-19 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAttendantsAndAssign_Should_IgnoreCachedPermissions_WhenRoleLosesManagePermission`; `AssignTicketCommandHandlerTests` › `Handle_Should_ReturnAssigneeNotAttendant_WhenCachedPermissionsStillSayAssigneeManagesTickets` | Beto faz uma chamada autenticada antes (permissões em cache); a role dele perde `tickets:manage` e, logo depois, ele some da lista e a atribuição recebe 400 `Tickets.AssigneeNotAttendant`.  | Aprovado em 2026-10-26 |
+| AC-20 | `dotnet build TickestPristine.slnx` e `dotnet test TickestPristine.slnx` | Build com 0 avisos; 50 testes de arquitetura, 581 unitários e 328 de integração aprovados (execução de 2026-10-26, a refazer na `spec-verify`).  | Aprovado em 2026-10-26 |
+| AC-21 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetAttendants_Should_HaveNoRateLimitPolicyOfItsOwn`, `GetAttendants_Should_ReturnTooManyRequests_WhenGlobalLimitIsExceeded` | O endpoint não tem metadado de rate limit próprio; com o limite global padrão de 100, a 101ª chamada do mesmo usuário recebe 429.  | Aprovado em 2026-10-26 |
 
 ## 9. Evidências de verificação
-- **Build:**
-- **Testes:**
-- **Revisão:**
-- **Documentação atualizada:** a atualizar pela `spec-verify`: `SYSTEM_SPECIFICATION.md` 2.2 (permissão nova e elegibilidade), 2.4 (`User` × `Sector`), 2.6 (RN-22), 4.3.1 (rotas), 5.10 (atribuir).
-- **CI:**
-- **Entrega:**
+- **Build:** `dotnet build TickestPristine.slnx` em 2026-10-26: 0 avisos, 0 erros.
+- **Testes:** `dotnet test TickestPristine.slnx --no-build --logger trx` em 2026-10-26: 959 aprovados, 0 com falha (ArchitectureTests 50/50, Application.UnitTests 581/581, IntegrationTests 328/328). Os 37 testes da rastreabilidade aparecem como aprovados no relatório TRX dessa execução (os `[Theory]` com todos os casos aprovados). Auditoria `python scripts/auditoria_sdd.py .`: 100% (`CONFORME`), 0 falhas críticas, código de saída 0.
+- **Revisão:** `ca-review` sobre `origin/main...HEAD` (arquivos do plano técnico): nenhum achado bloqueante e nenhuma violação de convenção. Observações não bloqueantes: (1) a recusa por privilégio na troca de setor usa a mensagem de `Users.CannotManagePrivilegedUser`, que fala em desativar e reativar; (2) os nomes do histórico comparam `users.id::text` com o valor gravado, sem índice (custo aceito na DEC-11, página de até 100 linhas). Fora do escopo e sem revisão: `specs/012-dominio-rico-estilo-milan/` e `specs/_fontes/contratos-central-atendimento.md`, não versionados.
+- **Limitações da verificação:** o banco dos testes de integração é compartilhado e as roles fixas não podem ser alteradas; por isso o AC-5 e o AC-11 isolam o cenário com um marcador no e-mail (o caso sem nenhum filtro é coberto no teste unitário), o AC-6 e o AC-19 usam roles de teste no papel de Atendente e Colaborador, e o Davi tem uma role de teste no papel de Administrador (a elegibilidade decide por permissão, não pelo nome da role). O AC-4 confere o código pelo `title` do Problem Details, onde a API o devolve.
+- **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 2.2 (Atendente, Administrador com 17 permissões, `tickets:assign` no catálogo), 2.3 (slices `ChangeSector` e `GetAttendants`), 2.4 (`User` × `Sector` e a migration), 2.6 (RN-22 revisada, RN-28 e RN-29 novas), 2.7 (C-05, C-10, C-18), 4.3.1 (rotas novas e `PUT tickets/{id}/assignee`) e 5.10 (atribuir).
+- **CI:** PR #27, job `build` verde (run `40422829377`, 6 min 13 s), em 2026-10-26.
+- **Entrega:** PR #27 (https://github.com/rafaelps15/tickest-pristine/pull/27); a spec fica `Entregue` quando o responsável mergear o PR na `main`.
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -173,3 +175,9 @@ Dados comuns: Ana (Atendente, ativa, setor TI do depto. Tecnologia), Beto (Atend
 | 2026-10-24 | Rascunho | Revisão de arquitetura pedida por Rafael Santos no chat ("Na spec 009 atue como arquiteto .net e encontre a melhor solução"): DEC-7 a DEC-11 decididas; REQ-3, REQ-5, REQ-6, REQ-7, REQ-11, REQ-13, AC-8, AC-9, AC-17, AC-19, plano e tarefas ajustados. Regra de elegibilidade única e sem cache; busca por palavras sobre `citext`; paginação e rate limit nos padrões do sistema; nomes do histórico em lote. Aguarda aprovação explícita. |
 | 2026-10-24 | Rascunho | AC-21 acrescentado para cobrir o REQ-13, que ficou sem critério depois da revisão de arquitetura (checklist de completude). |
 | 2026-10-24 | Aprovada | Aprovação explícita de Rafael Santos no chat ("aprovada!"), em resposta ao pedido de aprovação da spec 009. Checklist de completude conferido: todo REQ com AC, nenhuma DEC em aberto, toda tarefa ligada a ACs. |
+| 2026-10-26 | Em implementação | `/spec-implement 009` na branch `feat/SPEC-009-attendant-lookup-assignment`; Rafael Santos pediu a execução contínua de todas as tarefas, e os commits ficam para depois do diff e do ok. |
+| 2026-10-26 | Em implementação | T-1 a T-6 implementadas, com o build e todos os testes aprovados; os commits aguardam o ok de Rafael Santos. Pendente de decisão dele: a recusa do `PrivilegeEscalationGuard` na troca de setor usa a mensagem atual de `Users.CannotManagePrivilegedUser`, que fala em desativar e reativar. |
+| 2026-10-26 | Em implementação | Revisão pedida por Rafael Santos no chat ("GetTicketHistoryQueryHandler está fora do padrão pré estabelecido nas skills"; "GetUserIds não compactua com as minhas skills tb!"): DEC-11 trocada de (a) para (c), com a escolha "Subconsulta no Select"; REQ-11, AC-17 e o plano técnico ajustados, sem mudar o objetivo. Na mesma revisão, com a escolha "Alinhar ao padrão", a consulta de atendentes deixou de ter validator (o termo é conferido no handler, com 400 `Users.InvalidSearchTerm`) e o DTO passou a se chamar `AttendantResponse`. |
+| 2026-10-26 | Em implementação | Revisão pedida por Rafael Santos no chat ("AttendantSearch não segue minhas skills !"; sobre o `TicketAssigneeEligibility`, "ele segue minhas skilss ?"): com as escolhas "Sim, apague e mova" e "Filtro como o TicketSlaFilters", o `AttendantSearch` foi removido (os limites do termo foram para o `UserValidationRules`, e a checagem e a divisão em palavras, para o handler), e a regra de elegibilidade virou o filtro `WhereEligibleAssignee`, mantida num lugar só (DEC-10 sem mudança). |
+| 2026-10-26 | Verificada | `spec-verify`: build com 0 avisos; 959 testes aprovados e 0 com falha na execução de 2026-10-26; auditoria 100% com código de saída 0; os 21 ACs conferidos teste a teste (Dado, Quando e Então), todos aprovados nessa execução; `ca-review` sem achado bloqueante; `SYSTEM_SPECIFICATION.md` atualizado (2.2, 2.3, 2.4, 2.6, 2.7, 4.3.1 e 5.10). Pendências não bloqueantes: a mensagem da recusa por privilégio na troca de setor e o CI, que roda no PR. |
+| 2026-10-26 | Verificada | PR #27 aberto para a `main` a pedido de Rafael Santos no chat ("ok"); campo `pr:`, linha "Entrega" e o CI verde (job `build`, run `40422829377`) registrados. |
