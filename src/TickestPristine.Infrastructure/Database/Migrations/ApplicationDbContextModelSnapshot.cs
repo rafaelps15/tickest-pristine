@@ -1160,6 +1160,54 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.ToTable("user_credentials", "public");
                 });
 
+            modelBuilder.Entity("TickestPristine.Domain.Users.UserInvitation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at_utc");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at_utc");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_hash");
+
+                    b.Property<DateTime?>("UsedAtUtc")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("used_at_utc");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_user_invitations");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_user_invitations_token_hash");
+
+                    b.HasIndex("UserId", "CreatedAtUtc")
+                        .HasDatabaseName("ix_user_invitations_user_id_created_at_utc");
+
+                    b.ToTable("user_invitations", "public");
+                });
+
             modelBuilder.Entity("TickestPristine.Domain.Users.UserRole", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1347,6 +1395,16 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_user_credentials_users_user_id");
+                });
+
+            modelBuilder.Entity("TickestPristine.Domain.Users.UserInvitation", b =>
+                {
+                    b.HasOne("TickestPristine.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_invitations_users_user_id");
                 });
 
             modelBuilder.Entity("TickestPristine.Domain.Users.UserRole", b =>

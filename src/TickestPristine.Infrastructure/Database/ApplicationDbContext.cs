@@ -21,6 +21,8 @@ public sealed class ApplicationDbContext(
 
     public DbSet<UserCredential> UserCredentials { get; set; }
 
+    public DbSet<UserInvitation> UserInvitations { get; set; }
+
     public DbSet<RefreshToken> RefreshTokens { get; set; }
 
     public DbSet<Department> Departments { get; set; }

@@ -1,4 +1,5 @@
 using TickestPristine.Application.Users.Activate;
+using TickestPristine.Application.Users.ActivateAccount;
 using TickestPristine.Application.Users.AssignRoles;
 using TickestPristine.Application.Users.ChangePassword;
 using TickestPristine.Application.Users.ChangeSector;
@@ -29,6 +30,7 @@ public sealed class UserValidatorsTests
     private readonly AssignUserRolesCommandValidator _assignUserRolesValidator = new();
     private readonly DeactivateUserCommandValidator _deactivateValidator = new();
     private readonly ActivateUserCommandValidator _activateValidator = new();
+    private readonly ActivateUserAccountCommandValidator _activateAccountValidator = new();
     private readonly LogoutUserCommandValidator _logoutValidator = new();
     private readonly ChangeUserSectorCommandValidator _changeSectorValidator = new();
 
@@ -36,7 +38,7 @@ public sealed class UserValidatorsTests
     public void RegisterValidator_Should_HaveError_WhenEmailIsInvalid()
     {
         // Arrange
-        var command = new RegisterUserCommand("not-an-email", "First", "Last", "Password123!");
+        var command = new RegisterUserCommand("not-an-email", "First", "Last");
 
         // Act
         TestValidationResult<RegisterUserCommand> result = _registerValidator.TestValidate(command);
@@ -46,79 +48,79 @@ public sealed class UserValidatorsTests
     }
 
     [Fact]
-    public void RegisterValidator_Should_HaveError_WhenPasswordIsEmpty()
+    public void ActivateAccountValidator_Should_HaveError_WhenNewPasswordIsEmpty()
     {
         // Arrange
-        var command = new RegisterUserCommand("test@example.com", "First", "Last", string.Empty);
+        var command = new ActivateUserAccountCommand("token-do-convite", string.Empty);
 
         // Act
-        TestValidationResult<RegisterUserCommand> result = _registerValidator.TestValidate(command);
+        TestValidationResult<ActivateUserAccountCommand> result = _activateAccountValidator.TestValidate(command);
 
         // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Password)
-            .WithErrorMessage("Informe a senha.");
+        result.ShouldHaveValidationErrorFor(c => c.NewPassword)
+            .WithErrorMessage("Informe a nova senha.");
     }
 
     [Fact]
-    public void RegisterValidator_Should_HaveError_WhenPasswordIsTooShort()
+    public void ActivateAccountValidator_Should_HaveError_WhenNewPasswordIsTooShort()
     {
         // Arrange
-        var command = new RegisterUserCommand("test@example.com", "First", "Last", "Ab1#x");
+        var command = new ActivateUserAccountCommand("token-do-convite", "Ab1#x");
 
         // Act
-        TestValidationResult<RegisterUserCommand> result = _registerValidator.TestValidate(command);
+        TestValidationResult<ActivateUserAccountCommand> result = _activateAccountValidator.TestValidate(command);
 
         // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Password)
+        result.ShouldHaveValidationErrorFor(c => c.NewPassword)
             .WithErrorMessage(StrengthRequirementsMessage);
     }
 
     [Fact]
-    public void RegisterValidator_Should_HaveError_WhenPasswordHasNoUppercaseLetter()
+    public void ActivateAccountValidator_Should_HaveError_WhenNewPasswordHasNoUppercaseLetter()
     {
         // Arrange
-        var command = new RegisterUserCommand("test@example.com", "First", "Last", "password123!");
+        var command = new ActivateUserAccountCommand("token-do-convite", "password123!");
 
         // Act
-        TestValidationResult<RegisterUserCommand> result = _registerValidator.TestValidate(command);
+        TestValidationResult<ActivateUserAccountCommand> result = _activateAccountValidator.TestValidate(command);
 
         // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Password)
+        result.ShouldHaveValidationErrorFor(c => c.NewPassword)
             .WithErrorMessage(StrengthRequirementsMessage);
     }
 
     [Fact]
-    public void RegisterValidator_Should_HaveError_WhenPasswordHasNoSpecialCharacter()
+    public void ActivateAccountValidator_Should_HaveError_WhenNewPasswordHasNoSpecialCharacter()
     {
         // Arrange
-        var command = new RegisterUserCommand("test@example.com", "First", "Last", "Password123");
+        var command = new ActivateUserAccountCommand("token-do-convite", "Password123");
 
         // Act
-        TestValidationResult<RegisterUserCommand> result = _registerValidator.TestValidate(command);
+        TestValidationResult<ActivateUserAccountCommand> result = _activateAccountValidator.TestValidate(command);
 
         // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Password)
+        result.ShouldHaveValidationErrorFor(c => c.NewPassword)
             .WithErrorMessage(StrengthRequirementsMessage);
     }
 
     [Fact]
-    public void RegisterValidator_Should_NotHaveErrors_WhenPasswordHasExactlySixCharacters()
+    public void ActivateAccountValidator_Should_NotHaveErrors_WhenNewPasswordHasExactlySixCharacters()
     {
         // Arrange
-        var command = new RegisterUserCommand("test@example.com", "First", "Last", "Abc12#");
+        var command = new ActivateUserAccountCommand("token-do-convite", "Abc12#");
 
         // Act
-        TestValidationResult<RegisterUserCommand> result = _registerValidator.TestValidate(command);
+        TestValidationResult<ActivateUserAccountCommand> result = _activateAccountValidator.TestValidate(command);
 
         // Assert
-        result.ShouldNotHaveValidationErrorFor(c => c.Password);
+        result.ShouldNotHaveValidationErrorFor(c => c.NewPassword);
     }
 
     [Fact]
     public void RegisterValidator_Should_NotHaveErrors_WhenCommandIsValid()
     {
         // Arrange
-        var command = new RegisterUserCommand("test@example.com", "First", "Last", "Password123!");
+        var command = new RegisterUserCommand("test@example.com", "First", "Last");
 
         // Act
         TestValidationResult<RegisterUserCommand> result = _registerValidator.TestValidate(command);
@@ -412,7 +414,7 @@ public sealed class UserValidatorsTests
     {
         // Arrange
         string longName = new('a', 101);
-        var command = new RegisterUserCommand("test@example.com", longName, longName, "Password123!");
+        var command = new RegisterUserCommand("test@example.com", longName, longName);
 
         // Act
         TestValidationResult<RegisterUserCommand> result = _registerValidator.TestValidate(command);
@@ -427,7 +429,7 @@ public sealed class UserValidatorsTests
     {
         // Arrange
         string longEmail = $"{new string('a', 245)}@example.com";
-        var command = new RegisterUserCommand(longEmail, "First", "Last", "Password123!");
+        var command = new RegisterUserCommand(longEmail, "First", "Last");
 
         // Act
         TestValidationResult<RegisterUserCommand> result = _registerValidator.TestValidate(command);
@@ -440,7 +442,7 @@ public sealed class UserValidatorsTests
     public void RegisterValidator_Should_HaveError_WhenFirstNameIsEmpty()
     {
         // Arrange
-        var command = new RegisterUserCommand("test@example.com", string.Empty, "Last", "Password123!");
+        var command = new RegisterUserCommand("test@example.com", string.Empty, "Last");
 
         // Act
         TestValidationResult<RegisterUserCommand> result = _registerValidator.TestValidate(command);
@@ -453,7 +455,7 @@ public sealed class UserValidatorsTests
     public void RegisterValidator_Should_HaveError_WhenLastNameIsEmpty()
     {
         // Arrange
-        var command = new RegisterUserCommand("test@example.com", "First", string.Empty, "Password123!");
+        var command = new RegisterUserCommand("test@example.com", "First", string.Empty);
 
         // Act
         TestValidationResult<RegisterUserCommand> result = _registerValidator.TestValidate(command);
@@ -466,7 +468,7 @@ public sealed class UserValidatorsTests
     public void RegisterValidator_Should_HaveError_WhenEmailIsEmpty()
     {
         // Arrange
-        var command = new RegisterUserCommand(string.Empty, "First", "Last", "Password123!");
+        var command = new RegisterUserCommand(string.Empty, "First", "Last");
 
         // Act
         TestValidationResult<RegisterUserCommand> result = _registerValidator.TestValidate(command);
@@ -489,16 +491,16 @@ public sealed class UserValidatorsTests
     }
 
     [Fact]
-    public void RegisterValidator_Should_ReturnRequirementsOnce_WhenPasswordBreaksSeveralRules()
+    public void ActivateAccountValidator_Should_ReturnRequirementsOnce_WhenNewPasswordBreaksSeveralRules()
     {
         // Arrange
-        var command = new RegisterUserCommand("test@example.com", "First", "Last", "abc");
+        var command = new ActivateUserAccountCommand("token-do-convite", "abc");
 
         // Act
-        TestValidationResult<RegisterUserCommand> result = _registerValidator.TestValidate(command);
+        TestValidationResult<ActivateUserAccountCommand> result = _activateAccountValidator.TestValidate(command);
 
         // Assert
-        result.Errors.Where(e => e.PropertyName == nameof(RegisterUserCommand.Password))
+        result.Errors.Where(e => e.PropertyName == nameof(ActivateUserAccountCommand.NewPassword))
             .ShouldHaveSingleItem()
             .ErrorMessage.ShouldBe(StrengthRequirementsMessage);
     }
@@ -713,6 +715,45 @@ public sealed class UserValidatorsTests
 
         // Act
         TestValidationResult<ChangeUserSectorCommand> result = _changeSectorValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void ActivateAccountValidator_Should_HaveError_WhenTokenIsEmpty()
+    {
+        // Arrange
+        var command = new ActivateUserAccountCommand(string.Empty, "Password123!");
+
+        // Act
+        TestValidationResult<ActivateUserAccountCommand> result = _activateAccountValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.Token);
+    }
+
+    [Fact]
+    public void ActivateAccountValidator_Should_HaveError_WhenTokenIsTooLong()
+    {
+        // Arrange
+        var command = new ActivateUserAccountCommand(new string('a', 201), "Password123!");
+
+        // Act
+        TestValidationResult<ActivateUserAccountCommand> result = _activateAccountValidator.TestValidate(command);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(c => c.Token);
+    }
+
+    [Fact]
+    public void ActivateAccountValidator_Should_NotHaveErrors_WhenCommandIsValid()
+    {
+        // Arrange
+        var command = new ActivateUserAccountCommand("token-do-convite", "Password123!");
+
+        // Act
+        TestValidationResult<ActivateUserAccountCommand> result = _activateAccountValidator.TestValidate(command);
 
         // Assert
         result.ShouldNotHaveAnyValidationErrors();

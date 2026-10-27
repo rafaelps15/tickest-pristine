@@ -34,7 +34,7 @@ public sealed class GetUserByIdQueryHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(callerId, PermissionCodes.Users.Read, Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var handler = new GetUserByIdQueryHandler(context, userContext, permissionProvider);
+        var handler = new GetUserByIdQueryHandler(context, userContext, permissionProvider, CreateClock());
         var query = new GetUserByIdQuery(user.Id);
 
         // Act
@@ -56,7 +56,7 @@ public sealed class GetUserByIdQueryHandlerTests : BaseHandlerTest
         userContext.UserId.Returns(userId);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
 
-        var handler = new GetUserByIdQueryHandler(context, userContext, permissionProvider);
+        var handler = new GetUserByIdQueryHandler(context, userContext, permissionProvider, CreateClock());
         var query = new GetUserByIdQuery(userId);
 
         // Act
@@ -87,7 +87,7 @@ public sealed class GetUserByIdQueryHandlerTests : BaseHandlerTest
         userContext.UserId.Returns(user.Id);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
 
-        var handler = new GetUserByIdQueryHandler(context, userContext, permissionProvider);
+        var handler = new GetUserByIdQueryHandler(context, userContext, permissionProvider, CreateClock());
         var query = new GetUserByIdQuery(user.Id);
 
         // Act
@@ -121,7 +121,7 @@ public sealed class GetUserByIdQueryHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(callerId, PermissionCodes.Users.Read, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new GetUserByIdQueryHandler(context, userContext, permissionProvider);
+        var handler = new GetUserByIdQueryHandler(context, userContext, permissionProvider, CreateClock());
         var query = new GetUserByIdQuery(user.Id);
 
         // Act
@@ -201,6 +201,47 @@ public sealed class GetUserByIdQueryHandlerTests : BaseHandlerTest
         result.Value.SectorIsActive.ShouldBe(false);
     }
 
+    [Fact]
+    public async Task Handle_Should_ReturnPendingActivationWithInvitationExpiration_WhenUserHasNoCredential()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        User user = CreateUser();
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+        UserInvitation invitation = await ResendUserInvitationCommandHandlerTests.SeedInvitationAsync(
+            context, user.Id, "token-do-convite", DefaultUtcNow.AddHours(-1));
+
+        GetUserByIdQueryHandler handler = CreateSelfHandler(context, user.Id);
+
+        // Act
+        Result<UserResponse> result = await handler.Handle(new GetUserByIdQuery(user.Id), CancellationToken.None);
+
+        // Assert
+        result.Value.PendingActivation.ShouldBeTrue();
+        result.Value.InvitationExpiresAtUtc.ShouldBe(invitation.ExpiresAtUtc);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnNotPending_WhenUserHasCredential()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        User user = CreateUser();
+        context.Users.Add(user);
+        context.UserCredentials.Add(new UserCredential { Id = Guid.NewGuid(), UserId = user.Id, PasswordHash = "hash" });
+        await context.SaveChangesAsync();
+
+        GetUserByIdQueryHandler handler = CreateSelfHandler(context, user.Id);
+
+        // Act
+        Result<UserResponse> result = await handler.Handle(new GetUserByIdQuery(user.Id), CancellationToken.None);
+
+        // Assert
+        result.Value.PendingActivation.ShouldBeFalse();
+        result.Value.InvitationExpiresAtUtc.ShouldBeNull();
+    }
+
     /// <summary>
     /// Handler em que quem consulta é o próprio usuário, que sempre pode ler o próprio perfil.
     /// </summary>
@@ -209,6 +250,6 @@ public sealed class GetUserByIdQueryHandlerTests : BaseHandlerTest
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(userId);
 
-        return new GetUserByIdQueryHandler(context, userContext, Substitute.For<IPermissionProvider>());
+        return new GetUserByIdQueryHandler(context, userContext, Substitute.For<IPermissionProvider>(), CreateClock());
     }
 }

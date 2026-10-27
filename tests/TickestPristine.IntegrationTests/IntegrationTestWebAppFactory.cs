@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
+using TickestPristine.Application.Abstractions.Notifications;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api;
@@ -66,9 +67,18 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         // dele diretamente. Os eventos de violação ficam guardados para as asserções.
         builder.UseSetting("SlaMonitor:Enabled", "false");
 
+        // E-mails (spec 008): o envio real é trocado pelo CapturingEmailSender, mas as opções continuam validadas na
+        // inicialização, como em produção.
+        builder.UseSetting("Email:Host", "localhost");
+        builder.UseSetting("Email:FromAddress", "no-reply@tickest.test");
+        builder.UseSetting("Invitations:ActivationUrl", "https://tickest.test/ativar-conta");
+
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<SlaBreachEventRecorder>();
+
+            services.AddSingleton<CapturingEmailSender>();
+            services.AddScoped<IEmailSender>(sp => sp.GetRequiredService<CapturingEmailSender>());
             services.AddScoped<IDomainEventHandler<TicketSlaBreachedDomainEvent>, RecordingSlaBreachedDomainEventHandler>();
         });
     }
