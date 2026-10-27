@@ -13,4 +13,10 @@ public sealed class TicketAttachment : Entity, IAuditable
     public string StorageKey { get; set; }
     public DateTime UploadedAtUtc { get; set; }
     public DateTime? DeletedAtUtc { get; set; }
+
+    /// <summary>
+    /// Quando o arquivo foi apagado do armazenamento, depois da exclusão lógica. Nulo enquanto o arquivo existir ou se a
+    /// remoção falhou.
+    /// </summary>
+    public DateTime? PurgedAtUtc { get; set; }
 }

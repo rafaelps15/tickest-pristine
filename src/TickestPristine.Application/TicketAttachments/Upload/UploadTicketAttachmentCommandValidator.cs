@@ -11,7 +11,9 @@ internal sealed class UploadTicketAttachmentCommandValidator : AbstractValidator
             .Cascade(CascadeMode.Stop)
             .NotEmpty()
             .MaximumLength(260)
-            .Must(fileName => !fileName.Any(character => char.IsControl(character) || character is '/' or '\\'))
+            .Must(fileName =>
+                !fileName.Contains("..", StringComparison.Ordinal) &&
+                !fileName.Any(character => char.IsControl(character) || character is '/' or '\\'))
             .WithMessage("O nome do arquivo contém caracteres inválidos.");
         RuleFor(c => c.ContentType)
             .Cascade(CascadeMode.Stop)

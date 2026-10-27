@@ -36,6 +36,17 @@ internal static class RateLimitingExtensions
                     RateLimitPartition.GetFixedWindowLimiter(
                         partitionKey: GetPartitionKey(httpContext),
                         factory: _ => ToLimiterOptions(limits.Authentication)));
+
+                // Envio e exclusão de anexos: gravam e apagam arquivos, então têm limite próprio, além do global.
+                limiter.AddPolicy(RateLimitingPolicies.AttachmentUpload, httpContext =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        partitionKey: GetPartitionKey(httpContext),
+                        factory: _ => ToLimiterOptions(limits.AttachmentUpload)));
+
+                limiter.AddPolicy(RateLimitingPolicies.AttachmentDelete, httpContext =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        partitionKey: GetPartitionKey(httpContext),
+                        factory: _ => ToLimiterOptions(limits.AttachmentDelete)));
             });
 
         return services;

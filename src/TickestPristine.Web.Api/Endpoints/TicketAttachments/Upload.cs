@@ -11,7 +11,8 @@ internal sealed class Upload : IEndpoint
 {
     // Os 10 MB do anexo mais uma folga para o envelope do multipart: acima disso, o corpo é recusado (413) antes de ser
     // lido, em vez de chegar inteiro ao validator. O limite do Kestrel vale para a requisição toda; o do formulário é
-    // conferido pelo próprio ASP.NET ao ler o multipart, inclusive no TestServer dos testes de integração.
+    // conferido pelo próprio ASP.NET ao ler o multipart, inclusive no TestServer dos testes de integração. Os dois
+    // chegam ao GlobalExceptionHandler, que responde 413 em Problem Details.
     private const long MaxRequestBodySizeBytes = 11 * 1024 * 1024;
 
     public void MapEndpoint(IEndpointRouteBuilder app)
@@ -29,6 +30,7 @@ internal sealed class Upload : IEndpoint
                 TicketId = ticketId,
                 FileName = file.FileName,
                 ContentType = file.ContentType,
+                // Bytes efetivamente recebidos na parte do arquivo, e não um tamanho declarado pelo cliente.
                 FileSizeBytes = file.Length,
                 Content = content
             };
@@ -39,6 +41,7 @@ internal sealed class Upload : IEndpoint
         })
         .WithTags(Tags.TicketAttachments)
         .RequireAuthorization()
+        .RequireRateLimiting(RateLimitingPolicies.AttachmentUpload)
         .DisableAntiforgery()
         .WithMetadata(new RequestSizeLimitAttribute(MaxRequestBodySizeBytes))
         .WithFormOptions(multipartBodyLengthLimit: MaxRequestBodySizeBytes);

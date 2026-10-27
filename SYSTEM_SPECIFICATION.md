@@ -61,7 +61,7 @@
 ### 1.4 Principais riscos e limitações conhecidos
 
 1. **[Fato] Os eventos de domínio são publicados em memória depois do commit, sem outbox.** Hoje isso tem baixo impacto porque o único handler é vazio, mas o plano de SLA depende de notificações confiáveis. Ver GAP-05.
-2. **[Fato] Os anexos ficam em disco local**, e o arquivo de um anexo excluído não é removido. Ver GAP-08 e GAP-09.
+2. **[Fato] Os anexos ficam em disco local.** **[Spec 011]** O arquivo de um anexo excluído é apagado logo depois da exclusão (GAP-08 resolvido), e o conteúdo é conferido contra o tipo declarado; o armazenamento local continua não servindo para várias instâncias. Ver GAP-09.
 3. **[Fato] Não há procedimento automatizado de implantação nem de migração fora de Development.** Ver GAP-10.
 4. **[Fato] O `CLAUDE.md` continua descrevendo o domínio de exemplo Todos**, de forma intencional (os caminhos e a porta foram corrigidos). Ver 9.3.
 
@@ -192,7 +192,7 @@ stateDiagram-v2
 | RN-06 | Editar, excluir ou reabrir exige ser o dono com a permissão `*-own` correspondente, ou ter `tickets:manage`. | `TicketAccessGuard.cs:53-72` e os três handlers | `TicketAccessGuardTests.cs`, `TicketsTests.cs:905,979,553` |
 | RN-07 | Ver o chamado, as mensagens, os anexos e o histórico é permitido ao solicitante, ao responsável ou a quem tem `tickets:manage`. | `TicketAccessGuard.cs:18-46` | `TicketsTests.cs:350,371` |
 | RN-08 | Só o autor edita a própria mensagem. O autor ou quem tem `tickets:manage` a exclui. | `EditTicketMessageCommandHandler.cs:31-34`, `DeleteTicketMessageCommandHandler.cs:33-43` | `EditTicketMessageCommandHandlerTests.cs`, `DeleteTicketMessageCommandHandlerTests.cs` |
-| RN-09 | Anexo: até 10 MB, com tipos permitidos (imagens, PDF, Office, txt, zip) e extensão coerente com o tipo declarado. | `TicketAttachmentLimits.cs:8-58`, `UploadTicketAttachmentCommandValidator.cs:9-31` | `TicketAttachmentValidatorsTests.cs` |
+| RN-09 | Anexo: até 10 MB, com tipos permitidos (imagens, PDF, Office, txt, zip) e extensão coerente com o tipo declarado. **[Spec 011]** O tamanho é o do conteúdo recebido; o conteúdo precisa corresponder ao tipo (assinatura dos primeiros bytes; DOCX e XLSX com `word/` ou `xl/` no pacote; TXT sem byte nulo nos primeiros 8 KB), senão 400 `TicketAttachments.ContentMismatch`; o nome não pode ter `/`, `\`, `..` nem caracteres de controle; um chamado aceita até 20 anexos não excluídos e 100 MB somados (400 `TicketAttachments.TicketLimitReached`); corpo acima de 11 MB responde 413 em Problem Details. A política fica em `GET ticket-attachments/policy`. Envio limitado a 30 por usuário a cada 10 min, e exclusão a 60 por minuto. | `TicketAttachmentLimits.cs`, `TicketAttachmentContentInspector.cs`, `Upload/*`, `GetPolicy/*`, `GlobalExceptionHandler.cs` | `TicketAttachmentValidatorsTests.cs`, `TicketAttachmentContentInspectorTests.cs`, `UploadTicketAttachmentCommandHandlerTests.cs`, `TicketAttachmentsTests.cs` |
 | RN-10 | Um departamento ou setor não pode ser desativado com chamados ativos. Desativar o departamento desativa os setores dele. | `DeactivateDepartmentCommandHandler.cs:29-49`, `DeactivateSectorCommandHandler.cs:27-34` | `DeactivateDepartmentCommandHandlerTests.cs`, `DeactivateSectorCommandHandlerTests.cs` |
 | RN-11 | O nome do departamento é único entre os ativos, sem diferenciar maiúsculas. O nome do setor é único dentro do departamento, entre os ativos. | Handlers mais índice filtrado `citext` (`DepartmentConfiguration.cs:15-18`, `SectorConfiguration.cs:15-18`) | `DepartmentsTests.cs`, `SectorsTests.cs` |
 | RN-12 | O e-mail do usuário é único, sem diferenciar maiúsculas (`citext`). | `RegisterUserCommandHandler.cs:19-22`, `UserConfiguration.cs:14-18` | `RegisterUserCommandHandlerTests.cs` |
@@ -237,7 +237,7 @@ Legenda de estado: **IE** = Implementada e evidenciada · **PI** = Parcialmente 
 | C-14 | SLA de primeira resposta e resolução, com plano, cronômetros (spec 005) e violação materializada (spec 006) | IE | `TicketSla.cs`, `TicketSlaClock.cs`, `TicketSlaFilters.cs`, `Tickets/GetSla/*`, `Tickets/ProcessSlaBreaches/*`, `Infrastructure/Tickets/SlaMonitoring/*`, `TicketSlaTimerConfiguration.cs`, testes | Calendário útil (spec 004) | Sem pausa; o evento de violação não tem handler (sem notificação). |
 | C-15 | SLA completo (calendário, pausas, 1ª resposta, escalonamento, matriz, relatórios) | PI | Calendário útil (spec 004), plano com cronômetros de primeira resposta e resolução (spec 005) e monitoramento da violação (spec 006) prontos. Plano das fases em `specs/_fontes/prompt-sla.md` | Outbox (para notificações confiáveis) | Faltam pausa, alerta "em risco" como evento, escalonamento, notificações, políticas configuráveis e o cadastro de calendários (Fase 3). A stack descrita no prompt diverge da real (ver 9.3). |
 | C-16 | Mensagens do chamado | IE | `TicketMessages/*`, testes | — | Não há distinção entre mensagem pública e nota interna. Aceita mensagens em chamados encerrados (Q-07). |
-| C-17 | Anexos | IE | `TicketAttachments/*`, `LocalFileStorage.cs`, testes | Disco local | O arquivo de um anexo excluído continua no disco. O armazenamento local não serve para várias instâncias (GAP-09). |
+| C-17 | Anexos | IE | `TicketAttachments/*`, `LocalFileStorage.cs`, testes | Disco local | **[Spec 011]** Conteúdo conferido contra o tipo, limites por chamado, política em `GET ticket-attachments/policy`, 404 `TicketAttachments.FileMissing` para arquivo ausente e remoção física do arquivo depois da exclusão (`PurgedAtUtc`). Sem antivírus. O armazenamento local não serve para várias instâncias (GAP-09). |
 | C-18 | Histórico do chamado | IE | `TicketHistories/*`, testes | — | **[Spec 009]** A primeira atribuição grava `Assigned` e a troca, `Reassigned`, com os ids do anterior e do novo; as descrições de `Assigned`, `Reassigned` e `Unassigned` trazem os nomes completos (inclusive de usuários desativados; id sem usuário aparece como "usuário removido"), lidos por subconsultas na própria consulta da página. Registros antigos têm `Reassigned` também na primeira atribuição. A remoção do responsável grava `Unassigned` (spec 001), descrita como "Responsável removido: <nome>". **[Resolvido em 23/10, spec 002]** A alteração da descrição grava `DescriptionChanged` ("Descrição alterada"), com o texto anterior e o novo. |
 | C-19 | Auditoria de entidades | IE | `AuditLoggingInterceptor.cs`, `AuditLogsTests.cs` | — | `TicketHistory`, `RefreshToken`, `Role` e `Permission` não implementam `IAuditable` (escolha não documentada). |
 | C-20 | Eventos de domínio | INV | 28 tipos de evento declarados, 27 disparados em 31 pontos de `Raise(...)`; 1 handler vazio (`UserRegisteredDomainEventHandler.cs:8-12`) | — | **[Spec 008]** Novos `UserInvitationIssuedDomainEvent` e `UserInvitationAcceptedDomainEvent`, sem o token; em 27/10/2026 são 33 tipos declarados e 32 disparados, em 36 pontos de `Raise(...)`. Os eventos não têm efeito observável. `TicketHistoryRecordedDomainEvent` nunca é disparado (GAP-04). |
@@ -531,9 +531,10 @@ Fonte: `ApplicationDbContext.cs:57-108`, `DomainEventsDispatcher.cs:19-59`. **[F
 | `DELETE tickets/{id}/assignee` | `tickets:manage` | — |
 | `GET/POST tickets/{id}/messages` | Usuário ativo, e no handler: participante ou `tickets:manage` | — |
 | `PUT/DELETE ticket-messages/{id}` | Usuário ativo, e no handler: autor (editar) ou autor/`tickets:manage` (excluir) | — |
-| `GET/POST tickets/{id}/attachments` | Usuário ativo, e no handler: participante ou `tickets:manage` | — |
+| `GET/POST tickets/{id}/attachments` | Usuário ativo, e no handler: participante ou `tickets:manage` | `attachment-upload` no POST (spec 011) |
 | `GET ticket-attachments/{id}/download` | idem | — |
-| `DELETE ticket-attachments/{id}` | Usuário ativo, e no handler: quem enviou ou `tickets:manage` | — |
+| `DELETE ticket-attachments/{id}` | Usuário ativo, e no handler: quem enviou ou `tickets:manage` | `attachment-delete` (spec 011) |
+| `GET ticket-attachments/policy` (spec 011) | Usuário ativo | — |
 | `GET tickets/{id}/history` | Usuário ativo, e no handler: participante ou `tickets:manage` | — |
 | `GET audit-logs/{entityName}/{entityId}` | `audit:read` | — |
 | `GET health` | Anônima | Global |
@@ -565,7 +566,8 @@ Fonte: `src/TickestPristine.Web.Api/Endpoints/**`. O limite global (100 req/60 s
   - `HasPermission(code)` cria dinamicamente uma policy com `PermissionRequirement` (`PermissionAuthorizationPolicyProvider.cs:14-18`). Essa policy **não** inclui `ActiveUserRequirement`, mas a consulta de permissões já filtra usuários inativos (`PermissionProvider.cs:18`).
   - As regras por recurso (participante, dono) ficam nos guards da Application.
 - **Auditoria**: grava toda inclusão, alteração ou exclusão de entidades `IAuditable` na mesma transação, excluindo `PasswordHash`, `SecurityStamp` e, **[Spec 008]**, `UserInvitation.TokenHash` dos valores (`AuditLoggingInterceptor.cs:19-24`, `AuditLogsTests.cs:128`, `UserInvitationsTests.cs`). A credencial criada na ativação anônima é auditada com autor nulo.
-- **Arquivos**: a chave de armazenamento é gerada pelo servidor, a extensão é sanitizada e há proteção contra path traversal (`LocalFileStorage.cs:20,71-91`). **Não há** verificação do conteúdo real do arquivo (assinatura ou "magic bytes") nem antivírus. O tipo e o nome vêm do cliente.
+- **Arquivos**: a chave de armazenamento é gerada pelo servidor, a extensão é sanitizada e há proteção contra path traversal (`LocalFileStorage.cs:20,71-91`). **[Spec 011]** O conteúdo é conferido pela assinatura contra o tipo declarado, e o nome recusa caminho e caracteres de controle; **não há** antivírus. O download envia `Content-Disposition: attachment` e `nosniff`.
+- **Leitura do corpo**: **[Spec 011, DEC-6]** `RouteHandlerOptions.ThrowOnBadRequest` fica ligado em todos os ambientes: corpo ou parâmetros que não puderam ser lidos chegam ao `GlobalExceptionHandler` e respondem em Problem Details (antes, fora de Development, a resposta saía sem corpo). Corpo acima do limite da própria rota responde 413.
 
 ### 4.7 Transações, concorrência e consistência
 
@@ -591,7 +593,7 @@ Fonte: `src/TickestPristine.Web.Api/Endpoints/**`. O limite global (100 req/60 s
 | `Email:Host`, `Email:Port` (padrão 587), `Email:UseTls` (padrão `true`), `Email:UserName`, `Email:Password`, `Email:FromAddress`, `Email:FromName` | Sim (`Host` e `FromAddress`) | `ValidateDataAnnotations` + `ValidateOnStart` | Spec 008. No `appsettings.json` ficam vazios: fora de Development a API não sobe sem o SMTP configurado. Em Development, o Mailpit (`localhost:1025`, interface em `http://localhost:8025`). |
 | `Invitations:ActivationUrl` | Sim | `InvitationOptionsValidator` + `ValidateOnStart` | Spec 008. Endereço absoluto da tela de ativação do front (padrão de rota `/ativar-conta`), sem fragmento; HTTPS fora de Development. |
 | `Cors:AllowedOrigins[]`, `Cors:AllowLoopbackOrigins` | Não | — | Sem origens configuradas, nenhuma origem externa é aceita. |
-| `RateLimiting:Global|Authentication:{PermitLimit,WindowInSeconds}` | Sim (têm padrão no appsettings) | `RateLimitingOptionsValidator` + `ValidateOnStart` | — |
+| `RateLimiting:Global|Authentication|AttachmentUpload|AttachmentDelete:{PermitLimit,WindowInSeconds}` | Sim (têm padrão no appsettings) | `RateLimitingOptionsValidator` + `ValidateOnStart` | **[Spec 011]** `AttachmentUpload` (30 / 600 s) e `AttachmentDelete` (60 / 60 s), por usuário. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Não | — | Ativa a exportação OTLP. |
 | `Serilog:*` | Não | — | Em Development, envia para o Seq em `http://seq:5341`. |
 
@@ -659,8 +661,8 @@ Descrito no diagrama 3.6.
 ### 5.6 Conversa e anexos do chamado
 
 - **Mensagens**: `POST tickets/{id}/messages` (participante ou `tickets:manage`), com limite de 4000 caracteres. Editar só o autor. Excluir: autor ou `tickets:manage` (exclusão lógica). Cada ação grava histórico. **[Spec 005]** A primeira mensagem de quem atende a fila conclui a primeira resposta do SLA (RN-26). Evidências: `TicketMessages/*`, `TicketMessagesTests.cs` (15), `PostTicketMessageCommandHandlerTests.cs`.
-- **Anexos**: `POST tickets/{id}/attachments` (`multipart`) segue a sequência validação → guard de visualização → grava o arquivo no disco → grava a linha e o histórico → em caso de falha, apaga o arquivo. O download repete o guard e abre o stream do disco. A exclusão é lógica: **o arquivo físico não é removido** (`DeleteTicketAttachmentCommandHandler.cs:45-57`). Evidências: `TicketAttachmentsTests.cs` (15), `UploadTicketAttachmentCommandHandlerTests.cs`.
-- **Lacunas**: não há restrição pelo status do chamado (é possível conversar e anexar em chamado cancelado ou fechado). Não há limite de quantidade ou de volume total por chamado. Não há tratamento para arquivo ausente no disco no download: `OpenReadAsync` lança `FileNotFoundException`, que vira 500. **[Inferência, não testado]**
+- **Anexos**: `POST tickets/{id}/attachments` (`multipart`) segue a sequência validação → guard de visualização → grava o arquivo no disco → grava a linha e o histórico → em caso de falha, apaga o arquivo. O download repete o guard e abre o stream do disco. **[Spec 011]** Antes de gravar, o handler confere os limites do chamado e o conteúdo contra o tipo. O download responde 404 `TicketAttachments.FileMissing` (com log de erro) quando o arquivo sumiu do disco. A exclusão é lógica, e o `TicketAttachmentDeletedDomainEventHandler` apaga o arquivo depois do commit e grava `PurgedAtUtc`; se a remoção falhar, a exclusão continua valendo e a falha fica no log do despacho dos eventos. Evidências: `TicketAttachmentsTests.cs` (27), `UploadTicketAttachmentCommandHandlerTests.cs`, `TicketAttachmentDeletedDomainEventHandlerTests.cs`.
+- **Lacunas**: não há restrição pelo status do chamado (é possível conversar e anexar em chamado cancelado ou fechado, Q-07). **[Spec 011]** Os limites por chamado são conferidos sem trava: dois envios simultâneos no limite podem passar dele por um anexo.
 
 ### 5.7 Painel de SLA e dashboards
 
@@ -776,7 +778,7 @@ Pontos de atenção (detalhados na seção 7):
 
 - O auto-cadastro anônimo (GAP-03) foi **resolvido** em 22/10: o cadastro exige `users:create`.
 - Access token não revogável antes de expirar, até 1440 min por configuração (GAP-14).
-- Não há verificação de conteúdo dos anexos (GAP-09).
+- **[Spec 011]** O conteúdo dos anexos é conferido pela assinatura; não há antivírus (GAP-09).
 - Não há `UseHttpsRedirection`, HSTS nem `ForwardedHeaders` no pipeline (`Program.cs`). **[Inferência]** Pode ser intencional se TLS e proxy forem tratados fora da aplicação (GAP-11).
 - `docker-compose.override.yml` e `appsettings.Development.json` contêm credenciais **padrão de desenvolvimento** do PostgreSQL em texto plano. Os valores não foram reproduzidos aqui.
 
@@ -844,13 +846,13 @@ Pontos de atenção (detalhados na seção 7):
 | GAP-05 | Arquitetura / confiabilidade | `ApplicationDbContext.cs:63-69`, `DomainEventsDispatcher.cs:9-11`: eventos em memória depois do commit | Efeitos colaterais futuros (notificações de SLA, e-mails) podem se perder em falhas ou quedas. | **P2**: sem impacto hoje (não há handlers relevantes), mas é pré-requisito declarado do plano de SLA (`specs/_fontes/prompt-sla.md`, Fase 0). | Decisão sobre o plano de SLA | Introduzir o outbox só quando o primeiro efeito colateral relevante for implementado. |
 | GAP-06 | Documentação | **[Parcialmente resolvido em 22/10]** Os caminhos `src/TickestPristine.*` e `tests/TickestPristine.*` e a porta do Seq (`8090`) foram corrigidos no `CLAUDE.md`. Os exemplos de Todos foram mantidos de propósito | Os exemplos de Todos não correspondem ao domínio real | **P3** (era P2) | Q-09 | Nenhuma, salvo nova decisão sobre os exemplos. |
 | GAP-07 | Documentação | **[Resolvido em 22/10]** O `README.md` descreve roles fixas, desativação em vez de exclusão, o administrador vindo de `Admin:*`, o fechamento, a atribuição e o cadastro com `users:create` | — | Era **P2** | — | Nenhuma. |
-| GAP-08 | Funcional | `DeleteTicketAttachmentCommandHandler.cs:47` só marca `DeletedAtUtc` | Os arquivos continuam ocupando disco indefinidamente, e um "anexo removido" continua existindo fisicamente (relevante para a LGPD). | **P2** | Q-08 (política de retenção) | Definir a retenção e implementar a remoção física (imediata ou por rotina). |
+| GAP-08 | Funcional | **[Resolvido em 27/10, spec 011]** O arquivo é apagado logo depois da exclusão lógica (`TicketAttachmentDeletedDomainEventHandler.cs`), com `PurgedAtUtc`; a linha continua para o histórico e a auditoria. Antes: `DeleteTicketAttachmentCommandHandler.cs:47` só marcava `DeletedAtUtc` | Os arquivos continuam ocupando disco indefinidamente, e um "anexo removido" continua existindo fisicamente (relevante para a LGPD). | **P2** | Q-08 (política de retenção) | Definir a retenção e implementar a remoção física (imediata ou por rotina). |
 
 ### 7.2 Riscos potenciais
 
 | ID | Categoria | Evidência | Impacto potencial | Prioridade e justificativa | Próxima ação |
 |---|---|---|---|---|---|
-| GAP-09 | Segurança / escalabilidade | `LocalFileStorage.cs`; `TicketAttachmentLimits.cs` confia em `ContentType` e extensão | Não escala para várias instâncias. Um arquivo malicioso com extensão permitida é aceito. | **P2**: depende do modelo de implantação, que é desconhecido. | Definir o armazenamento alvo (ex.: blob) e a política de inspeção de arquivos. |
+| GAP-09 | Segurança / escalabilidade | `LocalFileStorage.cs`. **[Parcialmente resolvido em 27/10, spec 011]** O conteúdo é conferido pela assinatura contra o tipo (`TicketAttachmentContentInspector.cs`) | Não escala para várias instâncias. Um arquivo malicioso com a assinatura do tipo permitido (ex.: PDF com conteúdo ativo) ainda é aceito; não há antivírus. | **P2**: depende do modelo de implantação, que é desconhecido. | Definir o armazenamento alvo (ex.: blob) e a política de inspeção de arquivos. |
 | GAP-10 | Operação | Migrations e seed automáticos só em Development (`Program.cs:34-39`); não há pipeline de deploy | Implantação manual e propensa a erro; o primeiro administrador depende de rodar a ferramenta EF com a seção `Admin`. | **P2** | Documentar ou automatizar o procedimento de migração em produção. |
 | GAP-11 | Segurança / operação | Não há `ForwardedHeaders`, HTTPS redirection nem HSTS; rate limit por `RemoteIpAddress` (`RateLimitingExtensions.cs:50-56`) | Atrás de um proxy reverso, todos os anônimos podem cair na mesma partição (bloqueio coletivo do login). | **P2**: condicionado à topologia de rede, que é desconhecida. | Confirmar a topologia e configurar os forwarded headers, se aplicável. |
 | GAP-12 | CI | **[Resolvido no repositório em 22/10, commit `d9d1f50`; validação no GitHub pendente]** Antes: `build.yml` sem gatilho `pull_request`, com testes de integração só depois do merge. Agora: gatilho `pull_request` para a `main` e `Publish` só fora de PR (seção 6.8) | Até rodar num PR real, não há prova de que os 699 testes passam no runner Linux do GitHub | **P2** | Abrir um PR para a `main` e conferir a execução do workflow; avaliar exigir o check "Build" na proteção da `main`. |
@@ -907,7 +909,7 @@ As perguntas Q-01 a Q-12 estão na seção 9.5 (Q-01 e Q-02 foram respondidas e 
 | E-24 | Enums gravados como texto (commit `b2028ae`) | `src/TickestPristine.Infrastructure/Tickets/TicketConfiguration.cs:20-23`; migration `20261022023422_Store_Ticket_Enums_As_Names.cs` | — | `MigrationsTests.cs` |
 | E-25 | Volume com SQL e fuso fixo | `src/TickestPristine.Application/Tickets/GetVolume/GetTicketVolumeQueryHandler.cs:19-49` | — | `TicketsTests.cs:709-833` |
 | E-26 | Upload com compensação e arquivo antes da transação | `src/TickestPristine.Application/TicketAttachments/Upload/UploadTicketAttachmentCommandHandler.cs:35-75` | — | `UploadTicketAttachmentCommandHandlerTests.cs` |
-| E-27 | Exclusão de anexo só lógica | `src/TickestPristine.Application/TicketAttachments/Delete/DeleteTicketAttachmentCommandHandler.cs:45-57` | — | `DeleteTicketAttachmentCommandHandlerTests.cs` |
+| E-27 | Exclusão de anexo lógica, com remoção física do arquivo depois do commit (spec 011) | `src/TickestPristine.Application/TicketAttachments/Delete/DeleteTicketAttachmentCommandHandler.cs`, `TicketAttachmentDeletedDomainEventHandler.cs` | — | `DeleteTicketAttachmentCommandHandlerTests.cs`, `TicketAttachmentDeletedDomainEventHandlerTests.cs` |
 | E-28 | Proteção contra path traversal | `src/TickestPristine.Infrastructure/Storage/LocalFileStorage.cs:71-81` | `ResolveContainedPath` | — (não identificado) |
 | E-29 | Erros → ProblemDetails | `src/TickestPristine.Web.Api/Infrastructure/CustomResults.cs:7-57`; `GlobalExceptionHandler.cs:12-88` | — | vários testes de integração (status 400/403/404/409) |
 | E-30 | Rate limiting | `src/TickestPristine.Web.Api/Extensions/RateLimitingExtensions.cs:11-56`; `appsettings.json:36-45` | — | — (os testes elevam o limite: `IntegrationTestWebAppFactory.cs:44-45`) |
@@ -963,7 +965,6 @@ Arquivos modificados (19): handlers de `TicketAttachments`, `TicketHistories`, `
 
 - Funcionamento com Redis (`ConnectionStrings:Cache`) e invalidação entre instâncias.
 - Exportação OTLP e envio de logs ao Seq.
-- Download de anexo cujo arquivo não existe mais no disco.
 - Comportamento do Serilog com enrichers sem pacote.
 - Comportamento atrás de proxy reverso (IP do rate limit, esquema HTTPS).
 - Execução da imagem Docker (o Dockerfile não foi construído nesta análise).
@@ -981,7 +982,7 @@ Arquivos modificados (19): handlers de `TicketAttachments`, `TicketHistories`, `
 | Q-05 | **Respondida em parte (22/10):** depois da abertura, só quem tem `tickets:manage` atribui, e só a um usuário ativo com `tickets:manage`. Falta decidir se a mesma regra deve valer para o responsável indicado **na abertura**, que hoje aceita qualquer usuário ativo indicado por quem tem `tickets:create`. | C-08 |
 | Q-06 | A prioridade, o título e o setor devem ser editáveis? Se a prioridade for, o SLA deve ser recalculado (`TicketSla.cs:8-9` já prevê isso)? | C-09 |
 | Q-07 | Mensagens e anexos devem ser bloqueados em chamados Resolvidos, Fechados ou Cancelados? | 5.6 |
-| Q-08 | Qual é a política de retenção para anexos excluídos, logs de auditoria e chamados excluídos logicamente (inclusive por exigência da LGPD)? | GAP-08 |
+| Q-08 | Qual é a política de retenção para logs de auditoria e chamados excluídos logicamente (inclusive por exigência da LGPD)? **[Spec 011]** Para os arquivos de anexos excluídos, decidido: apagados logo depois da exclusão (DEC-1 da spec 011); a linha do anexo continua. | GAP-08 |
 | Q-09 | O `CLAUDE.md` deve descrever o domínio real ou permanecer como guia genérico do template com exemplos de Todo? | GAP-06 |
 | Q-10 | **Respondida em parte (23/10, Rafael Santos, no chat):** as fases do `prompt-sla-tickest.md` entraram no backlog (`specs/BACKLOG.md`, BL-004 e BL-012 a BL-018), e o prompt foi copiado como fonte para `specs/_fontes/prompt-sla.md`; a prioridade de cada fase fica no backlog e o escopo, em cada spec. Antes, já tinham sido resolvidas a stack (seção 9.3) e, na spec 004, os construtores primários (DEC-2) e a ordem do outbox (DEC-4). Faltam as decisões sobre multi-instância (Q-11) e notificações. **Complemento (25/10, spec 004):** a Fase 1 foi dividida nas specs 004, 005 e 006 (DEC-1); a série segue o estilo do `CLAUDE.md` (DEC-2), mantém o contrato do SLA atual (DEC-3), segue sem outbox até a Fase 5 (DEC-4) e não grava configuração padrão por migration (DEC-7). | C-15 |
 | Q-11 | Qual é o modelo de implantação alvo: uma ou várias instâncias, proxy reverso, armazenamento de arquivos? | GAP-09, GAP-10, GAP-11 |

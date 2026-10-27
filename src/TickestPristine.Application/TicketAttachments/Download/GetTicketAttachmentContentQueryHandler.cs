@@ -6,6 +6,7 @@ using TickestPristine.Application.Abstractions.Storage;
 using TickestPristine.Application.Authorization;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.TicketAttachments.Download;
@@ -14,7 +15,8 @@ internal sealed class GetTicketAttachmentContentQueryHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IPermissionProvider permissionProvider,
-    IFileStorage fileStorage)
+    IFileStorage fileStorage,
+    ILogger<GetTicketAttachmentContentQueryHandler> logger)
     : IQueryHandler<GetTicketAttachmentContentQuery, TicketAttachmentResponse>
 {
     public async Task<Result<TicketAttachmentResponse>> Handle(
@@ -52,7 +54,17 @@ internal sealed class GetTicketAttachmentContentQueryHandler(
             return Result.Failure<TicketAttachmentResponse>(access.Error);
         }
 
-        stored.Response.Content = await fileStorage.OpenReadAsync(stored.Response.StorageKey, cancellationToken);
+        Stream? content = await fileStorage.OpenReadAsync(stored.Response.StorageKey, cancellationToken);
+
+        if (content is null)
+        {
+            // A linha existe, mas o arquivo sumiu do armazenamento: falha de operação, não do cliente.
+            logger.LogError("O arquivo do anexo {AttachmentId} não foi encontrado no armazenamento", query.AttachmentId);
+
+            return Result.Failure<TicketAttachmentResponse>(TicketAttachmentErrors.FileMissing(query.AttachmentId));
+        }
+
+        stored.Response.Content = content;
 
         return stored.Response;
     }

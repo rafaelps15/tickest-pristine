@@ -23,6 +23,8 @@ internal sealed class Download : IEndpoint
 
             Result<TicketAttachmentResponse> result = await handler.Handle(query, cancellationToken);
 
+            // Com o nome do arquivo, a resposta leva "Content-Disposition: attachment": o navegador baixa o arquivo em
+            // vez de abri-lo na própria origem da API.
             return result.Match(
                 attachment => Results.File(attachment.Content, attachment.ContentType, attachment.FileName),
                 CustomResults.Problem);

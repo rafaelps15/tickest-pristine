@@ -47,6 +47,8 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         // Eleva o limite de requisições para não bloquear os testes.
         builder.UseSetting("RateLimiting:Global:PermitLimit", "100000");
         builder.UseSetting("RateLimiting:Authentication:PermitLimit", "100000");
+        builder.UseSetting("RateLimiting:AttachmentUpload:PermitLimit", "100000");
+        builder.UseSetting("RateLimiting:AttachmentDelete:PermitLimit", "100000");
 
         // Credenciais do administrador inicial nos testes.
         builder.UseSetting("Admin:Email", AdminEmail);

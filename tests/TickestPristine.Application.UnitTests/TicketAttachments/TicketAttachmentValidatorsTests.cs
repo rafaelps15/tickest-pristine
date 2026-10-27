@@ -204,6 +204,9 @@ public sealed class TicketAttachmentValidatorsTests
     [InlineData("../report.pdf")]
     [InlineData("pasta\\report.pdf")]
     [InlineData("report\n.pdf")]
+    [InlineData("../../a.png")]
+    [InlineData("relatorio..pdf")]
+    [InlineData("alerta\u0007.png")]
     public void UploadValidator_Should_HaveError_WhenFileNameHasInvalidCharacters(string fileName)
     {
         // Arrange
