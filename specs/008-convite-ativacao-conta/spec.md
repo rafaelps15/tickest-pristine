@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-26
 branch: feat/SPEC-008-user-invitation-activation
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: "#30"                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 008 — Convite por e-mail e ativação da conta pelo próprio usuário
@@ -175,7 +175,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 - **Revisão:** `ca-review` sobre `origin/main...HEAD` (arquivos do plano técnico): **aprovada, sem achados bloqueantes** nem violações de convenção. Limites entre camadas respeitados; slices `Register`, `ResendInvitation` e `ActivateAccount` no padrão Command/Handler/Validator; erros em `UserErrors` com textos em pt-BR; `ResendInvitation` com `HasPermission(users:create)` e `PrivilegeEscalationGuard`; `ActivateAccount` anônima com rate limit `authentication`; datas pelo `IDateTimeProvider`; eventos de domínio disparados antes do `SaveChangesAsync`; o `LoggingDecorator` registra só o nome do command (o token e a senha não vão para o log). Lacunas de teste, não bloqueantes e fora dos ACs: o `ResendUserInvitationCommandValidator` e o `InvitationOptionsValidator` (URL absoluta, sem fragmento, HTTPS fora de Development; mitigação do R-3) não têm testes próprios. Desvio do plano técnico já registrado no histórico de 2026-10-27: o consumo do convite usa tokens de concorrência em vez de `ExecuteUpdateAsync`; o AC-12 comprova o efeito.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md`: 2.6 (RN-30 nova), 2.7 (C-01, C-20 e C-21, esta passando de IND para PI), 4.3.1 (rotas `POST users/{id}/invitation` e `POST users/activation`, cadastro sem senha), 4.6 (tempo do login de conta pendente, token do convite, `TokenHash` fora da auditoria), 4.7 (envio depois do commit e concorrência da ativação), 4.8 (`Email:*` e `Invitations:ActivationUrl`) e 5.8 (fluxo de cadastro e ativação).
 - **CI:**
-- **Entrega:**
+- **Entrega:** PR #30 (https://github.com/rafaelps15/tickest-pristine/pull/30); a spec fica `Entregue` quando o responsável mergear o PR na `main`.
 
 ## 10. Histórico
 | Data | Status | Observação |
