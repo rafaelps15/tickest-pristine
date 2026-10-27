@@ -5,6 +5,7 @@ status: Verificada        # Rascunho | Bloqueada | Aprovada | Em implementação
 responsavel: Rafael Santos
 aprovada-em: 2026-10-24
 branch: feat/SPEC-009-attendant-lookup-assignment
+pr: "#27"
 backlog:
 ---
 
@@ -163,8 +164,8 @@ Dados comuns: Ana (Atendente, ativa, setor TI do depto. Tecnologia), Beto (Atend
 - **Revisão:** `ca-review` sobre `origin/main...HEAD` (arquivos do plano técnico): nenhum achado bloqueante e nenhuma violação de convenção. Observações não bloqueantes: (1) a recusa por privilégio na troca de setor usa a mensagem de `Users.CannotManagePrivilegedUser`, que fala em desativar e reativar; (2) os nomes do histórico comparam `users.id::text` com o valor gravado, sem índice (custo aceito na DEC-11, página de até 100 linhas). Fora do escopo e sem revisão: `specs/012-dominio-rico-estilo-milan/` e `specs/_fontes/contratos-central-atendimento.md`, não versionados.
 - **Limitações da verificação:** o banco dos testes de integração é compartilhado e as roles fixas não podem ser alteradas; por isso o AC-5 e o AC-11 isolam o cenário com um marcador no e-mail (o caso sem nenhum filtro é coberto no teste unitário), o AC-6 e o AC-19 usam roles de teste no papel de Atendente e Colaborador, e o Davi tem uma role de teste no papel de Administrador (a elegibilidade decide por permissão, não pelo nome da role). O AC-4 confere o código pelo `title` do Problem Details, onde a API o devolve.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 2.2 (Atendente, Administrador com 17 permissões, `tickets:assign` no catálogo), 2.3 (slices `ChangeSector` e `GetAttendants`), 2.4 (`User` × `Sector` e a migration), 2.6 (RN-22 revisada, RN-28 e RN-29 novas), 2.7 (C-05, C-10, C-18), 4.3.1 (rotas novas e `PUT tickets/{id}/assignee`) e 5.10 (atribuir).
-- **CI:**
-- **Entrega:**
+- **CI:** PR #27, job `build` verde (run `40422829377`, 6 min 13 s), em 2026-10-26.
+- **Entrega:** PR #27 (https://github.com/rafaelps15/tickest-pristine/pull/27); a spec fica `Entregue` quando o responsável mergear o PR na `main`.
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -179,3 +180,4 @@ Dados comuns: Ana (Atendente, ativa, setor TI do depto. Tecnologia), Beto (Atend
 | 2026-10-26 | Em implementação | Revisão pedida por Rafael Santos no chat ("GetTicketHistoryQueryHandler está fora do padrão pré estabelecido nas skills"; "GetUserIds não compactua com as minhas skills tb!"): DEC-11 trocada de (a) para (c), com a escolha "Subconsulta no Select"; REQ-11, AC-17 e o plano técnico ajustados, sem mudar o objetivo. Na mesma revisão, com a escolha "Alinhar ao padrão", a consulta de atendentes deixou de ter validator (o termo é conferido no handler, com 400 `Users.InvalidSearchTerm`) e o DTO passou a se chamar `AttendantResponse`. |
 | 2026-10-26 | Em implementação | Revisão pedida por Rafael Santos no chat ("AttendantSearch não segue minhas skills !"; sobre o `TicketAssigneeEligibility`, "ele segue minhas skilss ?"): com as escolhas "Sim, apague e mova" e "Filtro como o TicketSlaFilters", o `AttendantSearch` foi removido (os limites do termo foram para o `UserValidationRules`, e a checagem e a divisão em palavras, para o handler), e a regra de elegibilidade virou o filtro `WhereEligibleAssignee`, mantida num lugar só (DEC-10 sem mudança). |
 | 2026-10-26 | Verificada | `spec-verify`: build com 0 avisos; 959 testes aprovados e 0 com falha na execução de 2026-10-26; auditoria 100% com código de saída 0; os 21 ACs conferidos teste a teste (Dado, Quando e Então), todos aprovados nessa execução; `ca-review` sem achado bloqueante; `SYSTEM_SPECIFICATION.md` atualizado (2.2, 2.3, 2.4, 2.6, 2.7, 4.3.1 e 5.10). Pendências não bloqueantes: a mensagem da recusa por privilégio na troca de setor e o CI, que roda no PR. |
+| 2026-10-26 | Verificada | PR #27 aberto para a `main` a pedido de Rafael Santos no chat ("ok"); campo `pr:`, linha "Entrega" e o CI verde (job `build`, run `40422829377`) registrados. |
