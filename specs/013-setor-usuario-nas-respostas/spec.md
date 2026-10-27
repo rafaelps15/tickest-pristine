@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-26
 branch: feat/SPEC-013-user-sector-in-responses                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: "#28"                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 013 — Setor do usuário nas respostas de consulta de usuários
@@ -141,7 +141,7 @@ Dados comuns: setor TI ativo, no departamento Tecnologia; Ana (ativa, com setor 
 - **Limitações da verificação:** no caso sem setor (Eva), o DTO do teste não distingue um campo `null` de um campo ausente no JSON; a presença é coberta pelo item com setor, do mesmo tipo de resposta, e a API não omite nulos (sem opções de JSON configuradas). Os cenários de integração usam um marcador único no e-mail e no nome do departamento, porque o banco dos testes é compartilhado.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 2.6 (RN-29: leitura do setor em `GET users` e `GET users/{id}`) e 2.7 (C-05). A seção 4.4 não cita os campos dos DTOs de usuário e não muda. Achado fora do escopo: a 4.4 ainda descreve `TicketHistoryAction` como 1–12, sem o `Assigned = 13` da spec 009.
 - **CI:**
-- **Entrega:**
+- **Entrega:** PR #28 (https://github.com/rafaelps15/tickest-pristine/pull/28); a spec fica `Entregue` quando o responsável mergear o PR na `main`.
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -154,3 +154,4 @@ Dados comuns: setor TI ativo, no departamento Tecnologia; Ana (ativa, com setor 
 | 2026-10-26 | Em implementação | `/spec-implement 013` na branch `feat/SPEC-013-user-sector-in-responses`, já com o merge do PR #27 (spec 009) na base, como pede a DEC-5. |
 | 2026-10-26 | Em implementação | T-1 a T-4 implementadas (T-1 commitada em `1564131`), com o build e todos os testes aprovados. Os cenários de integração usam um marcador único no e-mail e no nome do departamento ("Tecnologia-<marcador>"), porque o banco dos testes é compartilhado e o nome do departamento é único entre os ativos. Os commits de T-2 a T-4 aguardam o ok de Rafael Santos. |
 | 2026-10-26 | Verificada | `spec-verify`: build com 0 avisos; 970 testes aprovados e 0 com falha na execução de 2026-10-26; auditoria 100% com código de saída 0; os 6 ACs conferidos teste a teste (Dado, Quando e Então), todos aprovados nessa execução; `ca-review` sem achado bloqueante; `SYSTEM_SPECIFICATION.md` atualizado (2.6 e 2.7). Pendências não bloqueantes: o CI, que roda no PR, e a 4.4 desatualizada pela spec 009. |
+| 2026-10-26 | Verificada | PR #28 aberto para a `main` a pedido de Rafael Santos no chat ("ok, com PR"); campo `pr:` e linha "Entrega" preenchidos. |
