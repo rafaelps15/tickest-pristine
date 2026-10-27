@@ -19,7 +19,8 @@ internal sealed class AuditLoggingInterceptor(IUserContext currentUser, IDateTim
     private static readonly HashSet<string> ExcludedProperties =
     [
         nameof(Domain.Users.UserCredential.PasswordHash),
-        nameof(Domain.Users.UserCredential.SecurityStamp)
+        nameof(Domain.Users.UserCredential.SecurityStamp),
+        nameof(Domain.Users.UserInvitation.TokenHash)
     ];
 
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(

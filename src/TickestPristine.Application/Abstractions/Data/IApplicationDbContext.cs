@@ -14,6 +14,7 @@ public interface IApplicationDbContext
 {
     DbSet<User> Users { get; }
     DbSet<UserCredential> UserCredentials { get; }
+    DbSet<UserInvitation> UserInvitations { get; }
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<Department> Departments { get; }
     DbSet<Sector> Sectors { get; }
