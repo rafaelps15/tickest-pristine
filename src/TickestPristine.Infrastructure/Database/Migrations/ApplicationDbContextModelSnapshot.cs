@@ -701,6 +701,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("due_at_utc");
 
+                    b.Property<DateTime>("LastActivityAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_activity_at_utc");
+
                     b.Property<string>("Priority")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -758,9 +762,9 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasIndex("Status", "DueAtUtc")
                         .HasDatabaseName("ix_tickets_status_due_at_utc");
 
-                    b.HasIndex("CreatedByUserId", "CreatedAtUtc", "Id")
+                    b.HasIndex("CreatedByUserId", "LastActivityAtUtc", "Id")
                         .IsDescending(false, true, true)
-                        .HasDatabaseName("ix_tickets_created_by_user_id_created_at_utc_id");
+                        .HasDatabaseName("ix_tickets_created_by_user_id_last_activity_at_utc_id");
 
                     b.ToTable("tickets", "public");
                 });

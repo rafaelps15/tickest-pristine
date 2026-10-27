@@ -13,6 +13,13 @@ public sealed class Ticket : Entity, IAuditable
     public Guid? AssignedToUserId { get; set; }
     public Guid SectorId { get; set; }
     public DateTime CreatedAtUtc { get; set; }
+
+    /// <summary>
+    /// Data da ação mais recente registrada no histórico do chamado; na abertura, a própria data de abertura. Nunca
+    /// volta para uma data anterior.
+    /// </summary>
+    public DateTime LastActivityAtUtc { get; set; }
+
     public DateTime DueAtUtc { get; set; }
     public DateTime SlaWarningAtUtc { get; set; }
     public DateTime? ResolvedAtUtc { get; set; }
