@@ -531,6 +531,7 @@ Fonte: `ApplicationDbContext.cs:57-108`, `DomainEventsDispatcher.cs:19-59`. **[F
 | `GET tickets/assignees` (spec 030) | `tickets:manage` | — (só o global) |
 | `GET tickets/mine` (**[Spec 015]** `status` (`Active` ou `Finished`) e `search`, opcionais), `GET tickets/mine/summary` | `tickets:view-own` | — |
 | `GET tickets/sla-summary`, `GET tickets/stats/status`, `GET tickets/stats/volume` | `tickets:manage` | — |
+| `GET tickets/stats/overview` (spec 026; os filtros de recorte de `GET tickets`, sem `status`, `slaStatus`, `search` nem paginação; período invertido dá 400 `Tickets.InvalidPeriod`) | `tickets:manage` | — |
 | `GET tickets/{id}` | Usuário ativo, e no handler: participante ou `tickets:manage` | — |
 | `GET tickets/{id}/sla` (spec 005) | Usuário ativo, e no handler: participante ou `tickets:manage` | — |
 | `PUT tickets/{id}` | Usuário ativo, e no handler (**[Spec 016]**): descrição pelo dono com `tickets:update-own` ou por `tickets:manage`; Em andamento e Resolvido só com `tickets:manage`; Cancelado com `tickets:cancel` ou pelo dono na janela de 15 min (RN-32) | — |
@@ -677,7 +678,8 @@ Descrito no diagrama 3.6.
 
 ### 5.7 Painel de SLA e dashboards
 
-- **Gatilhos**: `GET tickets?slaStatus=...&sort=DueDate`, `GET tickets/sla-summary?sectorId=`, `GET tickets/stats/status`, `GET tickets/stats/volume?groupBy=`, `GET tickets/mine/summary`.
+- **Gatilhos**: `GET tickets?slaStatus=...&sort=DueDate`, `GET tickets/sla-summary?sectorId=`, `GET tickets/stats/status`, `GET tickets/stats/volume?groupBy=`, `GET tickets/mine/summary`; **[Spec 026]** `GET tickets/stats/overview`.
+- **[Spec 026] Estatísticas da operação**: `GET tickets/stats/overview` devolve numa resposta `serverNowUtc` e três blocos — `volume` (total, aberto, em andamento, resolvido, fechado, cancelado e backlog = aberto + em andamento), `sla` (no prazo, em risco, atrasado, cumprido, perdido e sem SLA) e `attention` (atrasados, críticos = Urgentes ativos, e ativos sem responsável) — com os mesmos filtros de recorte de `GET tickets` (setores repetíveis, prioridade, solicitante, responsável, sem responsável e os períodos da spec 025), reunidos em `Tickets/TicketScopeFilter.cs`, que a listagem também usa. A contagem é um único SQL com contagens condicionais (Dapper); as condições de SLA repetem as de `TicketSlaFilters`, e os testes de paridade conferem cada contador contra o `totalCount` da listagem com o filtro equivalente.
 - **Regras**: RN-03, com a mesma lógica em memória (`TicketSla.GetStatus`) e em SQL (`TicketSlaFilters`). O resumo conta só chamados ativos com o relógio correndo (`TicketSlaSummaryResponse.cs:3-7`). O volume usa o horário de Brasília e preenche os períodos sem chamados com zero.
 - **Evidências**: `GetTicketsQueryHandlerTests.cs` (11), `GetTicketSlaSummaryQueryHandlerTests.cs`, `TicketsTests.cs:283-350,469-505,633-833` (inclui casos de fronteira de fuso).
 - **Lacunas**: o resumo e os filtros seguem o primeiro ciclo de resolução (`DueAtUtc` do chamado); a primeira resposta e os ciclos de reabertura aparecem só no bloco `sla` do chamado (`GET tickets/{id}` e `GET tickets/{id}/sla`; spec 005). Não há alerta ativo; a situação é calculada na leitura. **[Spec 006]** A violação é gravada pelo monitoramento, até uma volta (60 s) depois do prazo, e não muda nenhuma leitura.
