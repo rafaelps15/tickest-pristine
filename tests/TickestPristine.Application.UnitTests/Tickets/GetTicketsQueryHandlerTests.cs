@@ -268,6 +268,106 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
         item.Priority.ShouldBe(TicketPriority.Low);
     }
 
+    [Fact]
+    public async Task Handle_Should_FilterByLocalCreationDay_WhenCreatedPeriodIsGiven()
+    {
+        // Arrange: 31/10 às 23h30 em São Paulo é 02h30 UTC de 01/11; 01/11 às 10h é 13h UTC
+        await using TestDbContext context = CreateDbContext();
+        (User requester, Sector sector) = await SeedRequesterAndSectorAsync(context);
+        await SeedTicketAsync(context, requester, sector, TicketStatus.Open, new DateTime(2026, 11, 1, 2, 30, 0, DateTimeKind.Utc));
+        Ticket morning = await SeedTicketAsync(context, requester, sector, TicketStatus.Open, new DateTime(2026, 11, 1, 13, 0, 0, DateTimeKind.Utc));
+        Ticket later = await SeedTicketAsync(context, requester, sector, TicketStatus.Open, new DateTime(2026, 11, 15, 13, 0, 0, DateTimeKind.Utc));
+
+        GetTicketsQueryHandler handler = CreateHandler(context);
+
+        // Act
+        Result<PagedResponse<TicketSummaryResponse>> oneDay = await handler.Handle(
+            CreateQuery(createdFrom: new DateOnly(2026, 11, 1), createdTo: new DateOnly(2026, 11, 1)),
+            CancellationToken.None);
+        Result<PagedResponse<TicketSummaryResponse>> fromOnly = await handler.Handle(
+            CreateQuery(createdFrom: new DateOnly(2026, 11, 1)),
+            CancellationToken.None);
+
+        // Assert
+        oneDay.Value.Items.ShouldHaveSingleItem().Id.ShouldBe(morning.Id);
+        fromOnly.Value.Items.Select(t => t.Id).ShouldBe([morning.Id, later.Id], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ExcludeNeverResolvedTickets_WhenResolvedPeriodIsGiven()
+    {
+        // Arrange: resolvido em 02/11 às 12h de São Paulo (15h UTC)
+        await using TestDbContext context = CreateDbContext();
+        (User requester, Sector sector) = await SeedRequesterAndSectorAsync(context);
+        Ticket resolved = await SeedTicketAsync(
+            context,
+            requester,
+            sector,
+            TicketStatus.Resolved,
+            new DateTime(2026, 11, 1, 13, 0, 0, DateTimeKind.Utc),
+            resolvedAtUtc: new DateTime(2026, 11, 2, 15, 0, 0, DateTimeKind.Utc));
+        await SeedTicketAsync(context, requester, sector, TicketStatus.Open, new DateTime(2026, 11, 1, 14, 0, 0, DateTimeKind.Utc));
+
+        GetTicketsQueryHandler handler = CreateHandler(context);
+
+        // Act
+        Result<PagedResponse<TicketSummaryResponse>> result = await handler.Handle(
+            CreateQuery(resolvedFrom: new DateOnly(2026, 11, 2), resolvedTo: new DateOnly(2026, 11, 2)),
+            CancellationToken.None);
+
+        // Assert
+        result.Value.Items.ShouldHaveSingleItem().Id.ShouldBe(resolved.Id);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_Should_ReturnInvalidPeriod_WhenStartIsAfterEnd(bool createdPeriod)
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        GetTicketsQueryHandler handler = CreateHandler(context);
+        var start = new DateOnly(2026, 11, 10);
+        var end = new DateOnly(2026, 11, 1);
+        GetTicketsQuery query = createdPeriod
+            ? CreateQuery(createdFrom: start, createdTo: end)
+            : CreateQuery(resolvedFrom: start, resolvedTo: end);
+
+        // Act
+        Result<PagedResponse<TicketSummaryResponse>> result = await handler.Handle(query, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketErrors.InvalidPeriod);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnTicketsOfEverySector_WhenSeveralSectorsAreGiven()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        (User requester, Sector helpdesk) = await SeedRequesterAndSectorAsync(context);
+        (_, Sector infra) = await SeedRequesterAndSectorAsync(context);
+        (_, Sector other) = await SeedRequesterAndSectorAsync(context);
+        Ticket inHelpdesk = await SeedTicketAsync(context, requester, helpdesk, TicketStatus.Open, NowUtc.AddHours(-1));
+        Ticket inInfra = await SeedTicketAsync(context, requester, infra, TicketStatus.Open, NowUtc.AddHours(-2));
+        await SeedTicketAsync(context, requester, other, TicketStatus.Open, NowUtc.AddHours(-3));
+
+        GetTicketsQueryHandler handler = CreateHandler(context);
+
+        // Act
+        Result<PagedResponse<TicketSummaryResponse>> both = await handler.Handle(
+            CreateQuery(sectorIds: [helpdesk.Id, infra.Id]),
+            CancellationToken.None);
+        Result<PagedResponse<TicketSummaryResponse>> one = await handler.Handle(
+            CreateQuery(sectorIds: [helpdesk.Id]),
+            CancellationToken.None);
+
+        // Assert
+        both.Value.Items.Select(t => t.Id).ShouldBe([inHelpdesk.Id, inInfra.Id], ignoreOrder: true);
+        one.Value.Items.ShouldHaveSingleItem().Id.ShouldBe(inHelpdesk.Id);
+    }
+
     private static GetTicketsQueryHandler CreateHandler(TestDbContext context)
     {
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
@@ -285,8 +385,28 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
         Guid? assignedToUserId = null,
         bool unassignedOnly = false,
         TicketSortOrder sort = TicketSortOrder.Newest,
-        TicketPriority? priority = null) =>
-        new(statuses ?? [], priority, sectorId, requesterId, assignedToUserId, unassignedOnly, slaStatus, search, sort, new PageRequest(1, 20));
+        TicketPriority? priority = null,
+        Guid[]? sectorIds = null,
+        DateOnly? createdFrom = null,
+        DateOnly? createdTo = null,
+        DateOnly? resolvedFrom = null,
+        DateOnly? resolvedTo = null) =>
+        new(
+            statuses ?? [],
+            new TicketScopeFilter(
+                sectorIds ?? (sectorId is null ? [] : [sectorId.Value]),
+                priority,
+                requesterId,
+                assignedToUserId,
+                unassignedOnly,
+                createdFrom,
+                createdTo,
+                resolvedFrom,
+                resolvedTo),
+            slaStatus,
+            search,
+            sort,
+            new PageRequest(1, 20));
 
     private static async Task<(User Requester, Sector Sector)> SeedRequesterAndSectorAsync(TestDbContext context)
     {
