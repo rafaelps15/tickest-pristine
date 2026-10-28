@@ -69,19 +69,19 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
 | T-1 | Resolvidos por período, filtros e período no volume | AC-1 a AC-6 | `add-feature` | [x] |
-| T-2 | Testes de integração | AC-1 a AC-6 | `add-tests` | [ ] |
+| T-2 | Testes de integração | AC-1 a AC-6 | `add-tests` | [x] |
 | T-3 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-7 | — | [ ] |
 | T-4 | Revisão de convenções, build sem avisos e suíte inteira | AC-7 | `ca-review` | [ ] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | | | |
-| AC-2 | | | |
-| AC-3 | | | |
-| AC-4 | | | |
-| AC-5 | | | |
-| AC-6 | | | |
+| AC-1 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetVolume_Should_CountEveryResolution_WhenTicketIsResolvedReopenedAndResolvedAgain` | Chamado aberto em 01/09, resolvido em 02/09 e de novo em 05/09 (duas mudanças para Resolvido no histórico): com `groupBy=Day`, resolvidos = 1 em 02/09 e 1 em 05/09. | Aprovado |
+| AC-2 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › os 9 `GetVolume_*` que já existiam (criados por dia, semana e mês, virada do dia e da semana em Brasília, excluído fora); `GetVolume_Should_CountEveryResolution_WhenTicketIsResolvedReopenedAndResolvedAgain` | Os testes anteriores dos criados passam sem alteração no comportamento (só o DTO ganhou o campo novo); os dias vazios trazem zero nos dois campos (sete pontos de 01/09 a 07/09, com a abertura e as resoluções nos seus dias). | Aprovado |
+| AC-3 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetVolume_Should_CountOnlyTicketsOfTheSector_WhenSectorIsGiven`, `GetVolume_Should_NotCountResolutionsOfDeletedTicket` | Com um `sectorId`, criados e resolvidos só daquele setor (2 e 2, não 3); o chamado excluído sai dos dois campos (R-1). Uma mutação que tirava o recorte da contagem de resolvidos foi detectada pelos dois testes. | Aprovado |
+| AC-4 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetVolume_Should_CoverWholePeriodWeekByWeek_WhenPeriodIsGiven`; `tests/TickestPristine.Application.UnitTests/Tickets/TicketVolumePeriodsTests.cs` › `Build_Should_CoverWholePeriodInWeeks_WhenPeriodIsGiven`, `Build_Should_ReturnDefaultWindowEndingToday_WhenNoPeriodIsGiven`, `Build_Should_UseTodayAsEnd_WhenOnlyStartIsGiven`, `Build_Should_UseDefaultWindowEndingAtEnd_WhenOnlyEndIsGiven` | `groupBy=Week&createdFrom=2026-09-01&createdTo=2026-10-31` traz 9 pontos semanais, das segundas-feiras 31/08 a 26/10, de 7 em 7 dias; sem período, as 12 semanas de hoje, terminando numa segunda-feira. Os unitários conferem as janelas padrão e o período com uma ponta só (DEC-6). | Aprovado |
+| AC-5 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetVolume_Should_ReturnBadRequest_WhenPeriodGeneratesTooManyPoints`; `tests/TickestPristine.Application.UnitTests/Tickets/TicketVolumePeriodsTests.cs` › `Build_Should_AcceptExactlyTheMaximumOfPoints_AndRefuseOneMore`, `Build_Should_ReturnInvalidPeriod_WhenStartIsAfterEnd` | Dois anos agrupados por dia respondem 400 com `Tickets.VolumeTooManyPoints` e o limite de 366 na mensagem (DEC-5); o unitário aceita exatamente 366 dias e recusa 367, e recusa período invertido com `Tickets.InvalidPeriod`. | Aprovado |
+| AC-6 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetVolume_Should_ReturnForbidden_WhenCallerLacksManagePermission`, `GetVolume_Should_ReturnUnauthorized_WhenNoTokenProvided` (já existiam) | Sem `tickets:manage`, 403; sem token, 401: a permissão da rota não mudou. | Aprovado |
 | AC-7 | | | |
 
 ## 9. Evidências de verificação

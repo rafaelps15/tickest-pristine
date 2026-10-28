@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Application.SlaCalendars;
+using TickestPristine.Application.TicketHistories;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Infrastructure.Database;
@@ -3318,6 +3319,153 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
     private sealed record TimeStatisticsDto(double? AverageMinutes, double? MedianMinutes, int SampleSize);
 
+    [Fact]
+    public async Task GetVolume_Should_CountEveryResolution_WhenTicketIsResolvedReopenedAndResolvedAgain()
+    {
+        // Arrange: aberto em 01/09, resolvido em 02/09, reaberto e resolvido de novo em 05/09
+        Guid sectorId = await InsertSectorAsync($"Volume-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        Guid ticketId = await InsertVolumeTicketAsync(sectorId, BrasiliaToUtc(new DateOnly(2026, 9, 1), 10));
+        await InsertResolutionAsync(ticketId, BrasiliaToUtc(new DateOnly(2026, 9, 2), 15));
+        await InsertResolutionAsync(ticketId, BrasiliaToUtc(new DateOnly(2026, 9, 5), 15));
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        List<VolumePointDto> volume = (await HttpClient.GetFromJsonAsync<List<VolumePointDto>>(
+            $"tickets/stats/volume?groupBy=Day&sectorId={sectorId}&createdFrom=2026-09-01&createdTo=2026-09-07"))!;
+
+        // Assert: um ponto por dia, com a abertura e cada resolução no seu dia, e zero nos dias vazios
+        volume.Select(p => p.PeriodStart).ShouldBe(Enumerable.Range(1, 7).Select(day => new DateOnly(2026, 9, day)));
+        volume.Select(p => p.Count).ShouldBe([1, 0, 0, 0, 0, 0, 0]);
+        volume.Select(p => p.ResolvedCount).ShouldBe([0, 1, 0, 0, 1, 0, 0]);
+    }
+
+    [Fact]
+    public async Task GetVolume_Should_CountOnlyTicketsOfTheSector_WhenSectorIsGiven()
+    {
+        // Arrange: dois chamados resolvidos no setor do teste e um noutro setor, nos mesmos dias
+        Guid sectorId = await InsertSectorAsync($"Volume-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        Guid otherSectorId = await InsertSectorAsync($"Volume-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        DateTime openedAtUtc = BrasiliaToUtc(new DateOnly(2026, 9, 1), 10);
+        DateTime resolvedAtUtc = BrasiliaToUtc(new DateOnly(2026, 9, 2), 15);
+        foreach (Guid sector in new[] { sectorId, sectorId, otherSectorId })
+        {
+            await InsertResolutionAsync(await InsertVolumeTicketAsync(sector, openedAtUtc), resolvedAtUtc);
+        }
+
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        List<VolumePointDto> volume = (await HttpClient.GetFromJsonAsync<List<VolumePointDto>>(
+            $"tickets/stats/volume?groupBy=Day&sectorId={sectorId}&createdFrom=2026-09-01&createdTo=2026-09-02"))!;
+
+        // Assert
+        volume.Select(p => p.Count).ShouldBe([2, 0]);
+        volume.Select(p => p.ResolvedCount).ShouldBe([0, 2]);
+    }
+
+    [Fact]
+    public async Task GetVolume_Should_NotCountResolutionsOfDeletedTicket()
+    {
+        // Arrange
+        Guid sectorId = await InsertSectorAsync($"Volume-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        Guid deletedId = await InsertVolumeTicketAsync(sectorId, BrasiliaToUtc(new DateOnly(2026, 9, 1), 10), deletedAtUtc: DateTime.UtcNow);
+        await InsertResolutionAsync(deletedId, BrasiliaToUtc(new DateOnly(2026, 9, 2), 15));
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        List<VolumePointDto> volume = (await HttpClient.GetFromJsonAsync<List<VolumePointDto>>(
+            $"tickets/stats/volume?groupBy=Day&sectorId={sectorId}&createdFrom=2026-09-01&createdTo=2026-09-02"))!;
+
+        // Assert: o excluído sai dos criados e dos resolvidos, para os dois campos baterem (spec 028, R-1)
+        volume.ShouldAllBe(p => p.Count == 0 && p.ResolvedCount == 0);
+    }
+
+    [Fact]
+    public async Task GetVolume_Should_CoverWholePeriodWeekByWeek_WhenPeriodIsGiven()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        List<VolumePointDto> withPeriod = (await HttpClient.GetFromJsonAsync<List<VolumePointDto>>(
+            "tickets/stats/volume?groupBy=Week&createdFrom=2026-09-01&createdTo=2026-10-31"))!;
+        List<VolumePointDto> withoutPeriod = (await HttpClient.GetFromJsonAsync<List<VolumePointDto>>(
+            "tickets/stats/volume?groupBy=Week"))!;
+
+        // Assert: das segundas-feiras de 01/09 (31/08) e de 31/10 (26/10); sem período, as 12 semanas de hoje
+        withPeriod[0].PeriodStart.ShouldBe(new DateOnly(2026, 8, 31));
+        withPeriod[^1].PeriodStart.ShouldBe(new DateOnly(2026, 10, 26));
+        withPeriod.Count.ShouldBe(9);
+        withoutPeriod.Count.ShouldBe(12);
+        withoutPeriod[^1].PeriodStart.DayOfWeek.ShouldBe(DayOfWeek.Monday);
+    }
+
+    [Fact]
+    public async Task GetVolume_Should_ReturnBadRequest_WhenPeriodGeneratesTooManyPoints()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+
+        // Act: dois anos agrupados por dia
+        HttpResponseMessage response = await HttpClient.GetAsync(
+            "tickets/stats/volume?groupBy=Day&createdFrom=2024-01-01&createdTo=2025-12-31");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        string body = await response.Content.ReadAsStringAsync();
+        body.ShouldContain("Tickets.VolumeTooManyPoints");
+        body.ShouldContain("366");
+    }
+
+    /// <summary>
+    /// Chamado Aberto gravado direto no banco no setor e na data de abertura informados, com o administrador como
+    /// solicitante.
+    /// </summary>
+    private async Task<Guid> InsertVolumeTicketAsync(Guid sectorId, DateTime createdAtUtc, DateTime? deletedAtUtc = null)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Guid requesterId = await context.Users.Where(u => u.Email == AdminEmail).Select(u => u.Id).SingleAsync();
+
+        var ticket = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Title = "Chamado do volume",
+            Description = "Chamado gravado direto no banco para o volume",
+            Priority = TicketPriority.Medium,
+            Status = TicketStatus.Open,
+            CreatedByUserId = requesterId,
+            SectorId = sectorId,
+            CreatedAtUtc = createdAtUtc,
+            LastActivityAtUtc = createdAtUtc,
+            DueAtUtc = createdAtUtc.AddHours(8),
+            SlaWarningAtUtc = createdAtUtc.AddHours(6),
+            DeletedAtUtc = deletedAtUtc,
+            SlaPlan = TicketSla.LegacyPlan(TicketPriority.Medium)
+        };
+        context.Tickets.Add(ticket);
+        await context.SaveChangesAsync();
+
+        return ticket.Id;
+    }
+
+    /// <summary>
+    /// Mudança de status para Resolvido no histórico, como o handler grava ao resolver.
+    /// </summary>
+    private async Task InsertResolutionAsync(Guid ticketId, DateTime occurredAtUtc)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        context.TicketHistories.Add(TicketHistoryEntries.StatusChanged(
+            ticketId,
+            null,
+            TicketStatus.InProgress,
+            TicketStatus.Resolved,
+            occurredAtUtc));
+        await context.SaveChangesAsync();
+    }
+
     private sealed record PagedTicketsDto(List<TicketSummaryDto> Items, int TotalCount);
 
     private sealed record TicketSummaryDto(
@@ -3333,7 +3481,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
     private sealed record StatusCountsDto(int TotalCount, int OpenCount, int InProgressCount, int ResolvedCount);
 
-    private sealed record VolumePointDto(DateOnly PeriodStart, int Count);
+    private sealed record VolumePointDto(DateOnly PeriodStart, int Count, int ResolvedCount);
 
     private sealed record TicketHistoryDto(Guid Id, Guid TicketId, Guid? ChangedByUserId, int Action, string Description);
 
