@@ -4,6 +4,7 @@ using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Sla;
 using TickestPristine.Application.Authorization;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Application.Tickets.GetSla;
 using TickestPristine.Domain.Tickets;
@@ -89,6 +90,19 @@ internal sealed class GetTicketByIdQueryHandler(
             .AsNoTracking()
             .Where(t => t.TicketId == query.TicketId)
             .ToListAsync(cancellationToken);
+
+        Guid callerId = userContext.UserId;
+        bool canCancelAny = await permissionProvider.HasPermissionAsync(callerId, PermissionCodes.Tickets.Cancel, cancellationToken);
+        bool isOwnerWhoCanEdit = ticket.OpenedByUserId == callerId &&
+            await permissionProvider.HasPermissionAsync(callerId, PermissionCodes.Tickets.UpdateOwn, cancellationToken);
+
+        ticket.OwnerCancelDeadlineUtc = TicketCancellationPolicy.OwnerDeadline(ticket.CreatedAtUtc);
+        ticket.CanCancel = TicketCancellationPolicy.CanCancel(
+            ticket.Status,
+            ticket.CreatedAtUtc,
+            nowUtc,
+            canCancelAny,
+            isOwnerWhoCanEdit);
 
         string calendarName = TicketSlaClock.CodeCalendarName(plan.CalendarId)
             ?? await context.SlaCalendars.Where(c => c.Id == plan.CalendarId).Select(c => c.Name).SingleAsync(cancellationToken);

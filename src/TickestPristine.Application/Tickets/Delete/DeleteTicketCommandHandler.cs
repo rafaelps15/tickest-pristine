@@ -2,10 +2,10 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Authorization;
 using TickestPristine.Application.TicketHistories;
 using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -27,16 +27,15 @@ internal sealed class DeleteTicketCommandHandler(
             return Result.Failure(TicketErrors.NotFound(command.TicketId));
         }
 
-        Result access = await TicketAccessGuard.EnsureOwnerOrManagerAsync(
-            permissionProvider,
+        // Só quem tem tickets:delete exclui; ser o dono ou atender a fila não basta (spec 016).
+        bool canDelete = await permissionProvider.HasPermissionAsync(
             userContext.UserId,
-            ticket.CreatedByUserId,
-            PermissionCodes.Tickets.DeleteOwn,
+            PermissionCodes.Tickets.Delete,
             cancellationToken);
 
-        if (access.IsFailure)
+        if (!canDelete)
         {
-            return access;
+            return Result.Failure(UserErrors.Unauthorized());
         }
 
         if (!TicketStatusTransitions.IsActive(ticket.Status))

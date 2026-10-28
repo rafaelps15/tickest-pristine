@@ -44,7 +44,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
 
         Role role = CreateRole("Manager");
         context.Roles.Add(role);
-        context.RolePermissions.Add(new RolePermission { RoleName = role.Name, PermissionCode = PermissionCodes.Tickets.DeleteOwn });
+        context.RolePermissions.Add(new RolePermission { RoleName = role.Name, PermissionCode = PermissionCodes.Tickets.ReopenOwn });
 
         var firstUserId = Guid.NewGuid();
         var secondUserId = Guid.NewGuid();

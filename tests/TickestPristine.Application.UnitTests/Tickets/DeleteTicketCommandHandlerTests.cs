@@ -40,10 +40,11 @@ public sealed class DeleteTicketCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
         Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Resolved);
+        var administratorId = Guid.NewGuid();
         IUserContext userContext = Substitute.For<IUserContext>();
-        userContext.UserId.Returns(OwnerId);
+        userContext.UserId.Returns(administratorId);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.DeleteOwn, Arg.Any<CancellationToken>())
+        permissionProvider.HasPermissionAsync(administratorId, PermissionCodes.Tickets.Delete, Arg.Any<CancellationToken>())
             .Returns(true);
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
 
@@ -59,42 +60,14 @@ public sealed class DeleteTicketCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnUnauthorized_WhenNonOwnerLacksManagePermissionAndTicketIsInactive()
+    public async Task Handle_Should_ReturnUnauthorized_WhenCallerLacksDeletePermissionAndTicketIsInactive()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
         Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Resolved);
         IUserContext userContext = Substitute.For<IUserContext>();
-        var outsiderId = Guid.NewGuid();
-        userContext.UserId.Returns(outsiderId);
-        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        permissionProvider.HasPermissionAsync(outsiderId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
-            .Returns(false);
-        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
-
-        var handler = new DeleteTicketCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
-        var command = new DeleteTicketCommand(ticketId);
-
-        // Act
-        Result result = await handler.Handle(command, CancellationToken.None);
-
-        // Assert
-        result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(UserErrors.Unauthorized());
-    }
-
-    [Fact]
-    public async Task Handle_Should_ReturnUnauthorized_WhenNonOwnerLacksManagePermission()
-    {
-        // Arrange
-        await using TestDbContext context = CreateDbContext();
-        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open);
-
-        IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(Guid.NewGuid());
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
-            .Returns(false);
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
 
         var handler = new DeleteTicketCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
@@ -109,43 +82,18 @@ public sealed class DeleteTicketCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnUnauthorized_WhenOwnerLacksDeleteOwnPermission()
+    public async Task Handle_Should_ReturnUnauthorizedAndKeepTicket_WhenOwnerLacksDeletePermission()
     {
-        // Arrange
+        // Arrange: o dono pode editar o próprio chamado, mas não tem tickets:delete
         await using TestDbContext context = CreateDbContext();
         Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open);
 
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(OwnerId);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.DeleteOwn, Arg.Any<CancellationToken>())
-            .Returns(false);
-        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
-
-        var handler = new DeleteTicketCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
-        var command = new DeleteTicketCommand(ticketId);
-
-        // Act
-        Result result = await handler.Handle(command, CancellationToken.None);
-
-        // Assert
-        result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(UserErrors.Unauthorized());
-    }
-
-    [Fact]
-    public async Task Handle_Should_SoftDeleteTicketAndRaiseDomainEvent_WhenOwnerHasDeleteOwnPermission()
-    {
-        // Arrange
-        await using TestDbContext context = CreateDbContext();
-        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open);
-        IUserContext userContext = Substitute.For<IUserContext>();
-        userContext.UserId.Returns(OwnerId);
-        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.DeleteOwn, Arg.Any<CancellationToken>())
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
             .Returns(true);
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
-        dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
 
         var handler = new DeleteTicketCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
         var command = new DeleteTicketCommand(ticketId);
@@ -154,28 +102,53 @@ public sealed class DeleteTicketCommandHandlerTests : BaseHandlerTest
         Result result = await handler.Handle(command, CancellationToken.None);
 
         // Assert
-        result.IsSuccess.ShouldBeTrue();
-
-        Ticket ticket = await context.Tickets.IgnoreQueryFilters().SingleAsync(t => t.Id == ticketId);
-        ticket.DeletedAtUtc.ShouldNotBeNull();
-        ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketDeletedDomainEvent);
-        (await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id)).Action.ShouldBe(TicketHistoryAction.Deleted);
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.Unauthorized());
+        (await context.Tickets.SingleAsync(t => t.Id == ticketId)).DeletedAtUtc.ShouldBeNull();
+        (await context.TicketHistories.AnyAsync()).ShouldBeFalse();
     }
 
     [Fact]
-    public async Task Handle_Should_SoftDeleteTicket_WhenNonOwnerHasManagePermission()
+    public async Task Handle_Should_ReturnUnauthorizedAndKeepTicket_WhenManagerLacksDeletePermission()
     {
-        // Arrange
+        // Arrange: quem atende a fila (tickets:manage) também precisa de tickets:delete
         await using TestDbContext context = CreateDbContext();
         Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open);
 
-        IUserContext userContext = Substitute.For<IUserContext>();
         var managerId = Guid.NewGuid();
+        IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(managerId);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         permissionProvider.HasPermissionAsync(managerId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(true);
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+
+        var handler = new DeleteTicketCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        var command = new DeleteTicketCommand(ticketId);
+
+        // Act
+        Result result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.Unauthorized());
+        (await context.Tickets.SingleAsync(t => t.Id == ticketId)).DeletedAtUtc.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Handle_Should_SoftDeleteTicketAndRaiseDomainEvent_WhenCallerHasDeletePermission()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open);
+
+        var administratorId = Guid.NewGuid();
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(administratorId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(administratorId, PermissionCodes.Tickets.Delete, Arg.Any<CancellationToken>())
+            .Returns(true);
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
 
         var handler = new DeleteTicketCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
@@ -191,36 +164,10 @@ public sealed class DeleteTicketCommandHandlerTests : BaseHandlerTest
         ticket.DeletedAtUtc.ShouldNotBeNull();
         ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketDeletedDomainEvent);
 
-        // O histórico registra quem gerencia o chamado, não o dono.
+        // O histórico registra quem excluiu, não o dono.
         TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id);
         history.Action.ShouldBe(TicketHistoryAction.Deleted);
-        history.ChangedByUserId.ShouldBe(managerId);
-    }
-
-    private static async Task<Guid> SeedTicketAsync(TestDbContext context, Guid createdByUserId, TicketStatus status)
-    {
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Medium,
-            Status = TicketStatus.Open,
-            CreatedByUserId = createdByUserId,
-            AssignedToUserId = null,
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow
-        };
-
-        if (status != TicketStatus.Open)
-        {
-            ticket.Status = status;
-        }
-
-        context.Tickets.Add(ticket);
-        await context.SaveChangesAsync();
-
-        return ticket.Id;
+        history.ChangedByUserId.ShouldBe(administratorId);
     }
 
     [Fact]
@@ -229,10 +176,11 @@ public sealed class DeleteTicketCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
         Ticket ticket = await SeedTicketWithSlaAsync(context, OwnerId, DefaultUtcNow);
+        var administratorId = Guid.NewGuid();
         IUserContext userContext = Substitute.For<IUserContext>();
-        userContext.UserId.Returns(OwnerId);
+        userContext.UserId.Returns(administratorId);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.DeleteOwn, Arg.Any<CancellationToken>())
+        permissionProvider.HasPermissionAsync(administratorId, PermissionCodes.Tickets.Delete, Arg.Any<CancellationToken>())
             .Returns(true);
 
         var handler = new DeleteTicketCommandHandler(context, userContext, permissionProvider, CreateClock(DefaultUtcNow.AddMinutes(50)));
@@ -246,5 +194,26 @@ public sealed class DeleteTicketCommandHandlerTests : BaseHandlerTest
         List<TicketSlaTimer> timers = await context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id).ToListAsync();
         timers.Count.ShouldBe(2);
         timers.ShouldAllBe(t => t.NextActionOnUtc == null && t.BreachedOnUtc == null && t.StoppedOnUtc == null);
+    }
+
+    private static async Task<Guid> SeedTicketAsync(TestDbContext context, Guid createdByUserId, TicketStatus status)
+    {
+        var ticket = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Title = "Printer is broken",
+            Description = "Original description",
+            Priority = TicketPriority.Medium,
+            Status = status,
+            CreatedByUserId = createdByUserId,
+            AssignedToUserId = null,
+            SectorId = Guid.NewGuid(),
+            CreatedAtUtc = DateTime.UtcNow
+        };
+
+        context.Tickets.Add(ticket);
+        await context.SaveChangesAsync();
+
+        return ticket.Id;
     }
 }

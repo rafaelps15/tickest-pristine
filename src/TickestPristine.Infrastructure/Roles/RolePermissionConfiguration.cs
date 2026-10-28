@@ -38,7 +38,6 @@ internal sealed class RolePermissionConfiguration : IEntityTypeConfiguration<Rol
                 Create(RoleNames.Agent, PermissionCatalog.TicketsCreate),
                 Create(RoleNames.Agent, PermissionCatalog.TicketsViewOwn),
                 Create(RoleNames.Agent, PermissionCatalog.TicketsUpdateOwn),
-                Create(RoleNames.Agent, PermissionCatalog.TicketsDeleteOwn),
                 Create(RoleNames.Agent, PermissionCatalog.TicketsReopenOwn),
                 Create(RoleNames.Agent, PermissionCatalog.TicketsManage),
 
@@ -46,7 +45,6 @@ internal sealed class RolePermissionConfiguration : IEntityTypeConfiguration<Rol
                 Create(RoleNames.Collaborator, PermissionCatalog.TicketsCreate),
                 Create(RoleNames.Collaborator, PermissionCatalog.TicketsViewOwn),
                 Create(RoleNames.Collaborator, PermissionCatalog.TicketsUpdateOwn),
-                Create(RoleNames.Collaborator, PermissionCatalog.TicketsDeleteOwn),
                 Create(RoleNames.Collaborator, PermissionCatalog.TicketsReopenOwn)
             ];
 

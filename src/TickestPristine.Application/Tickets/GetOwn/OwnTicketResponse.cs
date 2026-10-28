@@ -18,4 +18,14 @@ public sealed class OwnTicketResponse
     public DateTime DueAtUtc { get; set; }
     public TicketSlaStatus SlaStatus { get; set; }
     public DateTime LastActivityAtUtc { get; set; }
+
+    /// <summary>
+    /// Se quem consulta pode cancelar o chamado agora (spec 016).
+    /// </summary>
+    public bool CanCancel { get; set; }
+
+    /// <summary>
+    /// Até quando o dono pode cancelar o próprio chamado: a abertura mais a janela da política de cancelamento.
+    /// </summary>
+    public DateTime OwnerCancelDeadlineUtc { get; set; }
 }

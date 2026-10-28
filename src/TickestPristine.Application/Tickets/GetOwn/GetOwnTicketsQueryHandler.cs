@@ -1,7 +1,9 @@
 using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Pagination;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.SharedKernel;
 
@@ -10,6 +12,7 @@ namespace TickestPristine.Application.Tickets.GetOwn;
 internal sealed class GetOwnTicketsQueryHandler(
     IApplicationDbContext context,
     IUserContext userContext,
+    IPermissionProvider permissionProvider,
     IDateTimeProvider dateTimeProvider)
     : IQueryHandler<GetOwnTicketsQuery, PagedResponse<OwnTicketResponse>>
 {
@@ -22,6 +25,10 @@ internal sealed class GetOwnTicketsQueryHandler(
     {
         Guid userId = userContext.UserId;
         DateTime nowUtc = dateTimeProvider.UtcNow;
+
+        // Uma consulta de permissão por requisição, e não por item: todos os chamados da lista são de quem consulta.
+        bool canCancelAny = await permissionProvider.HasPermissionAsync(userId, PermissionCodes.Tickets.Cancel, cancellationToken);
+        bool canEditOwn = await permissionProvider.HasPermissionAsync(userId, PermissionCodes.Tickets.UpdateOwn, cancellationToken);
         string? search = string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim();
         TicketStatus[]? statuses = query.StatusGroup switch
         {
@@ -60,7 +67,9 @@ internal sealed class GetOwnTicketsQueryHandler(
                 DueAtUtc = t.DueAtUtc,
                 // Mesma regra do Domain e mesmo instante da listagem geral: a situação é calculada na projeção final.
                 SlaStatus = TicketSla.GetStatus(t.Status, t.DueAtUtc, t.SlaWarningAtUtc, t.ResolvedAtUtc, nowUtc),
-                LastActivityAtUtc = t.LastActivityAtUtc
+                LastActivityAtUtc = t.LastActivityAtUtc,
+                CanCancel = TicketCancellationPolicy.CanCancel(t.Status, t.CreatedAtUtc, nowUtc, canCancelAny, canEditOwn),
+                OwnerCancelDeadlineUtc = TicketCancellationPolicy.OwnerDeadline(t.CreatedAtUtc)
             })
             .ToPagedListAsync(query.Paging, cancellationToken);
 

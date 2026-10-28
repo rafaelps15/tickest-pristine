@@ -16,10 +16,11 @@ public static class PermissionCatalog
     public static readonly PermissionCatalogEntry TicketsCreate = new(PermissionCodes.Tickets.Create, "Abrir chamados", "Abrir novos chamados.", TicketsGroup, IsAdministrative: false);
     public static readonly PermissionCatalogEntry TicketsViewOwn = new(PermissionCodes.Tickets.ViewOwn, "Ver os próprios chamados", "Consultar os chamados que a própria pessoa abriu.", TicketsGroup, IsAdministrative: false);
     public static readonly PermissionCatalogEntry TicketsUpdateOwn = new(PermissionCodes.Tickets.UpdateOwn, "Editar os próprios chamados", "Alterar os chamados que a própria pessoa abriu.", TicketsGroup, IsAdministrative: false);
-    public static readonly PermissionCatalogEntry TicketsDeleteOwn = new(PermissionCodes.Tickets.DeleteOwn, "Excluir os próprios chamados", "Excluir os chamados que a própria pessoa abriu.", TicketsGroup, IsAdministrative: false);
     public static readonly PermissionCatalogEntry TicketsReopenOwn = new(PermissionCodes.Tickets.ReopenOwn, "Reabrir os próprios chamados", "Reabrir chamados resolvidos que a própria pessoa abriu.", TicketsGroup, IsAdministrative: false);
     public static readonly PermissionCatalogEntry TicketsManage = new(PermissionCodes.Tickets.Manage, "Atender a fila de chamados", "Ver e tratar os chamados de todos os colaboradores.", TicketsGroup, IsAdministrative: false);
     public static readonly PermissionCatalogEntry TicketsAssign = new(PermissionCodes.Tickets.Assign, "Atribuir chamados", "Definir outra pessoa como responsável por um chamado.", TicketsGroup);
+    public static readonly PermissionCatalogEntry TicketsCancel = new(PermissionCodes.Tickets.Cancel, "Cancelar chamados", "Cancelar qualquer chamado ativo, a qualquer momento, inclusive depois da janela em que o solicitante pode cancelar o próprio.", TicketsGroup);
+    public static readonly PermissionCatalogEntry TicketsDelete = new(PermissionCodes.Tickets.Delete, "Excluir chamados", "Excluir chamados ativos de qualquer colaborador.", TicketsGroup);
 
     public static readonly PermissionCatalogEntry UsersRead = new(PermissionCodes.Users.Read, "Ver usuários", "Listar e consultar os colaboradores cadastrados.", UsersGroup);
     public static readonly PermissionCatalogEntry UsersCreate = new(PermissionCodes.Users.Create, "Cadastrar colaboradores", "Incluir novos colaboradores no sistema.", UsersGroup);
@@ -37,7 +38,7 @@ public static class PermissionCatalog
 
     public static readonly IReadOnlyList<PermissionCatalogEntry> All =
     [
-        TicketsCreate, TicketsViewOwn, TicketsUpdateOwn, TicketsDeleteOwn, TicketsReopenOwn, TicketsManage, TicketsAssign,
+        TicketsCreate, TicketsViewOwn, TicketsUpdateOwn, TicketsReopenOwn, TicketsManage, TicketsAssign, TicketsCancel, TicketsDelete,
         UsersRead, UsersCreate, UsersUpdate, UsersDeactivate, UsersAssignRoles,
         RolesRead, RolesManage,
         DepartmentsManage, SectorsManage,

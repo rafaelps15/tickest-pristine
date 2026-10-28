@@ -27,4 +27,16 @@ public static class TicketErrors
     public static readonly Error CannotAssignToOthers = Error.Forbidden(
         "Tickets.CannotAssignToOthers",
         "Você só pode atribuir o chamado a você mesmo.");
+
+    public static Error CancelWindowExpired(int windowInMinutes) => Error.Forbidden(
+        "Tickets.CancelWindowExpired",
+        $"O prazo de {windowInMinutes} minutos para cancelar o próprio chamado terminou. Peça o cancelamento a quem administra os chamados.");
+
+    public static readonly Error CancelForbidden = Error.Forbidden(
+        "Tickets.CancelForbidden",
+        "Você não tem permissão para cancelar este chamado.");
+
+    public static readonly Error StatusChangeForbidden = Error.Forbidden(
+        "Tickets.StatusChangeForbidden",
+        "Só quem atende a fila de chamados pode mudar o status para Em Andamento ou Resolvido.");
 }

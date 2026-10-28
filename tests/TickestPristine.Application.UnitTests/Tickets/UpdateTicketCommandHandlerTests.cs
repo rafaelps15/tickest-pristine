@@ -14,6 +14,11 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
 {
     private static readonly Guid OwnerId = Guid.NewGuid();
 
+    /// <summary>
+    /// Abertura dos chamados dos testes de cancelamento: 27/10/2026, 9h00 em São Paulo (12h00 UTC).
+    /// </summary>
+    private static readonly DateTime NineAmUtc = new(2026, 10, 27, 12, 0, 0, DateTimeKind.Utc);
+
     [Fact]
     public async Task Handle_Should_ReturnNotFound_WhenTicketDoesNotExist()
     {
@@ -151,7 +156,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_UpdateTicket_WhenOwnerHasUpdateOwnPermission()
+    public async Task Handle_Should_UpdateDescription_WhenOwnerHasUpdateOwnPermission()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -164,7 +169,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
             .Returns(true);
 
         var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, Substitute.For<IDateTimeProvider>());
-        var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.InProgress };
+        var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.Open };
 
         // Act
         Result result = await handler.Handle(command, CancellationToken.None);
@@ -174,14 +179,199 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
 
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == ticketId);
         ticket.Description.ShouldBe("Updated description");
-        ticket.Status.ShouldBe(TicketStatus.InProgress);
+        ticket.Status.ShouldBe(TicketStatus.Open);
         ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketUpdatedDomainEvent);
-        ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketStatusChangedDomainEvent);
-        List<TicketHistoryAction> actions = await context.TicketHistories
-            .Where(h => h.TicketId == ticket.Id)
-            .Select(h => h.Action)
-            .ToListAsync();
-        actions.ShouldBe([TicketHistoryAction.StatusChanged, TicketHistoryAction.DescriptionChanged], ignoreOrder: true);
+        (await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id)).Action
+            .ShouldBe(TicketHistoryAction.DescriptionChanged);
+    }
+
+    [Theory]
+    [InlineData(TicketStatus.Open, TicketStatus.InProgress)]
+    [InlineData(TicketStatus.InProgress, TicketStatus.Resolved)]
+    public async Task Handle_Should_ReturnStatusChangeForbiddenAndChangeNothing_WhenOwnerMovesStatusForward(
+        TicketStatus currentStatus,
+        TicketStatus newStatus)
+    {
+        // Arrange: o dono só edita a descrição e cancela; as outras trocas são de quem atende a fila
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, currentStatus);
+        var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = newStatus };
+
+        // Act
+        Result result = await CreateOwnerHandler(context).Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketErrors.StatusChangeForbidden);
+
+        Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == ticketId);
+        ticket.Status.ShouldBe(currentStatus);
+        ticket.Description.ShouldBe("Original description");
+        (await context.TicketHistories.AnyAsync()).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_Should_CancelTicket_WhenOwnerIsWithinCancelWindow()
+    {
+        // Arrange: aberto às 9h00, cancelado pelo dono às 9h14
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open, NineAmUtc);
+
+        // Act
+        Result result = await CreateOwnerHandler(context, NineAmUtc.AddMinutes(14))
+            .Handle(CancelCommand(ticketId), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        (await context.Tickets.SingleAsync(t => t.Id == ticketId)).Status.ShouldBe(TicketStatus.Canceled);
+        (await context.TicketHistories.SingleAsync(h => h.TicketId == ticketId)).Action.ShouldBe(TicketHistoryAction.StatusChanged);
+    }
+
+    [Fact]
+    public async Task Handle_Should_CancelTicket_WhenOwnerCancelsExactlyAtDeadline()
+    {
+        // Arrange: o prazo do dono é inclusivo (9h15)
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open, NineAmUtc);
+
+        // Act
+        Result result = await CreateOwnerHandler(context, NineAmUtc.AddMinutes(TicketCancellationPolicy.OwnerWindowMinutes))
+            .Handle(CancelCommand(ticketId), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+    }
+
+    [Theory]
+    [InlineData(TicketStatus.Open)]
+    [InlineData(TicketStatus.InProgress)]
+    public async Task Handle_Should_ReturnCancelWindowExpiredAndChangeNothing_WhenOwnerIsPastCancelWindow(TicketStatus status)
+    {
+        // Arrange: aberto às 9h00, dono tenta cancelar às 9h16
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, status, NineAmUtc);
+
+        // Act
+        Result result = await CreateOwnerHandler(context, NineAmUtc.AddMinutes(16))
+            .Handle(CancelCommand(ticketId), CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketErrors.CancelWindowExpired(TicketCancellationPolicy.OwnerWindowMinutes));
+        (await context.Tickets.SingleAsync(t => t.Id == ticketId)).Status.ShouldBe(status);
+        (await context.TicketHistories.AnyAsync()).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnCancelWindowExpired_WhenOwnerAlsoManagesTicketsButIsPastWindow()
+    {
+        // Arrange: o dono atende a fila, mas não tem tickets:cancel; fora da janela, vale o erro do prazo do dono
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open, NineAmUtc);
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(OwnerId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
+            .Returns(true);
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+            .Returns(true);
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, CreateClock(NineAmUtc.AddMinutes(16)));
+
+        // Act
+        Result result = await handler.Handle(CancelCommand(ticketId), CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketErrors.CancelWindowExpired(TicketCancellationPolicy.OwnerWindowMinutes));
+        (await context.Tickets.SingleAsync(t => t.Id == ticketId)).Status.ShouldBe(TicketStatus.Open);
+    }
+
+    [Fact]
+    public async Task Handle_Should_CancelTicket_WhenOwnerWithoutUpdateOwnHasCancelPermission()
+    {
+        // Arrange: o dono não tem tickets:update-own, mas tem tickets:cancel, que vale a qualquer momento
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open, NineAmUtc);
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(OwnerId);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.Cancel, Arg.Any<CancellationToken>())
+            .Returns(true);
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, CreateClock(NineAmUtc.AddHours(2)));
+
+        // Act
+        Result result = await handler.Handle(CancelCommand(ticketId), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        (await context.Tickets.SingleAsync(t => t.Id == ticketId)).Status.ShouldBe(TicketStatus.Canceled);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnUnauthorized_WhenCallerWithOnlyCancelPermissionMovesStatusForward()
+    {
+        // Arrange: tickets:cancel só serve para cancelar
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open, NineAmUtc);
+        var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Original description", Status = TicketStatus.InProgress };
+
+        // Act
+        Result result = await CreateCancelerHandler(context, NineAmUtc.AddHours(2)).Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.Unauthorized());
+        (await context.Tickets.SingleAsync(t => t.Id == ticketId)).Status.ShouldBe(TicketStatus.Open);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnCancelForbiddenAndChangeNothing_WhenManagerLacksCancelPermission()
+    {
+        // Arrange: chamado aberto há 2 horas; quem atende a fila não tem tickets:cancel
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open, NineAmUtc);
+
+        // Act
+        Result result = await CreateManagerHandler(context, NineAmUtc.AddHours(2))
+            .Handle(CancelCommand(ticketId), CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketErrors.CancelForbidden);
+        (await context.Tickets.SingleAsync(t => t.Id == ticketId)).Status.ShouldBe(TicketStatus.Open);
+    }
+
+    [Fact]
+    public async Task Handle_Should_CancelTicket_WhenCallerHasCancelPermission()
+    {
+        // Arrange: quem só tem tickets:cancel, sem ser o dono nem atender a fila, cancela depois de 2 horas
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open, NineAmUtc);
+
+        // Act
+        Result result = await CreateCancelerHandler(context, NineAmUtc.AddHours(2))
+            .Handle(CancelCommand(ticketId), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        (await context.Tickets.SingleAsync(t => t.Id == ticketId)).Status.ShouldBe(TicketStatus.Canceled);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnUnauthorized_WhenCallerWithOnlyCancelPermissionChangesDescription()
+    {
+        // Arrange: tickets:cancel não dá direito a editar a descrição
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Open, NineAmUtc);
+        var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Outra descrição", Status = TicketStatus.Canceled };
+
+        // Act
+        Result result = await CreateCancelerHandler(context, NineAmUtc.AddHours(2)).Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.Unauthorized());
+        (await context.Tickets.SingleAsync(t => t.Id == ticketId)).Status.ShouldBe(TicketStatus.Open);
     }
 
     [Fact]
@@ -381,7 +571,25 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         return new UpdateTicketCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
     }
 
-    private static async Task<Guid> SeedTicketAsync(TestDbContext context, Guid openedByUserId, TicketStatus status)
+    /// <summary>
+    /// Quem tem só <c>tickets:cancel</c>: não é o dono nem atende a fila.
+    /// </summary>
+    private static UpdateTicketCommandHandler CreateCancelerHandler(TestDbContext context, DateTime nowUtc)
+    {
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(Guid.NewGuid());
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Cancel, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        return new UpdateTicketCommandHandler(context, userContext, permissionProvider, CreateClock(nowUtc));
+    }
+
+    private static async Task<Guid> SeedTicketAsync(
+        TestDbContext context,
+        Guid openedByUserId,
+        TicketStatus status,
+        DateTime? createdAtUtc = null)
     {
         var ticket = new Ticket
         {
@@ -393,7 +601,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
             CreatedByUserId = openedByUserId,
             AssignedToUserId = null,
             SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = createdAtUtc ?? DateTime.UtcNow
         };
 
         if (status != TicketStatus.Open)
@@ -421,6 +629,12 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         return new UpdateTicketCommandHandler(context, userContext, permissionProvider, CreateClock(nowUtc));
     }
 
+    /// <summary>
+    /// Cancela o chamado sem mudar a descrição gravada por <see cref="SeedTicketAsync"/>.
+    /// </summary>
+    private static UpdateTicketCommand CancelCommand(Guid ticketId) =>
+        new() { TicketId = ticketId, Description = "Original description", Status = TicketStatus.Canceled };
+
     private static UpdateTicketCommand StatusCommand(Guid ticketId, TicketStatus status) =>
         new() { TicketId = ticketId, Description = "The printer on the 3rd floor is not working", Status = status };
 
@@ -434,7 +648,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         DateTime resolvedAtUtc = OpenedAtUtc.AddMinutes(20);
 
         // Act
-        Result result = await CreateOwnerHandler(context, resolvedAtUtc).Handle(StatusCommand(ticket.Id, TicketStatus.Resolved), CancellationToken.None);
+        Result result = await CreateManagerHandler(context, resolvedAtUtc).Handle(StatusCommand(ticket.Id, TicketStatus.Resolved), CancellationToken.None);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
@@ -451,7 +665,8 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
         Ticket ticket = await SeedTicketWithSlaAsync(context, OwnerId, OpenedAtUtc);
-        DateTime canceledAtUtc = OpenedAtUtc.AddMinutes(20);
+        // Dentro da janela em que o dono pode cancelar.
+        DateTime canceledAtUtc = OpenedAtUtc.AddMinutes(10);
 
         // Act
         Result result = await CreateOwnerHandler(context, canceledAtUtc).Handle(StatusCommand(ticket.Id, TicketStatus.Canceled), CancellationToken.None);
@@ -475,7 +690,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         Ticket ticket = await SeedTicketWithSlaAsync(context, OwnerId, OpenedAtUtc);
 
         // Act
-        Result result = await CreateOwnerHandler(context, OpenedAtUtc.AddMinutes(5))
+        Result result = await CreateManagerHandler(context, OpenedAtUtc.AddMinutes(5))
             .Handle(StatusCommand(ticket.Id, TicketStatus.InProgress), CancellationToken.None);
 
         // Assert
