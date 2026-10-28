@@ -1,7 +1,7 @@
 ---
 id: 026
 titulo: Estatísticas da operação agregadas numa chamada, com os filtros da listagem
-status: Aprovada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+status: Em implementação        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-026-tickets-operation-overview                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
@@ -79,17 +79,30 @@ Dados comuns: um atendente com `tickets:manage`; chamados em todos os status, pr
 ## 7. Tarefas
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
-| T-1 | Tipo único dos filtros de recorte (listagem e estatísticas) | AC-3 | `add-feature` | [ ] |
+| T-1 | Tipo único dos filtros de recorte (listagem e estatísticas) | AC-3 | `add-feature` | [x] |
 | T-2 | Consulta, resposta e rota do agregado | AC-1, AC-3 a AC-6 | `add-feature` | [ ] |
 | T-3 | Testes de paridade com `GET tickets` e demais casos | AC-1 a AC-6 | `add-tests` | [ ] |
 | T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-7 | — | [ ] |
 | T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-7 | `ca-review` | [ ] |
 
 ## 8. Rastreabilidade
-Não se aplica até a aprovação.
+| AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
+|---|---|---|---|
+| AC-1 | | | |
+| AC-2 | | | |
+| AC-3 | | | |
+| AC-4 | | | |
+| AC-5 | | | |
+| AC-6 | | | |
+| AC-7 | | | |
 
 ## 9. Evidências de verificação
-Não se aplica até a implementação.
+- **Build:**
+- **Testes:**
+- **Revisão:**
+- **Documentação atualizada:**
+- **CI:**
+- **Entrega:**
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -97,3 +110,4 @@ Não se aplica até a implementação.
 | 2026-10-28 | Rascunho | Criada a partir do pedido de Rafael Santos no chat do front-end; número reservado já na criação, porque outra sessão cria specs em paralelo. |
 | 2026-10-28 | Em descoberta | Perguntas respondidas no chat (DEC-1 a DEC-3). Aguardando aprovação. |
 | 2026-10-28 | Aprovada | Aprovada por Rafael Santos no chat do front-end ("Pode aprovar as specs", confirmando "As seis (025 a 030)"). Checklist de completude conferido: nenhuma pergunta aberta e nenhum `[SUPOSIÇÃO]`. Implementação depois do merge da 025. |
+| 2026-10-28 | Em implementação | `/spec-implement 026` na branch `feat/SPEC-026-tickets-operation-overview`, com a `origin/main` mesclada depois do merge da 025 (PR #43) e da 030 (PR #44). Rafael Santos pediu a implementação completa, com o agente respondendo por ele ("atue como senior e só pare quando finalizar"). Tabelas de rastreabilidade e de evidências criadas. |

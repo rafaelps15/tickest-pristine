@@ -393,17 +393,18 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
         DateOnly? resolvedTo = null) =>
         new(
             statuses ?? [],
-            priority,
-            sectorIds ?? (sectorId is null ? [] : [sectorId.Value]),
-            requesterId,
-            assignedToUserId,
-            unassignedOnly,
+            new TicketScopeFilter(
+                sectorIds ?? (sectorId is null ? [] : [sectorId.Value]),
+                priority,
+                requesterId,
+                assignedToUserId,
+                unassignedOnly,
+                createdFrom,
+                createdTo,
+                resolvedFrom,
+                resolvedTo),
             slaStatus,
             search,
-            createdFrom,
-            createdTo,
-            resolvedFrom,
-            resolvedTo,
             sort,
             new PageRequest(1, 20));
 
