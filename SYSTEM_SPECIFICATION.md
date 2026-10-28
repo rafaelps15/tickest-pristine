@@ -231,7 +231,7 @@ Legenda de estado: **IE** = Implementada e evidenciada · **PI** = Parcialmente 
 | C-02 | Login, refresh com rotação, logout | IE | `Users/Login`, `Users/Refresh`, `Users/Logout`, unitários e integração | JWT, PostgreSQL | O access token continua válido após logout ou troca de senha até expirar (GAP-14). |
 | C-03 | Senha provisória e troca obrigatória | IE | `ChangeRequiredPassword/*`, `AdminUserSeeder.cs` | Seed | Só o seed do administrador marca `MustChangePassword`. Não há fluxo de "resetar a senha de alguém". |
 | C-04 | Recuperação de senha esquecida | IND | Nenhum código | — | Não há fluxo nem documento que o planeje. |
-| C-05 | Gestão de usuários (listar, ver, editar perfil, ativar/desativar, atribuir roles e setor) | IE | `Users/*`, `UsersTests.cs` | Permissões | Não existe exclusão de usuário (o README cita "exclusão"). **[Spec 013]** A listagem e o detalhe mostram o setor atual do usuário (RN-29); não há filtro por setor na listagem. |
+| C-05 | Gestão de usuários (listar, ver, editar perfil, ativar/desativar, atribuir roles e setor) | IE | `Users/*`, `UsersTests.cs` | Permissões | Não existe exclusão de usuário (o README cita "exclusão"). **[Spec 013]** A listagem e o detalhe mostram o setor atual do usuário (RN-29); não há filtro por setor na listagem. **[Spec 018]** A listagem filtra por role (`roleName`) ou por ausência de role (`withoutRole`) e ordena por nome ou por data de cadastro, nas duas direções (4.3.1). |
 | C-06 | Gestão de permissões das roles | IE | `Roles/AssignPermissions`, `RolesTests.cs` | Cache de permissões | Não é possível criar ou excluir roles pela API. |
 | C-07 | Departamentos e setores | IE | `Departments/*`, `Sectors/*`, testes | — | Não há reativação. O responsável pelo departamento pode ser um usuário inativo (`DepartmentResponsibleUser.cs:26`). |
 | C-08 | Abertura de chamado | IE | `Tickets/Create/*`, `TicketsTests.cs` | Setor ativo | Na abertura, qualquer pessoa com `tickets:create` ainda pode indicar qualquer usuário ativo como responsável, sem a exigência de `tickets:manage` aplicada na atribuição posterior (Q-05). |
@@ -513,7 +513,7 @@ Fonte: `ApplicationDbContext.cs:57-108`, `DomainEventsDispatcher.cs:19-59`. **[F
 | `PUT users/me/password` | Usuário ativo | `authentication` |
 | `PUT users/{id}/profile` | Usuário ativo, e no handler: o próprio usuário ou `users:update` | — |
 | `GET users/{id}` | Usuário ativo, e no handler: o próprio usuário ou `users:read` | — |
-| `GET users`, `GET users/by-email` | `users:read` | — |
+| `GET users`, `GET users/by-email` | `users:read`. **[Spec 018]** `GET users` aceita, além de `status`, `search`, `createdFrom`, `createdTo`, `page` e `pageSize`: `roleName` (só quem tem a role; nome inexistente dá lista vazia, em branco não filtra), `withoutRole=true` (só quem não tem nenhuma role; vence o `roleName`), `sortBy` (`Name`, `CreatedAt`) e `sortDirection` (`Ascending`, `Descending`). Sem `sortBy`, nome crescente; com `CreatedAt` sem direção, mais recentes primeiro; o `Id` desempata. Enum inválido responde 400. Tudo é aplicado no banco antes da contagem e da paginação | — |
 | `PUT users/{id}/activate`, `PUT users/{id}/deactivate` | `users:deactivate` | — |
 | `PUT users/{id}/roles` | `users:assign-roles` | — |
 | `PUT users/{id}/sector` (spec 009) | `users:update` | — |
