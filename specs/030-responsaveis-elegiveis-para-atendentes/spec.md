@@ -65,7 +65,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | T-1 | Consulta e rota dos responsáveis elegíveis | AC-1 a AC-3, AC-5 | `add-feature` | [x] |
 | T-2 | Testes de integração | AC-1 a AC-5 | `add-tests` | [x] |
 | T-3 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-6 | — | [x] |
-| T-4 | Revisão de convenções, build sem avisos e suíte inteira | AC-6 | `ca-review` | [ ] |
+| T-4 | Revisão de convenções, build sem avisos e suíte inteira | AC-6 | `ca-review` | [x] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
@@ -75,7 +75,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | AC-3 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetAssignees_Should_ReturnForbidden_WhenCallerLacksManagePermission`, `GetAssignees_Should_ReturnUnauthorized_WhenNoTokenProvided` | Colaborador sem `tickets:manage` recebe 403; sem token, 401. | Aprovado |
 | AC-4 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › os 12 testes `GetAttendants_*`; `tests/TickestPristine.Application.UnitTests/Users/GetBacklogAttendantsQueryHandlerTests.cs` | Passam sem alteração: `GET users/attendants` e o handler dele não foram tocados. | Aprovado |
 | AC-5 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetAssignees_Should_ListAssigneeThatAssignAccepts` | O Atendente consulta a lista e escolhe Ana; a atribuição por `PUT tickets/{id}/assignee` responde 204 e grava Ana como responsável. Quem atribui é o administrador, porque atribuir a outra pessoa exige `tickets:assign` (spec 009, fora do escopo); o critério é que a lista e a atribuição usam a mesma regra de elegibilidade (`TicketAssigneeEligibility`). | Aprovado |
-| AC-6 | | | |
+| AC-6 | `dotnet build TickestPristine.slnx --no-incremental` e `dotnet test TickestPristine.slnx` | 0 avisos e 0 erros; 50 testes de arquitetura, 696 unitários e 392 de integração aprovados, nenhuma falha. | Aprovado |
 
 ## 9. Evidências de verificação
 - **Build:**
