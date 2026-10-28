@@ -2395,6 +2395,123 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
     private sealed record TicketCountDto(int Priority, int Status, int Count);
 
+    [Fact]
+    public async Task GetAssignees_Should_ReturnOnlyEligibleAssigneesWithoutEmail_WhenCallerIsAgentWithoutUsersRead()
+    {
+        // Arrange
+        AssigneeScenario scenario = await SeedAssigneeScenarioAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/assignees?search={scenario.Token}");
+
+        // Assert: só os atendentes ativos, por nome; o inativo e o colaborador ficam de fora
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        string body = await response.Content.ReadAsStringAsync();
+        body.ShouldNotContain("email", Case.Insensitive);
+
+        PagedAssigneesDto page = (await response.Content.ReadFromJsonAsync<PagedAssigneesDto>())!;
+        page.Items.Select(a => a.Id).ShouldBe([scenario.Ana, scenario.Beto]);
+        AssigneeDto ana = page.Items[0];
+        ana.FullName.ShouldBe($"Ana {scenario.Token}");
+        ana.SectorId.ShouldBe(scenario.Helpdesk);
+        ana.SectorName.ShouldBe(scenario.HelpdeskName);
+    }
+
+    [Fact]
+    public async Task GetAssignees_Should_ReturnMatchingAssignees_WhenSearchAndSectorAreGiven()
+    {
+        // Arrange
+        AssigneeScenario scenario = await SeedAssigneeScenarioAsync();
+
+        // Act: parte do nome em minúsculas e o sobrenome em maiúsculas
+        PagedAssigneesDto? bySearchAndSector = await HttpClient.GetFromJsonAsync<PagedAssigneesDto>(
+            $"tickets/assignees?search=an%20{scenario.Token.ToUpperInvariant()}&sectorId={scenario.Helpdesk}");
+        PagedAssigneesDto? bySector = await HttpClient.GetFromJsonAsync<PagedAssigneesDto>(
+            $"tickets/assignees?search={scenario.Token}&sectorId={scenario.Infra}");
+
+        // Assert
+        bySearchAndSector!.Items.ShouldHaveSingleItem().Id.ShouldBe(scenario.Ana);
+        bySector!.Items.ShouldHaveSingleItem().Id.ShouldBe(scenario.Beto);
+    }
+
+    [Fact]
+    public async Task GetAssignees_Should_ReturnForbidden_WhenCallerLacksManagePermission()
+    {
+        // Arrange: o cadastro dá a role Colaborador, sem tickets:manage
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/assignees");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetAssignees_Should_ReturnUnauthorized_WhenNoTokenProvided()
+    {
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/assignees");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetAssignees_Should_ListAssigneeThatAssignAccepts()
+    {
+        // Arrange: o atendente consulta a lista para um chamado do Helpdesk; quem atribui a outra pessoa é quem tem
+        // tickets:assign (spec 009), aqui o administrador
+        AssigneeScenario scenario = await SeedAssigneeScenarioAsync();
+        Guid ticketId = await CreateTicketAsync(scenario.Helpdesk);
+        PagedAssigneesDto? page = await HttpClient.GetFromJsonAsync<PagedAssigneesDto>(
+            $"tickets/assignees?search={scenario.Token}&sectorId={scenario.Helpdesk}");
+        Guid chosen = page!.Items.ShouldHaveSingleItem().Id;
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
+            $"tickets/{ticketId}/assignee",
+            new { assignedToUserId = chosen });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await context.Tickets.Where(t => t.Id == ticketId).Select(t => t.AssignedToUserId).SingleAsync())
+            .ShouldBe(scenario.Ana);
+    }
+
+    /// <summary>
+    /// Usuários da spec 030, isolados pelo sobrenome único (<see cref="AssigneeScenario.Token"/>), que as consultas usam
+    /// como busca: Ana (Atendente, Helpdesk), Beto (Atendente, Infra), Caio (Atendente inativo, Helpdesk) e Davi
+    /// (Colaborador, Helpdesk). Termina autenticado como um Atendente novo, que não tem <c>users:read</c>.
+    /// </summary>
+    private async Task<AssigneeScenario> SeedAssigneeScenarioAsync()
+    {
+        string token = $"Resp{Guid.NewGuid():N}";
+        string helpdeskName = $"Helpdesk-{Guid.NewGuid():N}";
+        Guid helpdesk = await InsertSectorAsync(helpdeskName, $"Department-{Guid.NewGuid():N}");
+        Guid infra = await InsertSectorAsync($"Infra-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+
+        Guid ana = await InsertUserAsync("Ana", token, UniqueEmail(), helpdesk, true, RoleNames.Agent);
+        Guid beto = await InsertUserAsync("Beto", token, UniqueEmail(), infra, true, RoleNames.Agent);
+        await InsertUserAsync("Caio", token, UniqueEmail(), helpdesk, false, RoleNames.Agent);
+        await InsertUserAsync("Davi", token, UniqueEmail(), helpdesk, true, RoleNames.Collaborator);
+
+        AccessTokens agentTokens = await CreateAgentAsync();
+        Authenticate(agentTokens.AccessToken);
+
+        return new AssigneeScenario(token, helpdesk, helpdeskName, infra, ana, beto);
+    }
+
+    private sealed record AssigneeScenario(string Token, Guid Helpdesk, string HelpdeskName, Guid Infra, Guid Ana, Guid Beto);
+
+    private sealed record AssigneeDto(Guid Id, string FullName, Guid? SectorId, string? SectorName);
+
+    private sealed record PagedAssigneesDto(List<AssigneeDto> Items, int TotalCount);
+
     private sealed record PagedTicketsDto(List<TicketSummaryDto> Items, int TotalCount);
 
     private sealed record TicketSummaryDto(

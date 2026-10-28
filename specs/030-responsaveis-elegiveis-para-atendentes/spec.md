@@ -63,18 +63,18 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
 | T-1 | Consulta e rota dos responsáveis elegíveis | AC-1 a AC-3, AC-5 | `add-feature` | [x] |
-| T-2 | Testes de integração | AC-1 a AC-5 | `add-tests` | [ ] |
+| T-2 | Testes de integração | AC-1 a AC-5 | `add-tests` | [x] |
 | T-3 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-6 | — | [ ] |
 | T-4 | Revisão de convenções, build sem avisos e suíte inteira | AC-6 | `ca-review` | [ ] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | | | |
-| AC-2 | | | |
-| AC-3 | | | |
-| AC-4 | | | |
-| AC-5 | | | |
+| AC-1 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetAssignees_Should_ReturnOnlyEligibleAssigneesWithoutEmail_WhenCallerIsAgentWithoutUsersRead`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketAssigneesQueryHandlerTests.cs` › `Handle_Should_ReturnOnlyActiveUsersWithManagePermission_WhenSomeUsersAreNotEligible` | Um Atendente recém-criado (sem `users:read`) recebe 200 só com Ana e Beto (atendentes ativos), por nome; o atendente inativo e o colaborador ficam fora. Cada item tem id, nome completo e setor (id e nome), e o corpo não contém "email". O unitário confere a regra (ativo com `tickets:manage`) e o setor nulo de quem não tem setor. Uma mutação que tirava o filtro de elegibilidade foi detectada por 1 caso unitário e 2 de integração. | Aprovado |
+| AC-2 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetAssignees_Should_ReturnMatchingAssignees_WhenSearchAndSectorAreGiven`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketAssigneesQueryHandlerTests.cs` › `Handle_Should_ReturnMatchingAssigneesOrderedByName_WhenSearchAndSectorAreGiven`, `Handle_Should_RequireEveryWordInNameOrSurname_WhenSearchHasSeveralWords` | Contra o PostgreSQL, a busca `an` + sobrenome em maiúsculas com o setor Helpdesk traz só Ana (sem diferenciar maiúsculas), e o setor Infra traz só Beto. O unitário confere a ordem por nome (Ana antes de Mariana) e que cada palavra precisa estar no nome ou no sobrenome. | Aprovado |
+| AC-3 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetAssignees_Should_ReturnForbidden_WhenCallerLacksManagePermission`, `GetAssignees_Should_ReturnUnauthorized_WhenNoTokenProvided` | Colaborador sem `tickets:manage` recebe 403; sem token, 401. | Aprovado |
+| AC-4 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › os 12 testes `GetAttendants_*`; `tests/TickestPristine.Application.UnitTests/Users/GetBacklogAttendantsQueryHandlerTests.cs` | Passam sem alteração: `GET users/attendants` e o handler dele não foram tocados. | Aprovado |
+| AC-5 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetAssignees_Should_ListAssigneeThatAssignAccepts` | O Atendente consulta a lista e escolhe Ana; a atribuição por `PUT tickets/{id}/assignee` responde 204 e grava Ana como responsável. Quem atribui é o administrador, porque atribuir a outra pessoa exige `tickets:assign` (spec 009, fora do escopo); o critério é que a lista e a atribuição usam a mesma regra de elegibilidade (`TicketAssigneeEligibility`). | Aprovado |
 | AC-6 | | | |
 
 ## 9. Evidências de verificação
