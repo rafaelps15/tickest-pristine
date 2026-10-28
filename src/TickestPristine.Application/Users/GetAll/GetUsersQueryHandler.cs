@@ -1,6 +1,7 @@
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Pagination;
+using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Users.GetAll;
@@ -11,11 +12,13 @@ internal sealed class GetUsersQueryHandler(IApplicationDbContext context, IDateT
     public async Task<Result<PagedResponse<UserSummaryResponse>>> Handle(GetUsersQuery query, CancellationToken cancellationToken)
     {
         string? search = string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim();
+        bool withoutRole = query.WithoutRole;
+        string? roleName = withoutRole || string.IsNullOrWhiteSpace(query.RoleName) ? null : query.RoleName.Trim();
         var createdFromUtc = query.CreatedFrom?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var createdUntilUtc = query.CreatedTo?.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         DateTime nowUtc = dateTimeProvider.UtcNow;
 
-        PagedResponse<UserSummaryResponse> users = await context.Users
+        IQueryable<User> filtered = context.Users
             .Where(u =>
                 (query.Status == UserStatusFilter.All || u.IsActive == (query.Status == UserStatusFilter.Active)) &&
                 (search == null ||
@@ -23,10 +26,11 @@ internal sealed class GetUsersQueryHandler(IApplicationDbContext context, IDateT
                  u.LastName.Contains(search) ||
                  u.Email.Contains(search)) &&
                 (createdFromUtc == null || u.CreatedAtUtc >= createdFromUtc) &&
-                (createdUntilUtc == null || u.CreatedAtUtc < createdUntilUtc))
-            .OrderBy(u => u.FirstName)
-            .ThenBy(u => u.LastName)
-            .ThenBy(u => u.Id)
+                (createdUntilUtc == null || u.CreatedAtUtc < createdUntilUtc) &&
+                (!withoutRole || !context.UserRoles.Any(ur => ur.UserId == u.Id)) &&
+                (roleName == null || context.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleName == roleName)));
+
+        PagedResponse<UserSummaryResponse> users = await Sort(filtered, query.SortBy ?? UserSortField.Name, query.SortDirection)
             .Select(u => new UserSummaryResponse
             {
                 Id = u.Id,
@@ -67,5 +71,20 @@ internal sealed class GetUsersQueryHandler(IApplicationDbContext context, IDateT
             .ToPagedListAsync(query.Paging, cancellationToken);
 
         return users;
+    }
+
+    // O Id desempata as chaves iguais, para a paginação não repetir nem pular usuários; a direção vale para todas as chaves.
+    private static IOrderedQueryable<User> Sort(IQueryable<User> users, UserSortField sortBy, SortDirection? direction)
+    {
+        if (sortBy == UserSortField.CreatedAt)
+        {
+            return (direction ?? SortDirection.Descending) == SortDirection.Ascending
+                ? users.OrderBy(u => u.CreatedAtUtc).ThenBy(u => u.Id)
+                : users.OrderByDescending(u => u.CreatedAtUtc).ThenByDescending(u => u.Id);
+        }
+
+        return (direction ?? SortDirection.Ascending) == SortDirection.Ascending
+            ? users.OrderBy(u => u.FirstName).ThenBy(u => u.LastName).ThenBy(u => u.Id)
+            : users.OrderByDescending(u => u.FirstName).ThenByDescending(u => u.LastName).ThenByDescending(u => u.Id);
     }
 }
