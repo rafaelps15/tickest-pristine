@@ -85,19 +85,19 @@ Dados comuns: um atendente com `tickets:manage`; chamados abertos em 31/10 às 2
 |---|---|---|---|---|
 | T-1 | Conversão de data local de São Paulo para intervalo UTC, com teste | AC-1 | `add-feature` | [x] |
 | T-2 | Período de abertura e de resolução, vários setores e validação em `GET tickets` | AC-1 a AC-5 | `add-feature` | [x] |
-| T-3 | Testes unitários e de integração da seção 6 | AC-1 a AC-6 | `add-tests` | [ ] |
+| T-3 | Testes unitários e de integração da seção 6 | AC-1 a AC-6 | `add-tests` | [x] |
 | T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-7 | — | [ ] |
 | T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-7 | `ca-review` | [ ] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | | | |
-| AC-2 | | | |
-| AC-3 | | | |
-| AC-4 | | | |
-| AC-5 | | | |
-| AC-6 | | | |
+| AC-1 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetAll_Should_FilterByLocalCreationDay_WhenCreatedPeriodIsGiven`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketsQueryHandlerTests.cs` › `Handle_Should_FilterByLocalCreationDay_WhenCreatedPeriodIsGiven`; `tests/TickestPristine.Application.UnitTests/SlaCalendars/LocalDatePeriodTests.cs` › `FromLocalDates_Should_CoverWholeLocalDays_WhenBothDatesAreGiven`, `FromLocalDates_Should_LeaveLateEveningOfPreviousLocalDayOutside_WhenItIsNextDayInUtc` | Contra o PostgreSQL, `createdFrom=2026-11-01&createdTo=2026-11-01` traz só o chamado de 01/11 às 10h; o de 31/10 às 23h30 de Brasília (02h30 UTC de 01/11) fica fora. Os unitários conferem os limites UTC exatos (03h de 01/11 a 03h de 02/11, `Kind` UTC). Uma mutação que tratava a data como UTC (como o `GET users`) foi detectada por 4 casos unitários e 2 de integração. | Aprovado |
+| AC-2 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetAll_Should_FilterFromCreationDayOnward_WhenOnlyCreatedFromIsGiven`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketsQueryHandlerTests.cs` › `Handle_Should_FilterByLocalCreationDay_WhenCreatedPeriodIsGiven` (caso só com início); `tests/TickestPristine.Application.UnitTests/SlaCalendars/LocalDatePeriodTests.cs` › `FromLocalDates_Should_LeaveMissingEndOpen_WhenOnlyOneDateIsGiven` | Só com `createdFrom=2026-11-01`, vêm os chamados de 01/11 e 15/11; a ponta ausente fica aberta. | Aprovado |
+| AC-3 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetAll_Should_ReturnOnlyTicketsResolvedInPeriod_WhenResolvedPeriodIsGiven`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketsQueryHandlerTests.cs` › `Handle_Should_ExcludeNeverResolvedTickets_WhenResolvedPeriodIsGiven` | `resolvedFrom=2026-11-02&resolvedTo=2026-11-02` traz só o chamado resolvido em 02/11 (12h de Brasília), com `totalCount` 1; os nunca resolvidos ficam fora. | Aprovado |
+| AC-4 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetAll_Should_ReturnBadRequest_WhenPeriodIsInverted`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketsQueryHandlerTests.cs` › `Handle_Should_ReturnInvalidPeriod_WhenStartIsAfterEnd`; `tests/TickestPristine.Application.UnitTests/SlaCalendars/LocalDatePeriodTests.cs` › `IsInverted_Should_BeTrueOnlyWhenStartIsAfterEnd` | Início depois do fim, no período de abertura ou no de resolução, responde 400 com `Tickets.InvalidPeriod` e a mensagem "A data inicial do período não pode ser posterior à data final." (DEC-6); o handler devolve exatamente `TicketErrors.InvalidPeriod`. | Aprovado |
+| AC-5 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetAll_Should_ReturnTicketsOfEverySector_WhenSectorIdIsRepeated`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketsQueryHandlerTests.cs` › `Handle_Should_ReturnTicketsOfEverySector_WhenSeveralSectorsAreGiven` | `sectorId` repetido com Helpdesk e Infra traz os chamados dos dois setores; só com Helpdesk, só os dele, como antes. | Aprovado |
+| AC-6 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › os `GetAll_*` que já existiam (`ReturnForbidden_WhenCallerLacksManagePermission`, `ReturnTicketsWithRequesterAndSla_WhenCallerIsAdmin`, `FilterByStatusAndSlaStatus_WhenTicketWasResolvedWithinDeadline`, `ReturnEmployeeTicketsInAllStatusesNewestFirst_WhenAdminFiltersByRequester`, `IgnoreAssignee_WhenUnassignedOnlyIsTrue`); `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketsQueryHandlerTests.cs` › os `Handle_*` que já existiam | Passam sem alteração nos testes; no unitário, só o helper `CreateQuery` mudou para montar a query com os campos novos. | Aprovado |
 | AC-7 | | | |
 
 ## 9. Evidências de verificação
