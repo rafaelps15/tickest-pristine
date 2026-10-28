@@ -1,7 +1,7 @@
 ---
 id: 020
 titulo: Contagem de usuários por status (ativos, inativos e com convite pendente) numa só chamada
-status: Em implementação        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
 aprovada-em: 2026-10-27
 branch: feat/SPEC-020-users-status-counts                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
@@ -99,20 +99,20 @@ Dados: o administrador do seed (ativo, com senha), Ana (ativa, com senha), Bruno
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | `tests/TickestPristine.Application.UnitTests/Users/GetUserStatusCountsQueryHandlerTests.cs` › `Handle_Should_CountActivePendingAndInactiveSeparately_WhenUsersHaveEverySituation`, `Handle_Should_ReturnZeros_WhenThereAreNoUsers`; `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetStatusCounts_Should_CountActivePendingAndInactiveSeparately` | O unitário monta exatamente os dados do AC (administrador e Ana com senha, Bruno pendente, Carla inativa com senha, Davi inativo sem senha) e confere `totalCount` 5, `activeCount` 2, `pendingActivationCount` 1 e `inactiveCount` 2. A integração, contra o PostgreSQL e pelas rotas reais (cadastro, ativação e desativação), confere 200 e a variação a partir da contagem anterior (+4, +1, +1, +2) e que as três somam o total: o banco é compartilhado pelos testes, então o total absoluto não é fixo. Uma mutação que contava os pendentes como ativos foi detectada por 1 caso unitário e 2 de integração. | Aprovado |
-| AC-2 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetStatusCounts_Should_MovePendingUserToActive_WhenAccountIsActivated` | Bruno cadastrado sem senha ativa a conta por `POST users/activation` com o token do e-mail: `pendingActivationCount` cai 1, `activeCount` sobe 1, `inactiveCount` e `totalCount` iguais. | Aprovado |
-| AC-3 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetStatusCounts_Should_MoveActiveUserToInactive_WhenUserIsDeactivated` | Ana ativa com senha é desativada por `PUT users/{id}/deactivate`: `activeCount` cai 1, `inactiveCount` sobe 1, `pendingActivationCount` e `totalCount` iguais. | Aprovado |
-| AC-4 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetStatusCounts_Should_ReturnForbidden_WhenCallerLacksUsersReadPermission`, `GetStatusCounts_Should_ReturnUnauthorized_WhenNotAuthenticated` | Colaborador sem `users:read` recebe 403; sem token, 401. | Aprovado |
-| AC-5 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetStatusCounts_Should_CountInSingleSqlCommand` | Com o `EfCommandCounter` ativo durante a requisição, um único comando lê `user_credentials`, e ele tem `GROUP BY`: o EF traduziu o `Any` dentro da chave do agrupamento (R-1 não se concretizou). | Aprovado |
-| AC-6 | `dotnet build TickestPristine.slnx --no-incremental` e `dotnet test TickestPristine.slnx` | 0 avisos e 0 erros; 50 testes de arquitetura, 695 unitários e 393 de integração aprovados, nenhuma falha. | Aprovado |
+| AC-1 | `tests/TickestPristine.Application.UnitTests/Users/GetUserStatusCountsQueryHandlerTests.cs` › `Handle_Should_CountActivePendingAndInactiveSeparately_WhenUsersHaveEverySituation`, `Handle_Should_ReturnZeros_WhenThereAreNoUsers`; `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetStatusCounts_Should_CountActivePendingAndInactiveSeparately` | O unitário monta exatamente os dados do AC (administrador e Ana com senha, Bruno pendente, Carla inativa com senha, Davi inativo sem senha) e confere `totalCount` 5, `activeCount` 2, `pendingActivationCount` 1 e `inactiveCount` 2. A integração, contra o PostgreSQL e pelas rotas reais (cadastro, ativação e desativação), confere 200 e a variação a partir da contagem anterior (+4, +1, +1, +2) e que as três somam o total: o banco é compartilhado pelos testes, então o total absoluto não é fixo. Uma mutação que contava os pendentes como ativos foi detectada por 1 caso unitário e 2 de integração. | Aprovado na execução da `spec-verify` de 2026-10-28 |
+| AC-2 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetStatusCounts_Should_MovePendingUserToActive_WhenAccountIsActivated` | Bruno cadastrado sem senha ativa a conta por `POST users/activation` com o token do e-mail: `pendingActivationCount` cai 1, `activeCount` sobe 1, `inactiveCount` e `totalCount` iguais. | Aprovado na execução da `spec-verify` de 2026-10-28 |
+| AC-3 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetStatusCounts_Should_MoveActiveUserToInactive_WhenUserIsDeactivated` | Ana ativa com senha é desativada por `PUT users/{id}/deactivate`: `activeCount` cai 1, `inactiveCount` sobe 1, `pendingActivationCount` e `totalCount` iguais. | Aprovado na execução da `spec-verify` de 2026-10-28 |
+| AC-4 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetStatusCounts_Should_ReturnForbidden_WhenCallerLacksUsersReadPermission`, `GetStatusCounts_Should_ReturnUnauthorized_WhenNotAuthenticated` | Colaborador sem `users:read` recebe 403; sem token, 401. | Aprovado na execução da `spec-verify` de 2026-10-28 |
+| AC-5 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetStatusCounts_Should_CountInSingleSqlCommand` | Com o `EfCommandCounter` ativo durante a requisição, um único comando lê `user_credentials`, e ele tem `GROUP BY`: o EF traduziu o `Any` dentro da chave do agrupamento (R-1 não se concretizou). | Aprovado na execução da `spec-verify` de 2026-10-28 |
+| AC-6 | `dotnet build TickestPristine.slnx --no-incremental` e `dotnet test TickestPristine.slnx` | 0 avisos e 0 erros; 50 testes de arquitetura, 695 unitários e 393 de integração aprovados, nenhuma falha. | Aprovado na execução da `spec-verify` de 2026-10-28 |
 
 ## 9. Evidências de verificação
-- **Build:**
-- **Testes:**
-- **Revisão:**
-- **Documentação atualizada:**
-- **CI:**
-- **Entrega:**
+- **Build:** 2026-10-28, `dotnet build TickestPristine.slnx --no-incremental`: 0 avisos, 0 erros.
+- **Testes:** 2026-10-28, `dotnet test TickestPristine.slnx` com relatório TRX por teste: 50 de arquitetura, 695 unitários e 393 de integração aprovados, 0 com falha. Os 8 testes da rastreabilidade (2 unitários e 6 de integração) aparecem como `Passed` no TRX. Auditoria `python scripts/auditoria_sdd.py .`: score 100,0%, CONFORME, 0 falhas críticas, código de saída 0. Limitação: o total absoluto do AC-1 (5 usuários) é conferido no unitário; na integração, com o banco compartilhado pelos testes, o teste confere a variação a partir da contagem anterior.
+- **Revisão:** `ca-review` sobre as mudanças da spec: nenhum achado bloqueante, nenhuma violação de convenção. O R-1 não se concretizou: o EF gerou um único comando com `GROUP BY` (AC-5).
+- **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 4.3.1 (rota `GET users/stats/status`) e 2.7 C-05 (contagem por situação e a diferença em relação a `status=Active`), no commit `d69df25` (T-3); conferidas nesta verificação, sem outra seção afetada.
+- **CI:** roda no PR para a `main`.
+- **Entrega:** pendente (PR ainda não aberto).
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -122,3 +122,4 @@ Dados: o administrador do seed (ativo, com senha), Ana (ativa, com senha), Bruno
 | 2026-10-27 | Em descoberta | Rafael Santos delegou as decisões ao agente ("responda vc como senior .net"); DECs fechadas com as recomendações, sem `[SUPOSIÇÃO]` pendente. Aguardando aprovação explícita. |
 | 2026-10-27 | Aprovada | Aprovada por Rafael Santos no chat ("aprovo 017 a 021"). Checklist de completude conferido: nenhuma pergunta aberta e nenhum `[SUPOSIÇÃO]`. |
 | 2026-10-28 | Em implementação | `/spec-implement 020` na branch `feat/SPEC-020-users-status-counts`, a partir da `origin/main`. Rafael Santos pediu a implementação completa, com o agente respondendo por ele ("atue como senior e só pare quando finalizar"). |
+| 2026-10-28 | Verificada | `spec-verify`: build sem avisos, 1.138 testes aprovados, auditoria 100% (saída 0), AC-1 a AC-6 cobertos por testes que passaram nesta execução, `ca-review` sem achados bloqueantes. |
