@@ -4,6 +4,7 @@ using TickestPristine.Application.Users.GetAll;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Users;
+using SortDirection = TickestPristine.Application.Abstractions.Pagination.SortDirection;
 
 namespace TickestPristine.Application.UnitTests.Users;
 
@@ -317,6 +318,174 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
 
         // Assert
         result.Value.Items.ShouldAllBe(u => u.PendingActivation && u.InvitationExpiresAtUtc == null);
+    }
+
+    [Theory]
+    [InlineData("Atendente")]
+    [InlineData("  Atendente ")]
+    public async Task Handle_Should_ReturnOnlyUsersWithRole_WhenRoleNameIsGiven(string roleName)
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        (User ana, User bruno, _, _) = await SeedUsersWithRolesAsync(context);
+
+        var handler = new GetUsersQueryHandler(context, CreateClock());
+
+        // Act
+        Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(
+            AllUsers with { RoleName = roleName },
+            CancellationToken.None);
+
+        // Assert
+        result.Value.Items.Select(u => u.Id).ShouldBe([ana.Id, bruno.Id], ignoreOrder: true);
+        result.Value.TotalCount.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnEmptyPage_WhenNoUserHasRoleName()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        await SeedUsersWithRolesAsync(context);
+
+        var handler = new GetUsersQueryHandler(context, CreateClock());
+
+        // Act
+        Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(
+            AllUsers with { RoleName = "Inexistente" },
+            CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Items.ShouldBeEmpty();
+        result.Value.TotalCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Handle_Should_IgnoreRoleName_WhenRoleNameIsBlank()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        await SeedUsersWithRolesAsync(context);
+
+        var handler = new GetUsersQueryHandler(context, CreateClock());
+
+        // Act
+        Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(
+            AllUsers with { RoleName = "  " },
+            CancellationToken.None);
+
+        // Assert
+        result.Value.TotalCount.ShouldBe(4);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("Atendente")]
+    public async Task Handle_Should_ReturnOnlyUsersWithoutRole_WhenWithoutRoleIsTrue(string? roleName)
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        (_, _, _, User davi) = await SeedUsersWithRolesAsync(context);
+
+        var handler = new GetUsersQueryHandler(context, CreateClock());
+
+        // Act
+        Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(
+            AllUsers with { WithoutRole = true, RoleName = roleName },
+            CancellationToken.None);
+
+        // Assert
+        result.Value.Items.ShouldHaveSingleItem().Id.ShouldBe(davi.Id);
+        result.Value.TotalCount.ShouldBe(1);
+    }
+
+    [Theory]
+    [InlineData(null, null, new[] { "Ana", "Bruno", "Carla", "Davi" })]
+    [InlineData(UserSortField.Name, null, new[] { "Ana", "Bruno", "Carla", "Davi" })]
+    [InlineData(UserSortField.Name, SortDirection.Descending, new[] { "Davi", "Carla", "Bruno", "Ana" })]
+    [InlineData(null, SortDirection.Descending, new[] { "Davi", "Carla", "Bruno", "Ana" })]
+    [InlineData(UserSortField.CreatedAt, null, new[] { "Davi", "Carla", "Bruno", "Ana" })]
+    [InlineData(UserSortField.CreatedAt, SortDirection.Ascending, new[] { "Ana", "Bruno", "Carla", "Davi" })]
+    public async Task Handle_Should_SortUsers_WhenSortIsGiven(
+        UserSortField? sortBy,
+        SortDirection? sortDirection,
+        string[] expectedFirstNames)
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        // Cadastro na ordem inversa do nome, para a ordem por data não coincidir com a ordem por nome por acaso.
+        await SeedUsersWithRolesAsync(context);
+        foreach ((string firstName, int day) in new[] { ("Ana", 1), ("Bruno", 5), ("Carla", 10), ("Davi", 15) })
+        {
+            context.Users.Single(u => u.FirstName == firstName).CreatedAtUtc = new DateTime(2026, 10, day, 12, 0, 0, DateTimeKind.Utc);
+        }
+        await context.SaveChangesAsync();
+
+        var handler = new GetUsersQueryHandler(context, CreateClock());
+
+        // Act
+        Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(
+            AllUsers with { SortBy = sortBy, SortDirection = sortDirection },
+            CancellationToken.None);
+
+        // Assert
+        result.Value.Items.Select(u => u.FirstName).ShouldBe(expectedFirstNames);
+    }
+
+    [Theory]
+    [InlineData(UserSortField.Name, SortDirection.Ascending)]
+    [InlineData(UserSortField.Name, SortDirection.Descending)]
+    [InlineData(UserSortField.CreatedAt, SortDirection.Ascending)]
+    [InlineData(UserSortField.CreatedAt, SortDirection.Descending)]
+    public async Task Handle_Should_BreakTiesById_WhenSortKeysAreEqual(UserSortField sortBy, SortDirection sortDirection)
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        var createdAtUtc = new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
+        User first = AddUser(context, "Ana", "ana1@tickestpristine.dev", isActive: true);
+        User second = AddUser(context, "Ana", "ana2@tickestpristine.dev", isActive: true);
+        first.CreatedAtUtc = createdAtUtc;
+        second.CreatedAtUtc = createdAtUtc;
+        await context.SaveChangesAsync();
+
+        var handler = new GetUsersQueryHandler(context, CreateClock());
+        Guid[] expected = sortDirection == SortDirection.Ascending
+            ? [.. new[] { first.Id, second.Id }.Order()]
+            : [.. new[] { first.Id, second.Id }.OrderDescending()];
+
+        // Act
+        var pages = new List<Guid>();
+        for (int page = 1; page <= 2; page++)
+        {
+            Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(
+                AllUsers with { SortBy = sortBy, SortDirection = sortDirection, Paging = new PageRequest(page, 1) },
+                CancellationToken.None);
+            pages.Add(result.Value.Items.ShouldHaveSingleItem().Id);
+        }
+
+        // Assert
+        pages.ShouldBe(expected);
+    }
+
+    /// <summary>
+    /// Ana (Atendente), Bruno (Atendente e Administrador), Carla (Colaboradora, inativa) e Davi (sem role).
+    /// </summary>
+    private static async Task<(User Ana, User Bruno, User Carla, User Davi)> SeedUsersWithRolesAsync(TestDbContext context)
+    {
+        User ana = AddUser(context, "Ana", "ana@tickestpristine.dev", isActive: true);
+        User bruno = AddUser(context, "Bruno", "bruno@tickestpristine.dev", isActive: true);
+        User carla = AddUser(context, "Carla", "carla@tickestpristine.dev", isActive: false);
+        User davi = AddUser(context, "Davi", "davi@tickestpristine.dev", isActive: true);
+        context.Roles.AddRange(CreateRole("Atendente"), CreateRole("Administrador"), CreateRole("Colaborador"));
+        context.UserRoles.AddRange(
+            new UserRole { Id = Guid.NewGuid(), UserId = ana.Id, RoleName = "Atendente" },
+            new UserRole { Id = Guid.NewGuid(), UserId = bruno.Id, RoleName = "Atendente" },
+            new UserRole { Id = Guid.NewGuid(), UserId = bruno.Id, RoleName = "Administrador" },
+            new UserRole { Id = Guid.NewGuid(), UserId = carla.Id, RoleName = "Colaborador" });
+        await context.SaveChangesAsync();
+
+        return (ana, bruno, carla, davi);
     }
 
     private static User AddUser(TestDbContext context, string firstName, string email, bool isActive)
