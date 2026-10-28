@@ -1,9 +1,9 @@
 ---
 id: 026
 titulo: Estatísticas da operação agregadas numa chamada, com os filtros da listagem
-status: Em descoberta        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+status: Aprovada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
-aprovada-em:
+aprovada-em: 2026-10-28
 branch: feat/SPEC-026-tickets-operation-overview                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
 pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
@@ -96,3 +96,4 @@ Não se aplica até a implementação.
 |---|---|---|
 | 2026-10-28 | Rascunho | Criada a partir do pedido de Rafael Santos no chat do front-end; número reservado já na criação, porque outra sessão cria specs em paralelo. |
 | 2026-10-28 | Em descoberta | Perguntas respondidas no chat (DEC-1 a DEC-3). Aguardando aprovação. |
+| 2026-10-28 | Aprovada | Aprovada por Rafael Santos no chat do front-end ("Pode aprovar as specs", confirmando "As seis (025 a 030)"). Checklist de completude conferido: nenhuma pergunta aberta e nenhum `[SUPOSIÇÃO]`. Implementação depois do merge da 025. |
