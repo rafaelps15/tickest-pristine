@@ -78,20 +78,20 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 |---|---|---|---|---|
 | T-1 | Causa da conclusão no cronômetro, gravada nos dois caminhos, e migration | AC-1, AC-2 | `add-entity` | [x] |
 | T-2 | Consulta, cálculo e rota dos tempos médios | AC-3 a AC-7 | `add-feature` | [x] |
-| T-3 | Testes unitários e de integração | AC-1 a AC-7 | `add-tests` | [ ] |
+| T-3 | Testes unitários e de integração | AC-1 a AC-7 | `add-tests` | [x] |
 | T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-8 | — | [ ] |
 | T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-8 | `ca-review` | [ ] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | | | |
-| AC-2 | | | |
-| AC-3 | | | |
-| AC-4 | | | |
-| AC-5 | | | |
-| AC-6 | | | |
-| AC-7 | | | |
+| AC-1 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `CompleteFirstResponse_Should_RecordCause_ByMessageAndByResolution`; `tests/TickestPristine.Application.UnitTests/TicketMessages/PostTicketMessageCommandHandlerTests.cs` › `Handle_Should_CompleteFirstResponse_WhenAgentWithManagePermissionAnswers`; `tests/TickestPristine.Application.UnitTests/Tickets/UpdateTicketCommandHandlerTests.cs` › `Handle_Should_CompleteResolutionAndFirstResponseTimers_WhenResolvedWithoutResponse`, `Handle_Should_StopOpenSlaTimers_WhenCanceled` | Pela API, a mensagem de um Atendente grava a causa "mensagem" na primeira resposta, e resolver outro chamado sem resposta grava "resolução" na primeira resposta e na resolução; a resolução ainda aberta fica sem causa. Os unitários conferem a causa em cada caminho e que o cronômetro parado pelo cancelamento fica sem causa. | Aprovado |
+| AC-2 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Migration_Should_FillCompletionCauseOfCompletedTimers` | Com um chamado respondido por mensagem e outro resolvido sem resposta, a migration desce (apagando a coluna) e sobe: a primeira resposta do respondido volta como "mensagem", a resolução em aberto fica sem causa e os dois cronômetros do resolvido voltam como "resolução". | Aprovado |
+| AC-3 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetTimes_Should_AverageOnlyFirstResponsesByMessage_WhenOneWasResolvedWithoutAnswer`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketTimesQueryHandlerTests.cs` › `Handle_Should_CountOnlyFirstResponsesCompletedByMessage_WhenSomeWereCompletedByResolution`; `tests/TickestPristine.Application.UnitTests/Tickets/TicketTimeStatisticsTests.cs` › `From_Should_ReturnAverageAndMedianOfMiddlePair_WhenSampleIsEven`, `From_Should_ReturnMiddleValueAsMedianAndRoundAverage_WhenSampleIsOdd` | Seis respondidos por mensagem em 30, 60, 60, 90, 120 e 600 minutos úteis e um resolvido sem resposta: primeira resposta com amostra 6, média 160 e mediana 75, e `minimumSampleSize` 5. Os cronômetros usam o calendário contínuo, em que o minuto útil é o do relógio. Uma mutação que tirava o filtro de causa foi detectada por 1 caso unitário e 1 de integração. | Aprovado |
+| AC-4 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetTimes_Should_UseOnlyFirstCycleForResolution_WhenTicketWasReopened`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketTimesQueryHandlerTests.cs` › `Handle_Should_UseOnlyFirstCycleForResolution_WhenTicketWasReopened` | Cinco resolvidos em 60 minutos no ciclo 1, um deles reaberto e resolvido de novo depois de 5000 minutos: resolução com amostra 5, média e mediana 60 (o ciclo 2 não entra). | Aprovado |
+| AC-5 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetTimes_Should_ReturnOnlySampleSize_WhenSampleIsBelowMinimum`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketTimesQueryHandlerTests.cs` › `Handle_Should_ReturnOnlySampleSize_WhenSampleIsBelowMinimum`; `tests/TickestPristine.Application.UnitTests/Tickets/TicketTimeStatisticsTests.cs` › `From_Should_ReturnOnlySampleSize_WhenSampleIsBelowMinimum` | Com 4 resolvidos, a resolução vem com amostra 4 e média e mediana nulas. Também coberto: cronômetro parado pelo cancelamento fica fora (`Handle_Should_LeaveStoppedTimersOut_WhenTicketWasCanceled`). | Aprovado |
+| AC-6 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetTimes_Should_CountOnlyCompletionsOfTheMonthAndSector_WhenPeriodAndSectorAreGiven`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketTimesQueryHandlerTests.cs` › `Handle_Should_FilterByCompletionDateAndSector_WhenPeriodAndSectorAreGiven` | Com `resolvedFrom=2026-09-01&resolvedTo=2026-09-30` e um setor, entram só as duas conclusões de setembro daquele setor; ficam fora a de outubro e a do outro setor. | Aprovado |
+| AC-7 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetTimes_Should_ReturnForbidden_WhenCallerLacksManagePermission`, `GetTimes_Should_ReturnUnauthorized_WhenNoTokenProvided`, `GetTimes_Should_ReturnBadRequest_WhenPeriodIsInverted`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketTimesQueryHandlerTests.cs` › `Handle_Should_ReturnInvalidPeriod_WhenStartIsAfterEnd` | Colaborador sem `tickets:manage` recebe 403; sem token, 401. Também coberto o 400 do contrato: período invertido devolve `Tickets.InvalidPeriod`. | Aprovado |
 | AC-8 | | | |
 
 ## 9. Evidências de verificação

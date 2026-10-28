@@ -227,6 +227,7 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
 
         TicketSlaTimer firstResponse = await GetFirstResponseAsync(context, ticket.Id);
         firstResponse.CompletedOnUtc.ShouldBe(answeredAtUtc);
+        firstResponse.CompletionCause.ShouldBe(SlaCompletionCause.Message);
         (firstResponse.CompletedOnUtc <= firstResponse.DueOnUtc).ShouldBeTrue();
 
         (await context.TicketSlaTimers.AsNoTracking().SingleAsync(t => t.TicketId == ticket.Id && t.Metric == SlaMetric.Resolution))
