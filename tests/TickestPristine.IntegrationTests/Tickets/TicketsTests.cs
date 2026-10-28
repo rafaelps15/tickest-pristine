@@ -539,6 +539,139 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
+    public async Task GetOwn_Should_SearchTitleOrDescriptionIgnoringCase_WhenSearchIsGiven()
+    {
+        // Arrange
+        OwnSearchScenario scenario = await SeedOwnSearchScenarioAsync();
+
+        // Act
+        PagedOwnTicketItemsDto? byPassword = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>("tickets/mine?search=senha");
+        PagedOwnTicketItemsDto? byPaper = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>("tickets/mine?search=PAPEL");
+        PagedOwnTicketItemsDto? byTitle = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>("tickets/mine?search=impress");
+        PagedOwnTicketItemsDto? byBlank = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>("tickets/mine?search=%20%20");
+
+        // Assert
+        OwnTicketItemDto email = byPassword!.Items.ShouldHaveSingleItem();
+        email.Id.ShouldBe(scenario.Email);
+        email.Description.ShouldBe("Outlook pede a SENHA toda hora");
+        byPaper!.Items.ShouldHaveSingleItem().Id.ShouldBe(scenario.Printer);
+        byTitle!.Items.ShouldHaveSingleItem().Id.ShouldBe(scenario.Printer);
+        byBlank!.Items.Select(t => t.Id).ShouldBe([scenario.Printer, scenario.Email, scenario.Monitor], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task GetOwn_Should_NotReturnOtherUsersTickets_WhenOnlyTheirDescriptionMatches()
+    {
+        // Arrange
+        OwnSearchScenario scenario = await SeedOwnSearchScenarioAsync();
+
+        // Act
+        PagedOwnTicketItemsDto? page = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>("tickets/mine?search=senha");
+
+        // Assert
+        page!.Items.ShouldHaveSingleItem().Id.ShouldBe(scenario.Email);
+        page.Items.ShouldNotContain(t => t.Id == scenario.OtherUsersTicket);
+        page.TotalCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task GetOwn_Should_CombineDescriptionSearchWithStatusGroup_WhenBothAreGiven()
+    {
+        // Arrange
+        OwnSearchScenario scenario = await SeedOwnSearchScenarioAsync();
+
+        // Act
+        PagedOwnTicketItemsDto? activeWithE = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>(
+            "tickets/mine?status=Active&search=e");
+        PagedOwnTicketItemsDto? finishedWithPassword = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>(
+            "tickets/mine?status=Finished&search=senha");
+        PagedOwnTicketItemsDto? activeWithPassword = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>(
+            "tickets/mine?status=Active&search=senha");
+
+        // Assert: o Monitor só tem "e" na descrição
+        activeWithE!.Items.Select(t => t.Id).ShouldBe([scenario.Printer, scenario.Monitor]);
+        finishedWithPassword!.Items.ShouldHaveSingleItem().Id.ShouldBe(scenario.Email);
+        activeWithPassword!.Items.ShouldBeEmpty();
+        activeWithPassword.TotalCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task GetOwn_Should_PageDescriptionSearchByLastActivity_WhenStatusAndSearchAreGiven()
+    {
+        // Arrange
+        OwnSearchScenario scenario = await SeedOwnSearchScenarioAsync();
+
+        // Act
+        PagedOwnTicketItemsDto? firstPage = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>(
+            "tickets/mine?search=e&status=Active&pageSize=1");
+        PagedOwnTicketItemsDto? secondPage = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>(
+            "tickets/mine?search=e&status=Active&pageSize=1&page=2");
+
+        // Assert
+        firstPage!.TotalCount.ShouldBe(2);
+        firstPage.Items.ShouldHaveSingleItem().Id.ShouldBe(scenario.Printer);
+        secondPage!.TotalCount.ShouldBe(2);
+        secondPage.Items.ShouldHaveSingleItem().Id.ShouldBe(scenario.Monitor);
+    }
+
+    [Fact]
+    public async Task GetOwn_Should_ReturnAllOwnTicketsByLastActivity_WhenNoFilterIsGiven()
+    {
+        // Arrange
+        OwnSearchScenario scenario = await SeedOwnSearchScenarioAsync();
+
+        // Act
+        PagedOwnTicketItemsDto? page = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>("tickets/mine");
+
+        // Assert
+        page!.Items.Select(t => t.Id).ShouldBe([scenario.Printer, scenario.Email, scenario.Monitor]);
+        page.TotalCount.ShouldBe(3);
+    }
+
+    [Fact]
+    public async Task Migration_Should_TurnDescriptionIntoCitextKeepingExistingText()
+    {
+        // Arrange: o banco antes da migration, com um chamado já gravado
+        (Guid requesterId, Guid sectorId) = await CreateRequesterAndSectorAsync();
+        const string description = "Outlook pede a SENHA toda hora";
+        Guid ticketId = Guid.Empty;
+        string? typeBeforeMigration = null;
+        string? typeAfterMigration = null;
+
+        await ExecuteInScopeAsync(async context =>
+        {
+            IMigrator migrator = context.GetService<IMigrator>();
+            var migrations = context.Database.GetMigrations().ToList();
+            int index = migrations.FindIndex(m => m.EndsWith(nameof(Ticket_Description_Citext), StringComparison.Ordinal));
+
+            try
+            {
+                await migrator.MigrateAsync(migrations[index - 1]);
+                ticketId = await InsertOwnTicketAsync(
+                    requesterId, sectorId, TicketStatus.Open, "Acesso ao e-mail", DateTime.UtcNow.AddHours(-1), description);
+                typeBeforeMigration = await GetDescriptionColumnTypeAsync(context);
+
+                // Act
+                await migrator.MigrateAsync(migrations[index]);
+                typeAfterMigration = await GetDescriptionColumnTypeAsync(context);
+            }
+            finally
+            {
+                // O banco é compartilhado pela coleção: volta à última migration, mesmo se o teste falhar no meio.
+                await migrator.MigrateAsync();
+            }
+        });
+
+        // Assert
+        typeBeforeMigration.ShouldBe("varchar");
+        typeAfterMigration.ShouldBe("citext");
+        OwnTicketItemDto ticket = (await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>("tickets/mine?search=senha"))!
+            .Items.ShouldHaveSingleItem();
+        ticket.Id.ShouldBe(ticketId);
+        ticket.Description.ShouldBe(description);
+    }
+
+    [Fact]
     public async Task GetOwn_Should_PageFilteredResultsByLastActivity_WhenTicketGetsNewMessage()
     {
         // Arrange: A, B e C abertos nessa ordem; depois, uma mensagem nova em A
@@ -2326,7 +2459,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         Guid sectorId,
         TicketStatus status,
         string title,
-        DateTime createdAtUtc)
+        DateTime createdAtUtc,
+        string description = "The printer on the 3rd floor is not working")
     {
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -2335,7 +2469,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         {
             Id = Guid.NewGuid(),
             Title = title,
-            Description = "The printer on the 3rd floor is not working",
+            Description = description,
             Priority = TicketPriority.Medium,
             Status = status,
             CreatedByUserId = requesterId,
@@ -2352,6 +2486,36 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         return ticket.Id;
     }
+
+    /// <summary>
+    /// Chamados da spec 019, de Maria (o usuário autenticado): "Impressora não imprime" (Aberto), "Acesso ao e-mail"
+    /// (Resolvido) e "Monitor piscando" (Em Andamento, com "e" só na descrição), da última atividade mais recente para a
+    /// mais antiga; e um chamado de Paulo com "senha" na descrição.
+    /// </summary>
+    private async Task<OwnSearchScenario> SeedOwnSearchScenarioAsync()
+    {
+        (Guid mariaId, Guid sectorId) = await CreateRequesterAndSectorAsync();
+        Guid pauloId = await InsertUserAsync("Paulo", "Lima", UniqueEmail());
+
+        Guid printer = await InsertOwnTicketAsync(
+            mariaId, sectorId, TicketStatus.Open, "Impressora não imprime", DateTime.UtcNow.AddHours(-1), "Sai papel em branco");
+        Guid email = await InsertOwnTicketAsync(
+            mariaId, sectorId, TicketStatus.Resolved, "Acesso ao e-mail", DateTime.UtcNow.AddHours(-2), "Outlook pede a SENHA toda hora");
+        Guid monitor = await InsertOwnTicketAsync(
+            mariaId, sectorId, TicketStatus.InProgress, "Monitor piscando", DateTime.UtcNow.AddHours(-3), "Desde ontem");
+        Guid other = await InsertOwnTicketAsync(
+            pauloId, sectorId, TicketStatus.Open, "Bloqueio", DateTime.UtcNow.AddHours(-4), "senha bloqueada");
+
+        return new OwnSearchScenario(printer, email, monitor, other);
+    }
+
+    private sealed record OwnSearchScenario(Guid Printer, Guid Email, Guid Monitor, Guid OtherUsersTicket);
+
+    private static Task<string> GetDescriptionColumnTypeAsync(ApplicationDbContext context) =>
+        context.Database
+            .SqlQueryRaw<string>(
+                "SELECT udt_name AS \"Value\" FROM information_schema.columns WHERE table_name = 'tickets' AND column_name = 'description'")
+            .SingleAsync();
 
     private async Task<string> GetSectorNameAsync(Guid sectorId)
     {
