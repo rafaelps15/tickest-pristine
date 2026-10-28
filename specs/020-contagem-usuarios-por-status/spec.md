@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-27
 branch: feat/SPEC-020-users-status-counts                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: "#42"                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 020 — Contagem de usuários por status numa só chamada
@@ -112,7 +112,7 @@ Dados: o administrador do seed (ativo, com senha), Ana (ativa, com senha), Bruno
 - **Revisão:** `ca-review` sobre as mudanças da spec: nenhum achado bloqueante, nenhuma violação de convenção. O R-1 não se concretizou: o EF gerou um único comando com `GROUP BY` (AC-5).
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 4.3.1 (rota `GET users/stats/status`) e 2.7 C-05 (contagem por situação e a diferença em relação a `status=Active`), no commit `d69df25` (T-3); conferidas nesta verificação, sem outra seção afetada.
 - **CI:** roda no PR para a `main`.
-- **Entrega:** pendente (PR ainda não aberto).
+- **Entrega:** PR [#42](https://github.com/rafaelps15/tickest-pristine/pull/42) aberto para a `main` em 2026-10-28; a spec fica `Entregue` quando ele for mergeado.
 
 ## 10. Histórico
 | Data | Status | Observação |
