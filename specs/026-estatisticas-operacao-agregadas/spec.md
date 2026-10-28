@@ -80,7 +80,7 @@ Dados comuns: um atendente com `tickets:manage`; chamados em todos os status, pr
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
 | T-1 | Tipo único dos filtros de recorte (listagem e estatísticas) | AC-3 | `add-feature` | [x] |
-| T-2 | Consulta, resposta e rota do agregado | AC-1, AC-3 a AC-6 | `add-feature` | [ ] |
+| T-2 | Consulta, resposta e rota do agregado | AC-1, AC-3 a AC-6 | `add-feature` | [x] |
 | T-3 | Testes de paridade com `GET tickets` e demais casos | AC-1 a AC-6 | `add-tests` | [ ] |
 | T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-7 | — | [ ] |
 | T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-7 | `ca-review` | [ ] |
