@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Pagination;
+using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Tickets.GetAll;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.SharedKernel;
@@ -31,21 +32,17 @@ internal sealed class GetAll : IEndpoint
             IQueryHandler<GetTicketsQuery, PagedResponse<TicketSummaryResponse>> handler,
             CancellationToken cancellationToken) =>
         {
-            var query = new GetTicketsQuery(
-                statuses ?? [],
-                priority,
+            var scope = new TicketScopeFilter(
                 sectorIds ?? [],
+                priority,
                 requesterId,
                 assignedToUserId,
                 unassignedOnly ?? false,
-                slaStatus,
-                search,
                 createdFrom,
                 createdTo,
                 resolvedFrom,
-                resolvedTo,
-                sort ?? TicketSortOrder.Newest,
-                paging);
+                resolvedTo);
+            var query = new GetTicketsQuery(statuses ?? [], scope, slaStatus, search, sort ?? TicketSortOrder.Newest, paging);
 
             Result<PagedResponse<TicketSummaryResponse>> result = await handler.Handle(query, cancellationToken);
 
