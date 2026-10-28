@@ -70,7 +70,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 |---|---|---|---|---|
 | T-1 | Resolvidos por período, filtros e período no volume | AC-1 a AC-6 | `add-feature` | [x] |
 | T-2 | Testes de integração | AC-1 a AC-6 | `add-tests` | [x] |
-| T-3 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-7 | — | [ ] |
+| T-3 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-7 | — | [x] |
 | T-4 | Revisão de convenções, build sem avisos e suíte inteira | AC-7 | `ca-review` | [ ] |
 
 ## 8. Rastreabilidade
