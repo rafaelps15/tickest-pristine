@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-030-ticket-assignees-for-agents                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: "#44"                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 030 — Lista de responsáveis elegíveis para quem atende a fila, sem `users:read`
@@ -83,7 +83,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 - **Revisão:** `ca-review` sobre as mudanças da spec: nenhum achado bloqueante, nenhuma violação de convenção. Observação sem defeito: o limite de 5 palavras da busca reaproveita `UserValidationRules.SearchTermMaxWords`, como a consulta de atendentes; a busca não valida tamanho, porque a spec não pede.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 4.3.1 (rota `GET tickets/assignees`) e RN-28 (a mesma regra de elegibilidade na rota nova, sem e-mail, e atribuir a outra pessoa continua exigindo `tickets:assign`), no commit `e206be7` (T-3); conferidas nesta verificação, sem outra seção afetada.
 - **CI:** roda no PR para a `main`.
-- **Entrega:** pendente (PR ainda não aberto).
+- **Entrega:** PR [#44](https://github.com/rafaelps15/tickest-pristine/pull/44) aberto para a `main` em 2026-10-28; a spec fica `Entregue` quando ele for mergeado.
 
 ## 10. Histórico
 | Data | Status | Observação |
