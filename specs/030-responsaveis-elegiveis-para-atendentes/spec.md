@@ -1,7 +1,7 @@
 ---
 id: 030
 titulo: Lista de responsáveis elegíveis para quem atende a fila, sem `users:read`
-status: Aprovada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+status: Em implementação        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-030-ticket-assignees-for-agents                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
@@ -62,16 +62,28 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 ## 7. Tarefas
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
-| T-1 | Consulta e rota dos responsáveis elegíveis | AC-1 a AC-3, AC-5 | `add-feature` | [ ] |
+| T-1 | Consulta e rota dos responsáveis elegíveis | AC-1 a AC-3, AC-5 | `add-feature` | [x] |
 | T-2 | Testes de integração | AC-1 a AC-5 | `add-tests` | [ ] |
 | T-3 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-6 | — | [ ] |
 | T-4 | Revisão de convenções, build sem avisos e suíte inteira | AC-6 | `ca-review` | [ ] |
 
 ## 8. Rastreabilidade
-Não se aplica até a aprovação.
+| AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
+|---|---|---|---|
+| AC-1 | | | |
+| AC-2 | | | |
+| AC-3 | | | |
+| AC-4 | | | |
+| AC-5 | | | |
+| AC-6 | | | |
 
 ## 9. Evidências de verificação
-Não se aplica até a implementação.
+- **Build:**
+- **Testes:**
+- **Revisão:**
+- **Documentação atualizada:**
+- **CI:**
+- **Entrega:**
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -79,3 +91,4 @@ Não se aplica até a implementação.
 | 2026-10-28 | Rascunho | Criada a partir do pedido de Rafael Santos no chat do front-end; número reservado já na criação, porque outra sessão cria specs em paralelo. |
 | 2026-10-28 | Em descoberta | Pergunta respondida no chat (DEC-1). Aguardando aprovação. |
 | 2026-10-28 | Aprovada | Aprovada por Rafael Santos no chat do front-end ("Pode aprovar as specs", confirmando "As seis (025 a 030)"). Checklist de completude conferido: nenhuma pergunta aberta e nenhum `[SUPOSIÇÃO]`. Pode começar já. |
+| 2026-10-28 | Em implementação | `/spec-implement 030` na branch `feat/SPEC-030-ticket-assignees-for-agents`, a partir da `origin/main`. Rafael Santos pediu a implementação completa seguindo as skills como modelo de código, com o agente respondendo por ele ("atue como senior e só pare quando finalizar [...] Mantenha exatamente como no modelo"). Tabelas de rastreabilidade e de evidências criadas. |
