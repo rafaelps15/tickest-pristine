@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-027-tickets-average-times                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: "#47"                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 027 — Tempos médios de primeira resposta e de resolução
@@ -100,7 +100,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 - **Revisão:** `ca-review` sobre as mudanças da spec: nenhum achado bloqueante, nenhuma violação de convenção. Observações sem defeito: média e mediana saem com uma casa decimal (a spec não fixava o arredondamento), e os cronômetros do recorte são carregados em memória para o cálculo, como o plano previu.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` RN-26 (causa da conclusão e preenchimento da migration), 4.3.1 (rota `GET tickets/stats/times`) e 5.7 (tempos médios), no commit `bb0dda1` (T-4); conferidas nesta verificação, sem outra seção afetada.
 - **CI:** roda no PR para a `main`.
-- **Entrega:** pendente (PR ainda não aberto). A migration `Add_Ticket_Sla_Timer_Completion_Cause` acrescenta uma coluna e preenche os cronômetros concluídos com um `UPDATE` sobre `ticket_sla_timers`.
+- **Entrega:** PR [#47](https://github.com/rafaelps15/tickest-pristine/pull/47) aberto para a `main` em 2026-10-28; a spec fica `Entregue` quando ele for mergeado. A migration `Add_Ticket_Sla_Timer_Completion_Cause` acrescenta uma coluna e preenche os cronômetros concluídos com um `UPDATE` sobre `ticket_sla_timers`.
 
 ## 10. Histórico
 | Data | Status | Observação |
