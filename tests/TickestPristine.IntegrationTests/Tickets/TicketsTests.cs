@@ -2637,6 +2637,265 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         Guid MidMonth,
         Guid InInfra);
 
+    [Fact]
+    public async Task GetOverview_Should_ReturnThreeBlocksWithServerTime_WhenNoFilterIsGiven()
+    {
+        // Arrange
+        await SeedOverviewScenarioAsync();
+        DateTime before = DateTime.UtcNow;
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/overview");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        OverviewDto overview = (await response.Content.ReadFromJsonAsync<OverviewDto>())!;
+        overview.ServerNowUtc.ShouldBeInRange(before.AddSeconds(-5), DateTime.UtcNow.AddSeconds(5));
+        overview.Volume.BacklogCount.ShouldBe(overview.Volume.OpenCount + overview.Volume.InProgressCount);
+        overview.Volume.TotalCount.ShouldBeGreaterThanOrEqualTo(8);
+        overview.Attention.BreachedCount.ShouldBe(overview.Sla.BreachedCount);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task GetOverview_Should_MatchTotalCountOfListing_ForEveryCounter(bool bySectors, bool byUrgentPriority)
+    {
+        // Arrange: sem recorte, com os dois setores do cenário e com setores e prioridade Urgente
+        OverviewScenario scenario = await SeedOverviewScenarioAsync();
+        string scope = string.Join('&', new[]
+        {
+            bySectors ? $"sectorId={scenario.Helpdesk}&sectorId={scenario.Infra}" : null,
+            byUrgentPriority ? "priority=Urgent" : null
+        }.Where(part => part is not null));
+        string critical = byUrgentPriority ? "status=Open&status=InProgress" : "priority=Urgent&status=Open&status=InProgress";
+
+        // Act
+        OverviewDto overview = (await HttpClient.GetFromJsonAsync<OverviewDto>($"tickets/stats/overview?{scope}"))!;
+
+        // Assert: cada contador contra a listagem com o mesmo recorte e o filtro equivalente
+        overview.Volume.TotalCount.ShouldBe(await CountTicketsAsync(scope, ""));
+        overview.Volume.OpenCount.ShouldBe(await CountTicketsAsync(scope, "status=Open"));
+        overview.Volume.InProgressCount.ShouldBe(await CountTicketsAsync(scope, "status=InProgress"));
+        overview.Volume.ResolvedCount.ShouldBe(await CountTicketsAsync(scope, "status=Resolved"));
+        overview.Volume.ClosedCount.ShouldBe(await CountTicketsAsync(scope, "status=Closed"));
+        overview.Volume.CanceledCount.ShouldBe(await CountTicketsAsync(scope, "status=Canceled"));
+        overview.Volume.BacklogCount.ShouldBe(await CountTicketsAsync(scope, "status=Open&status=InProgress"));
+        overview.Sla.OnTimeCount.ShouldBe(await CountTicketsAsync(scope, "slaStatus=OnTime"));
+        overview.Sla.AtRiskCount.ShouldBe(await CountTicketsAsync(scope, "slaStatus=AtRisk"));
+        overview.Sla.BreachedCount.ShouldBe(await CountTicketsAsync(scope, "slaStatus=Breached"));
+        overview.Sla.MetCount.ShouldBe(await CountTicketsAsync(scope, "slaStatus=Met"));
+        overview.Sla.MissedCount.ShouldBe(await CountTicketsAsync(scope, "slaStatus=Missed"));
+        overview.Sla.NotApplicableCount.ShouldBe(await CountTicketsAsync(scope, "slaStatus=NotApplicable"));
+        overview.Attention.BreachedCount.ShouldBe(await CountTicketsAsync(scope, "slaStatus=Breached"));
+        overview.Attention.CriticalCount.ShouldBe(await CountTicketsAsync(scope, critical));
+        overview.Attention.UnassignedCount.ShouldBe(await CountTicketsAsync(scope, "unassignedOnly=true&status=Open&status=InProgress"));
+    }
+
+    [Fact]
+    public async Task GetOverview_Should_CountOnlyTicketsOfTheSectorsOpenedInPeriod_WhenSectorsAndPeriodAreGiven()
+    {
+        // Arrange
+        OverviewScenario scenario = await SeedOverviewScenarioAsync();
+
+        // Act: os dois setores, só os abertos de 01/09 a 15/09 (fica fora o chamado de 25/09 e o do terceiro setor)
+        OverviewDto overview = (await HttpClient.GetFromJsonAsync<OverviewDto>(
+            $"tickets/stats/overview?sectorId={scenario.Helpdesk}&sectorId={scenario.Infra}&createdFrom=2026-09-01&createdTo=2026-09-15"))!;
+
+        // Assert: os sete chamados do período nos dois setores
+        overview.Volume.TotalCount.ShouldBe(7);
+        overview.Volume.OpenCount.ShouldBe(3);
+        overview.Volume.InProgressCount.ShouldBe(1);
+        overview.Volume.ResolvedCount.ShouldBe(1);
+        overview.Volume.ClosedCount.ShouldBe(1);
+        overview.Volume.CanceledCount.ShouldBe(1);
+        overview.Volume.BacklogCount.ShouldBe(4);
+        overview.Sla.OnTimeCount.ShouldBe(2);
+        overview.Sla.AtRiskCount.ShouldBe(1);
+        overview.Sla.BreachedCount.ShouldBe(1);
+        overview.Sla.MetCount.ShouldBe(1);
+        overview.Sla.MissedCount.ShouldBe(1);
+        overview.Sla.NotApplicableCount.ShouldBe(1);
+        overview.Attention.BreachedCount.ShouldBe(1);
+        overview.Attention.CriticalCount.ShouldBe(2);
+        overview.Attention.UnassignedCount.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task GetOverview_Should_CountOnlyActiveUrgentAndActiveUnassigned_WhenTicketsAreInactive()
+    {
+        // Arrange: no Helpdesk, um Urgente ativo, um Urgente resolvido e ativos e inativos sem responsável
+        OverviewScenario scenario = await SeedOverviewScenarioAsync();
+
+        // Act
+        OverviewDto overview = (await HttpClient.GetFromJsonAsync<OverviewDto>(
+            $"tickets/stats/overview?sectorId={scenario.Helpdesk}&createdFrom=2026-09-01&createdTo=2026-09-15"))!;
+
+        // Assert: o Urgente resolvido e os inativos sem responsável (fechado e cancelado) ficam de fora
+        overview.Attention.CriticalCount.ShouldBe(1);
+        overview.Attention.UnassignedCount.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task GetOverview_Should_IgnoreStatus_WhenStatusIsGiven()
+    {
+        // Arrange
+        OverviewScenario scenario = await SeedOverviewScenarioAsync();
+        string scope = $"sectorId={scenario.Helpdesk}&sectorId={scenario.Infra}";
+
+        // Act
+        OverviewDto withoutStatus = (await HttpClient.GetFromJsonAsync<OverviewDto>($"tickets/stats/overview?{scope}"))!;
+        OverviewDto withStatus = (await HttpClient.GetFromJsonAsync<OverviewDto>($"tickets/stats/overview?{scope}&status=1"))!;
+
+        // Assert: os blocos são iguais; só a hora do servidor muda entre as chamadas
+        withStatus.Volume.ShouldBe(withoutStatus.Volume);
+        withStatus.Sla.ShouldBe(withoutStatus.Sla);
+        withStatus.Attention.ShouldBe(withoutStatus.Attention);
+    }
+
+    [Fact]
+    public async Task GetOverview_Should_ReturnBadRequest_WhenPeriodIsInverted()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/overview?createdFrom=2026-11-10&createdTo=2026-11-01");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).ShouldContain("Tickets.InvalidPeriod");
+    }
+
+    [Fact]
+    public async Task GetOverview_Should_ReturnForbidden_WhenCallerLacksManagePermission()
+    {
+        // Arrange: o cadastro dá a role Colaborador, sem tickets:manage
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/overview");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetOverview_Should_ReturnUnauthorized_WhenNoTokenProvided()
+    {
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/overview");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    /// <summary>
+    /// Chamados da spec 026 em setores novos, abertos em 10/09 (o prazo e o alerta são relativos a agora, para cada um
+    /// cair numa situação de SLA): no Helpdesk, (1) Aberto Urgente sem responsável no prazo, (2) Em andamento com
+    /// responsável em risco, (3) Aberto sem responsável atrasado, (4) Resolvido Urgente com responsável dentro do prazo,
+    /// (5) Fechado sem responsável resolvido depois do prazo e (6) Cancelado sem responsável nunca resolvido; na Infra,
+    /// (7) Aberto Urgente com responsável no prazo. Fora do período, um Aberto no Helpdesk em 25/09; fora dos setores, um
+    /// Aberto num terceiro setor. Termina autenticado como administrador (<c>tickets:manage</c>).
+    /// </summary>
+    private async Task<OverviewScenario> SeedOverviewScenarioAsync()
+    {
+        Guid helpdesk = await InsertSectorAsync($"Helpdesk-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        Guid infra = await InsertSectorAsync($"Infra-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        Guid other = await InsertSectorAsync($"Other-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        Guid requesterId = await InsertUserAsync("Maria", "Souza", UniqueEmail());
+        Guid assigneeId = await InsertUserAsync("Ana", "Lima", UniqueEmail(), null, true, RoleNames.Agent);
+
+        DateTime now = DateTime.UtcNow;
+        var inPeriod = new DateTime(2026, 9, 10, 15, 0, 0, DateTimeKind.Utc);
+        var outOfPeriod = new DateTime(2026, 9, 25, 15, 0, 0, DateTimeKind.Utc);
+
+        await InsertOverviewTicketAsync(requesterId, helpdesk, TicketStatus.Open, TicketPriority.Urgent, inPeriod, now.AddHours(5), now.AddHours(7));
+        await InsertOverviewTicketAsync(requesterId, helpdesk, TicketStatus.InProgress, TicketPriority.Medium, inPeriod, now.AddHours(-1), now.AddHours(1), assigneeId);
+        await InsertOverviewTicketAsync(requesterId, helpdesk, TicketStatus.Open, TicketPriority.Low, inPeriod, now.AddHours(-10), now.AddHours(-2));
+        await InsertOverviewTicketAsync(requesterId, helpdesk, TicketStatus.Resolved, TicketPriority.Urgent, inPeriod, now.AddHours(-6), now.AddHours(-3), assigneeId, resolvedAtUtc: now.AddHours(-5));
+        await InsertOverviewTicketAsync(requesterId, helpdesk, TicketStatus.Closed, TicketPriority.Medium, inPeriod, now.AddHours(-12), now.AddHours(-10), resolvedAtUtc: now.AddHours(-1));
+        await InsertOverviewTicketAsync(requesterId, helpdesk, TicketStatus.Canceled, TicketPriority.High, inPeriod, now.AddHours(5), now.AddHours(7));
+        await InsertOverviewTicketAsync(requesterId, infra, TicketStatus.Open, TicketPriority.Urgent, inPeriod, now.AddHours(5), now.AddHours(7), assigneeId);
+        await InsertOverviewTicketAsync(requesterId, helpdesk, TicketStatus.Open, TicketPriority.Medium, outOfPeriod, now.AddHours(5), now.AddHours(7));
+        await InsertOverviewTicketAsync(requesterId, other, TicketStatus.Open, TicketPriority.Medium, inPeriod, now.AddHours(5), now.AddHours(7));
+
+        await AuthenticateAsAdminAsync();
+
+        return new OverviewScenario(helpdesk, infra);
+    }
+
+    private async Task InsertOverviewTicketAsync(
+        Guid requesterId,
+        Guid sectorId,
+        TicketStatus status,
+        TicketPriority priority,
+        DateTime createdAtUtc,
+        DateTime slaWarningAtUtc,
+        DateTime dueAtUtc,
+        Guid? assignedToUserId = null,
+        DateTime? resolvedAtUtc = null)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        context.Tickets.Add(new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Title = "Chamado do resumo",
+            Description = "Chamado gravado direto no banco para o resumo da operação",
+            Priority = priority,
+            Status = status,
+            CreatedByUserId = requesterId,
+            AssignedToUserId = assignedToUserId,
+            SectorId = sectorId,
+            CreatedAtUtc = createdAtUtc,
+            LastActivityAtUtc = createdAtUtc,
+            SlaWarningAtUtc = slaWarningAtUtc,
+            DueAtUtc = dueAtUtc,
+            ResolvedAtUtc = resolvedAtUtc,
+            SlaPlan = TicketSla.LegacyPlan(priority)
+        });
+        await context.SaveChangesAsync();
+    }
+
+    private async Task<int> CountTicketsAsync(string scope, string filter)
+    {
+        string query = string.Join('&', new[] { scope, filter, "pageSize=1" }.Where(part => part.Length > 0));
+        PagedTicketsDto? page = await HttpClient.GetFromJsonAsync<PagedTicketsDto>($"tickets?{query}");
+
+        return page!.TotalCount;
+    }
+
+    private sealed record OverviewScenario(Guid Helpdesk, Guid Infra);
+
+    private sealed record OverviewDto(
+        DateTime ServerNowUtc,
+        OverviewVolumeDto Volume,
+        OverviewSlaDto Sla,
+        OverviewAttentionDto Attention);
+
+    private sealed record OverviewVolumeDto(
+        int TotalCount,
+        int OpenCount,
+        int InProgressCount,
+        int ResolvedCount,
+        int ClosedCount,
+        int CanceledCount,
+        int BacklogCount);
+
+    private sealed record OverviewSlaDto(
+        int OnTimeCount,
+        int AtRiskCount,
+        int BreachedCount,
+        int MetCount,
+        int MissedCount,
+        int NotApplicableCount);
+
+    private sealed record OverviewAttentionDto(int BreachedCount, int CriticalCount, int UnassignedCount);
+
     private sealed record PagedTicketsDto(List<TicketSummaryDto> Items, int TotalCount);
 
     private sealed record TicketSummaryDto(

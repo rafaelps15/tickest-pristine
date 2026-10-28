@@ -81,19 +81,19 @@ Dados comuns: um atendente com `tickets:manage`; chamados em todos os status, pr
 |---|---|---|---|---|
 | T-1 | Tipo único dos filtros de recorte (listagem e estatísticas) | AC-3 | `add-feature` | [x] |
 | T-2 | Consulta, resposta e rota do agregado | AC-1, AC-3 a AC-6 | `add-feature` | [x] |
-| T-3 | Testes de paridade com `GET tickets` e demais casos | AC-1 a AC-6 | `add-tests` | [ ] |
+| T-3 | Testes de paridade com `GET tickets` e demais casos | AC-1 a AC-6 | `add-tests` | [x] |
 | T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-7 | — | [ ] |
 | T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-7 | `ca-review` | [ ] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | | | |
-| AC-2 | | | |
-| AC-3 | | | |
-| AC-4 | | | |
-| AC-5 | | | |
-| AC-6 | | | |
+| AC-1 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_ReturnThreeBlocksWithServerTime_WhenNoFilterIsGiven` | Sem filtros, responde 200 com `volume`, `sla` e `attention`; `serverNowUtc` fica no instante da chamada; o backlog é a soma de aberto e em andamento, e "atrasados" da atenção é o mesmo número do SLA atrasado. | Aprovado |
+| AC-2 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_MatchTotalCountOfListing_ForEveryCounter` (sem recorte; com os dois setores; com setores e prioridade Urgente) | Contra o PostgreSQL, cada um dos 16 contadores é igual ao `totalCount` de `GET tickets` com o mesmo recorte e o filtro equivalente (`status`, `slaStatus`, `priority=Urgent` com os ativos, `unassignedOnly=true` com os ativos). Uma mutação que trocava o alerta pelo prazo na regra "no prazo" do SQL foi detectada por 3 casos. | Aprovado |
+| AC-3 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_CountOnlyTicketsOfTheSectorsOpenedInPeriod_WhenSectorsAndPeriodAreGiven` | Com dois `sectorId` e `createdFrom=2026-09-01&createdTo=2026-09-15`, conta só os 7 chamados dos dois setores abertos no período (fica fora o de 25/09 e o do terceiro setor), com cada contador conferido: 3 abertos, 1 em andamento, 1 resolvido, 1 fechado, 1 cancelado, backlog 4, SLA 2/1/1/1/1/1, críticos 2 e sem responsável 2. | Aprovado |
+| AC-4 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_CountOnlyActiveUrgentAndActiveUnassigned_WhenTicketsAreInactive` | No Helpdesk, com um Urgente ativo, um Urgente resolvido e ativos e inativos (fechado e cancelado) sem responsável: críticos = 1 e sem responsável = 2, só os ativos. | Aprovado |
+| AC-5 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_IgnoreStatus_WhenStatusIsGiven` | Com e sem `status=1`, os blocos `volume`, `sla` e `attention` são iguais (só a hora do servidor muda entre as chamadas). | Aprovado |
+| AC-6 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_ReturnForbidden_WhenCallerLacksManagePermission`, `GetOverview_Should_ReturnUnauthorized_WhenNoTokenProvided`, `GetOverview_Should_ReturnBadRequest_WhenPeriodIsInverted`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketOverviewQueryHandlerTests.cs` › `Handle_Should_ReturnInvalidPeriod_WhenStartIsAfterEnd` | Colaborador sem `tickets:manage` recebe 403; sem token, 401. Também coberto o 400 do contrato: período invertido devolve `Tickets.InvalidPeriod`, e o handler responde sem abrir conexão com o banco. | Aprovado |
 | AC-7 | | | |
 
 ## 9. Evidências de verificação
