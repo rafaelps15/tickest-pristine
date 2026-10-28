@@ -80,7 +80,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | T-2 | Consulta, cálculo e rota dos tempos médios | AC-3 a AC-7 | `add-feature` | [x] |
 | T-3 | Testes unitários e de integração | AC-1 a AC-7 | `add-tests` | [x] |
 | T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-8 | — | [x] |
-| T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-8 | `ca-review` | [ ] |
+| T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-8 | `ca-review` | [x] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
@@ -92,7 +92,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | AC-5 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetTimes_Should_ReturnOnlySampleSize_WhenSampleIsBelowMinimum`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketTimesQueryHandlerTests.cs` › `Handle_Should_ReturnOnlySampleSize_WhenSampleIsBelowMinimum`; `tests/TickestPristine.Application.UnitTests/Tickets/TicketTimeStatisticsTests.cs` › `From_Should_ReturnOnlySampleSize_WhenSampleIsBelowMinimum` | Com 4 resolvidos, a resolução vem com amostra 4 e média e mediana nulas. Também coberto: cronômetro parado pelo cancelamento fica fora (`Handle_Should_LeaveStoppedTimersOut_WhenTicketWasCanceled`). | Aprovado |
 | AC-6 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetTimes_Should_CountOnlyCompletionsOfTheMonthAndSector_WhenPeriodAndSectorAreGiven`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketTimesQueryHandlerTests.cs` › `Handle_Should_FilterByCompletionDateAndSector_WhenPeriodAndSectorAreGiven` | Com `resolvedFrom=2026-09-01&resolvedTo=2026-09-30` e um setor, entram só as duas conclusões de setembro daquele setor; ficam fora a de outubro e a do outro setor. | Aprovado |
 | AC-7 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetTimes_Should_ReturnForbidden_WhenCallerLacksManagePermission`, `GetTimes_Should_ReturnUnauthorized_WhenNoTokenProvided`, `GetTimes_Should_ReturnBadRequest_WhenPeriodIsInverted`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketTimesQueryHandlerTests.cs` › `Handle_Should_ReturnInvalidPeriod_WhenStartIsAfterEnd` | Colaborador sem `tickets:manage` recebe 403; sem token, 401. Também coberto o 400 do contrato: período invertido devolve `Tickets.InvalidPeriod`. | Aprovado |
-| AC-8 | | | |
+| AC-8 | `dotnet build TickestPristine.slnx --no-incremental` e `dotnet test TickestPristine.slnx` | 0 avisos e 0 erros; 50 testes de arquitetura, 743 unitários e 450 de integração aprovados, nenhuma falha. A primeira execução da suíte apontou `Timers_Should_BeAudited_WithoutChangingStartAfterwards` (spec 006): a auditoria do cronômetro passou a listar também `CompletionCause`, consequência do REQ-1; a expectativa foi atualizada para `CompletedOnUtc,CompletionCause,NextActionOnUtc`. | Aprovado |
 
 ## 9. Evidências de verificação
 - **Build:**

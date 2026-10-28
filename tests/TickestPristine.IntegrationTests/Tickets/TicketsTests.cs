@@ -3953,8 +3953,10 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         List<AuditLogEntry> modified = [.. entries.Where(a => a.Action == "Modified")];
         modified.Count.ShouldBe(2);
-        // A conclusão dentro do prazo também tira o cronômetro da fila do monitoramento (spec 006), no mesmo registro.
-        modified.ShouldAllBe(a => a.AffectedColumns == $"{nameof(TicketSlaTimer.CompletedOnUtc)},{nameof(TicketSlaTimer.NextActionOnUtc)}");
+        // A conclusão dentro do prazo também tira o cronômetro da fila do monitoramento (spec 006) e grava a causa da
+        // conclusão (spec 027), no mesmo registro.
+        modified.ShouldAllBe(a => a.AffectedColumns ==
+            $"{nameof(TicketSlaTimer.CompletedOnUtc)},{nameof(TicketSlaTimer.CompletionCause)},{nameof(TicketSlaTimer.NextActionOnUtc)}");
     }
 
     [Fact]
