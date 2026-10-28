@@ -127,7 +127,7 @@ Dados comuns: chamados de Maria "Impressora não imprime" (descrição "Sai pape
 | T-2 | Busca no título ou na descrição no handler, combinada com o filtro por grupo | AC-1 a AC-5 | `add-feature` | [x] |
 | T-3 | Testes unitários e de integração | AC-1 a AC-6 | `add-tests` | [x] |
 | T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-7 | — | [x] |
-| T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-7 | `ca-review` | [ ] |
+| T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-7 | `ca-review` | [x] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
@@ -138,7 +138,7 @@ Dados comuns: chamados de Maria "Impressora não imprime" (descrição "Sai pape
 | AC-4 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOwn_Should_PageDescriptionSearchByLastActivity_WhenStatusAndSearchAreGiven` | `search=e&status=Active&pageSize=1`: `totalCount` 2 nas duas páginas; a página 1 traz a Impressora (atividade mais recente) e a página 2, o Monitor. | Aprovado |
 | AC-5 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOwn_Should_ReturnAllOwnTicketsByLastActivity_WhenNoFilterIsGiven`; os demais `GetOwn_*` e `Handle_*` da 015, sem mudança | Sem parâmetros, os três chamados de Maria vêm pela última atividade (Impressora, Acesso, Monitor), `totalCount` 3; os testes da 015 passam sem alteração. | Aprovado |
 | AC-6 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Migration_Should_TurnDescriptionIntoCitextKeepingExistingText` | Desce até a migration anterior (coluna `varchar`), grava um chamado com "Outlook pede a SENHA toda hora", aplica `Ticket_Description_Citext` (coluna `citext`) e volta à última migration; a busca `senha` acha o chamado e a descrição volta igual. O `citext` não guarda limite de tamanho no banco, como no título: os 500 caracteres seguem garantidos pelo validator e pelo modelo do EF. | Aprovado |
-| AC-7 | | | |
+| AC-7 | `dotnet build TickestPristine.slnx --no-incremental` e `dotnet test TickestPristine.slnx` | 0 avisos e 0 erros; 50 testes de arquitetura, 696 unitários e 393 de integração aprovados, nenhuma falha. | Aprovado |
 
 ## 9. Evidências de verificação
 - **Build:**
