@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-026-tickets-operation-overview                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: "#45"                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 026 — Estatísticas da operação agregadas numa chamada, com os filtros da listagem
@@ -102,7 +102,7 @@ Dados comuns: um atendente com `tickets:manage`; chamados em todos os status, pr
 - **Revisão:** `ca-review` sobre as mudanças da spec: nenhum achado bloqueante, nenhuma violação de convenção. Observação para decisão futura, sem defeito: o `GetTicketSlaSummaryQueryHandler` conta num só comando em EF reaproveitando `TicketSlaFilters`; o mesmo caminho eliminaria a regra de SLA escrita duas vezes (R-1), mas a DEC-2 (SQL) foi mantida como aprovada.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 4.3.1 (rota `GET tickets/stats/overview`) e 5.7 (gatilho e descrição das estatísticas da operação, com o `TicketScopeFilter` e a paridade), no commit `b0b798f` (T-4); conferidas nesta verificação, sem outra seção afetada.
 - **CI:** roda no PR para a `main`.
-- **Entrega:** pendente (PR ainda não aberto).
+- **Entrega:** PR [#45](https://github.com/rafaelps15/tickest-pristine/pull/45) aberto para a `main` em 2026-10-28; a spec fica `Entregue` quando ele for mergeado.
 
 ## 10. Histórico
 | Data | Status | Observação |
