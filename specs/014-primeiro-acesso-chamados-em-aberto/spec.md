@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-27
 branch: feat/SPEC-014-first-access-open-tickets
-pr:
+pr: "#34"                     
 ---
 
 # 014 — Troca de senha no primeiro acesso, chamados em aberto por atendente e devolução à fila na desativação
@@ -142,7 +142,7 @@ pr:
 - **Revisão:** `ca-review` sobre os 15 arquivos alterados da spec: sem bloqueantes, sem violações de convenção e sem lacunas de teste (pronto para commit). Antes, duas rodadas de revisão independente; os achados da primeira foram corrigidos (`DECISIONS.md`, itens 15 a 18 e 23 a 24) e a segunda não encontrou nada. Fora do escopo, não revisadas: as pastas não versionadas das specs 017 a 020, 022 e 023 e `specs/_fontes/`.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md`: 2.6 (RN-31, ação 14; RN-32 nova), 2.7 (C-05, C-18, C-20), 4.4 (enums de negócio), 5.8 (desativação) e 7.2 (GAP-18 atualizada; GAP-19 e GAP-20 novas).
 - **CI:**
-- **Entrega:** avisar o front da ação 14 no histórico (`UnassignedOnUserDeactivation`), do campo `openTicketCount` em `GET users` e do novo efeito da desativação (texto do aviso). O item 1 não se aplica (DEC-1 (a)).
+- **Entrega:** PR #34 (https://github.com/rafaelps15/tickest-pristine/pull/34); a spec fica `Entregue` quando o responsável mergear o PR na `main`. Avisar o front da ação 14 no histórico (`UnassignedOnUserDeactivation`), do campo `openTicketCount` em `GET users` e do novo efeito da desativação (texto do aviso). O item 1 não se aplica (DEC-1 (a)).
 
 ## 10. Histórico
 | Data | Status | Observação |
