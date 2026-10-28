@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-27
 branch: feat/SPEC-018-users-role-filter-sorting                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: "#40"                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 018 — Filtro por função (role) e ordenação por nome ou cadastro em GET users
@@ -168,7 +168,7 @@ Dados comuns: Ana (Atendente, cadastrada em 01/10), Bruno (Atendente e Administr
 - **Revisão:** `ca-review` sobre as mudanças da spec: nenhum achado bloqueante, nenhuma violação de convenção. Na verificação, a cobertura do AC-3 foi reprovada de início (datas dos dados comuns na mesma ordem dos nomes) e corrigida nos testes (`dabb22c`), sem mudança de código de produção.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 4.3.1 (linha de `GET users`, parâmetros novos) e 2.7 C-05 (nota da listagem), no commit `dcd3e59` (T-4); conferidas nesta verificação, sem outra seção afetada.
 - **CI:** roda no PR para a `main`.
-- **Entrega:** pendente (PR ainda não aberto).
+- **Entrega:** PR [#40](https://github.com/rafaelps15/tickest-pristine/pull/40) aberto para a `main` em 2026-10-28; a spec fica `Entregue` quando ele for mergeado.
 
 ## 10. Histórico
 | Data | Status | Observação |
