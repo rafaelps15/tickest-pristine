@@ -92,18 +92,18 @@ Dados: o administrador do seed (ativo, com senha), Ana (ativa, com senha), Bruno
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
 | T-1 | Slice `Users/GetStatusCounts` (query, resposta, handler) e endpoint | AC-1 a AC-5 | `add-feature` | [x] |
-| T-2 | Testes unitários e de integração | AC-1 a AC-5 | `add-tests` | [ ] |
+| T-2 | Testes unitários e de integração | AC-1 a AC-5 | `add-tests` | [x] |
 | T-3 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-6 | — | [ ] |
 | T-4 | Revisão de convenções, build sem avisos e suíte inteira | AC-6 | `ca-review` | [ ] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | | | |
-| AC-2 | | | |
-| AC-3 | | | |
-| AC-4 | | | |
-| AC-5 | | | |
+| AC-1 | `tests/TickestPristine.Application.UnitTests/Users/GetUserStatusCountsQueryHandlerTests.cs` › `Handle_Should_CountActivePendingAndInactiveSeparately_WhenUsersHaveEverySituation`, `Handle_Should_ReturnZeros_WhenThereAreNoUsers`; `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetStatusCounts_Should_CountActivePendingAndInactiveSeparately` | O unitário monta exatamente os dados do AC (administrador e Ana com senha, Bruno pendente, Carla inativa com senha, Davi inativo sem senha) e confere `totalCount` 5, `activeCount` 2, `pendingActivationCount` 1 e `inactiveCount` 2. A integração, contra o PostgreSQL e pelas rotas reais (cadastro, ativação e desativação), confere 200 e a variação a partir da contagem anterior (+4, +1, +1, +2) e que as três somam o total: o banco é compartilhado pelos testes, então o total absoluto não é fixo. Uma mutação que contava os pendentes como ativos foi detectada por 1 caso unitário e 2 de integração. | Aprovado |
+| AC-2 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetStatusCounts_Should_MovePendingUserToActive_WhenAccountIsActivated` | Bruno cadastrado sem senha ativa a conta por `POST users/activation` com o token do e-mail: `pendingActivationCount` cai 1, `activeCount` sobe 1, `inactiveCount` e `totalCount` iguais. | Aprovado |
+| AC-3 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetStatusCounts_Should_MoveActiveUserToInactive_WhenUserIsDeactivated` | Ana ativa com senha é desativada por `PUT users/{id}/deactivate`: `activeCount` cai 1, `inactiveCount` sobe 1, `pendingActivationCount` e `totalCount` iguais. | Aprovado |
+| AC-4 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetStatusCounts_Should_ReturnForbidden_WhenCallerLacksUsersReadPermission`, `GetStatusCounts_Should_ReturnUnauthorized_WhenNotAuthenticated` | Colaborador sem `users:read` recebe 403; sem token, 401. | Aprovado |
+| AC-5 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetStatusCounts_Should_CountInSingleSqlCommand` | Com o `EfCommandCounter` ativo durante a requisição, um único comando lê `user_credentials`, e ele tem `GROUP BY`: o EF traduziu o `Any` dentro da chave do agrupamento (R-1 não se concretizou). | Aprovado |
 | AC-6 | | | |
 
 ## 9. Evidências de verificação

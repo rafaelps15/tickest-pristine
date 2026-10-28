@@ -1342,6 +1342,126 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
+    public async Task GetStatusCounts_Should_CountActivePendingAndInactiveSeparately()
+    {
+        // Arrange: o banco é compartilhado pelos testes (que rodam em série), então o teste confere a variação a partir
+        // da contagem anterior
+        await AuthenticateAsAdminAsync();
+        UserStatusCountsDto before = await GetUserStatusCountsAsync();
+
+        await RegisterUserAsync(UniqueEmail());                     // Ana: ativa, com senha
+        await RegisterPendingUserAsync(UniqueEmail());              // Bruno: pendente
+        Guid carla = await RegisterUserAsync(UniqueEmail());        // Carla: desativada depois de ativar a conta
+        Guid davi = await RegisterPendingUserAsync(UniqueEmail());  // Davi: desativado antes de ativar
+        (await HttpClient.PutAsync($"users/{carla}/deactivate", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await HttpClient.PutAsync($"users/{davi}/deactivate", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("users/stats/status");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        UserStatusCountsDto after = (await response.Content.ReadFromJsonAsync<UserStatusCountsDto>())!;
+        (after.TotalCount - before.TotalCount).ShouldBe(4);
+        (after.ActiveCount - before.ActiveCount).ShouldBe(1);
+        (after.PendingActivationCount - before.PendingActivationCount).ShouldBe(1);
+        (after.InactiveCount - before.InactiveCount).ShouldBe(2);
+        (after.ActiveCount + after.PendingActivationCount + after.InactiveCount).ShouldBe(after.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetStatusCounts_Should_MovePendingUserToActive_WhenAccountIsActivated()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string email = UniqueEmail();
+        await RegisterPendingUserAsync(email);
+        UserStatusCountsDto before = await GetUserStatusCountsAsync();
+
+        // Act
+        (await ActivateAccountAsync(EmailSender.LatestTokenFor(email), "Password123!")).StatusCode
+            .ShouldBe(HttpStatusCode.NoContent);
+        UserStatusCountsDto after = await GetUserStatusCountsAsync();
+
+        // Assert
+        (after.PendingActivationCount - before.PendingActivationCount).ShouldBe(-1);
+        (after.ActiveCount - before.ActiveCount).ShouldBe(1);
+        after.InactiveCount.ShouldBe(before.InactiveCount);
+        after.TotalCount.ShouldBe(before.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetStatusCounts_Should_MoveActiveUserToInactive_WhenUserIsDeactivated()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid ana = await RegisterUserAsync(UniqueEmail());
+        UserStatusCountsDto before = await GetUserStatusCountsAsync();
+
+        // Act
+        (await HttpClient.PutAsync($"users/{ana}/deactivate", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        UserStatusCountsDto after = await GetUserStatusCountsAsync();
+
+        // Assert
+        (after.ActiveCount - before.ActiveCount).ShouldBe(-1);
+        (after.InactiveCount - before.InactiveCount).ShouldBe(1);
+        after.PendingActivationCount.ShouldBe(before.PendingActivationCount);
+        after.TotalCount.ShouldBe(before.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetStatusCounts_Should_ReturnForbidden_WhenCallerLacksUsersReadPermission()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("users/stats/status");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetStatusCounts_Should_ReturnUnauthorized_WhenNotAuthenticated()
+    {
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("users/stats/status");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetStatusCounts_Should_CountInSingleSqlCommand()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        await RegisterPendingUserAsync(UniqueEmail());
+
+        // Act: conta os comandos que leem credenciais (a contagem é o único que precisa delas)
+        HttpResponseMessage response;
+        int credentialQueries;
+        int groupedCountQueries;
+
+        using (var credentialCounter = new EfCommandCounter(sql => sql.Contains("user_credentials", StringComparison.Ordinal)))
+        using (var groupedCounter = new EfCommandCounter(sql =>
+            sql.Contains("user_credentials", StringComparison.Ordinal) &&
+            sql.Contains("GROUP BY", StringComparison.Ordinal)))
+        {
+            response = await HttpClient.GetAsync("users/stats/status");
+            credentialQueries = credentialCounter.Count;
+            groupedCountQueries = groupedCounter.Count;
+        }
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        credentialQueries.ShouldBe(1);
+        groupedCountQueries.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task Activate_Should_RestoreLoginAndPermissions_WhenUserWasDeactivated()
     {
         // Arrange
@@ -1513,6 +1633,22 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         return roleName;
     }
+
+    /// <summary>
+    /// Cadastra pelo administrador sem ativar a conta: o usuário fica pendente, com o convite no e-mail capturado.
+    /// </summary>
+    private async Task<Guid> RegisterPendingUserAsync(string email)
+    {
+        HttpResponseMessage response = await PostRegisterAsAdminAsync(new { email, firstName = "Test", lastName = "User" });
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<Guid>();
+    }
+
+    private async Task<UserStatusCountsDto> GetUserStatusCountsAsync() =>
+        (await HttpClient.GetFromJsonAsync<UserStatusCountsDto>("users/stats/status"))!;
+
+    private sealed record UserStatusCountsDto(int TotalCount, int ActiveCount, int InactiveCount, int PendingActivationCount);
 
     private sealed record PagedDto<T>(List<T> Items, int Page, int PageSize, int TotalCount, int TotalPages, bool HasPreviousPage, bool HasNextPage);
 
