@@ -1,6 +1,7 @@
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Pagination;
+using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.SharedKernel;
 
@@ -11,9 +12,22 @@ internal sealed class GetTicketsQueryHandler(IApplicationDbContext context, IDat
 {
     public async Task<Result<PagedResponse<TicketSummaryResponse>>> Handle(GetTicketsQuery query, CancellationToken cancellationToken)
     {
+        if (LocalDatePeriod.IsInverted(query.CreatedFrom, query.CreatedTo) ||
+            LocalDatePeriod.IsInverted(query.ResolvedFrom, query.ResolvedTo))
+        {
+            return Result.Failure<PagedResponse<TicketSummaryResponse>>(TicketErrors.InvalidPeriod);
+        }
+
         DateTime nowUtc = dateTimeProvider.UtcNow;
         string? search = string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim();
         bool allStatuses = query.Statuses.Count == 0;
+        bool allSectors = query.SectorIds.Count == 0;
+        var created = LocalDatePeriod.FromLocalDates(query.CreatedFrom, query.CreatedTo);
+        var resolved = LocalDatePeriod.FromLocalDates(query.ResolvedFrom, query.ResolvedTo);
+        DateTime? createdFromUtc = created.FromUtc;
+        DateTime? createdUntilUtc = created.UntilUtc;
+        DateTime? resolvedFromUtc = resolved.FromUtc;
+        DateTime? resolvedUntilUtc = resolved.UntilUtc;
         bool unassignedOnly = query.UnassignedOnly;
         Guid? assignedToUserId = unassignedOnly ? null : query.AssignedToUserId;
 
@@ -21,11 +35,16 @@ internal sealed class GetTicketsQueryHandler(IApplicationDbContext context, IDat
             .Where(t =>
                 (allStatuses || query.Statuses.Contains(t.Status)) &&
                 (query.Priority == null || t.Priority == query.Priority) &&
-                (query.SectorId == null || t.SectorId == query.SectorId) &&
+                (allSectors || query.SectorIds.Contains(t.SectorId)) &&
                 (query.RequesterId == null || t.CreatedByUserId == query.RequesterId) &&
                 (!unassignedOnly || t.AssignedToUserId == null) &&
                 (assignedToUserId == null || t.AssignedToUserId == assignedToUserId) &&
-                (search == null || t.Title.Contains(search)))
+                (search == null || t.Title.Contains(search)) &&
+                (createdFromUtc == null || t.CreatedAtUtc >= createdFromUtc) &&
+                (createdUntilUtc == null || t.CreatedAtUtc < createdUntilUtc) &&
+                // Sem resolução, as comparações dão falso: o chamado nunca resolvido fica fora do período de resolução.
+                (resolvedFromUtc == null || t.ResolvedAtUtc >= resolvedFromUtc) &&
+                (resolvedUntilUtc == null || t.ResolvedAtUtc < resolvedUntilUtc))
             .WhereSlaStatus(query.SlaStatus, nowUtc);
 
         // O solicitante é obrigatório (chave estrangeira), então o join não descarta chamados; nome e e-mail saem da
