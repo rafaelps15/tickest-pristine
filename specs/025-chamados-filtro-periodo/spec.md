@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-025-tickets-period-filter                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: "#43"                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 025 — Filtro de período (abertura e resolução) e vários setores na listagem de chamados
@@ -106,7 +106,7 @@ Dados comuns: um atendente com `tickets:manage`; chamados abertos em 31/10 às 2
 - **Revisão:** `ca-review` sobre as mudanças da spec: nenhum achado bloqueante, nenhuma violação de convenção. A DEC-6 (período invertido recusado no handler, e não num validator de query, que o projeto não executa) segue o precedente `UserErrors.InvalidSearchTerm`.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 4.3.1 (parâmetros de `GET tickets`), a nota de fuso das datas de filtro (com o R-1 sobre o `GET users`) e 2.7 C-13, no commit `a492881` (T-4); conferidas nesta verificação, sem outra seção afetada.
 - **CI:** roda no PR para a `main`.
-- **Entrega:** pendente (PR ainda não aberto). A branch parte da `main` sem a spec 019; quem mergear a segunda pode ter conflito em linhas próximas de `TicketsTests.cs`.
+- **Entrega:** PR [#43](https://github.com/rafaelps15/tickest-pristine/pull/43), mergeado na `main` em 2026-10-28. O número foi registrado depois do merge, numa branch de documentação, porque o campo ficou vazio no PR.
 
 ## 10. Histórico
 | Data | Status | Observação |
