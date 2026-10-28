@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-27
 branch: feat/SPEC-019-own-tickets-description-search                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: "#41"                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 019 — Busca também na descrição em "Meus chamados"
@@ -146,7 +146,7 @@ Dados comuns: chamados de Maria "Impressora não imprime" (descrição "Sai pape
 - **Revisão:** `ca-review` sobre as mudanças da spec: nenhum achado bloqueante, nenhuma violação de convenção. Conferido também que nenhuma consulta ao banco compara a descrição por igualdade: a edição detecta a mudança em memória, com `StringComparison.Ordinal` (`UpdateTicketCommandHandler.cs:33`), então o `citext` não esconde uma alteração só de maiúsculas.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 2.7 C-13 (busca na descrição em "Meus chamados"), 4.3.1 (parâmetro `search` de `GET tickets/mine`) e o modelo de dados de `Ticket` (descrição em `citext`), no commit `b06f952` (T-4); conferidas nesta verificação, sem outra seção afetada.
 - **CI:** roda no PR para a `main`.
-- **Entrega:** pendente (PR ainda não aberto). Em produção, a migration reescreve a tabela `tickets` (R-2): aplicar fora do horário de pico.
+- **Entrega:** PR [#41](https://github.com/rafaelps15/tickest-pristine/pull/41) aberto para a `main` em 2026-10-28; a spec fica `Entregue` quando ele for mergeado. Em produção, a migration reescreve a tabela `tickets` (R-2): aplicar fora do horário de pico.
 
 ## 10. Histórico
 | Data | Status | Observação |
