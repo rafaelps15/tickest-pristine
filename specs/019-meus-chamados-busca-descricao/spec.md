@@ -125,19 +125,19 @@ Dados comuns: chamados de Maria "Impressora não imprime" (descrição "Sai pape
 |---|---|---|---|---|
 | T-1 | `Description` em `citext`: configuração e migration | AC-6 | `add-entity` | [x] |
 | T-2 | Busca no título ou na descrição no handler, combinada com o filtro por grupo | AC-1 a AC-5 | `add-feature` | [x] |
-| T-3 | Testes unitários e de integração | AC-1 a AC-6 | `add-tests` | [ ] |
+| T-3 | Testes unitários e de integração | AC-1 a AC-6 | `add-tests` | [x] |
 | T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-7 | — | [ ] |
 | T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-7 | `ca-review` | [ ] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | | | |
-| AC-2 | | | |
-| AC-3 | | | |
-| AC-4 | | | |
-| AC-5 | | | |
-| AC-6 | | | |
+| AC-1 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOwn_Should_SearchTitleOrDescriptionIgnoringCase_WhenSearchIsGiven`; `tests/TickestPristine.Application.UnitTests/Tickets/GetOwnTicketsQueryHandlerTests.cs` › `Handle_Should_SearchTitleOrDescription_WhenSearchIsGiven` | Contra o PostgreSQL, com os dados comuns: `senha` acha "Acesso ao e-mail" pela descrição "Outlook pede a SENHA toda hora" (só o `citext` faz isso), `PAPEL` acha "Impressora" pela descrição, `impress` acha "Impressora" pelo título e `%20%20` traz os três; a descrição volta com a grafia original. O unitário confere título ou descrição sem depender de maiúsculas. Uma mutação que tirava a descrição da busca foi detectada por 3 casos unitários e 5 de integração. | Aprovado |
+| AC-2 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOwn_Should_NotReturnOtherUsersTickets_WhenOnlyTheirDescriptionMatches`; `tests/TickestPristine.Application.UnitTests/Tickets/GetOwnTicketsQueryHandlerTests.cs` › `Handle_Should_NotReturnOtherUsersTickets_WhenDescriptionMatchesSearch` | O chamado de Paulo, com "senha bloqueada" na descrição, não aparece na busca `senha` de Maria; `totalCount` = 1. | Aprovado |
+| AC-3 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOwn_Should_CombineDescriptionSearchWithStatusGroup_WhenBothAreGiven`; `tests/TickestPristine.Application.UnitTests/Tickets/GetOwnTicketsQueryHandlerTests.cs` › `Handle_Should_CombineDescriptionSearchWithStatusGroup_WhenBothAreGiven` | `status=Active&search=e` traz Impressora e Monitor (o Monitor só tem "e" na descrição), `status=Finished&search=senha` traz "Acesso ao e-mail" e `status=Active&search=senha` traz lista vazia, com `totalCount` 0. | Aprovado |
+| AC-4 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOwn_Should_PageDescriptionSearchByLastActivity_WhenStatusAndSearchAreGiven` | `search=e&status=Active&pageSize=1`: `totalCount` 2 nas duas páginas; a página 1 traz a Impressora (atividade mais recente) e a página 2, o Monitor. | Aprovado |
+| AC-5 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOwn_Should_ReturnAllOwnTicketsByLastActivity_WhenNoFilterIsGiven`; os demais `GetOwn_*` e `Handle_*` da 015, sem mudança | Sem parâmetros, os três chamados de Maria vêm pela última atividade (Impressora, Acesso, Monitor), `totalCount` 3; os testes da 015 passam sem alteração. | Aprovado |
+| AC-6 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Migration_Should_TurnDescriptionIntoCitextKeepingExistingText` | Desce até a migration anterior (coluna `varchar`), grava um chamado com "Outlook pede a SENHA toda hora", aplica `Ticket_Description_Citext` (coluna `citext`) e volta à última migration; a busca `senha` acha o chamado e a descrição volta igual. O `citext` não guarda limite de tamanho no banco, como no título: os 500 caracteres seguem garantidos pelo validator e pelo modelo do EF. | Aprovado |
 | AC-7 | | | |
 
 ## 9. Evidências de verificação
