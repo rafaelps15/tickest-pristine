@@ -1401,6 +1401,34 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Theory]
+    [InlineData("sortBy=Name", new[] { "Ana", "Bruno", "Carla" })]
+    [InlineData("sortBy=CreatedAt", new[] { "Carla", "Ana", "Bruno" })]
+    [InlineData("sortBy=CreatedAt&sortDirection=Ascending", new[] { "Bruno", "Ana", "Carla" })]
+    public async Task GetAll_Should_SortByCreatedAtInsteadOfName_WhenDatesDisagreeWithNames(
+        string sortQuery,
+        string[] expectedFirstNames)
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        // Nos dados comuns, as datas seguem a ordem dos nomes; aqui elas divergem, para a ordem por cadastro não
+        // coincidir com a ordem por nome.
+        string token = $"Spec018{Guid.NewGuid():N}";
+        Guid ana = await InsertUserAsync("Ana", token, UniqueEmail());
+        Guid bruno = await InsertUserAsync("Bruno", token, UniqueEmail());
+        Guid carla = await InsertUserAsync("Carla", token, UniqueEmail());
+        await SetCreatedAtAsync(new DateTime(2026, 10, 10, 12, 0, 0, DateTimeKind.Utc), ana);
+        await SetCreatedAtAsync(new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc), bruno);
+        await SetCreatedAtAsync(new DateTime(2026, 10, 15, 12, 0, 0, DateTimeKind.Utc), carla);
+
+        // Act
+        PagedDto<UserSummaryDto>? users = await HttpClient.GetFromJsonAsync<PagedDto<UserSummaryDto>>(
+            $"users?search={token}&{sortQuery}");
+
+        // Assert
+        users!.Items.Select(u => u.FirstName).ShouldBe(expectedFirstNames);
+    }
+
+    [Theory]
     [InlineData("sortBy=Email")]
     [InlineData("sortDirection=Up")]
     public async Task GetAll_Should_ReturnBadRequest_WhenSortValueIsInvalid(string sortQuery)

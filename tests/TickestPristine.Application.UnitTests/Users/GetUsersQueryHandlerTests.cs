@@ -405,8 +405,9 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
     [InlineData(UserSortField.Name, null, new[] { "Ana", "Bruno", "Carla", "Davi" })]
     [InlineData(UserSortField.Name, SortDirection.Descending, new[] { "Davi", "Carla", "Bruno", "Ana" })]
     [InlineData(null, SortDirection.Descending, new[] { "Davi", "Carla", "Bruno", "Ana" })]
-    [InlineData(UserSortField.CreatedAt, null, new[] { "Davi", "Carla", "Bruno", "Ana" })]
-    [InlineData(UserSortField.CreatedAt, SortDirection.Ascending, new[] { "Ana", "Bruno", "Carla", "Davi" })]
+    [InlineData(UserSortField.CreatedAt, null, new[] { "Carla", "Ana", "Davi", "Bruno" })]
+    [InlineData(UserSortField.CreatedAt, SortDirection.Descending, new[] { "Carla", "Ana", "Davi", "Bruno" })]
+    [InlineData(UserSortField.CreatedAt, SortDirection.Ascending, new[] { "Bruno", "Davi", "Ana", "Carla" })]
     public async Task Handle_Should_SortUsers_WhenSortIsGiven(
         UserSortField? sortBy,
         SortDirection? sortDirection,
@@ -414,9 +415,9 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        // Cadastro na ordem inversa do nome, para a ordem por data não coincidir com a ordem por nome por acaso.
+        // Datas de cadastro fora da ordem dos nomes, para a ordem por data não coincidir com a ordem por nome por acaso.
         await SeedUsersWithRolesAsync(context);
-        foreach ((string firstName, int day) in new[] { ("Ana", 1), ("Bruno", 5), ("Carla", 10), ("Davi", 15) })
+        foreach ((string firstName, int day) in new[] { ("Ana", 10), ("Bruno", 1), ("Carla", 15), ("Davi", 5) })
         {
             context.Users.Single(u => u.FirstName == firstName).CreatedAtUtc = new DateTime(2026, 10, day, 12, 0, 0, DateTimeKind.Utc);
         }
