@@ -697,7 +697,7 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
+                        .HasColumnType("citext")
                         .HasColumnName("description");
 
                     b.Property<DateTime>("DueAtUtc")

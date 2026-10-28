@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Pagination;
+using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Tickets.GetAll;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.SharedKernel;
@@ -16,28 +17,32 @@ internal sealed class GetAll : IEndpoint
         app.MapGet("tickets", async (
             [FromQuery(Name = "status")] TicketStatus[]? statuses,
             TicketPriority? priority,
-            Guid? sectorId,
+            [FromQuery(Name = "sectorId")] Guid[]? sectorIds,
             Guid? requesterId,
             Guid? assignedToUserId,
             bool? unassignedOnly,
             TicketSlaStatus? slaStatus,
             string? search,
+            DateOnly? createdFrom,
+            DateOnly? createdTo,
+            DateOnly? resolvedFrom,
+            DateOnly? resolvedTo,
             TicketSortOrder? sort,
             [AsParameters] PageRequest paging,
             IQueryHandler<GetTicketsQuery, PagedResponse<TicketSummaryResponse>> handler,
             CancellationToken cancellationToken) =>
         {
-            var query = new GetTicketsQuery(
-                statuses ?? [],
+            var scope = new TicketScopeFilter(
+                sectorIds ?? [],
                 priority,
-                sectorId,
                 requesterId,
                 assignedToUserId,
                 unassignedOnly ?? false,
-                slaStatus,
-                search,
-                sort ?? TicketSortOrder.Newest,
-                paging);
+                createdFrom,
+                createdTo,
+                resolvedFrom,
+                resolvedTo);
+            var query = new GetTicketsQuery(statuses ?? [], scope, slaStatus, search, sort ?? TicketSortOrder.Newest, paging);
 
             Result<PagedResponse<TicketSummaryResponse>> result = await handler.Handle(query, cancellationToken);
 
