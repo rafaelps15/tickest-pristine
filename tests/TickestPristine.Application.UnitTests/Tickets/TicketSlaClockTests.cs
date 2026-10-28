@@ -104,7 +104,7 @@ public sealed class TicketSlaClockTests
     {
         // Arrange
         TicketSlaTimer resolution = UrgentResolution();
-        TicketSlaClock.Complete(resolution, SaoPaulo(12, 10));
+        TicketSlaClock.Complete(resolution, SaoPaulo(12, 10), SlaCompletionCause.Resolution);
 
         // Act
         SlaObjectiveState state = TicketSlaClock.GetState(resolution, SaoPaulo(13, 0));
@@ -118,7 +118,7 @@ public sealed class TicketSlaClockTests
     {
         // Arrange
         TicketSlaTimer resolution = UrgentResolution();
-        TicketSlaClock.Complete(resolution, SaoPaulo(12, 30));
+        TicketSlaClock.Complete(resolution, SaoPaulo(12, 30), SlaCompletionCause.Resolution);
 
         // Act
         SlaObjectiveState state = TicketSlaClock.GetState(resolution, SaoPaulo(13, 0));
@@ -148,10 +148,10 @@ public sealed class TicketSlaClockTests
     {
         // Arrange
         TicketSlaTimer resolution = UrgentResolution();
-        TicketSlaClock.Complete(resolution, SaoPaulo(10, 0));
+        TicketSlaClock.Complete(resolution, SaoPaulo(10, 0), SlaCompletionCause.Resolution);
 
         // Act
-        TicketSlaClock.Complete(resolution, SaoPaulo(11, 0));
+        TicketSlaClock.Complete(resolution, SaoPaulo(11, 0), SlaCompletionCause.Resolution);
         TicketSlaClock.Stop(resolution, SaoPaulo(11, 30));
 
         // Assert
@@ -222,7 +222,7 @@ public sealed class TicketSlaClockTests
         TicketSlaTimer resolution = UrgentResolution();
 
         // Act
-        TicketSlaClock.Complete(resolution, SaoPaulo(12, 10));
+        TicketSlaClock.Complete(resolution, SaoPaulo(12, 10), SlaCompletionCause.Resolution);
 
         // Assert
         resolution.NextActionOnUtc.ShouldBeNull();
@@ -235,7 +235,7 @@ public sealed class TicketSlaClockTests
         TicketSlaTimer resolution = UrgentResolution();
 
         // Act
-        TicketSlaClock.Complete(resolution, SaoPaulo(12, 30));
+        TicketSlaClock.Complete(resolution, SaoPaulo(12, 30), SlaCompletionCause.Resolution);
 
         // Assert
         resolution.NextActionOnUtc.ShouldBe(resolution.DueOnUtc);
@@ -278,7 +278,7 @@ public sealed class TicketSlaClockTests
     {
         // Arrange
         TicketSlaTimer firstResponse = UrgentFirstResponse();
-        TicketSlaClock.Complete(firstResponse, SaoPaulo(8, 45));
+        TicketSlaClock.Complete(firstResponse, SaoPaulo(8, 45), SlaCompletionCause.Message);
 
         // Act
         bool breached = TicketSlaClock.ProcessDue(firstResponse);

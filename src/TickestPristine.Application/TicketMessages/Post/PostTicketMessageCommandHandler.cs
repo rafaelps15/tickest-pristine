@@ -101,7 +101,7 @@ internal sealed class PostTicketMessageCommandHandler(
             return null;
         }
 
-        TicketSlaClock.Complete(firstResponse, nowUtc);
+        TicketSlaClock.Complete(firstResponse, nowUtc, SlaCompletionCause.Message);
 
         return firstResponse;
     }

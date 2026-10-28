@@ -169,12 +169,14 @@ internal sealed class UpdateTicketCommandHandler(
 
         if (TicketSlaClock.CurrentCycle(timers, SlaMetric.Resolution) is { } resolution)
         {
-            TicketSlaClock.Complete(resolution, nowUtc);
+            TicketSlaClock.Complete(resolution, nowUtc, SlaCompletionCause.Resolution);
         }
 
+        // Resolver sem ter respondido também conclui a primeira resposta, mas com a causa "resolução": a média de primeira
+        // resposta conta só as concluídas por mensagem (spec 027).
         if (TicketSlaClock.CurrentCycle(timers, SlaMetric.FirstResponse) is { } firstResponse)
         {
-            TicketSlaClock.Complete(firstResponse, nowUtc);
+            TicketSlaClock.Complete(firstResponse, nowUtc, SlaCompletionCause.Resolution);
         }
     }
 }

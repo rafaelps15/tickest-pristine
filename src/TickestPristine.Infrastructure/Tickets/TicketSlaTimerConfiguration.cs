@@ -13,6 +13,9 @@ internal sealed class TicketSlaTimerConfiguration : IEntityTypeConfiguration<Tic
         // Objetivo gravado pelo nome (ex.: "FirstResponse"), legível no banco; a API continua devolvendo o número.
         builder.Property(t => t.Metric).HasConversion<string>().HasMaxLength(20);
 
+        // Causa da conclusão também pelo nome (ex.: "Message"); nula enquanto o cronômetro não foi concluído (spec 027).
+        builder.Property(t => t.CompletionCause).HasConversion<string>().HasMaxLength(20);
+
         // A conclusão e a parada são os tokens de concorrência: de duas conclusões simultâneas, só a primeira salva.
         // Não é o xmin da linha para que outras colunas do cronômetro possam ser gravadas sem conflitar com elas.
         builder.Property(t => t.CompletedOnUtc).IsConcurrencyToken();

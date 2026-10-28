@@ -948,6 +948,11 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_on_utc");
 
+                    b.Property<string>("CompletionCause")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("completion_cause");
+
                     b.Property<int>("Cycle")
                         .HasColumnType("integer")
                         .HasColumnName("cycle");
