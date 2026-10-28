@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Application.Tickets;
@@ -3060,6 +3061,263 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
     private sealed record OverviewAttentionDto(int BreachedCount, int CriticalCount, int UnassignedCount);
 
+    [Fact]
+    public async Task CompleteFirstResponse_Should_RecordCause_ByMessageAndByResolution()
+    {
+        // Arrange
+        (Guid answered, Guid resolvedWithoutAnswer) = await CreateAnsweredAndResolvedTicketsAsync();
+
+        // Act
+        TicketSlaTimer answeredFirstResponse = GetTimers(answered).Single(t => t.Metric == SlaMetric.FirstResponse);
+        List<TicketSlaTimer> resolvedTimers = GetTimers(resolvedWithoutAnswer);
+
+        // Assert
+        answeredFirstResponse.CompletionCause.ShouldBe(SlaCompletionCause.Message);
+        resolvedTimers.Single(t => t.Metric == SlaMetric.FirstResponse).CompletionCause.ShouldBe(SlaCompletionCause.Resolution);
+        resolvedTimers.Single(t => t.Metric == SlaMetric.Resolution).CompletionCause.ShouldBe(SlaCompletionCause.Resolution);
+        GetTimers(answered).Single(t => t.Metric == SlaMetric.Resolution).CompletionCause.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Migration_Should_FillCompletionCauseOfCompletedTimers()
+    {
+        // Arrange: um chamado respondido por mensagem e outro resolvido sem resposta, antes da migration
+        (Guid answered, Guid resolvedWithoutAnswer) = await CreateAnsweredAndResolvedTicketsAsync();
+
+        await ExecuteInScopeAsync(async context =>
+        {
+            IMigrator migrator = context.GetService<IMigrator>();
+            var migrations = context.Database.GetMigrations().ToList();
+            int index = migrations.FindIndex(m => m.EndsWith(nameof(Add_Ticket_Sla_Timer_Completion_Cause), StringComparison.Ordinal));
+
+            try
+            {
+                // A volta apaga a coluna; a ida a recria e preenche pela regra da migration
+                await migrator.MigrateAsync(migrations[index - 1]);
+
+                // Act
+                await migrator.MigrateAsync(migrations[index]);
+            }
+            finally
+            {
+                // O banco é compartilhado pela coleção: volta à última migration, mesmo se o teste falhar no meio.
+                await migrator.MigrateAsync();
+            }
+        });
+
+        // Assert
+        GetTimers(answered).Single(t => t.Metric == SlaMetric.FirstResponse).CompletionCause.ShouldBe(SlaCompletionCause.Message);
+        GetTimers(answered).Single(t => t.Metric == SlaMetric.Resolution).CompletionCause.ShouldBeNull();
+        GetTimers(resolvedWithoutAnswer).ShouldAllBe(t => t.CompletionCause == SlaCompletionCause.Resolution);
+    }
+
+    [Fact]
+    public async Task GetTimes_Should_AverageOnlyFirstResponsesByMessage_WhenOneWasResolvedWithoutAnswer()
+    {
+        // Arrange: seis respondidos por mensagem em 30, 60, 60, 90, 120 e 600 minutos e um resolvido sem resposta
+        Guid sectorId = await InsertSectorAsync($"Times-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        foreach (int minutes in new[] { 30, 60, 60, 90, 120, 600 })
+        {
+            await InsertTimesTicketAsync(sectorId, TimesStartUtc, (SlaMetric.FirstResponse, 1, minutes, SlaCompletionCause.Message));
+        }
+
+        await InsertTimesTicketAsync(sectorId, TimesStartUtc, (SlaMetric.FirstResponse, 1, 5, SlaCompletionCause.Resolution));
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/stats/times?sectorId={sectorId}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        TimesDto times = (await response.Content.ReadFromJsonAsync<TimesDto>())!;
+        times.MinimumSampleSize.ShouldBe(5);
+        times.FirstResponseTimes.SampleSize.ShouldBe(6);
+        times.FirstResponseTimes.AverageMinutes.ShouldBe(160);
+        times.FirstResponseTimes.MedianMinutes.ShouldBe(75);
+    }
+
+    [Fact]
+    public async Task GetTimes_Should_UseOnlyFirstCycleForResolution_WhenTicketWasReopened()
+    {
+        // Arrange: cinco resolvidos em 60 minutos; um deles foi reaberto e resolvido de novo depois de 5000 minutos
+        Guid sectorId = await InsertSectorAsync($"Times-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        for (int i = 0; i < 4; i++)
+        {
+            await InsertTimesTicketAsync(sectorId, TimesStartUtc, (SlaMetric.Resolution, 1, 60, SlaCompletionCause.Resolution));
+        }
+
+        await InsertTimesTicketAsync(
+            sectorId,
+            TimesStartUtc,
+            (SlaMetric.Resolution, 1, 60, SlaCompletionCause.Resolution),
+            (SlaMetric.Resolution, 2, 5000, SlaCompletionCause.Resolution));
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        TimesDto times = (await HttpClient.GetFromJsonAsync<TimesDto>($"tickets/stats/times?sectorId={sectorId}"))!;
+
+        // Assert
+        times.ResolutionTimes.SampleSize.ShouldBe(5);
+        times.ResolutionTimes.AverageMinutes.ShouldBe(60);
+        times.ResolutionTimes.MedianMinutes.ShouldBe(60);
+    }
+
+    [Fact]
+    public async Task GetTimes_Should_ReturnOnlySampleSize_WhenSampleIsBelowMinimum()
+    {
+        // Arrange
+        Guid sectorId = await InsertSectorAsync($"Times-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        for (int i = 0; i < 4; i++)
+        {
+            await InsertTimesTicketAsync(sectorId, TimesStartUtc, (SlaMetric.Resolution, 1, 60, SlaCompletionCause.Resolution));
+        }
+
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        TimesDto times = (await HttpClient.GetFromJsonAsync<TimesDto>($"tickets/stats/times?sectorId={sectorId}"))!;
+
+        // Assert
+        times.ResolutionTimes.SampleSize.ShouldBe(4);
+        times.ResolutionTimes.AverageMinutes.ShouldBeNull();
+        times.ResolutionTimes.MedianMinutes.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task GetTimes_Should_CountOnlyCompletionsOfTheMonthAndSector_WhenPeriodAndSectorAreGiven()
+    {
+        // Arrange: conclusões em setembro e em outubro no setor do teste, e em setembro noutro setor
+        Guid sectorId = await InsertSectorAsync($"Times-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        Guid otherSectorId = await InsertSectorAsync($"Times-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        await InsertTimesTicketAsync(sectorId, TimesStartUtc, (SlaMetric.Resolution, 1, 60, SlaCompletionCause.Resolution));
+        await InsertTimesTicketAsync(sectorId, TimesStartUtc, (SlaMetric.Resolution, 1, 90, SlaCompletionCause.Resolution));
+        await InsertTimesTicketAsync(sectorId, TimesStartUtc.AddMonths(1), (SlaMetric.Resolution, 1, 60, SlaCompletionCause.Resolution));
+        await InsertTimesTicketAsync(otherSectorId, TimesStartUtc, (SlaMetric.Resolution, 1, 60, SlaCompletionCause.Resolution));
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        TimesDto times = (await HttpClient.GetFromJsonAsync<TimesDto>(
+            $"tickets/stats/times?sectorId={sectorId}&resolvedFrom=2026-09-01&resolvedTo=2026-09-30"))!;
+
+        // Assert
+        times.ResolutionTimes.SampleSize.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task GetTimes_Should_ReturnBadRequest_WhenPeriodIsInverted()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/times?resolvedFrom=2026-11-10&resolvedTo=2026-11-01");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).ShouldContain("Tickets.InvalidPeriod");
+    }
+
+    [Fact]
+    public async Task GetTimes_Should_ReturnForbidden_WhenCallerLacksManagePermission()
+    {
+        // Arrange: o cadastro dá a role Colaborador, sem tickets:manage
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/times");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetTimes_Should_ReturnUnauthorized_WhenNoTokenProvided()
+    {
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/times");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    // Início dos cronômetros dos tempos médios, em setembro (as conclusões caem no mesmo mês).
+    private static readonly DateTime TimesStartUtc = new(2026, 9, 10, 12, 0, 0, DateTimeKind.Utc);
+
+    /// <summary>
+    /// Pela API: um chamado respondido pela mensagem de um Atendente e outro resolvido pelo administrador sem resposta.
+    /// </summary>
+    private async Task<(Guid Answered, Guid ResolvedWithoutAnswer)> CreateAnsweredAndResolvedTicketsAsync()
+    {
+        (Guid answered, AccessTokens requesterTokens) = await CreateTicketAsRequesterAsync();
+        AccessTokens agentTokens = await CreateAgentAsync();
+        (await SendMessageAsAsync(agentTokens, answered, "Já estou verificando.")).EnsureSuccessStatusCode();
+
+        Authenticate(requesterTokens.AccessToken);
+        (Guid resolvedWithoutAnswer, _) = await CreateTicketAsRequesterAsync();
+        // Aberto só vai para Resolvido passando por Em Andamento, que não conclui nenhum cronômetro.
+        await AuthenticateAsAdminAsync();
+        (await HttpClient.PutAsJsonAsync($"tickets/{resolvedWithoutAnswer}", new { description = "Verificando o chamado", status = 2 }))
+            .EnsureSuccessStatusCode();
+        (await HttpClient.PutAsJsonAsync($"tickets/{resolvedWithoutAnswer}", new { description = "Resolvido sem resposta", status = 3 }))
+            .EnsureSuccessStatusCode();
+
+        return (answered, resolvedWithoutAnswer);
+    }
+
+    /// <summary>
+    /// Chamado gravado direto no banco com os cronômetros informados, todos no calendário contínuo (24 horas), em que o
+    /// minuto útil é o minuto do relógio; cada cronômetro é concluído <c>Minutes</c> minutos depois do início.
+    /// </summary>
+    private async Task InsertTimesTicketAsync(
+        Guid sectorId,
+        DateTime startUtc,
+        params (SlaMetric Metric, int Cycle, int Minutes, SlaCompletionCause Cause)[] timers)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Guid requesterId = await context.Users.Select(u => u.Id).FirstAsync();
+
+        var ticket = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Title = "Chamado dos tempos médios",
+            Description = "Chamado gravado direto no banco para os tempos médios",
+            Priority = TicketPriority.Medium,
+            Status = TicketStatus.Resolved,
+            CreatedByUserId = requesterId,
+            SectorId = sectorId,
+            CreatedAtUtc = startUtc,
+            LastActivityAtUtc = startUtc,
+            DueAtUtc = startUtc.AddHours(8),
+            SlaWarningAtUtc = startUtc.AddHours(6),
+            SlaPlan = TicketSla.LegacyPlan(TicketPriority.Medium)
+        };
+        context.Tickets.Add(ticket);
+        context.TicketSlaTimers.AddRange(timers.Select(t => new TicketSlaTimer
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            Metric = t.Metric,
+            Cycle = t.Cycle,
+            TargetMinutes = 480,
+            CalendarId = SlaCalendarIds.Continuous,
+            StartedAtUtc = startUtc,
+            WarningOnUtc = startUtc.AddHours(6),
+            DueOnUtc = startUtc.AddHours(8),
+            CompletedOnUtc = startUtc.AddMinutes(t.Minutes),
+            CompletionCause = t.Cause
+        }));
+        await context.SaveChangesAsync();
+    }
+
+    private sealed record TimesDto(
+        int MinimumSampleSize,
+        [property: JsonPropertyName("firstResponse")] TimeStatisticsDto FirstResponseTimes,
+        [property: JsonPropertyName("resolution")] TimeStatisticsDto ResolutionTimes);
+
+    private sealed record TimeStatisticsDto(double? AverageMinutes, double? MedianMinutes, int SampleSize);
+
     private sealed record PagedTicketsDto(List<TicketSummaryDto> Items, int TotalCount);
 
     private sealed record TicketSummaryDto(
@@ -3695,8 +3953,10 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         List<AuditLogEntry> modified = [.. entries.Where(a => a.Action == "Modified")];
         modified.Count.ShouldBe(2);
-        // A conclusão dentro do prazo também tira o cronômetro da fila do monitoramento (spec 006), no mesmo registro.
-        modified.ShouldAllBe(a => a.AffectedColumns == $"{nameof(TicketSlaTimer.CompletedOnUtc)},{nameof(TicketSlaTimer.NextActionOnUtc)}");
+        // A conclusão dentro do prazo também tira o cronômetro da fila do monitoramento (spec 006) e grava a causa da
+        // conclusão (spec 027), no mesmo registro.
+        modified.ShouldAllBe(a => a.AffectedColumns ==
+            $"{nameof(TicketSlaTimer.CompletedOnUtc)},{nameof(TicketSlaTimer.CompletionCause)},{nameof(TicketSlaTimer.NextActionOnUtc)}");
     }
 
     [Fact]

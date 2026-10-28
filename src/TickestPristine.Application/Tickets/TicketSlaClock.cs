@@ -51,10 +51,11 @@ internal static class TicketSlaClock
     public static bool IsOpen(TicketSlaTimer timer) => timer.CompletedOnUtc is null && timer.StoppedOnUtc is null;
 
     /// <summary>
-    /// Conclui o cronômetro, se ainda estiver em aberto; conclusão e parada já gravadas não mudam. Concluído até o prazo,
-    /// sai da fila do monitoramento; depois do prazo, continua nela, para o monitoramento gravar a violação.
+    /// Conclui o cronômetro, se ainda estiver em aberto, gravando o que o concluiu; conclusão e parada já gravadas não
+    /// mudam. Concluído até o prazo, sai da fila do monitoramento; depois do prazo, continua nela, para o monitoramento
+    /// gravar a violação.
     /// </summary>
-    public static void Complete(TicketSlaTimer timer, DateTime completedAtUtc)
+    public static void Complete(TicketSlaTimer timer, DateTime completedAtUtc, SlaCompletionCause cause)
     {
         if (!IsOpen(timer))
         {
@@ -62,6 +63,7 @@ internal static class TicketSlaClock
         }
 
         timer.CompletedOnUtc = completedAtUtc;
+        timer.CompletionCause = cause;
 
         if (completedAtUtc <= timer.DueOnUtc)
         {
