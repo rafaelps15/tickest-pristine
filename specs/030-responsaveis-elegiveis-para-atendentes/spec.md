@@ -64,7 +64,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 |---|---|---|---|---|
 | T-1 | Consulta e rota dos responsáveis elegíveis | AC-1 a AC-3, AC-5 | `add-feature` | [x] |
 | T-2 | Testes de integração | AC-1 a AC-5 | `add-tests` | [x] |
-| T-3 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-6 | — | [ ] |
+| T-3 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-6 | — | [x] |
 | T-4 | Revisão de convenções, build sem avisos e suíte inteira | AC-6 | `ca-review` | [ ] |
 
 ## 8. Rastreabilidade
