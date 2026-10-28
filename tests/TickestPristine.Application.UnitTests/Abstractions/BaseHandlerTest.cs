@@ -101,7 +101,7 @@ public abstract class BaseHandlerTest
 
         foreach (TicketSlaTimer timer in context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id))
         {
-            TicketSlaClock.Complete(timer, resolvedAtUtc);
+            TicketSlaClock.Complete(timer, resolvedAtUtc, SlaCompletionCause.Resolution);
         }
 
         await context.SaveChangesAsync();

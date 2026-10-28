@@ -657,6 +657,8 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         timers.Count.ShouldBe(2);
         timers.ShouldAllBe(t => t.CompletedOnUtc == resolvedAtUtc && t.StoppedOnUtc == null);
         timers.ShouldAllBe(t => t.CompletedOnUtc <= t.DueOnUtc);
+        // Resolver sem responder conclui a primeira resposta com a causa "resolução" (spec 027).
+        timers.ShouldAllBe(t => t.CompletionCause == SlaCompletionCause.Resolution);
     }
 
     [Fact]
@@ -675,7 +677,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         result.IsSuccess.ShouldBeTrue();
 
         List<TicketSlaTimer> timers = await context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id).ToListAsync();
-        timers.ShouldAllBe(t => t.StoppedOnUtc == canceledAtUtc && t.CompletedOnUtc == null);
+        timers.ShouldAllBe(t => t.StoppedOnUtc == canceledAtUtc && t.CompletedOnUtc == null && t.CompletionCause == null);
 
         Ticket saved = await context.Tickets.SingleAsync(t => t.Id == ticket.Id);
         TicketSla.GetStatus(saved.Status, saved.DueAtUtc, saved.SlaWarningAtUtc, saved.ResolvedAtUtc, canceledAtUtc)
