@@ -83,7 +83,7 @@ Dados comuns: um atendente com `tickets:manage`; chamados em todos os status, pr
 | T-2 | Consulta, resposta e rota do agregado | AC-1, AC-3 a AC-6 | `add-feature` | [x] |
 | T-3 | Testes de paridade com `GET tickets` e demais casos | AC-1 a AC-6 | `add-tests` | [x] |
 | T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-7 | — | [x] |
-| T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-7 | `ca-review` | [ ] |
+| T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-7 | `ca-review` | [x] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
@@ -94,7 +94,7 @@ Dados comuns: um atendente com `tickets:manage`; chamados em todos os status, pr
 | AC-4 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_CountOnlyActiveUrgentAndActiveUnassigned_WhenTicketsAreInactive` | No Helpdesk, com um Urgente ativo, um Urgente resolvido e ativos e inativos (fechado e cancelado) sem responsável: críticos = 1 e sem responsável = 2, só os ativos. | Aprovado |
 | AC-5 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_IgnoreStatus_WhenStatusIsGiven` | Com e sem `status=1`, os blocos `volume`, `sla` e `attention` são iguais (só a hora do servidor muda entre as chamadas). | Aprovado |
 | AC-6 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_ReturnForbidden_WhenCallerLacksManagePermission`, `GetOverview_Should_ReturnUnauthorized_WhenNoTokenProvided`, `GetOverview_Should_ReturnBadRequest_WhenPeriodIsInverted`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketOverviewQueryHandlerTests.cs` › `Handle_Should_ReturnInvalidPeriod_WhenStartIsAfterEnd` | Colaborador sem `tickets:manage` recebe 403; sem token, 401. Também coberto o 400 do contrato: período invertido devolve `Tickets.InvalidPeriod`, e o handler responde sem abrir conexão com o banco. | Aprovado |
-| AC-7 | | | |
+| AC-7 | `dotnet build TickestPristine.slnx --no-incremental` e `dotnet test TickestPristine.slnx` | 0 avisos e 0 erros; 50 testes de arquitetura, 711 unitários e 408 de integração aprovados, nenhuma falha. | Aprovado |
 
 ## 9. Evidências de verificação
 - **Build:**
