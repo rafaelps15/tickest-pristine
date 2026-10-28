@@ -1,7 +1,7 @@
 ---
 id: 028
 titulo: Resolvidos por período no volume de chamados, ao lado dos criados, com filtros
-status: Aprovada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+status: Em implementação        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-028-tickets-volume-resolved                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
@@ -46,6 +46,8 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | DEC-2 | O volume passa a aceitar filtros? | (a) sim, os da 026; (b) não | (a): o gráfico passa a seguir a barra de filtros do Início | Rafael Santos, 2026-10-28, no chat |
 | DEC-3 | Com período, como fica o gráfico? | (a) o período define o intervalo, limite de 366 pontos; (b) janelas fixas | (a) | Rafael Santos, 2026-10-28, no chat |
 | DEC-4 | Qual data decide a entrada no período? | (a) a data do evento (criação para criados, resolução para resolvidos); (b) a abertura | (a) | Rafael Santos, 2026-10-28, no chat |
+| DEC-5 | Onde recusar o período grande demais (REQ-4), já que o decorator de validação só envolve commands? | (a) no handler, com `TicketErrors.VolumeTooManyPoints` (`Error.Problem`, 400), como a DEC-6 da spec 025; (b) estender a validação às queries | (a): mesmo precedente da 025 e do `UserErrors.InvalidSearchTerm`; o AC-5 não muda | Delegado por Rafael Santos ao agente, 2026-10-28, no chat ("desenvolva tudo a nivel senior [...] Atue como senior no desenvolvimento") |
+| DEC-6 | E com só uma ponta do período? | (a) sem `createdTo`, o fim é hoje em São Paulo; sem `createdFrom`, o início é a janela padrão (30 dias, 12 semanas, 12 meses) terminando no fim; início depois do fim responde 400 `Tickets.InvalidPeriod`; (b) exigir as duas pontas | (a): o gráfico sempre tem um intervalo, a regra sem período continua a mesma e o período invertido segue a 025 | Delegado por Rafael Santos ao agente, 2026-10-28, no chat ("desenvolva tudo a nivel senior [...] Atue como senior no desenvolvimento") |
 
 ## 5. Fora do escopo
 - Fechados e cancelados por período.
@@ -66,16 +68,29 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 ## 7. Tarefas
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
-| T-1 | Resolvidos por período, filtros e período no volume | AC-1 a AC-6 | `add-feature` | [ ] |
+| T-1 | Resolvidos por período, filtros e período no volume | AC-1 a AC-6 | `add-feature` | [x] |
 | T-2 | Testes de integração | AC-1 a AC-6 | `add-tests` | [ ] |
 | T-3 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-7 | — | [ ] |
 | T-4 | Revisão de convenções, build sem avisos e suíte inteira | AC-7 | `ca-review` | [ ] |
 
 ## 8. Rastreabilidade
-Não se aplica até a aprovação.
+| AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
+|---|---|---|---|
+| AC-1 | | | |
+| AC-2 | | | |
+| AC-3 | | | |
+| AC-4 | | | |
+| AC-5 | | | |
+| AC-6 | | | |
+| AC-7 | | | |
 
 ## 9. Evidências de verificação
-Não se aplica até a implementação.
+- **Build:**
+- **Testes:**
+- **Revisão:**
+- **Documentação atualizada:**
+- **CI:**
+- **Entrega:**
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -83,3 +98,4 @@ Não se aplica até a implementação.
 | 2026-10-28 | Rascunho | Criada a partir do pedido de Rafael Santos no chat do front-end; número reservado já na criação, porque outra sessão cria specs em paralelo. |
 | 2026-10-28 | Em descoberta | Perguntas respondidas no chat (DEC-1 a DEC-4). Aguardando aprovação. |
 | 2026-10-28 | Aprovada | Aprovada por Rafael Santos no chat do front-end ("Pode aprovar as specs", confirmando "As seis (025 a 030)"). Checklist de completude conferido: nenhuma pergunta aberta e nenhum `[SUPOSIÇÃO]`. Implementação depois do merge da 025 e da 026. |
+| 2026-10-28 | Em implementação | `/spec-implement 028` na branch `feat/SPEC-028-tickets-volume-resolved`, com a `origin/main` mesclada depois do merge da 025 (PR #43), da 026 (PR #45) e da 027 (PR #47). Rafael Santos pediu a implementação completa seguindo as skills, com o agente respondendo por ele ("desenvolva tudo a nivel senior e siga minha skill modelo de codigo como exemplo padrão. Atue como senior no desenvolvimento"). DEC-5 (limite de pontos no handler) e DEC-6 (período com uma ponta só) registradas como delegadas. Tabelas de rastreabilidade e de evidências criadas. |

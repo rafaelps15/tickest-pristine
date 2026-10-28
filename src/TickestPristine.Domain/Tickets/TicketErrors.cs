@@ -43,4 +43,8 @@ public static class TicketErrors
     public static readonly Error InvalidPeriod = Error.Problem(
         "Tickets.InvalidPeriod",
         "A data inicial do período não pode ser posterior à data final.");
+
+    public static Error VolumeTooManyPoints(int maxPoints) => Error.Problem(
+        "Tickets.VolumeTooManyPoints",
+        $"O período gera mais de {maxPoints} pontos no gráfico. Escolha um período menor ou um agrupamento maior.");
 }

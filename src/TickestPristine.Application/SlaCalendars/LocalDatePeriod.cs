@@ -19,6 +19,11 @@ public sealed record LocalDatePeriod(DateTime? FromUtc, DateTime? UntilUtc)
     /// </summary>
     public static bool IsInverted(DateOnly? from, DateOnly? to) => from > to;
 
+    /// <summary>
+    /// Data local de São Paulo de um instante UTC (por exemplo, o "hoje" das janelas padrão do volume, spec 028).
+    /// </summary>
+    public static DateOnly ToLocalDate(DateTime utc) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(utc, TimeZone));
+
     private static DateTime StartOfDayUtc(DateOnly day) =>
         TimeZoneInfo.ConvertTimeToUtc(day.ToDateTime(TimeOnly.MinValue), TimeZone);
 }
