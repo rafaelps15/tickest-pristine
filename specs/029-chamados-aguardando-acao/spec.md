@@ -1,0 +1,91 @@
+---
+id: 029
+titulo: Chamados aguardando ação do solicitante ou de quem atende
+status: Em descoberta        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+responsavel: Rafael Santos
+aprovada-em:
+branch: feat/SPEC-029-tickets-awaiting-action                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
+pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+---
+
+# 029 — Chamados aguardando ação do solicitante ou de quem atende
+
+## 1. Contexto
+- **Pedido original:** Rafael Santos, no chat da sessão do front-end, em 2026-10-28: "sim! pode criar na pasta do back" (item 7 do relatório do Início operacional).
+- **Por que:** a Central de atenção do Início deveria mostrar os chamados "aguardando ação". Hoje não existe status nem campo que diga se o chamado espera o solicitante ou quem atende.
+- **Referências:** spec 026 (agregado, que esta estende); spec 015 (última atividade, mesmo padrão de coluna mantida a cada ação).
+- **Fatos do repositório:**
+  - Não há status de espera nem pausa do SLA (`Domain/Tickets/TicketStatus.cs`; `Tickets/TicketSlaClock.cs:9`).
+  - As mensagens guardam `AuthorUserId` e `CreatedAtUtc` (`TicketMessages/*`); o solicitante é o `CreatedByUserId` do chamado; excluir mensagem é lógico.
+  - A primeira resposta de SLA já usa a regra "mensagem de quem não é o solicitante e tem `tickets:manage`" (`TicketMessages/Post/PostTicketMessageCommandHandler.cs:68-107`).
+
+## 2. Requisitos
+| ID | Requisito | Fonte |
+|---|---|---|
+| REQ-1 | Cada chamado ativo (aberto ou em andamento) tem uma situação de espera: **aguardando o solicitante** quando a última mensagem válida é de quem atende; **aguardando quem atende** quando a última é do solicitante ou quando ainda não há mensagem de quem atende. Chamados inativos não têm situação de espera. | pedido; DEC-1 |
+| REQ-2 | "Quem atende" segue a mesma regra da primeira resposta: autor que não é o solicitante e tem `tickets:manage` no momento da mensagem. | DEC-1; fato do repositório |
+| REQ-3 | A situação fica guardada no chamado e é atualizada ao publicar ou excluir mensagem e ao mudar o status; os chamados existentes são preenchidos na migration. | DEC-2 |
+| REQ-4 | `GET tickets` traz a situação em cada item e aceita filtrá-la. | pedido |
+| REQ-5 | O agregado da 026 ganha os contadores "aguardando o solicitante" e "aguardando quem atende", com os mesmos filtros de recorte. | DEC-3 |
+| REQ-6 | Nada muda no status nem no SLA: a espera é só informativa. | DEC-1 |
+
+## 3. Critérios de aceitação
+| ID | REQ | Dado | Quando | Então (resultado observável) |
+|---|---|---|---|---|
+| AC-1 | REQ-1 | um chamado novo, sem mensagens | consulta | aguardando quem atende |
+| AC-2 | REQ-1, REQ-2, REQ-3 | o mesmo chamado | um atendente responde; depois o solicitante responde | aguardando o solicitante; depois aguardando quem atende |
+| AC-3 | REQ-3 | a última mensagem é do atendente | ela é excluída | volta a valer a mensagem anterior |
+| AC-4 | REQ-1, REQ-3 | um chamado aguardando | é resolvido; depois reaberto | sem situação de espera enquanto inativo; ao reabrir, recalculada pela última mensagem |
+| AC-5 | REQ-3 | chamados existentes com e sem mensagens | aplica a migration | cada ativo com a situação certa |
+| AC-6 | REQ-4 | chamados nas duas situações | lista com o filtro de cada situação | só os da situação pedida, com o campo em cada item |
+| AC-7 | REQ-5 | a mesma base | chama o agregado | os dois contadores iguais ao `totalCount` da listagem filtrada |
+| AC-8 | REQ-6 | um chamado aguardando o solicitante | o prazo passa | o SLA corre como hoje |
+| AC-9 | todos | a mudança aplicada | `dotnet build` e `dotnet test` | 0 avisos; todos os testes passam |
+
+## 4. Decisões
+| ID | Pergunta | Opções | Decisão | Decidido por, em |
+|---|---|---|---|---|
+| DEC-1 | Como saber quem é aguardado? | (a) pela última mensagem, sem mudar status nem SLA; (b) status novo que pode pausar o SLA | (a) | Rafael Santos, 2026-10-28, no chat |
+| DEC-2 | Como guardar? | (a) coluna no chamado, mantida a cada ação; (b) calcular na consulta | (a): filtrar e contar fica barato, como a última atividade da 015 | Rafael Santos, 2026-10-28, no chat |
+| DEC-3 | Entra no agregado? | (a) sim, depois da 026; (b) só na listagem | (a) | Rafael Santos, 2026-10-28, no chat |
+
+## 5. Fora do escopo
+- Status "aguardando" com pausa do SLA (DEC-1).
+- Avisos ou lembretes para quem está sendo aguardado.
+- Mostrar a situação em "Meus chamados" (pode virar spec do front depois).
+
+## 6. Plano técnico
+- **Pré-requisito:** PR da spec 026 mergeado.
+- **Arquivos a criar ou alterar:**
+  - Domain: `Tickets/Ticket.cs` (situação de espera, opcional) e o enum da situação (novo).
+  - Application: a publicação e a exclusão de mensagem e a troca de status recalculam a situação; `Tickets/GetAll/*` (campo e filtro); `Tickets/GetOverview/*` (dois contadores).
+  - Infrastructure: configuração da coluna, índice para o filtro e migration com o preenchimento.
+  - Testes: unitários do recálculo e de integração dos ACs.
+- **Contratos:** cada item de `GET tickets` ganha a situação de espera (nula quando inativo) e a rota aceita filtrá-la; o agregado ganha os dois contadores. Mudança aditiva.
+- **Mudança no banco:** sim, uma coluna no chamado e um índice.
+- **Documentação de estado afetada:** `SYSTEM_SPECIFICATION.md` (regra nova, 4.3 e estatísticas).
+- **Análise:**
+  - **Concorrência:** publicar mensagem passa a atualizar a linha do chamado; usar o mesmo cuidado da DEC-11 da spec 015 (atualização fora da checagem de versão quando o chamado não muda) para não reabrir conflitos entre mensagens simultâneas.
+- **Riscos:**
+  - R-1: a regra de "quem atende" depende da permissão no momento da mensagem; um usuário que perca `tickets:manage` depois não muda as situações já gravadas (comportamento aceitável, como a primeira resposta).
+
+## 7. Tarefas
+| ID | Tarefa | ACs | Skill | Feita |
+|---|---|---|---|---|
+| T-1 | Situação de espera no chamado, recálculo nas ações e migration | AC-1 a AC-5, AC-8 | `add-entity` | [ ] |
+| T-2 | Campo e filtro na listagem; contadores no agregado | AC-6, AC-7 | `add-feature` | [ ] |
+| T-3 | Testes unitários e de integração | AC-1 a AC-8 | `add-tests` | [ ] |
+| T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-9 | — | [ ] |
+| T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-9 | `ca-review` | [ ] |
+
+## 8. Rastreabilidade
+Não se aplica até a aprovação.
+
+## 9. Evidências de verificação
+Não se aplica até a implementação.
+
+## 10. Histórico
+| Data | Status | Observação |
+|---|---|---|
+| 2026-10-28 | Rascunho | Criada a partir do pedido de Rafael Santos no chat do front-end; número reservado já na criação, porque outra sessão cria specs em paralelo. |
+| 2026-10-28 | Em descoberta | Perguntas respondidas no chat (DEC-1 a DEC-3). Aguardando aprovação. |
