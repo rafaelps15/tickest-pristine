@@ -18,6 +18,8 @@ internal sealed class GetAll : IEndpoint
             DateOnly? createdTo,
             string? roleName,
             bool? withoutRole,
+            UserSortField? sortBy,
+            SortDirection? sortDirection,
             [AsParameters] PageRequest paging,
             IQueryHandler<GetUsersQuery, PagedResponse<UserSummaryResponse>> handler,
             CancellationToken cancellationToken) =>
@@ -29,6 +31,8 @@ internal sealed class GetAll : IEndpoint
                 createdTo,
                 roleName,
                 withoutRole ?? false,
+                sortBy,
+                sortDirection,
                 paging);
 
             Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(query, cancellationToken);

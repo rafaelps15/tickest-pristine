@@ -145,7 +145,7 @@ Dados comuns: Ana (Atendente, cadastrada em 01/10), Bruno (Atendente e Administr
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
 | T-1 | Filtro por role e "sem role" na query, no handler e no endpoint | AC-1, AC-2, AC-6, AC-7 | `add-feature` | [x] |
-| T-2 | Ordenação por nome ou cadastro, com direção e desempate, no handler e no endpoint | AC-3, AC-4, AC-5, AC-6 | `add-feature` | [ ] |
+| T-2 | Ordenação por nome ou cadastro, com direção e desempate, no handler e no endpoint | AC-3, AC-4, AC-5, AC-6 | `add-feature` | [x] |
 | T-3 | Testes unitários e de integração | AC-1 a AC-7 | `add-tests` | [ ] |
 | T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` (4.3.1 e C-05) | AC-8 | — | [ ] |
 | T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-8 | `ca-review` | [ ] |
