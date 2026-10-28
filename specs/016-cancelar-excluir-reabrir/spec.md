@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-27
 branch: feat/SPEC-016-cancel-window-delete-reopen-reason                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: "#33"                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 016 — Cancelamento em 15 minutos pelo solicitante, exclusão e cancelamento por permissão e reabertura com motivo
@@ -161,7 +161,7 @@ Dados comuns: Maria (Colaboradora, dona dos chamados); Ana (Atendente, com `tick
 - **Revisão:** `ca-review` aplicado por um subagente revisor independente, em duas rodadas sobre a árvore de trabalho: a primeira apontou 12 itens, nenhum bloqueante, dos quais 11 foram corrigidos e 1 recusado pelo analisador do projeto (decisão 18 de `DECISIONS.md`); a segunda confirmou as correções e só apontou uma referência antiga da E-18 no `SYSTEM_SPECIFICATION.md`, também corrigida. Veredito: **aprovada, sem achados bloqueantes**. O código não mudou depois da segunda rodada.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` (na T-8, com as correções da revisão, conferido nesta verificação): 2.2 (roles e catálogo de permissões), 2.5 (quem muda o status), 2.6 (RN-06 revisada, RN-32 e RN-33 novas), 4.3.1 (rotas de edição, exclusão e reabertura), 5.4 e 5.5 (fluxos de tratar e reabrir), 8 (E-18) e 9.5 (Q-03 respondida).
 - **CI:**
-- **Entrega:** <PR #n (o mesmo do campo `pr:`); a spec fica `Entregue` quando o responsável mergear o PR na `main`>
+- **Entrega:** PR [#33](https://github.com/rafaelps15/tickest-pristine/pull/33), mergeado na `main` em 2026-10-28. O número foi registrado depois do merge, numa branch de documentação, porque o campo ficou vazio no PR.
 
 ## 10. Histórico
 | Data | Status | Observação |
