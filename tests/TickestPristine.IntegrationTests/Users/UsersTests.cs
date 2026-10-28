@@ -1688,15 +1688,17 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
     /// <summary>
     /// Usuários da spec 018, isolados pelo sobrenome único (<see cref="RoleScenario.Token"/>), que as consultas usam como
-    /// busca: Ana (Atendente, 01/10), Bruno (Atendente e Administrador, 05/10), Carla (Colaboradora, inativa, 10/10) e
-    /// Davi (sem role, 15/10).
+    /// busca: Ana (Atendente, 01/10), Bruno (Atendente e uma role de teste, 05/10), Carla (Colaboradora, inativa, 10/10) e
+    /// Davi (sem role, 15/10). O Bruno não recebe a role Administrador: um segundo administrador ativo no banco
+    /// compartilhado mudaria os testes que dependem de o administrador do seed ser o último.
     /// </summary>
     private async Task<RoleScenario> SeedRoleScenarioAsync()
     {
         string token = $"Spec018{Guid.NewGuid():N}";
+        string secondRole = await CreateTestRoleAsync();
 
         Guid ana = await InsertUserAsync("Ana", token, UniqueEmail(), null, true, RoleNames.Agent);
-        Guid bruno = await InsertUserAsync("Bruno", token, UniqueEmail(), null, true, RoleNames.Agent, RoleNames.Administrator);
+        Guid bruno = await InsertUserAsync("Bruno", token, UniqueEmail(), null, true, RoleNames.Agent, secondRole);
         Guid carla = await InsertUserAsync("Carla", token, UniqueEmail(), null, false, RoleNames.Collaborator);
         Guid davi = await InsertUserAsync("Davi", token, UniqueEmail());
 
