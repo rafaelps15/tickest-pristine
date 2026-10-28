@@ -93,7 +93,7 @@ Dados: o administrador do seed (ativo, com senha), Ana (ativa, com senha), Bruno
 |---|---|---|---|---|
 | T-1 | Slice `Users/GetStatusCounts` (query, resposta, handler) e endpoint | AC-1 a AC-5 | `add-feature` | [x] |
 | T-2 | Testes unitários e de integração | AC-1 a AC-5 | `add-tests` | [x] |
-| T-3 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-6 | — | [ ] |
+| T-3 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-6 | — | [x] |
 | T-4 | Revisão de convenções, build sem avisos e suíte inteira | AC-6 | `ca-review` | [ ] |
 
 ## 8. Rastreabilidade
