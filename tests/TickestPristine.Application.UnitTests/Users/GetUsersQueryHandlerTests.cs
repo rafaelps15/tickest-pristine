@@ -9,7 +9,7 @@ namespace TickestPristine.Application.UnitTests.Users;
 
 public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
 {
-    private static GetUsersQuery AllUsers => new(UserStatusFilter.All, null, null, null, new PageRequest(1, 20));
+    private static GetUsersQuery AllUsers => new(UserStatusFilter.All, null, null, null, null, false, new PageRequest(1, 20));
 
     [Fact]
     public async Task Handle_Should_ReturnAllUsers_WhenNoFilterIsGiven()
