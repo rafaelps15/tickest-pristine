@@ -151,6 +151,36 @@ public sealed class GetTicketHistoryQueryHandlerTests : BaseHandlerTest
         ]);
     }
 
+    [Fact]
+    public async Task Handle_Should_NameDeactivatedAssignee_WhenUnassignedOnUserDeactivation()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketWithHistoryAsync(context);
+
+        User ana = CreateUser(isActive: false);
+        ana.FirstName = "Ana";
+        ana.LastName = "Souza";
+        context.Users.Add(ana);
+        context.TicketHistories.Add(
+            TicketHistoryEntries.UnassignedOnUserDeactivation(ticketId, CreatorId, ana.Id, DateTime.UtcNow.AddMinutes(5)));
+        await context.SaveChangesAsync();
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(CreatorId);
+        var handler = new GetTicketHistoryQueryHandler(context, userContext, Substitute.For<IPermissionProvider>());
+        var query = new GetTicketHistoryQuery(ticketId, new CursorPageRequest(null, null, 20));
+
+        // Act
+        Result<CursorPagedResponse<TicketHistoryResponse>> result = await handler.Handle(query, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        TicketHistoryResponse history = result.Value.Items[0];
+        history.Action.ShouldBe(TicketHistoryAction.UnassignedOnUserDeactivation);
+        history.Description.ShouldBe("Responsável removido automaticamente (usuário desativado): Ana Souza");
+    }
+
     private static async Task<Guid> SeedTicketWithHistoryAsync(TestDbContext context)
     {
         var ticket = new Ticket

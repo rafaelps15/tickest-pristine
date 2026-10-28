@@ -3,6 +3,8 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Authorization;
+using TickestPristine.Application.TicketHistories;
+using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -68,6 +70,10 @@ internal sealed class DeactivateUserCommandHandler(
         // Encerra as sessões abertas: sem isso, uma reativação faria os refresh tokens anteriores voltarem a valer.
         await UserSessions.RevokeAllAsync(context, user.Id, cancellationToken);
 
+        await ReturnOpenTicketsToQueueAsync(user.Id, user.DeactivatedAtUtc.Value, cancellationToken);
+
+        // Um único SaveChanges: desativação, chamados e histórico entram juntos ou nenhum entra. Se outra requisição
+        // alterou um dos chamados no meio, o token de concorrência derruba tudo com 409.
         await context.SaveChangesAsync(cancellationToken);
 
         // Sem as permissões e a situação do usuário em cache, o access token que ele ainda tem deixa de valer na próxima
@@ -76,5 +82,47 @@ internal sealed class DeactivateUserCommandHandler(
         await permissionProvider.InvalidateAsync(user.Id, CancellationToken.None);
 
         return Result.Success();
+    }
+
+    /// <summary>
+    /// Os chamados em aberto do usuário desativado voltam para a fila, sem responsável e com o status Aberto, para que
+    /// outro atendente os assuma (spec 014). A volta de Em Andamento para Aberto só acontece aqui: as transições manuais
+    /// não a permitem. Chamados resolvidos, fechados e cancelados ficam como estão, e reativar o usuário não os devolve.
+    /// </summary>
+    private async Task ReturnOpenTicketsToQueueAsync(Guid userId, DateTime nowUtc, CancellationToken cancellationToken)
+    {
+        // O filtro global de exclusão lógica deixa os chamados excluídos de fora.
+        List<Ticket> openTickets = await context.Tickets
+            .Where(t =>
+                t.AssignedToUserId == userId &&
+                (t.Status == TicketStatus.Open || t.Status == TicketStatus.InProgress))
+            .ToListAsync(cancellationToken);
+
+        foreach (Ticket ticket in openTickets)
+        {
+            ticket.AssignedToUserId = null;
+            ticket.Raise(new TicketUnassignedDomainEvent(ticket.Id, userId, userContext.UserId));
+            context.TicketHistories.Add(TicketHistoryEntries.UnassignedOnUserDeactivation(
+                ticket.Id,
+                userContext.UserId,
+                userId,
+                nowUtc));
+
+            if (ticket.Status == TicketStatus.InProgress)
+            {
+                ticket.Status = TicketStatus.Open;
+                ticket.Raise(new TicketStatusChangedDomainEvent(
+                    ticket.Id,
+                    TicketStatus.InProgress,
+                    TicketStatus.Open,
+                    userContext.UserId));
+                context.TicketHistories.Add(TicketHistoryEntries.StatusChanged(
+                    ticket.Id,
+                    userContext.UserId,
+                    TicketStatus.InProgress,
+                    TicketStatus.Open,
+                    nowUtc));
+            }
+        }
     }
 }

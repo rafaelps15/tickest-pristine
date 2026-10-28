@@ -46,7 +46,9 @@ internal sealed class GetTicketHistoryQueryHandler(
                     h.Action,
                     h.OldValue,
                     h.NewValue,
-                    h.Action == TicketHistoryAction.Reassigned || h.Action == TicketHistoryAction.Unassigned
+                    h.Action == TicketHistoryAction.Reassigned ||
+                    h.Action == TicketHistoryAction.Unassigned ||
+                    h.Action == TicketHistoryAction.UnassignedOnUserDeactivation
                         ? context.Users
                             .Where(u => u.Id.ToString() == h.OldValue)
                             .Select(u => u.FirstName + " " + u.LastName)

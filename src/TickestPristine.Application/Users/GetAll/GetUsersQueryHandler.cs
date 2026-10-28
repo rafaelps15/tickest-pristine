@@ -1,6 +1,7 @@
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Pagination;
+using TickestPristine.Domain.Tickets;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Users.GetAll;
@@ -59,6 +60,11 @@ internal sealed class GetUsersQueryHandler(IApplicationDbContext context, IDateT
                         .Where(i => i.UserId == u.Id && i.UsedAtUtc == null && i.RevokedAtUtc == null && i.ExpiresAtUtc > nowUtc)
                         .Max(i => (DateTime?)i.ExpiresAtUtc)
                     : null,
+                // Chamados em aberto (Aberto ou Em Andamento) que têm o usuário como responsável, para o aviso da
+                // desativação (spec 014). Subconsulta na mesma consulta da página; o filtro global já tira os excluídos.
+                OpenTicketCount = context.Tickets.Count(t =>
+                    t.AssignedToUserId == u.Id &&
+                    (t.Status == TicketStatus.Open || t.Status == TicketStatus.InProgress)),
                 Roles = context.UserRoles
                     .Where(ur => ur.UserId == u.Id)
                     .Select(ur => new RoleSummaryResponse { Name = ur.RoleName })

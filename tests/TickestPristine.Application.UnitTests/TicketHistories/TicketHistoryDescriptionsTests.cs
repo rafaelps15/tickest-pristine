@@ -138,4 +138,23 @@ public sealed class TicketHistoryDescriptionsTests
         unassigned.ShouldBe("Responsável removido: usuário removido");
         reassigned.ShouldBe("Responsável alterado de usuário removido para Beto Lima");
     }
+
+    [Fact]
+    public void For_Should_NameDeactivatedAssignee_WhenUnassignedOnUserDeactivation()
+    {
+        // Arrange
+        string anaId = Guid.NewGuid().ToString();
+
+        // Act
+        string named = TicketHistoryDescriptions.For(
+            TicketHistoryAction.UnassignedOnUserDeactivation,
+            anaId,
+            null,
+            oldUserName: "Ana Souza");
+        string unnamed = TicketHistoryDescriptions.For(TicketHistoryAction.UnassignedOnUserDeactivation, anaId, null);
+
+        // Assert
+        named.ShouldBe("Responsável removido automaticamente (usuário desativado): Ana Souza");
+        unnamed.ShouldBe("Responsável removido automaticamente (usuário desativado): usuário removido");
+    }
 }

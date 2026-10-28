@@ -33,6 +33,8 @@ internal static class TicketHistoryDescriptions
             TicketHistoryAction.Reassigned =>
                 $"Responsável alterado de {oldUserName ?? RemovedUserName} para {newUserName ?? RemovedUserName}",
             TicketHistoryAction.Unassigned => $"Responsável removido: {oldUserName ?? RemovedUserName}",
+            TicketHistoryAction.UnassignedOnUserDeactivation =>
+                $"Responsável removido automaticamente (usuário desativado): {oldUserName ?? RemovedUserName}",
             TicketHistoryAction.DescriptionChanged => "Descrição alterada",
             TicketHistoryAction.Reopened => "Chamado reaberto",
             TicketHistoryAction.Deleted => "Chamado excluído",

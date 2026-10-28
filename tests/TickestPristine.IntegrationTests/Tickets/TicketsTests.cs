@@ -791,6 +791,51 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
+    public async Task GetAll_Should_ReturnOnlyOpenTicketsOfAssignee_WhenFilteringByAssigneeAndOpenStatuses()
+    {
+        // Arrange: o atendente tem 2 chamados Abertos, 1 Em Andamento e 1 Fechado; outro atendente tem 1 Aberto
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        Guid agentId = GetUserId(await CreateAgentAsync());
+        Guid otherAgentId = GetUserId(await CreateAgentAsync());
+        await AuthenticateAsAdminAsync();
+
+        Guid firstOpenId = await CreateAssignedTicketAsync(sectorId, agentId);
+        Guid secondOpenId = await CreateAssignedTicketAsync(sectorId, agentId);
+        Guid inProgressId = await CreateAssignedTicketAsync(sectorId, agentId);
+        await UpdateStatusAsync(inProgressId, 2); // InProgress
+        Guid closedId = await CreateAssignedTicketAsync(sectorId, agentId);
+        await UpdateStatusAsync(closedId, 2); // InProgress
+        await UpdateStatusAsync(closedId, 3); // Resolved
+        (await HttpClient.PostAsync($"tickets/{closedId}/close", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        await CreateAssignedTicketAsync(sectorId, otherAgentId);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync(
+            $"tickets?sectorId={sectorId}&assignedToUserId={agentId}&status=Open&status=InProgress");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        PagedTicketsDto? page = await response.Content.ReadFromJsonAsync<PagedTicketsDto>();
+        page!.TotalCount.ShouldBe(3);
+        page.Items.Select(t => t.Id).ShouldBe([firstOpenId, secondOpenId, inProgressId], ignoreOrder: true);
+    }
+
+    private async Task<Guid> CreateAssignedTicketAsync(Guid sectorId, Guid assignedToUserId)
+    {
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("tickets", new
+        {
+            title = "Printer is broken",
+            description = "The printer on the 3rd floor is not working",
+            priority = 2,
+            sectorId,
+            assignedToUserId
+        });
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<Guid>();
+    }
+
+    [Fact]
     public async Task GetStatusCounts_Should_ReturnUnauthorized_WhenNoTokenProvided()
     {
         // Arrange
@@ -1336,6 +1381,31 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
         problem!.Title.ShouldBe("Tickets.InvalidStatusTransition");
         GetHistoryAfterCreation(ticketId).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Update_Should_ReturnBadRequest_WhenManagerMovesInProgressTicketBackToOpen()
+    {
+        // Arrange: a volta de Em Andamento para Aberto só acontece na desativação do responsável (spec 014)
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        Guid agentId = GetUserId(await CreateAgentAsync());
+        await AuthenticateAsAdminAsync();
+        Guid ticketId = await CreateAssignedTicketAsync(sectorId, agentId);
+        await UpdateStatusAsync(ticketId, 2); // InProgress
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = "The printer on the 3rd floor is not working",
+            status = 1 // Open
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Tickets.InvalidStatusTransition");
+        PagedTicketsDto? page = await HttpClient.GetFromJsonAsync<PagedTicketsDto>($"tickets?sectorId={sectorId}");
+        page!.Items.ShouldHaveSingleItem().Status.ShouldBe(2);
     }
 
     [Fact]

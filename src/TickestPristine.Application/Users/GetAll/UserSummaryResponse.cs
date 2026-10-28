@@ -15,6 +15,7 @@ public sealed record UserSummaryResponse
     public bool? SectorIsActive { get; init; }
     public bool PendingActivation { get; init; }
     public DateTime? InvitationExpiresAtUtc { get; init; }
+    public int OpenTicketCount { get; init; }
     public List<RoleSummaryResponse> Roles { get; init; } = [];
 }
 

@@ -102,6 +102,22 @@ public static class TicketHistoryEntries
             oldAssignedToUserId.ToString());
 
     /// <summary>
+    /// Remoção automática do responsável quando ele é desativado: guarda o id do anterior, como na remoção manual, com
+    /// quem desativou como autor.
+    /// </summary>
+    public static TicketHistory UnassignedOnUserDeactivation(
+        Guid ticketId,
+        Guid? changedByUserId,
+        Guid oldAssignedToUserId,
+        DateTime occurredAtUtc) =>
+        Create(
+            ticketId,
+            changedByUserId,
+            TicketHistoryAction.UnassignedOnUserDeactivation,
+            occurredAtUtc,
+            oldAssignedToUserId.ToString());
+
+    /// <summary>
     /// Alteração da descrição: guarda o texto anterior e o novo (os dois cabem nas colunas, como a descrição).
     /// </summary>
     public static TicketHistory DescriptionChanged(

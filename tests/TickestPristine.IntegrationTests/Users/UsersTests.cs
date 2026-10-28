@@ -6,11 +6,14 @@ using System.Text.Json;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Application.Permissions;
 using TickestPristine.Application.Roles;
+using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Users;
 using TickestPristine.Domain.Roles;
+using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using TickestPristine.IntegrationTests.Tickets;
 using TickestPristine.Infrastructure.Database;
@@ -1246,6 +1249,302 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
+
+    [Fact]
+    public async Task Deactivate_Should_ReturnOpenTicketsToQueue_WhenUserIsAssignedToOpenTickets()
+    {
+        // Arrange: Ana é responsável por um chamado Aberto, um Em Andamento, um Fechado e um Aberto excluído
+        Guid adminId = await AuthenticateAsAdminAndGetIdAsync();
+        string token = NewToken();
+        Guid sectorId = await InsertSectorAsync("TI", $"Tecnologia-{token}");
+        Guid anaId = await InsertUserAsync("Ana", "Souza", $"ana.{token}@example.com", sectorId, true, RoleNames.Agent);
+        Guid openId = await InsertAssignedTicketAsync(adminId, sectorId, anaId, TicketStatus.Open);
+        Guid inProgressId = await InsertAssignedTicketAsync(adminId, sectorId, anaId, TicketStatus.InProgress);
+        Guid closedId = await InsertAssignedTicketAsync(adminId, sectorId, anaId, TicketStatus.Closed);
+        Guid deletedId = await InsertAssignedTicketAsync(adminId, sectorId, anaId, TicketStatus.Open, deletedAtUtc: DateTime.UtcNow);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsync($"users/{anaId}/deactivate", null);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        PagedDto<TicketItemDto> queue = await GetTicketsAsync($"sectorId={sectorId}&unassignedOnly=true&status=Open");
+        queue.Items.Select(t => t.Id).ShouldBe([openId, inProgressId], ignoreOrder: true);
+        PagedDto<TicketItemDto> stillAssigned = await GetTicketsAsync($"sectorId={sectorId}&assignedToUserId={anaId}");
+        stillAssigned.Items.ShouldHaveSingleItem().ShouldBe(new TicketItemDto(closedId, (int)TicketStatus.Closed));
+        (await GetAssigneeIgnoringDeletionAsync(deletedId)).ShouldBe(anaId);
+
+        const string expectedDescription = "Responsável removido automaticamente (usuário desativado): Ana Souza";
+        TicketHistoryDto openHistory = (await GetHistoryAsync(openId)).ShouldHaveSingleItem();
+        openHistory.ShouldBe(new TicketHistoryDto(
+            adminId,
+            (int)TicketHistoryAction.UnassignedOnUserDeactivation,
+            expectedDescription,
+            anaId.ToString()));
+        List<TicketHistoryDto> inProgressHistory = await GetHistoryAsync(inProgressId);
+        inProgressHistory.Select(h => h.Action).ShouldBe(
+            [(int)TicketHistoryAction.UnassignedOnUserDeactivation, (int)TicketHistoryAction.StatusChanged],
+            ignoreOrder: true);
+        inProgressHistory.ShouldAllBe(h => h.ChangedByUserId == adminId);
+        (await GetHistoryAsync(closedId)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Activate_Should_KeepTicketsInQueue_WhenDeactivatedUserIsReactivated()
+    {
+        // Arrange
+        Guid adminId = await AuthenticateAsAdminAndGetIdAsync();
+        string token = NewToken();
+        Guid sectorId = await InsertSectorAsync("TI", $"Tecnologia-{token}");
+        Guid anaId = await InsertUserAsync("Ana", "Souza", $"ana.{token}@example.com", sectorId, true, RoleNames.Agent);
+        Guid ticketId = await InsertAssignedTicketAsync(adminId, sectorId, anaId, TicketStatus.InProgress);
+        (await HttpClient.PutAsync($"users/{anaId}/deactivate", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsync($"users/{anaId}/activate", null);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        PagedDto<TicketItemDto> queue = await GetTicketsAsync($"sectorId={sectorId}&unassignedOnly=true");
+        queue.Items.ShouldHaveSingleItem().ShouldBe(new TicketItemDto(ticketId, (int)TicketStatus.Open));
+        (await GetTicketsAsync($"sectorId={sectorId}&assignedToUserId={anaId}")).Items.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Deactivate_Should_ReturnTicketToQueue_WhenUserNoLongerManagesTickets()
+    {
+        // Arrange: Carla é colaboradora (sem tickets:manage), mas ficou com um chamado atribuído antes de perder a role
+        Guid adminId = await AuthenticateAsAdminAndGetIdAsync();
+        string token = NewToken();
+        Guid sectorId = await InsertSectorAsync("TI", $"Tecnologia-{token}");
+        Guid carlaId = await InsertUserAsync("Carla", "Dias", $"carla.{token}@example.com", sectorId, true, RoleNames.Collaborator);
+        Guid ticketId = await InsertAssignedTicketAsync(adminId, sectorId, carlaId, TicketStatus.Open);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsync($"users/{carlaId}/deactivate", null);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await GetTicketsAsync($"sectorId={sectorId}&unassignedOnly=true")).Items.ShouldHaveSingleItem().Id.ShouldBe(ticketId);
+        (await GetHistoryAsync(ticketId)).ShouldHaveSingleItem().Action
+            .ShouldBe((int)TicketHistoryAction.UnassignedOnUserDeactivation);
+    }
+
+    [Fact]
+    public async Task Deactivate_Should_KeepTicketsAssigned_WhenDeactivationIsForbidden()
+    {
+        // Arrange: quem chama só pode desativar colaboradores; o alvo também gerencia funções (RN-17)
+        Guid adminId = await AuthenticateAsAdminAndGetIdAsync();
+        string deactivatorRole = await CreateRoleWithPermissionsAsync(PermissionCodes.Users.Deactivate);
+        string rolesManagerRole = await CreateRoleWithPermissionsAsync(PermissionCodes.Roles.Manage);
+
+        string callerEmail = UniqueEmail();
+        Guid callerId = await RegisterUserAsync(callerEmail);
+        (await HttpClient.PutAsJsonAsync($"users/{callerId}/roles", new { roleNames = new[] { deactivatorRole } }))
+            .EnsureSuccessStatusCode();
+
+        string token = NewToken();
+        Guid sectorId = await InsertSectorAsync("TI", $"Tecnologia-{token}");
+        Guid targetId = await InsertUserAsync("Ana", "Souza", $"ana.{token}@example.com", sectorId, true, rolesManagerRole);
+        Guid ticketId = await InsertAssignedTicketAsync(adminId, sectorId, targetId, TicketStatus.InProgress);
+
+        Authenticate((await LoginAsync(callerEmail)).AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsync($"users/{targetId}/deactivate", null);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        await AuthenticateAsAdminAsync();
+        (await GetTicketsAsync($"sectorId={sectorId}&assignedToUserId={targetId}")).Items.ShouldHaveSingleItem()
+            .ShouldBe(new TicketItemDto(ticketId, (int)TicketStatus.InProgress));
+        (await GetHistoryAsync(ticketId)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Deactivate_Should_ReturnConflictAndSaveNothing_WhenTicketChangesDuringDeactivation()
+    {
+        // Arrange
+        Guid adminId = await AuthenticateAsAdminAndGetIdAsync();
+        string token = NewToken();
+        Guid sectorId = await InsertSectorAsync("TI", $"Tecnologia-{token}");
+        Guid anaId = await InsertUserAsync("Ana", "Souza", $"ana.{token}@example.com", sectorId, true, RoleNames.Agent);
+        Guid betoId = await InsertUserAsync("Beto", "Lima", $"beto.{token}@example.com", sectorId, true, RoleNames.Agent);
+        Guid ticketId = await InsertAssignedTicketAsync(adminId, sectorId, anaId, TicketStatus.InProgress);
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // Outra transação passa o chamado para Beto e segura a linha sem confirmar. A desativação lê o chamado ainda com
+        // Ana, fica esperando a linha ao gravar e, depois da confirmação, encontra outra versão (conflito de concorrência).
+        await using IDbContextTransaction concurrentChange = await context.Database.BeginTransactionAsync();
+        await context.Database.ExecuteSqlAsync(
+            $"UPDATE public.tickets SET assigned_to_user_id = {betoId} WHERE id = {ticketId}");
+
+        // Act
+        Task<HttpResponseMessage> deactivation = HttpClient.PutAsync($"users/{anaId}/deactivate", null);
+        await WaitForLockedUpdateAsync(deactivation);
+        await concurrentChange.CommitAsync();
+        HttpResponseMessage response = await deactivation;
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        PagedDto<UserSummaryDto> users = await GetUsersPageAsync($"search=ana.{token}");
+        users.Items.ShouldHaveSingleItem().IsActive.ShouldBeTrue();
+        (await GetTicketsAsync($"sectorId={sectorId}&assignedToUserId={betoId}")).Items.ShouldHaveSingleItem()
+            .ShouldBe(new TicketItemDto(ticketId, (int)TicketStatus.InProgress));
+        (await GetHistoryAsync(ticketId)).ShouldNotContain(h => h.Action == (int)TicketHistoryAction.UnassignedOnUserDeactivation);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnOpenTicketCountInSingleQuery_WhenListingUsers()
+    {
+        // Arrange: Ana tem 2 chamados Abertos, 1 Em Andamento e 1 Fechado; Beto não tem chamados
+        Guid adminId = await AuthenticateAsAdminAndGetIdAsync();
+        string token = NewToken();
+        Guid sectorId = await InsertSectorAsync("TI", $"Tecnologia-{token}");
+        Guid anaId = await InsertUserAsync("Ana", "Souza", $"ana.{token}@example.com", sectorId, true, RoleNames.Agent);
+        Guid betoId = await InsertUserAsync("Beto", "Lima", $"beto.{token}@example.com", sectorId, true, RoleNames.Agent);
+        await InsertAssignedTicketAsync(adminId, sectorId, anaId, TicketStatus.Open);
+        await InsertAssignedTicketAsync(adminId, sectorId, anaId, TicketStatus.Open);
+        await InsertAssignedTicketAsync(adminId, sectorId, anaId, TicketStatus.InProgress);
+        await InsertAssignedTicketAsync(adminId, sectorId, anaId, TicketStatus.Closed);
+
+        // A contagem sai como subconsulta da própria consulta da página (que também lê os usuários): os chamados são
+        // lidos por um único comando, e não por um comando por usuário. O monitor de SLA fica desligado nos testes.
+        using var ticketReads = new EfCommandCounter(sql => sql.Contains("FROM public.tickets", StringComparison.Ordinal));
+        using var pageReadsWithCount = new EfCommandCounter(sql =>
+            sql.Contains("FROM public.tickets", StringComparison.Ordinal) &&
+            sql.Contains("FROM public.users", StringComparison.Ordinal));
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"users?search={token}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        PagedDto<UserOpenTicketCountDto>? page = await response.Content.ReadFromJsonAsync<PagedDto<UserOpenTicketCountDto>>();
+        page!.Items.ShouldBe([new UserOpenTicketCountDto(anaId, 3), new UserOpenTicketCountDto(betoId, 0)], ignoreOrder: true);
+        ticketReads.Count.ShouldBe(1);
+        pageReadsWithCount.Count.ShouldBe(1);
+    }
+
+    /// <summary>
+    /// Autentica como o administrador do seed e devolve o id dele.
+    /// </summary>
+    private async Task<Guid> AuthenticateAsAdminAndGetIdAsync()
+    {
+        AccessTokens tokens = await LoginAsync(AdminEmail, AdminPassword);
+        Authenticate(tokens.AccessToken);
+
+        return GetUserId(tokens);
+    }
+
+    /// <summary>
+    /// Chamado gravado direto no banco, já com o responsável e o status escolhidos (pela API, o chamado nasce Aberto e
+    /// só um atendente elegível pode recebê-lo) e sem histórico.
+    /// </summary>
+    private async Task<Guid> InsertAssignedTicketAsync(
+        Guid requesterId,
+        Guid sectorId,
+        Guid assignedToUserId,
+        TicketStatus status,
+        DateTime? deletedAtUtc = null)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        DateTime createdAtUtc = DateTime.UtcNow;
+        var ticket = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Title = "Printer is broken",
+            Description = "The printer on the 3rd floor is not working",
+            Priority = TicketPriority.Medium,
+            Status = status,
+            CreatedByUserId = requesterId,
+            AssignedToUserId = assignedToUserId,
+            SectorId = sectorId,
+            CreatedAtUtc = createdAtUtc,
+            LastActivityAtUtc = createdAtUtc,
+            DueAtUtc = createdAtUtc.AddHours(8),
+            SlaWarningAtUtc = createdAtUtc.AddHours(6),
+            DeletedAtUtc = deletedAtUtc,
+            SlaPlan = TicketSla.LegacyPlan(TicketPriority.Medium)
+        };
+
+        context.Tickets.Add(ticket);
+        await context.SaveChangesAsync();
+
+        return ticket.Id;
+    }
+
+    private async Task<PagedDto<TicketItemDto>> GetTicketsAsync(string queryString)
+    {
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets?{queryString}");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        return (await response.Content.ReadFromJsonAsync<PagedDto<TicketItemDto>>())!;
+    }
+
+    private async Task<PagedDto<UserSummaryDto>> GetUsersPageAsync(string queryString)
+    {
+        HttpResponseMessage response = await HttpClient.GetAsync($"users?{queryString}");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        return (await response.Content.ReadFromJsonAsync<PagedDto<UserSummaryDto>>())!;
+    }
+
+    private async Task<List<TicketHistoryDto>> GetHistoryAsync(Guid ticketId)
+    {
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/{ticketId}/history");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        return (await response.Content.ReadFromJsonAsync<CursorPageDto<TicketHistoryDto>>())!.Items;
+    }
+
+    private async Task<Guid?> GetAssigneeIgnoringDeletionAsync(Guid ticketId)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return await context.Tickets
+            .IgnoreQueryFilters()
+            .Where(t => t.Id == ticketId)
+            .Select(t => t.AssignedToUserId)
+            .SingleAsync();
+    }
+
+    /// <summary>
+    /// Espera até que a requisição esteja parada esperando uma linha bloqueada por outra transação. Se a requisição
+    /// terminar antes disso, o teste falha: ela não chegou a gravar no chamado bloqueado.
+    /// </summary>
+    private async Task WaitForLockedUpdateAsync(Task<HttpResponseMessage> request)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        DateTime deadlineUtc = DateTime.UtcNow.AddSeconds(10);
+
+        while (await context.Database
+                   .SqlQueryRaw<int>(
+                       """
+                       SELECT count(*)::int AS "Value"
+                       FROM pg_stat_activity
+                       WHERE datname = current_database() AND wait_event_type = 'Lock'
+                       """)
+                   .SingleAsync() == 0)
+        {
+            request.IsCompleted.ShouldBeFalse("A requisição terminou sem esperar a linha bloqueada.");
+            DateTime.UtcNow.ShouldBeLessThan(deadlineUtc, "A requisição não chegou à linha bloqueada.");
+            await Task.Delay(20);
+        }
+    }
+
+    private sealed record TicketItemDto(Guid Id, int Status);
+
+    private sealed record TicketHistoryDto(Guid? ChangedByUserId, int Action, string Description, string? OldValue);
+
+    private sealed record UserOpenTicketCountDto(Guid Id, int OpenTicketCount);
 
     [Fact]
     public async Task GetAll_Should_ReturnUserAsInactiveWithDeactivationDate_WhenUserWasDeactivated()

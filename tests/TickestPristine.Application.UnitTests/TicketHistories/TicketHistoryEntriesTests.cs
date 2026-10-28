@@ -91,6 +91,30 @@ public sealed class TicketHistoryEntriesTests
     }
 
     [Fact]
+    public void UnassignedOnUserDeactivation_Should_RecordPreviousAssigneeWithoutNewValue()
+    {
+        // Arrange
+        var ticketId = Guid.NewGuid();
+        var administratorId = Guid.NewGuid();
+        var deactivatedUserId = Guid.NewGuid();
+
+        // Act
+        TicketHistory history = TicketHistoryEntries.UnassignedOnUserDeactivation(
+            ticketId,
+            administratorId,
+            deactivatedUserId,
+            OccurredAtUtc);
+
+        // Assert
+        history.TicketId.ShouldBe(ticketId);
+        history.ChangedByUserId.ShouldBe(administratorId);
+        history.Action.ShouldBe(TicketHistoryAction.UnassignedOnUserDeactivation);
+        history.OldValue.ShouldBe(deactivatedUserId.ToString());
+        history.NewValue.ShouldBeNull();
+        history.OccurredAtUtc.ShouldBe(OccurredAtUtc);
+    }
+
+    [Fact]
     public void DescriptionChanged_Should_RecordOldAndNewDescription()
     {
         // Arrange

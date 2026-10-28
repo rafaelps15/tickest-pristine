@@ -3,6 +3,7 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Users.GetAll;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Sectors;
+using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 
 namespace TickestPristine.Application.UnitTests.Users;
@@ -317,6 +318,56 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
 
         // Assert
         result.Value.Items.ShouldAllBe(u => u.PendingActivation && u.InvitationExpiresAtUtc == null);
+    }
+
+    [Fact]
+    public async Task Handle_Should_CountOnlyOpenAndInProgressAssignedTickets_WhenListingUsers()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        User agent = AddUser(context, "Ana", "ana@tickestpristine.dev", isActive: true);
+        User withoutTickets = AddUser(context, "Bruno", "bruno@tickestpristine.dev", isActive: true);
+        User otherAgent = AddUser(context, "Carla", "carla@tickestpristine.dev", isActive: true);
+        AddTicket(context, agent.Id, TicketStatus.Open);
+        AddTicket(context, agent.Id, TicketStatus.Open);
+        AddTicket(context, agent.Id, TicketStatus.InProgress);
+        AddTicket(context, agent.Id, TicketStatus.Resolved);
+        AddTicket(context, agent.Id, TicketStatus.Closed);
+        AddTicket(context, agent.Id, TicketStatus.Canceled);
+        AddTicket(context, agent.Id, TicketStatus.Open).DeletedAtUtc = DefaultUtcNow;
+        AddTicket(context, otherAgent.Id, TicketStatus.InProgress);
+        await context.SaveChangesAsync();
+
+        var handler = new GetUsersQueryHandler(context, CreateClock());
+
+        // Act
+        Result<PagedResponse<UserSummaryResponse>> result = await handler.Handle(AllUsers, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Items.Single(u => u.Id == agent.Id).OpenTicketCount.ShouldBe(3);
+        result.Value.Items.Single(u => u.Id == withoutTickets.Id).OpenTicketCount.ShouldBe(0);
+        result.Value.Items.Single(u => u.Id == otherAgent.Id).OpenTicketCount.ShouldBe(1);
+    }
+
+    private static Ticket AddTicket(TestDbContext context, Guid assignedToUserId, TicketStatus status)
+    {
+        var ticket = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Title = "Printer is broken",
+            Description = "Original description",
+            Priority = TicketPriority.Medium,
+            Status = status,
+            CreatedByUserId = Guid.NewGuid(),
+            AssignedToUserId = assignedToUserId,
+            SectorId = Guid.NewGuid(),
+            CreatedAtUtc = DefaultUtcNow
+        };
+
+        context.Tickets.Add(ticket);
+
+        return ticket;
     }
 
     private static User AddUser(TestDbContext context, string firstName, string email, bool isActive)
