@@ -2559,6 +2559,248 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
     private sealed record TicketCountDto(int Priority, int Status, int Count);
 
+    [Fact]
+    public async Task GetAssignees_Should_ReturnOnlyEligibleAssigneesWithoutEmail_WhenCallerIsAgentWithoutUsersRead()
+    {
+        // Arrange
+        AssigneeScenario scenario = await SeedAssigneeScenarioAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets/assignees?search={scenario.Token}");
+
+        // Assert: só os atendentes ativos, por nome; o inativo e o colaborador ficam de fora
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        string body = await response.Content.ReadAsStringAsync();
+        body.ShouldNotContain("email", Case.Insensitive);
+
+        PagedAssigneesDto page = (await response.Content.ReadFromJsonAsync<PagedAssigneesDto>())!;
+        page.Items.Select(a => a.Id).ShouldBe([scenario.Ana, scenario.Beto]);
+        AssigneeDto ana = page.Items[0];
+        ana.FullName.ShouldBe($"Ana {scenario.Token}");
+        ana.SectorId.ShouldBe(scenario.Helpdesk);
+        ana.SectorName.ShouldBe(scenario.HelpdeskName);
+    }
+
+    [Fact]
+    public async Task GetAssignees_Should_ReturnMatchingAssignees_WhenSearchAndSectorAreGiven()
+    {
+        // Arrange
+        AssigneeScenario scenario = await SeedAssigneeScenarioAsync();
+
+        // Act: parte do nome em minúsculas e o sobrenome em maiúsculas
+        PagedAssigneesDto? bySearchAndSector = await HttpClient.GetFromJsonAsync<PagedAssigneesDto>(
+            $"tickets/assignees?search=an%20{scenario.Token.ToUpperInvariant()}&sectorId={scenario.Helpdesk}");
+        PagedAssigneesDto? bySector = await HttpClient.GetFromJsonAsync<PagedAssigneesDto>(
+            $"tickets/assignees?search={scenario.Token}&sectorId={scenario.Infra}");
+
+        // Assert
+        bySearchAndSector!.Items.ShouldHaveSingleItem().Id.ShouldBe(scenario.Ana);
+        bySector!.Items.ShouldHaveSingleItem().Id.ShouldBe(scenario.Beto);
+    }
+
+    [Fact]
+    public async Task GetAssignees_Should_ReturnForbidden_WhenCallerLacksManagePermission()
+    {
+        // Arrange: o cadastro dá a role Colaborador, sem tickets:manage
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/assignees");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetAssignees_Should_ReturnUnauthorized_WhenNoTokenProvided()
+    {
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets/assignees");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetAssignees_Should_ListAssigneeThatAssignAccepts()
+    {
+        // Arrange: o atendente consulta a lista para um chamado do Helpdesk; quem atribui a outra pessoa é quem tem
+        // tickets:assign (spec 009), aqui o administrador
+        AssigneeScenario scenario = await SeedAssigneeScenarioAsync();
+        Guid ticketId = await CreateTicketAsync(scenario.Helpdesk);
+        PagedAssigneesDto? page = await HttpClient.GetFromJsonAsync<PagedAssigneesDto>(
+            $"tickets/assignees?search={scenario.Token}&sectorId={scenario.Helpdesk}");
+        Guid chosen = page!.Items.ShouldHaveSingleItem().Id;
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
+            $"tickets/{ticketId}/assignee",
+            new { assignedToUserId = chosen });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await context.Tickets.Where(t => t.Id == ticketId).Select(t => t.AssignedToUserId).SingleAsync())
+            .ShouldBe(scenario.Ana);
+    }
+
+    /// <summary>
+    /// Usuários da spec 030, isolados pelo sobrenome único (<see cref="AssigneeScenario.Token"/>), que as consultas usam
+    /// como busca: Ana (Atendente, Helpdesk), Beto (Atendente, Infra), Caio (Atendente inativo, Helpdesk) e Davi
+    /// (Colaborador, Helpdesk). Termina autenticado como um Atendente novo, que não tem <c>users:read</c>.
+    /// </summary>
+    private async Task<AssigneeScenario> SeedAssigneeScenarioAsync()
+    {
+        string token = $"Resp{Guid.NewGuid():N}";
+        string helpdeskName = $"Helpdesk-{Guid.NewGuid():N}";
+        Guid helpdesk = await InsertSectorAsync(helpdeskName, $"Department-{Guid.NewGuid():N}");
+        Guid infra = await InsertSectorAsync($"Infra-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+
+        Guid ana = await InsertUserAsync("Ana", token, UniqueEmail(), helpdesk, true, RoleNames.Agent);
+        Guid beto = await InsertUserAsync("Beto", token, UniqueEmail(), infra, true, RoleNames.Agent);
+        await InsertUserAsync("Caio", token, UniqueEmail(), helpdesk, false, RoleNames.Agent);
+        await InsertUserAsync("Davi", token, UniqueEmail(), helpdesk, true, RoleNames.Collaborator);
+
+        AccessTokens agentTokens = await CreateAgentAsync();
+        Authenticate(agentTokens.AccessToken);
+
+        return new AssigneeScenario(token, helpdesk, helpdeskName, infra, ana, beto);
+    }
+
+    private sealed record AssigneeScenario(string Token, Guid Helpdesk, string HelpdeskName, Guid Infra, Guid Ana, Guid Beto);
+
+    private sealed record AssigneeDto(Guid Id, string FullName, Guid? SectorId, string? SectorName);
+
+    private sealed record PagedAssigneesDto(List<AssigneeDto> Items, int TotalCount);
+
+    [Fact]
+    public async Task GetAll_Should_FilterByLocalCreationDay_WhenCreatedPeriodIsGiven()
+    {
+        // Arrange
+        PeriodScenario scenario = await SeedPeriodScenarioAsync();
+
+        // Act
+        PagedTicketsDto? page = await HttpClient.GetFromJsonAsync<PagedTicketsDto>(
+            $"tickets?sectorId={scenario.Helpdesk}&createdFrom=2026-11-01&createdTo=2026-11-01");
+
+        // Assert: o de 31/10 às 23h30 de Brasília fica fora, mesmo sendo 01/11 em UTC
+        page!.Items.ShouldHaveSingleItem().Id.ShouldBe(scenario.MorningOfFirst);
+        page.Items.ShouldNotContain(t => t.Id == scenario.LateEveningBefore);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_FilterFromCreationDayOnward_WhenOnlyCreatedFromIsGiven()
+    {
+        // Arrange
+        PeriodScenario scenario = await SeedPeriodScenarioAsync();
+
+        // Act
+        PagedTicketsDto? page = await HttpClient.GetFromJsonAsync<PagedTicketsDto>(
+            $"tickets?sectorId={scenario.Helpdesk}&createdFrom=2026-11-01");
+
+        // Assert
+        page!.Items.Select(t => t.Id).ShouldBe([scenario.MorningOfFirst, scenario.MidMonth], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnOnlyTicketsResolvedInPeriod_WhenResolvedPeriodIsGiven()
+    {
+        // Arrange
+        PeriodScenario scenario = await SeedPeriodScenarioAsync();
+
+        // Act
+        PagedTicketsDto? page = await HttpClient.GetFromJsonAsync<PagedTicketsDto>(
+            $"tickets?sectorId={scenario.Helpdesk}&resolvedFrom=2026-11-02&resolvedTo=2026-11-02");
+
+        // Assert: os nunca resolvidos ficam de fora
+        page!.Items.ShouldHaveSingleItem().Id.ShouldBe(scenario.MorningOfFirst);
+        page.TotalCount.ShouldBe(1);
+    }
+
+    [Theory]
+    [InlineData("createdFrom=2026-11-10&createdTo=2026-11-01")]
+    [InlineData("resolvedFrom=2026-11-10&resolvedTo=2026-11-01")]
+    public async Task GetAll_Should_ReturnBadRequest_WhenPeriodIsInverted(string period)
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"tickets?{period}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        string body = await response.Content.ReadAsStringAsync();
+        body.ShouldContain("Tickets.InvalidPeriod");
+        body.ShouldContain("A data inicial do período não pode ser posterior à data final.");
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnTicketsOfEverySector_WhenSectorIdIsRepeated()
+    {
+        // Arrange
+        PeriodScenario scenario = await SeedPeriodScenarioAsync();
+
+        // Act
+        PagedTicketsDto? both = await HttpClient.GetFromJsonAsync<PagedTicketsDto>(
+            $"tickets?sectorId={scenario.Helpdesk}&sectorId={scenario.Infra}");
+        PagedTicketsDto? helpdeskOnly = await HttpClient.GetFromJsonAsync<PagedTicketsDto>(
+            $"tickets?sectorId={scenario.Helpdesk}");
+
+        // Assert
+        both!.Items.Select(t => t.Id).ShouldBe(
+            [scenario.LateEveningBefore, scenario.MorningOfFirst, scenario.MidMonth, scenario.InInfra],
+            ignoreOrder: true);
+        helpdeskOnly!.Items.Select(t => t.Id).ShouldBe(
+            [scenario.LateEveningBefore, scenario.MorningOfFirst, scenario.MidMonth],
+            ignoreOrder: true);
+    }
+
+    /// <summary>
+    /// Chamados da spec 025, em setores novos (isolam os dados dos outros testes): no Helpdesk, um aberto em 31/10 às
+    /// 23h30 de Brasília (02h30 UTC de 01/11), um em 01/11 às 10h resolvido em 02/11 e um em 15/11 nunca resolvido;
+    /// na Infra, um aberto em 01/11 às 10h. Termina autenticado como administrador (<c>tickets:manage</c>).
+    /// </summary>
+    private async Task<PeriodScenario> SeedPeriodScenarioAsync()
+    {
+        Guid helpdesk = await CreateSectorAsAdminAsync();
+        Guid infra = await CreateSectorAsAdminAsync();
+        Guid requesterId = await InsertUserAsync("Maria", "Souza", UniqueEmail());
+
+        Guid lateEvening = await InsertOwnTicketAsync(
+            requesterId, helpdesk, TicketStatus.Open, "Impressora", new DateTime(2026, 11, 1, 2, 30, 0, DateTimeKind.Utc));
+        Guid morning = await InsertOwnTicketAsync(
+            requesterId, helpdesk, TicketStatus.Resolved, "Acesso ao e-mail", new DateTime(2026, 11, 1, 13, 0, 0, DateTimeKind.Utc));
+        await SetResolvedAtAsync(morning, new DateTime(2026, 11, 2, 15, 0, 0, DateTimeKind.Utc));
+        Guid midMonth = await InsertOwnTicketAsync(
+            requesterId, helpdesk, TicketStatus.Open, "Monitor", new DateTime(2026, 11, 15, 13, 0, 0, DateTimeKind.Utc));
+        Guid inInfra = await InsertOwnTicketAsync(
+            requesterId, infra, TicketStatus.Open, "Rede", new DateTime(2026, 11, 1, 13, 0, 0, DateTimeKind.Utc));
+
+        return new PeriodScenario(helpdesk, infra, lateEvening, morning, midMonth, inInfra);
+    }
+
+    private async Task SetResolvedAtAsync(Guid ticketId, DateTime resolvedAtUtc)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        await context.Tickets
+            .Where(t => t.Id == ticketId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(t => t.ResolvedAtUtc, resolvedAtUtc));
+    }
+
+    private sealed record PeriodScenario(
+        Guid Helpdesk,
+        Guid Infra,
+        Guid LateEveningBefore,
+        Guid MorningOfFirst,
+        Guid MidMonth,
+        Guid InInfra);
+
     private sealed record PagedTicketsDto(List<TicketSummaryDto> Items, int TotalCount);
 
     private sealed record TicketSummaryDto(
