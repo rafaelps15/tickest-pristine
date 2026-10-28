@@ -79,7 +79,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | T-1 | Causa da conclusão no cronômetro, gravada nos dois caminhos, e migration | AC-1, AC-2 | `add-entity` | [x] |
 | T-2 | Consulta, cálculo e rota dos tempos médios | AC-3 a AC-7 | `add-feature` | [x] |
 | T-3 | Testes unitários e de integração | AC-1 a AC-7 | `add-tests` | [x] |
-| T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-8 | — | [ ] |
+| T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-8 | — | [x] |
 | T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-8 | `ca-review` | [ ] |
 
 ## 8. Rastreabilidade
