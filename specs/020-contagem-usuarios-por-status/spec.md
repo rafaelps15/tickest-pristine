@@ -94,7 +94,7 @@ Dados: o administrador do seed (ativo, com senha), Ana (ativa, com senha), Bruno
 | T-1 | Slice `Users/GetStatusCounts` (query, resposta, handler) e endpoint | AC-1 a AC-5 | `add-feature` | [x] |
 | T-2 | Testes unitários e de integração | AC-1 a AC-5 | `add-tests` | [x] |
 | T-3 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-6 | — | [x] |
-| T-4 | Revisão de convenções, build sem avisos e suíte inteira | AC-6 | `ca-review` | [ ] |
+| T-4 | Revisão de convenções, build sem avisos e suíte inteira | AC-6 | `ca-review` | [x] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
@@ -104,7 +104,7 @@ Dados: o administrador do seed (ativo, com senha), Ana (ativa, com senha), Bruno
 | AC-3 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetStatusCounts_Should_MoveActiveUserToInactive_WhenUserIsDeactivated` | Ana ativa com senha é desativada por `PUT users/{id}/deactivate`: `activeCount` cai 1, `inactiveCount` sobe 1, `pendingActivationCount` e `totalCount` iguais. | Aprovado |
 | AC-4 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetStatusCounts_Should_ReturnForbidden_WhenCallerLacksUsersReadPermission`, `GetStatusCounts_Should_ReturnUnauthorized_WhenNotAuthenticated` | Colaborador sem `users:read` recebe 403; sem token, 401. | Aprovado |
 | AC-5 | `tests/TickestPristine.IntegrationTests/Users/UsersTests.cs` › `GetStatusCounts_Should_CountInSingleSqlCommand` | Com o `EfCommandCounter` ativo durante a requisição, um único comando lê `user_credentials`, e ele tem `GROUP BY`: o EF traduziu o `Any` dentro da chave do agrupamento (R-1 não se concretizou). | Aprovado |
-| AC-6 | | | |
+| AC-6 | `dotnet build TickestPristine.slnx --no-incremental` e `dotnet test TickestPristine.slnx` | 0 avisos e 0 erros; 50 testes de arquitetura, 695 unitários e 393 de integração aprovados, nenhuma falha. | Aprovado |
 
 ## 9. Evidências de verificação
 - **Build:**
