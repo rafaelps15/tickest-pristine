@@ -1,7 +1,7 @@
 ---
 id: 026
 titulo: Estatísticas da operação agregadas numa chamada, com os filtros da listagem
-status: Em implementação        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-026-tickets-operation-overview                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
@@ -88,21 +88,21 @@ Dados comuns: um atendente com `tickets:manage`; chamados em todos os status, pr
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_ReturnThreeBlocksWithServerTime_WhenNoFilterIsGiven` | Sem filtros, responde 200 com `volume`, `sla` e `attention`; `serverNowUtc` fica no instante da chamada; o backlog é a soma de aberto e em andamento, e "atrasados" da atenção é o mesmo número do SLA atrasado. | Aprovado |
-| AC-2 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_MatchTotalCountOfListing_ForEveryCounter` (sem recorte; com os dois setores; com setores e prioridade Urgente) | Contra o PostgreSQL, cada um dos 16 contadores é igual ao `totalCount` de `GET tickets` com o mesmo recorte e o filtro equivalente (`status`, `slaStatus`, `priority=Urgent` com os ativos, `unassignedOnly=true` com os ativos). Uma mutação que trocava o alerta pelo prazo na regra "no prazo" do SQL foi detectada por 3 casos. | Aprovado |
-| AC-3 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_CountOnlyTicketsOfTheSectorsOpenedInPeriod_WhenSectorsAndPeriodAreGiven` | Com dois `sectorId` e `createdFrom=2026-09-01&createdTo=2026-09-15`, conta só os 7 chamados dos dois setores abertos no período (fica fora o de 25/09 e o do terceiro setor), com cada contador conferido: 3 abertos, 1 em andamento, 1 resolvido, 1 fechado, 1 cancelado, backlog 4, SLA 2/1/1/1/1/1, críticos 2 e sem responsável 2. | Aprovado |
-| AC-4 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_CountOnlyActiveUrgentAndActiveUnassigned_WhenTicketsAreInactive` | No Helpdesk, com um Urgente ativo, um Urgente resolvido e ativos e inativos (fechado e cancelado) sem responsável: críticos = 1 e sem responsável = 2, só os ativos. | Aprovado |
-| AC-5 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_IgnoreStatus_WhenStatusIsGiven` | Com e sem `status=1`, os blocos `volume`, `sla` e `attention` são iguais (só a hora do servidor muda entre as chamadas). | Aprovado |
-| AC-6 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_ReturnForbidden_WhenCallerLacksManagePermission`, `GetOverview_Should_ReturnUnauthorized_WhenNoTokenProvided`, `GetOverview_Should_ReturnBadRequest_WhenPeriodIsInverted`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketOverviewQueryHandlerTests.cs` › `Handle_Should_ReturnInvalidPeriod_WhenStartIsAfterEnd` | Colaborador sem `tickets:manage` recebe 403; sem token, 401. Também coberto o 400 do contrato: período invertido devolve `Tickets.InvalidPeriod`, e o handler responde sem abrir conexão com o banco. | Aprovado |
-| AC-7 | `dotnet build TickestPristine.slnx --no-incremental` e `dotnet test TickestPristine.slnx` | 0 avisos e 0 erros; 50 testes de arquitetura, 711 unitários e 408 de integração aprovados, nenhuma falha. | Aprovado |
+| AC-1 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_ReturnThreeBlocksWithServerTime_WhenNoFilterIsGiven` | Sem filtros, responde 200 com `volume`, `sla` e `attention`; `serverNowUtc` fica no instante da chamada; o backlog é a soma de aberto e em andamento, e "atrasados" da atenção é o mesmo número do SLA atrasado. | Aprovado na execução da `spec-verify` de 2026-10-28 |
+| AC-2 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_MatchTotalCountOfListing_ForEveryCounter` (sem recorte; com os dois setores; com setores e prioridade Urgente) | Contra o PostgreSQL, cada um dos 16 contadores é igual ao `totalCount` de `GET tickets` com o mesmo recorte e o filtro equivalente (`status`, `slaStatus`, `priority=Urgent` com os ativos, `unassignedOnly=true` com os ativos). Uma mutação que trocava o alerta pelo prazo na regra "no prazo" do SQL foi detectada por 3 casos. | Aprovado na execução da `spec-verify` de 2026-10-28 |
+| AC-3 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_CountOnlyTicketsOfTheSectorsOpenedInPeriod_WhenSectorsAndPeriodAreGiven` | Com dois `sectorId` e `createdFrom=2026-09-01&createdTo=2026-09-15`, conta só os 7 chamados dos dois setores abertos no período (fica fora o de 25/09 e o do terceiro setor), com cada contador conferido: 3 abertos, 1 em andamento, 1 resolvido, 1 fechado, 1 cancelado, backlog 4, SLA 2/1/1/1/1/1, críticos 2 e sem responsável 2. | Aprovado na execução da `spec-verify` de 2026-10-28 |
+| AC-4 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_CountOnlyActiveUrgentAndActiveUnassigned_WhenTicketsAreInactive` | No Helpdesk, com um Urgente ativo, um Urgente resolvido e ativos e inativos (fechado e cancelado) sem responsável: críticos = 1 e sem responsável = 2, só os ativos. | Aprovado na execução da `spec-verify` de 2026-10-28 |
+| AC-5 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_IgnoreStatus_WhenStatusIsGiven` | Com e sem `status=1`, os blocos `volume`, `sla` e `attention` são iguais (só a hora do servidor muda entre as chamadas). | Aprovado na execução da `spec-verify` de 2026-10-28 |
+| AC-6 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_ReturnForbidden_WhenCallerLacksManagePermission`, `GetOverview_Should_ReturnUnauthorized_WhenNoTokenProvided`, `GetOverview_Should_ReturnBadRequest_WhenPeriodIsInverted`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketOverviewQueryHandlerTests.cs` › `Handle_Should_ReturnInvalidPeriod_WhenStartIsAfterEnd` | Colaborador sem `tickets:manage` recebe 403; sem token, 401. Também coberto o 400 do contrato: período invertido devolve `Tickets.InvalidPeriod`, e o handler responde sem abrir conexão com o banco. | Aprovado na execução da `spec-verify` de 2026-10-28 |
+| AC-7 | `dotnet build TickestPristine.slnx --no-incremental` e `dotnet test TickestPristine.slnx` | 0 avisos e 0 erros; 50 testes de arquitetura, 711 unitários e 408 de integração aprovados, nenhuma falha. | Aprovado na execução da `spec-verify` de 2026-10-28 |
 
 ## 9. Evidências de verificação
-- **Build:**
-- **Testes:**
-- **Revisão:**
-- **Documentação atualizada:**
-- **CI:**
-- **Entrega:**
+- **Build:** 2026-10-28, `dotnet build TickestPristine.slnx --no-incremental`: 0 avisos, 0 erros.
+- **Testes:** 2026-10-28, `dotnet test TickestPristine.slnx` com relatório TRX por teste: 50 de arquitetura, 711 unitários e 408 de integração aprovados, 0 com falha. No TRX, aparecem como `Passed` os 10 `GetOverview_*`, os 2 de `GetTicketOverviewQueryHandlerTests`, os 11 `GetAll_*` de `TicketsTests` e os 21 de `GetTicketsQueryHandlerTests` (a refatoração de `GET tickets` sem mudança de comportamento). O `TickestPristine.Web.Api.deps.json` da pasta de testes foi conferido antes e depois da execução. Auditoria `python scripts/auditoria_sdd.py .`: score 100,0%, CONFORME, 0 falhas críticas, código de saída 0.
+- **Revisão:** `ca-review` sobre as mudanças da spec: nenhum achado bloqueante, nenhuma violação de convenção. Observação para decisão futura, sem defeito: o `GetTicketSlaSummaryQueryHandler` conta num só comando em EF reaproveitando `TicketSlaFilters`; o mesmo caminho eliminaria a regra de SLA escrita duas vezes (R-1), mas a DEC-2 (SQL) foi mantida como aprovada.
+- **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 4.3.1 (rota `GET tickets/stats/overview`) e 5.7 (gatilho e descrição das estatísticas da operação, com o `TicketScopeFilter` e a paridade), no commit `b0b798f` (T-4); conferidas nesta verificação, sem outra seção afetada.
+- **CI:** roda no PR para a `main`.
+- **Entrega:** pendente (PR ainda não aberto).
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -111,3 +111,4 @@ Dados comuns: um atendente com `tickets:manage`; chamados em todos os status, pr
 | 2026-10-28 | Em descoberta | Perguntas respondidas no chat (DEC-1 a DEC-3). Aguardando aprovação. |
 | 2026-10-28 | Aprovada | Aprovada por Rafael Santos no chat do front-end ("Pode aprovar as specs", confirmando "As seis (025 a 030)"). Checklist de completude conferido: nenhuma pergunta aberta e nenhum `[SUPOSIÇÃO]`. Implementação depois do merge da 025. |
 | 2026-10-28 | Em implementação | `/spec-implement 026` na branch `feat/SPEC-026-tickets-operation-overview`, com a `origin/main` mesclada depois do merge da 025 (PR #43) e da 030 (PR #44). Rafael Santos pediu a implementação completa, com o agente respondendo por ele ("atue como senior e só pare quando finalizar"). Tabelas de rastreabilidade e de evidências criadas. |
+| 2026-10-28 | Verificada | `spec-verify`: build sem avisos, 1.169 testes aprovados, auditoria 100% (saída 0), AC-1 a AC-7 cobertos por testes que passaram nesta execução, `ca-review` sem achados bloqueantes. |
