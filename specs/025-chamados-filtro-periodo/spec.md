@@ -1,7 +1,7 @@
 ---
 id: 025
 titulo: Filtro de período (abertura e resolução) e vários setores na listagem de chamados
-status: Aprovada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+status: Em implementação        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-025-tickets-period-filter                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
@@ -51,6 +51,7 @@ Dados comuns: um atendente com `tickets:manage`; chamados abertos em 31/10 às 2
 | DEC-3 | Nomes dos parâmetros | — | `createdFrom`/`createdTo` (como `GET users`) e `resolvedFrom`/`resolvedTo` | consequência da DEC-2, registrada em 2026-10-28 |
 | DEC-4 | `GET tickets` aceita vários setores? | (a) sim, `sectorId` repetido; (b) não | (a): o drill-down de um card filtrado por departamento (vários setores) precisa abrir a lista com o mesmo recorte | Rafael Santos, 2026-10-28, no chat |
 | DEC-5 | Na listagem, "resolvido no período" usa qual data? | (a) a primeira resolução (`ResolvedAtUtc`); (b) qualquer resolução, pelo histórico | (a): é a única data de resolução do chamado; a vazão com cada resolução fica na série da 028 | Rafael Santos, 2026-10-28, no chat |
+| DEC-6 | Onde recusar o período invertido (REQ-3), já que o decorator de validação só envolve commands (`CLAUDE.md`, "Comportamentos transversais") e um `GetTicketsQueryValidator` nunca rodaria? | (a) no handler, com `TicketErrors.InvalidPeriod` (`Error.Problem`, 400), como `GetBacklogAttendantsQueryHandler` faz com `UserErrors.InvalidSearchTerm`; (b) estender o decorator de validação às queries | (a): segue o precedente do projeto e não muda um comportamento transversal fora do plano; o AC-4 (400 com erro claro) não muda. A conversão de fuso fica em `SlaCalendars/LocalDatePeriod.cs`, junto de `DefaultSlaCalendar.TimeZoneId`, como o plano sugeria | Delegado por Rafael Santos ao agente, 2026-10-28, no chat ("atue como senior e só pare quando finalizar") |
 
 ## 5. Fora do escopo
 - Período e setores no endpoint agregado (spec 026), nos tempos médios (027) e no volume (028), que usam esta mesma regra.
@@ -82,17 +83,30 @@ Dados comuns: um atendente com `tickets:manage`; chamados abertos em 31/10 às 2
 ## 7. Tarefas
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
-| T-1 | Conversão de data local de São Paulo para intervalo UTC, com teste | AC-1 | `add-feature` | [ ] |
+| T-1 | Conversão de data local de São Paulo para intervalo UTC, com teste | AC-1 | `add-feature` | [x] |
 | T-2 | Período de abertura e de resolução, vários setores e validação em `GET tickets` | AC-1 a AC-5 | `add-feature` | [ ] |
 | T-3 | Testes unitários e de integração da seção 6 | AC-1 a AC-6 | `add-tests` | [ ] |
 | T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-7 | — | [ ] |
 | T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-7 | `ca-review` | [ ] |
 
 ## 8. Rastreabilidade
-Não se aplica até a aprovação.
+| AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
+|---|---|---|---|
+| AC-1 | | | |
+| AC-2 | | | |
+| AC-3 | | | |
+| AC-4 | | | |
+| AC-5 | | | |
+| AC-6 | | | |
+| AC-7 | | | |
 
 ## 9. Evidências de verificação
-Não se aplica até a implementação.
+- **Build:**
+- **Testes:**
+- **Revisão:**
+- **Documentação atualizada:**
+- **CI:**
+- **Entrega:**
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -100,3 +114,4 @@ Não se aplica até a implementação.
 | 2026-10-28 | Rascunho | Criada a partir do pedido de Rafael Santos no chat do front-end; número reservado já na criação, porque outra sessão cria specs em paralelo. |
 | 2026-10-28 | Em descoberta | Cinco rodadas de perguntas respondidas no chat (DEC-1 a DEC-5). Aguardando aprovação. |
 | 2026-10-28 | Aprovada | Aprovada por Rafael Santos no chat do front-end ("Pode aprovar as specs", confirmando "As seis (025 a 030)"). Checklist de completude conferido: nenhuma pergunta aberta e nenhum `[SUPOSIÇÃO]`. Pode começar já. |
+| 2026-10-28 | Em implementação | `/spec-implement 025` na branch `feat/SPEC-025-tickets-period-filter`, a partir da `origin/main`. Rafael Santos pediu a implementação completa seguindo as skills, com o agente respondendo por ele ("atue como senior e só pare quando finalizar e siga as minhas skills"). DEC-6 registrada: o plano previa um validator de query, que o projeto não executa; o período invertido é recusado no handler. Tabelas de rastreabilidade e de evidências criadas. |
