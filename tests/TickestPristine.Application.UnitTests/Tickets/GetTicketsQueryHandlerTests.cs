@@ -286,7 +286,21 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
         bool unassignedOnly = false,
         TicketSortOrder sort = TicketSortOrder.Newest,
         TicketPriority? priority = null) =>
-        new(statuses ?? [], priority, sectorId, requesterId, assignedToUserId, unassignedOnly, slaStatus, search, sort, new PageRequest(1, 20));
+        new(
+            statuses ?? [],
+            priority,
+            sectorId is null ? [] : [sectorId.Value],
+            requesterId,
+            assignedToUserId,
+            unassignedOnly,
+            slaStatus,
+            search,
+            null,
+            null,
+            null,
+            null,
+            sort,
+            new PageRequest(1, 20));
 
     private static async Task<(User Requester, Sector Sector)> SeedRequesterAndSectorAsync(TestDbContext context)
     {

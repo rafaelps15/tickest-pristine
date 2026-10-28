@@ -84,7 +84,7 @@ Dados comuns: um atendente com `tickets:manage`; chamados abertos em 31/10 às 2
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
 | T-1 | Conversão de data local de São Paulo para intervalo UTC, com teste | AC-1 | `add-feature` | [x] |
-| T-2 | Período de abertura e de resolução, vários setores e validação em `GET tickets` | AC-1 a AC-5 | `add-feature` | [ ] |
+| T-2 | Período de abertura e de resolução, vários setores e validação em `GET tickets` | AC-1 a AC-5 | `add-feature` | [x] |
 | T-3 | Testes unitários e de integração da seção 6 | AC-1 a AC-6 | `add-tests` | [ ] |
 | T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-7 | — | [ ] |
 | T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-7 | `ca-review` | [ ] |
