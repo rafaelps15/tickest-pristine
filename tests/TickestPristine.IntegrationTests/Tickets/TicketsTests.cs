@@ -917,17 +917,26 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
-    public async Task GetStatusCounts_Should_ReturnForbidden_WhenCallerLacksManagePermission()
+    public async Task GetStatusCounts_Should_ReturnSameTotalsAsAgent_WhenCallerLacksManagePermission()
     {
-        // Arrange
-        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
-        Authenticate(tokens.AccessToken);
+        // Arrange: chamados em vários status, um Solicitante (sem tickets:manage) e um Atendente
+        (_, AccessTokens requesterTokens) = await CreateTicketAsRequesterAsync();
+        (Guid resolvedId, _) = await CreateTicketAsRequesterAsync();
+        await ResolveTicketAsync(resolvedId);
+        AccessTokens agentTokens = await CreateAgentAsync();
 
         // Act
-        HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/status");
+        Authenticate(requesterTokens.AccessToken);
+        HttpResponseMessage requesterResponse = await HttpClient.GetAsync("tickets/stats/status");
+        Authenticate(agentTokens.AccessToken);
+        StatusCountsDto? agentCounts = await HttpClient.GetFromJsonAsync<StatusCountsDto>("tickets/stats/status");
 
-        // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        // Assert: a empresa toda, com os mesmos totais de quem atende
+        requesterResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        StatusCountsDto? requesterCounts = await requesterResponse.Content.ReadFromJsonAsync<StatusCountsDto>();
+        requesterCounts.ShouldBe(agentCounts);
+        requesterCounts!.OpenCount.ShouldBeGreaterThanOrEqualTo(1);
+        requesterCounts.ResolvedCount.ShouldBeGreaterThanOrEqualTo(1);
     }
 
     [Fact]
@@ -966,17 +975,30 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
-    public async Task GetVolume_Should_ReturnForbidden_WhenCallerLacksManagePermission()
+    public async Task GetVolume_Should_ReturnSameCompanyPointsAsAgent_WhenCallerLacksManagePermission()
     {
-        // Arrange
-        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
-        Authenticate(tokens.AccessToken);
+        // Arrange: chamados abertos em dois dias diferentes dos últimos 30, um Solicitante e um Atendente
+        Guid sectorId = await InsertSectorAsync($"Volume-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        DateTime yesterdayUtc = DateTime.UtcNow.AddDays(-1);
+        DateTime threeDaysAgoUtc = DateTime.UtcNow.AddDays(-3);
+        await InsertVolumeTicketAsync(sectorId, yesterdayUtc);
+        await InsertVolumeTicketAsync(sectorId, threeDaysAgoUtc);
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        AccessTokens agentTokens = await CreateAgentAsync();
 
         // Act
-        HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/volume");
+        Authenticate(requesterTokens.AccessToken);
+        HttpResponseMessage requesterResponse = await HttpClient.GetAsync("tickets/stats/volume?groupBy=Day");
+        Authenticate(agentTokens.AccessToken);
+        List<VolumePointDto> agentVolume = (await HttpClient.GetFromJsonAsync<List<VolumePointDto>>(
+            "tickets/stats/volume?groupBy=Day"))!;
 
-        // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        // Assert: os mesmos pontos de quem atende, com os dois dias contados
+        requesterResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        List<VolumePointDto> requesterVolume = (await requesterResponse.Content.ReadFromJsonAsync<List<VolumePointDto>>())!;
+        requesterVolume.ShouldBe(agentVolume);
+        requesterVolume.Single(p => p.PeriodStart == BrasiliaDate(yesterdayUtc)).Count.ShouldBeGreaterThanOrEqualTo(1);
+        requesterVolume.Single(p => p.PeriodStart == BrasiliaDate(threeDaysAgoUtc)).Count.ShouldBeGreaterThanOrEqualTo(1);
     }
 
     [Fact]
@@ -2402,6 +2424,9 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
     private static DateOnly BrasiliaToday() =>
         DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, BrasiliaTimeZone));
+
+    private static DateOnly BrasiliaDate(DateTime utc) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(utc, BrasiliaTimeZone));
 
     private static DateTime BrasiliaToUtc(DateOnly date, int hour) =>
         TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(new TimeOnly(hour, 0)), BrasiliaTimeZone);

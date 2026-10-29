@@ -40,6 +40,10 @@ public static class TicketErrors
         "Tickets.StatusChangeForbidden",
         "Só quem atende a fila de chamados pode mudar o status para Em Andamento ou Resolvido.");
 
+    public static readonly Error StatsScopeForbidden = Error.Forbidden(
+        "Tickets.StatsScopeForbidden",
+        "Só quem atende a fila de chamados pode filtrar as estatísticas por setor, prioridade, solicitante ou responsável.");
+
     public static readonly Error InvalidPeriod = Error.Problem(
         "Tickets.InvalidPeriod",
         "A data inicial do período não pode ser posterior à data final.");

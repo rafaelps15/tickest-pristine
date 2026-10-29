@@ -1,4 +1,7 @@
+using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Tickets.GetVolume;
 using TickestPristine.Application.UnitTests.Abstractions;
@@ -12,6 +15,7 @@ namespace TickestPristine.Application.UnitTests.Tickets;
 /// </summary>
 public sealed class GetTicketVolumeQueryHandlerTests : BaseHandlerTest
 {
+    private static readonly Guid CallerId = Guid.NewGuid();
     private static readonly TicketScopeFilter NoScope = new([], null, null, null, false, null, null, null, null);
 
     [Fact]
@@ -19,7 +23,7 @@ public sealed class GetTicketVolumeQueryHandlerTests : BaseHandlerTest
     {
         // Arrange
         IDbConnectionFactory dbConnectionFactory = Substitute.For<IDbConnectionFactory>();
-        var handler = new GetTicketVolumeQueryHandler(dbConnectionFactory, CreateClock());
+        GetTicketVolumeQueryHandler handler = CreateHandler(dbConnectionFactory, Substitute.For<IPermissionProvider>());
         var query = new GetTicketVolumeQuery(TicketVolumeGrouping.Day, NoScope, new DateOnly(2026, 10, 10), new DateOnly(2026, 10, 1));
 
         // Act
@@ -36,7 +40,7 @@ public sealed class GetTicketVolumeQueryHandlerTests : BaseHandlerTest
     {
         // Arrange: dois anos agrupados por dia
         IDbConnectionFactory dbConnectionFactory = Substitute.For<IDbConnectionFactory>();
-        var handler = new GetTicketVolumeQueryHandler(dbConnectionFactory, CreateClock());
+        GetTicketVolumeQueryHandler handler = CreateHandler(dbConnectionFactory, Substitute.For<IPermissionProvider>());
         var query = new GetTicketVolumeQuery(TicketVolumeGrouping.Day, NoScope, new DateOnly(2024, 1, 1), new DateOnly(2025, 12, 31));
 
         // Act
@@ -46,5 +50,13 @@ public sealed class GetTicketVolumeQueryHandlerTests : BaseHandlerTest
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(TicketErrors.VolumeTooManyPoints(TicketVolumePeriods.MaxPoints));
         await dbConnectionFactory.DidNotReceive().OpenConnectionAsync(Arg.Any<CancellationToken>());
+    }
+
+    private static GetTicketVolumeQueryHandler CreateHandler(IDbConnectionFactory dbConnectionFactory, IPermissionProvider permissionProvider)
+    {
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(CallerId);
+
+        return new GetTicketVolumeQueryHandler(dbConnectionFactory, CreateClock(), userContext, permissionProvider);
     }
 }

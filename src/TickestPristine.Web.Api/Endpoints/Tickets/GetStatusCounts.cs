@@ -10,6 +10,7 @@ internal sealed class GetStatusCounts : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
+        // Só números agregados da empresa: atende qualquer usuário ativo (spec 031).
         app.MapGet("tickets/stats/status", async (
             IQueryHandler<GetTicketStatusCountsQuery, TicketStatusCountsResponse> handler,
             CancellationToken cancellationToken) =>
@@ -21,6 +22,6 @@ internal sealed class GetStatusCounts : IEndpoint
             return result.Match(Results.Ok, CustomResults.Problem);
         })
         .WithTags(Tags.Tickets)
-        .HasPermission(Permissions.TicketsManage);
+        .RequireAuthorization();
     }
 }
