@@ -917,17 +917,26 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
-    public async Task GetStatusCounts_Should_ReturnForbidden_WhenCallerLacksManagePermission()
+    public async Task GetStatusCounts_Should_ReturnSameTotalsAsAgent_WhenCallerLacksManagePermission()
     {
-        // Arrange
-        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
-        Authenticate(tokens.AccessToken);
+        // Arrange: chamados em vários status, um Solicitante (sem tickets:manage) e um Atendente
+        (_, AccessTokens requesterTokens) = await CreateTicketAsRequesterAsync();
+        (Guid resolvedId, _) = await CreateTicketAsRequesterAsync();
+        await ResolveTicketAsync(resolvedId);
+        AccessTokens agentTokens = await CreateAgentAsync();
 
         // Act
-        HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/status");
+        Authenticate(requesterTokens.AccessToken);
+        HttpResponseMessage requesterResponse = await HttpClient.GetAsync("tickets/stats/status");
+        Authenticate(agentTokens.AccessToken);
+        StatusCountsDto? agentCounts = await HttpClient.GetFromJsonAsync<StatusCountsDto>("tickets/stats/status");
 
-        // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        // Assert: a empresa toda, com os mesmos totais de quem atende
+        requesterResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        StatusCountsDto? requesterCounts = await requesterResponse.Content.ReadFromJsonAsync<StatusCountsDto>();
+        requesterCounts.ShouldBe(agentCounts);
+        requesterCounts!.OpenCount.ShouldBeGreaterThanOrEqualTo(1);
+        requesterCounts.ResolvedCount.ShouldBeGreaterThanOrEqualTo(1);
     }
 
     [Fact]
@@ -966,17 +975,82 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
-    public async Task GetVolume_Should_ReturnForbidden_WhenCallerLacksManagePermission()
+    public async Task GetVolume_Should_ReturnSameCompanyPointsAsAgent_WhenCallerLacksManagePermission()
     {
-        // Arrange
-        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
-        Authenticate(tokens.AccessToken);
+        // Arrange: chamados abertos em dois dias diferentes dos últimos 30, um Solicitante e um Atendente
+        Guid sectorId = await InsertSectorAsync($"Volume-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        DateTime yesterdayUtc = DateTime.UtcNow.AddDays(-1);
+        DateTime threeDaysAgoUtc = DateTime.UtcNow.AddDays(-3);
+        await InsertVolumeTicketAsync(sectorId, yesterdayUtc);
+        await InsertVolumeTicketAsync(sectorId, threeDaysAgoUtc);
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        AccessTokens agentTokens = await CreateAgentAsync();
 
         // Act
-        HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/volume");
+        Authenticate(requesterTokens.AccessToken);
+        HttpResponseMessage requesterResponse = await HttpClient.GetAsync("tickets/stats/volume?groupBy=Day");
+        Authenticate(agentTokens.AccessToken);
+        List<VolumePointDto> agentVolume = (await HttpClient.GetFromJsonAsync<List<VolumePointDto>>(
+            "tickets/stats/volume?groupBy=Day"))!;
 
-        // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        // Assert: os mesmos pontos de quem atende, com os dois dias contados
+        requesterResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        List<VolumePointDto> requesterVolume = (await requesterResponse.Content.ReadFromJsonAsync<List<VolumePointDto>>())!;
+        requesterVolume.ShouldBe(agentVolume);
+        requesterVolume.Single(p => p.PeriodStart == BrasiliaDate(yesterdayUtc)).Count.ShouldBeGreaterThanOrEqualTo(1);
+        requesterVolume.Single(p => p.PeriodStart == BrasiliaDate(threeDaysAgoUtc)).Count.ShouldBeGreaterThanOrEqualTo(1);
+    }
+
+    [Fact]
+    public async Task GetVolume_Should_ReturnPointsOfThePeriod_WhenCallerLacksManagePermissionAndGivesOnlyThePeriod()
+    {
+        // Arrange: chamados abertos em dois dias de uma semana, um Solicitante e um Atendente
+        Guid sectorId = await InsertSectorAsync($"Volume-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        await InsertVolumeTicketAsync(sectorId, BrasiliaToUtc(new DateOnly(2025, 2, 11), 10));
+        await InsertVolumeTicketAsync(sectorId, BrasiliaToUtc(new DateOnly(2025, 2, 13), 10));
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        AccessTokens agentTokens = await CreateAgentAsync();
+        const string Route = "tickets/stats/volume?groupBy=Day&createdFrom=2025-02-10&createdTo=2025-02-16";
+
+        // Act
+        Authenticate(requesterTokens.AccessToken);
+        HttpResponseMessage requesterResponse = await HttpClient.GetAsync(Route);
+        Authenticate(agentTokens.AccessToken);
+        List<VolumePointDto> agentVolume = (await HttpClient.GetFromJsonAsync<List<VolumePointDto>>(Route))!;
+
+        // Assert: o período não é filtro de recorte (DEC-3): um ponto por dia do período, como para quem atende
+        requesterResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        List<VolumePointDto> requesterVolume = (await requesterResponse.Content.ReadFromJsonAsync<List<VolumePointDto>>())!;
+        requesterVolume.Select(p => p.PeriodStart).ShouldBe(Enumerable.Range(10, 7).Select(day => new DateOnly(2025, 2, day)));
+        requesterVolume.ShouldBe(agentVolume);
+        requesterVolume.Single(p => p.PeriodStart == new DateOnly(2025, 2, 11)).Count.ShouldBeGreaterThanOrEqualTo(1);
+        requesterVolume.Single(p => p.PeriodStart == new DateOnly(2025, 2, 13)).Count.ShouldBeGreaterThanOrEqualTo(1);
+    }
+
+    [Theory]
+    [InlineData("sectorId=6f1c2a4e-0b7d-4c1e-9a52-3d8e7f6a1b20")]
+    [InlineData("sectorId=6f1c2a4e-0b7d-4c1e-9a52-3d8e7f6a1b20&createdFrom=2025-02-10&createdTo=2025-02-16")]
+    [InlineData("priority=Urgent")]
+    [InlineData("requesterId=1b9d4e7a-5c3f-4a2b-8e6d-0f7a9c2b4d31")]
+    [InlineData("assignedToUserId=1b9d4e7a-5c3f-4a2b-8e6d-0f7a9c2b4d31")]
+    [InlineData("unassignedOnly=true")]
+    public async Task GetVolume_Should_ReturnForbiddenToRequesterAndOkToAgent_WhenSlicingFilterIsGiven(string filter)
+    {
+        // Arrange
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        AccessTokens agentTokens = await CreateAgentAsync();
+        string route = $"tickets/stats/volume?groupBy=Day&{filter}";
+
+        // Act
+        Authenticate(requesterTokens.AccessToken);
+        HttpResponseMessage requesterResponse = await HttpClient.GetAsync(route);
+        Authenticate(agentTokens.AccessToken);
+        HttpResponseMessage agentResponse = await HttpClient.GetAsync(route);
+
+        // Assert: sem tickets:manage, ninguém recorta por setor ou pessoa (DEC-2)
+        requesterResponse.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await requesterResponse.Content.ReadAsStringAsync()).ShouldContain("Tickets.StatsScopeForbidden");
+        agentResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
     [Fact]
@@ -2402,6 +2476,9 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
     private static DateOnly BrasiliaToday() =>
         DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, BrasiliaTimeZone));
+
+    private static DateOnly BrasiliaDate(DateTime utc) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(utc, BrasiliaTimeZone));
 
     private static DateTime BrasiliaToUtc(DateOnly date, int hour) =>
         TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(new TimeOnly(hour, 0)), BrasiliaTimeZone);
