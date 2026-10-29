@@ -247,7 +247,7 @@ Ordem: esta spec `Entregue` → Spec C aprovada e entregue → Spec B. Esta spec
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
 | T-1 | Linha de base (somente leitura): build e testes do Tickest; validador e testes da biblioteca; listagem da biblioteca | AC-12 | manual, com diff e ok | [x] |
-| T-2 | Com P-3: snapshot, manifesto, restauração verificada, `git init` e commit de linha de base | AC-1 | manual, com diff e ok | [ ] |
+| T-2 | Com P-3: snapshot, manifesto, restauração verificada, `git init` e commit de linha de base | AC-1 | manual, com diff e ok | [x] |
 | T-3 | Validador e testes da biblioteca com fixtures; as regras novas contra a biblioteca real só são ligadas na T-4c | AC-2 | manual, com diff e ok | [ ] |
 | T-4a | Biblioteca: entidade e `domain-modeling` (C-1 a C-6, C-9); `add-entity` com até 101 linhas | AC-3 | manual, com diff e ok | [ ] |
 | T-4b | Biblioteca: handler, consulta, autorização, abstração e evento (C-7, C-8) | AC-3 | manual, com diff e ok | [ ] |
@@ -264,7 +264,7 @@ Ordem: esta spec `Entregue` → Spec C aprovada e entregue → Spec B. Esta spec
 
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | evidência por comando | restauração comprovada pelo manifesto | |
+| AC-1 | evidência por comando (`tar -xzf` + `sha256sum -c`) | restauração comprovada pelo manifesto | Aprovado em 2026-10-29: 24/24 `OK` (seção 9) |
 | AC-2, AC-3 | `tests/test_library.py` | fixtures do validador; um teste por item C-1 a C-10 | |
 | AC-4 a AC-8, AC-14 | `scripts/test_instructions.py` | frases, paridade, `CLAUDE.md`, agente, README, autotestes | |
 | AC-9 | `tests/TickestPristine.ArchitectureTests` | lista vazia e autoteste | |
@@ -278,7 +278,11 @@ Ordem: esta spec `Entregue` → Spec C aprovada e entregue → Spec B. Esta spec
   - Tickest: `dotnet build TickestPristine.slnx` com 0 avisos e 0 erros; `dotnet test TickestPristine.slnx` com 1.282 testes aprovados e 0 falhas (50 de arquitetura, 761 unitários, 471 de integração).
   - Biblioteca: `python tools/validate_library.py` → `RESULTADO: APROVADO` (192 verificações, 5 skills). `python -m unittest discover -s tests -v` → 2 testes, 1 falha preexistente: `test_catches_broken_copy` espera "cita outro projeto ou autor", que o validador não produz nesse cenário; fica para a T-3, que reescreve o validador e os testes.
   - Listagem da biblioteca: 24 arquivos, sem `.git`, com SHA-256 por arquivo (sem `__pycache__/`, que o próprio `unittest` criou em `tests/` durante a T-1 e que o `.gitignore` da biblioteca já ignora). Referência para a P-3.
-- **Backup e restauração:**
+- **Backup e restauração (T-2, 2026-10-29):**
+  - P-3: confirmação de Rafael Santos no chat ("por enquanto prossiga"); listagem da biblioteca igual à da T-1 (24 arquivos, mesmos SHA-256).
+  - Snapshot `C:\dev\_backups\dotnet-universal-skills-2026-10-29.tgz` (30.717 bytes, SHA-256 `5adaa1c5f7bb28c27d68e452934fc0af47175989465f26765c9a0217f015f122`), sem `__pycache__/`; manifesto `C:\dev\_backups\dotnet-universal-skills-2026-10-29.sha256` com 24 linhas.
+  - AC-1: `tar -xzf` numa pasta temporária e `sha256sum -c` do manifesto → 24 `OK`, 0 falhas, 24 arquivos restaurados.
+  - `git init -b main` na biblioteca, sem remoto (`git remote` vazio); commit local de linha de base `c4e3c82` ("chore: linha de base da biblioteca antes da spec 012"), autorizado por Rafael Santos no chat ("sim"), com os 24 arquivos do manifesto e nenhum outro; árvore igual ao manifesto depois do commit.
 - **Validador e testes da biblioteca:**
 - **Build:**
 - **Testes:**
