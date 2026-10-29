@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: fix/SPEC-031-company-stats-for-every-user                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: "#50"                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 031 — Totais por status e volume da empresa toda para qualquer usuário logado
@@ -89,7 +89,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 - **Revisão:** `ca-review` sobre as mudanças da spec: nenhum achado bloqueante nem violação de convenção. A autorização segue a forma 2 do `CLAUDE.md` (rota com usuário ativo e `tickets:manage` conferida no handler, como em `GET users/attendants`), e o erro `Tickets.StatsScopeForbidden` está em `TicketErrors`, em pt-BR. O único ajuste, de formatação (comentário de `GetTicketVolumeQuery`), foi feito na T-4, antes desta verificação. Observação sem defeito: o 400 de período inválido vem antes do 403 de recorte, a mesma ordem do handler de atendentes.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 2.6 (RN-35), 2.7 (C-13), 4.3.1 (a linha de `sla-summary`, `stats/status` e `stats/volume` dividida em três) e 5.7 (gatilhos do painel), no commit `7ec9f52` (T-3); conferidas nesta verificação, sem outra seção afetada.
 - **CI:** roda no PR para a `main`.
-- **Entrega:**
+- **Entrega:** PR [#50](https://github.com/rafaelps15/tickest-pristine/pull/50) aberto para a `main` em 2026-10-28; a spec fica `Entregue` quando ele for mergeado.
 
 ## 10. Histórico
 | Data | Status | Observação |
