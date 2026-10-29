@@ -70,7 +70,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | T-1 | Autorização das duas rotas por usuário autenticado; `tickets:manage` só com filtro de recorte no volume | AC-1 a AC-6 | `add-feature` | [x] |
 | T-2 | Testes de integração | AC-1 a AC-6 | `add-tests` | [x] |
 | T-3 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-7 | — | [x] |
-| T-4 | Revisão de convenções, build sem avisos e suíte inteira | AC-7 | `ca-review` | [ ] |
+| T-4 | Revisão de convenções, build sem avisos e suíte inteira | AC-7 | `ca-review` | [x] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
@@ -81,7 +81,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | AC-4 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetVolume_Should_ReturnPointsOfThePeriod_WhenCallerLacksManagePermissionAndGivesOnlyThePeriod` | Só com `createdFrom`/`createdTo` (10 a 16/02/2025), o Solicitante recebe 200 com um ponto por dia do período, os mesmos do Atendente, e os dois dias com chamados contados. | Aprovado |
 | AC-5 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetVolume_Should_ReturnForbiddenToRequesterAndOkToAgent_WhenSlicingFilterIsGiven` (setor, setor com período, prioridade, solicitante, responsável e só sem responsável); `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketVolumeQueryHandlerTests.cs` › `Handle_Should_ReturnStatsScopeForbidden_WhenSlicingFilterIsGivenWithoutManagePermission` (cada filtro) | Com cada filtro de recorte, o Solicitante recebe 403 `Tickets.StatsScopeForbidden` e o Atendente, 200; no unitário, o handler confere `tickets:manage` de quem chama e não abre a conexão. Uma mutação que tirava "só sem responsável" do recorte foi detectada por 1 caso unitário e 1 de integração. | Aprovado |
 | AC-6 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetSlaSummary_Should_ReturnForbidden_WhenCallerLacksManagePermission`, `GetOverview_Should_ReturnForbidden_WhenCallerLacksManagePermission` | Um usuário recém-cadastrado (Colaborador, sem `tickets:manage`) continua recebendo 403 em `GET tickets/sla-summary` e no agregado da 026. | Aprovado |
-| AC-7 | | | |
+| AC-7 | `dotnet build TickestPristine.slnx` e `dotnet test TickestPristine.slnx` (suíte inteira) | Build com 0 avisos e 0 erros; 1.282 testes aprovados e 0 com falha (50 de arquitetura, 761 unitários, 471 de integração), com o `deps.json` dos testes conferido antes e depois da execução. | Aprovado |
 
 ## 9. Evidências de verificação
 - **Build:**
@@ -99,3 +99,4 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | 2026-10-28 | Aprovada | Aprovada por Rafael Santos no chat ("sim"). |
 | 2026-10-28 | Em implementação | `/spec-implement 031` na branch `fix/SPEC-031-company-stats-for-every-user`, criada a partir da `origin/main` depois do merge da 029 (PR #49); as specs 025 e 028 já estão mergeadas, então a regra de recorte entra nesta spec (R-1). Rafael Santos pediu a implementação completa seguindo as skills de código. |
 | 2026-10-28 | Em implementação | T-1: as duas rotas passam a `RequireAuthorization()` (usuário ativo); o handler do volume confere `tickets:manage` só quando `TicketScopeFilter.HasSlicingFilter` (setores, prioridade, solicitante, responsável ou só sem responsável; os períodos não contam, DEC-3) e responde 403 `Tickets.StatsScopeForbidden`, depois da validação do período, como o handler de atendentes. Os dois testes de integração que conferiam o 403 antigo (`GetStatusCounts_Should_ReturnForbidden_*` e `GetVolume_Should_ReturnForbidden_*`) contradiziam a DEC-1 e foram trocados, no mesmo commit, pelos testes do AC-1 e do AC-3. |
+| 2026-10-28 | Em implementação | T-4: revisão de convenções sem achados bloqueantes (autorização na forma 2 do `CLAUDE.md`: rota com usuário ativo e permissão conferida no handler; erro em `TicketErrors` com texto em pt-BR). Único ajuste: quebra de linha no comentário de `GetTicketVolumeQuery`. Build com 0 avisos e suíte inteira verde (1.282 testes). Todas as tarefas concluídas; próximo passo: `/spec-verify 031`. |

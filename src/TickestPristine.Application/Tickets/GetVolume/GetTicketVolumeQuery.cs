@@ -7,8 +7,8 @@ namespace TickestPristine.Application.Tickets.GetVolume;
 /// depois de reabrir) em cada dia, semana ou mês, para o gráfico do dashboard. A empresa toda atende qualquer usuário
 /// ativo; o <see cref="Scope"/> recorta os chamados (setores, prioridade, solicitante e responsável; os períodos dele não
 /// se aplicam) e, com recorte, exige a permissão de gestão dos chamados (spec 031). <see cref="From"/>/<see cref="To"/>
-/// definem o intervalo do gráfico. Os períodos seguem o horário de Brasília e vêm do mais antigo para o mais recente, inclusive os vazios,
-/// com zero.
+/// definem o intervalo do gráfico. Os períodos seguem o horário de Brasília e vêm do mais antigo para o mais recente,
+/// inclusive os vazios, com zero.
 /// </summary>
 public sealed record GetTicketVolumeQuery(
     TicketVolumeGrouping GroupBy,
