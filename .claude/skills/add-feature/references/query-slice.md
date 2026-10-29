@@ -97,9 +97,7 @@ public static Expression<Func<TodoItem, bool>> OverdueAt(DateTime utcNow) =>
 
 ## Cache (opcional, só para leituras frequentes)
 
-**Adaptação do Tickest:** nenhuma query da Application usa cache; o único uso de `HybridCache` é o `PermissionProvider` (Infrastructure). Os modelos abaixo não se aplicam aqui sem uma decisão explícita.
-
-Envolva a consulta ao banco em `HybridCache.GetOrCreateAsync`, com uma chave da classe de chaves de cache da feature:
+Envolva a consulta ao banco em `HybridCache.GetOrCreateAsync`, com uma chave da classe de chaves de cache da feature (veja o `GetTodoByIdQueryHandler` como exemplo real):
 
 ```csharp
 namespace Application.Todos;
@@ -109,8 +107,6 @@ internal static class TodoCacheKeys
     internal static string ById(Guid userId, Guid todoItemId) => $"todos-{userId}-{todoItemId}";
 }
 ```
-
-
 
 ```csharp
 TodoResponse? todo = await cache.GetOrCreateAsync(

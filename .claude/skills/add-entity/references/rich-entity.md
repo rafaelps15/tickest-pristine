@@ -15,9 +15,9 @@ public sealed class TodoItem : Entity
 
     private TodoItem(Guid userId, string description, Priority priority, DateTime? dueDate, IEnumerable<string> labels, DateTime createdAt)
     {
-        Ensure.NotEmpty(userId, "The user is required.", nameof(userId));
-        Ensure.NotEmpty(description, "The description is required.", nameof(description));
-        Ensure.NotEmpty(createdAt, "The creation date is required.", nameof(createdAt));
+        Ensure.NotEmpty(userId, "O usuário é obrigatório.", nameof(userId));
+        Ensure.NotEmpty(description, "A descrição é obrigatória.", nameof(description));
+        Ensure.NotEmpty(createdAt, "A data de criação é obrigatória.", nameof(createdAt));
 
         Id = Guid.NewGuid();
         UserId = userId;
@@ -74,6 +74,11 @@ public sealed class TodoItem : Entity
             return Result.Failure(TodoItemErrors.AlreadyCompleted(Id));
         }
 
+        if (utcNow < CreatedAt)
+        {
+            return Result.Failure(TodoItemErrors.CompletedBeforeCreation(Id));
+        }
+
         IsCompleted = true;
         CompletedAt = utcNow;
 
@@ -87,7 +92,7 @@ public sealed class TodoItem : Entity
 ```
 
 - `sealed`, herda `Entity`. O construtor privado protege os argumentos; o construtor privado sem parâmetros existe só para o EF Core.
-- `private set` em toda propriedade. A coleção fica num campo privado e é exposta como `IReadOnlyCollection<T>`; o EF Core a mapeia pelo campo (seção abaixo), e só os métodos da entidade a alteram.
+- `private set` em toda propriedade. A coleção fica num campo privado e é exposta como `IReadOnlyCollection<T>`; o EF Core a mapeia pelo campo (`persistence.md`), e só os métodos da entidade a alteram.
 - `Create` devolve `Result<TodoItem>` porque uma regra de negócio pode recusar a criação; quando a criação não pode falhar, `Create` devolve a própria entidade (`Project.Create`, padrão 2 da `domain-modeling`). Nos dois casos, dispara o evento `Created`.
 - Os métodos de comportamento devolvem `Result` e disparam os próprios eventos. A hora atual é parâmetro.
 - Um `<summary>` curto em português só onde explica algo: em toda interface e nos métodos cujo comportamento não é óbvio pelo nome e pela assinatura (o que acontece em falha, quando devolve `false`, efeitos colaterais). Nada em propriedades, construtores, DTOs, endpoints, testes e métodos simples; nunca vazio. O único comentário comum explica o construtor do EF Core.
@@ -99,8 +104,8 @@ public sealed class ProjectMember : Entity
 {
     internal ProjectMember(Guid projectId, Guid userId)
     {
-        Ensure.NotEmpty(projectId, "The project is required.", nameof(projectId));
-        Ensure.NotEmpty(userId, "The user is required.", nameof(userId));
+        Ensure.NotEmpty(projectId, "O projeto é obrigatório.", nameof(projectId));
+        Ensure.NotEmpty(userId, "O usuário é obrigatório.", nameof(userId));
 
         Id = Guid.NewGuid();
         ProjectId = projectId;
@@ -138,14 +143,3 @@ builder.OwnsOne(p => p.Name, nameBuilder =>
 
 - A coluna usa o nome do objeto de valor e o `MaxLength` dele; nenhum número se repete na configuração.
 
-## Coleção num campo privado
-
-**Adaptação do Tickest:** a biblioteca traz este mapeamento num modelo de persistência junto com o conversor UTC e a auditoria no `SaveChangesAsync`, que o Tickest não adota; aqui fica só o mapeamento da coleção.
-
-```csharp
-builder.PrimitiveCollection(t => t.Labels)
-    .HasField("_labels")
-    .UsePropertyAccessMode(PropertyAccessMode.Field);
-```
-
-- Só os métodos da entidade incluem ou removem itens; nenhum handler alcança a lista.

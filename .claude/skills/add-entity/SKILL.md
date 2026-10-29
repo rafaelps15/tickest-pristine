@@ -20,7 +20,7 @@ argument-hint: '<descrição da entidade, ex.: "Project with a name, owner, and 
 > escreva código: procure em `specs/` uma spec que cubra o pedido e indique o comando de implementação
 > dela; se não houver, use a skill de especificação.
 
-Crie uma entidade que guarda o próprio estado e as próprias regras, e ligue-a em todas as camadas. Modelo completo (entidade, filho, coleção e objeto de valor): [references/rich-entity.md](references/rich-entity.md). Os padrões de domínio estão na `domain-modeling`.
+Crie uma entidade que guarda o próprio estado e as próprias regras, e ligue-a em todas as camadas. Modelos completos: [references/rich-entity.md](references/rich-entity.md) (entidade, filho, mapeamento do objeto de valor) e [references/persistence.md](references/persistence.md) (coleções, datas UTC, auditoria). Os padrões de domínio estão na `domain-modeling`.
 
 ## Arquivos a criar/alterar
 
@@ -52,7 +52,7 @@ public static class ProjectErrors
 {
     public static Error NotFound(Guid projectId) => Error.NotFound(
         "Projects.NotFound",
-        $"The project with the Id = '{projectId}' was not found");
+        $"O projeto com o Id = '{projectId}' não foi encontrado.");
 }
 ```
 
@@ -82,7 +82,7 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
 }
 ```
 
-Os relacionamentos são configurados no estilo shadow (`HasOne<User>().WithMany()`): as entidades guardam ids de chave estrangeira, não propriedades de navegação. Objetos de valor usam `OwnsOne` com o `MaxLength` deles; uma coleção é mapeada pelo campo (`references/rich-entity.md`). As configurações são encontradas pelo `ApplyConfigurationsFromAssembly`.
+Os relacionamentos são configurados no estilo shadow (`HasOne<User>().WithMany()`): as entidades guardam ids de chave estrangeira, não propriedades de navegação. Objetos de valor usam `OwnsOne` com o `MaxLength` deles; uma coleção é mapeada pelo campo (`references/persistence.md`). As configurações são encontradas pelo `ApplyConfigurationsFromAssembly`.
 
 5. **Ligação no DbContext** — adicione `DbSet<{Entity}> {Plural}` **nos dois**:
    - `src/Application/Abstractions/Data/IApplicationDbContext.cs`
@@ -101,5 +101,4 @@ Os nomes de migration seguem `PascalCase_With_Underscores` (veja `Add_RefreshTok
 
 - O projeto Domain referencia só o `SharedKernel` — sem EF, sem tipos da Application. Os detalhes de persistência ficam na configuração da Infrastructure.
 - Nenhum handler ou classe estática atribui as propriedades da entidade nem dispara os eventos dela; eles chamam os métodos da entidade.
-- **Adaptação do Tickest:** sem conversor UTC nem auditoria no `SaveChangesAsync`; as datas (`CreatedAtUtc`, `DeletedAtUtc`) chegam pelos métodos da entidade, com a hora do `IDateTimeProvider`, e a exclusão lógica usa `DeletedAtUtc` com filtro global.
 - Rode `dotnet build` e `dotnet test` ao terminar — os `ArchitectureTests` garantem as regras de camada. Escreva os testes da entidade com a `add-tests`; siga com a `add-feature` para os casos de uso dela.

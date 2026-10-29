@@ -41,8 +41,8 @@ public sealed class Project : Entity
 {
     private Project(Guid ownerId, ProjectName name)
     {
-        Ensure.NotEmpty(ownerId, "The owner is required.", nameof(ownerId));
-        Ensure.NotNull(name, "The name is required.", nameof(name));
+        Ensure.NotEmpty(ownerId, "O dono é obrigatório.", nameof(ownerId));
+        Ensure.NotNull(name, "O nome é obrigatório.", nameof(name));
 
         Id = Guid.NewGuid();
         OwnerId = ownerId;
@@ -277,8 +277,6 @@ public interface IPasswordHashChecker
 }
 ```
 
-
-
 ```csharp
 /// <summary>Indica se a senha informada é a do usuário.</summary>
 public bool VerifyPassword(string password, IPasswordHashChecker passwordHashChecker) =>
@@ -327,15 +325,13 @@ public ProjectMember AddMember(Guid userId)
 }
 ```
 
-
-
 ```csharp
 public sealed class ProjectMember : Entity
 {
     internal ProjectMember(Guid projectId, Guid userId)
     {
-        Ensure.NotEmpty(projectId, "The project is required.", nameof(projectId));
-        Ensure.NotEmpty(userId, "The user is required.", nameof(userId));
+        Ensure.NotEmpty(projectId, "O projeto é obrigatório.", nameof(projectId));
+        Ensure.NotEmpty(userId, "O usuário é obrigatório.", nameof(userId));
 
         Id = Guid.NewGuid();
         ProjectId = projectId;
@@ -375,7 +371,6 @@ await context.SaveChangesAsync(cancellationToken);
 
 - O mesmo formato vale para um registro de histórico ou de auditoria: o método do agregado o cria e o handler o adiciona antes do único `SaveChangesAsync`.
 - Quando o método do agregado ainda pode falhar, ele devolve `Result<TChild>` e o handler devolve a falha antes de adicionar o filho.
-- **Adaptação do Tickest:** o histórico de chamados é o exemplo real deste padrão — todo command que altera um chamado, uma mensagem ou um anexo grava um `TicketHistory` no mesmo `SaveChangesAsync`. Hoje a entrada é montada pela classe estática `TicketHistoryEntries` (listada em "Em migração" no `CLAUDE.md`); no modelo rico, o método do agregado a cria.
 
 ## 8. `Result` para mudanças que podem falhar, `bool` para mudanças que podem não mudar nada
 

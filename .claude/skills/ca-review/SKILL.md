@@ -27,13 +27,12 @@ Revise o escopo informado (padrão: `git diff` + arquivos não rastreados) contr
 - `Create` devolve a entidade quando a criação não pode falhar e `Result<T>` quando uma regra pode recusá-la; dispara o evento `Created`.
 - As mudanças de estado passam por métodos da entidade que conferem tudo antes da primeira mudança, devolvem `Result` (pode falhar) ou `bool` (pode não mudar nada, com evento só quando mudou) e disparam o próprio evento; a hora atual é parâmetro. Uma chamada que falha deixa o estado e os eventos intactos.
 - `Ensure` só para erro de programação; as falhas que o usuário pode provocar são `Result.Failure(...)`.
-- Nenhum handler atribui as propriedades de uma entidade nem chama `Raise` por ela (bloqueante para código novo). **Adaptação do Tickest:** as datas (`CreatedAtUtc`, `DeletedAtUtc`) chegam pelos métodos da entidade com a hora do `IDateTimeProvider`; não há auditoria no `SaveChangesAsync`.
+- Nenhum handler atribui as propriedades de uma entidade nem chama `Raise` por ela (bloqueante para código novo). O contexto preenche `CreatedOnUtc` / `ModifiedOnUtc` / `DeletedOnUtc`.
 - Registros filho, de histórico ou de auditoria são criados pelo método do agregado e adicionados pelo handler antes do único `SaveChangesAsync` — nunca num handler de evento de domínio, nunca montados por uma classe estática.
 - Nenhuma classe estática, `*Service`, `*Helper`, `*Manager` ou `*Clock` na Application muda ou inspeciona o estado de uma entidade: o comportamento vira membro da entidade (bloqueante para código novo). Trabalho técnico (hash, arquivos, bytes, ZIP) é uma interface em `Application/Abstractions/` com implementação `internal sealed` na Infrastructure.
 - As queries nunca chamam um método da entidade dentro de `Where` ou `Select`; usam um predicado escrito na consulta ou um `Expression<Func<T, bool>>`.
 - Objetos de valor herdam `ValueObject` e são criados por `Create(...)` devolvendo `Result<T>`.
 - Eventos de domínio são `sealed record` com ids (mais o valor anterior numa alteração), sem `OccurredOnUtc`. Handlers de evento: um por reação, `{Action}On{Event}DomainEventHandler`, numa pasta com o nome do evento.
-- **Adaptação do Tickest:** o código listado em "Em migração" no `CLAUDE.md` ainda segue o modelo anêmico; ele não é achado da revisão até a spec que o migrar, mas código novo ou alterado fora dessa lista segue as regras acima.
 
 ### Estrutura do slice
 - Uma pasta por caso de uso em `src/Application/{Feature}/{UseCase}/`; o endpoint espelha em `src/Web.Api/Endpoints/{Feature}/{UseCase}.cs`.
@@ -54,10 +53,10 @@ Revise o escopo informado (padrão: `git diff` + arquivos não rastreados) contr
 - Nenhum `DateTime.UtcNow`/`DateTime.Now` na Application — use `IDateTimeProvider`.
 
 ### Cache
-- **Adaptação do Tickest:** nenhuma query usa cache; um `HybridCache` novo numa query ou num handler é achado, salvo decisão explícita. O `PermissionProvider` é invalidado com `IPermissionProvider.InvalidateAsync` depois do commit.
+- Toda leitura em cache no `HybridCache` tem a invalidação correspondente (`cache.RemoveAsync`) em todo command que altera esses dados; as chaves vêm da classe `{Feature}CacheKeys`.
 
 ### Comentários
-- Identificadores em inglês; um `<summary>` curto em português só onde explica algo: em toda interface e nos métodos cujo comportamento não é óbvio pelo nome e pela assinatura (o que acontece em falha, quando devolve `false`, efeitos colaterais). Nada em propriedades, construtores, DTOs, endpoints, testes e métodos simples; nunca vazio. Outros comentários só onde o código não se explica, em português. Nenhum comentário cita spec, requisito ou decisão. Nenhum `<summary>` existente é removido.
+- Identificadores em inglês; um `<summary>` curto em português só onde explica algo: em toda interface e nos métodos cujo comportamento não é óbvio pelo nome e pela assinatura (o que acontece em falha, quando devolve `false`, efeitos colaterais). Nada em propriedades, construtores, DTOs, endpoints, testes e métodos simples; nunca vazio. Outros comentários só onde o código não se explica, em português. Nenhum comentário cita id de issue ou de spec. Nenhum `<summary>` existente é removido.
 
 ### Testes
 - Entidades: invariante na construção, cada transição válida, cada transição inválida com estado e eventos inalterados.
@@ -66,7 +65,7 @@ Revise o escopo informado (padrão: `git diff` + arquivos não rastreados) contr
 - Os nomes dos testes e a estrutura Arrange/Act/Assert seguem os testes existentes.
 
 ### Desvios e regras do projeto
-- Confira cada desvio e cada regra permanente da seção "Contexto do projeto" do `CLAUDE.md` (por exemplo: registro de histórico no mesmo `SaveChangesAsync`, exclusão lógica, idioma dos textos ao usuário, permissão nova no catálogo, migration para mudança de modelo). Violação de regra permanente é **Violação de convenção**; se for de segurança ou autorização, é **Bloqueante**. Um desvio declarado que a convenção exige seguir e que não foi seguido também é **Violação de convenção**.
+- Confira cada desvio e cada regra permanente declarados no `CLAUDE.md` do repositório. Violação de regra permanente é **Violação de convenção**; se for de segurança ou autorização, é **Bloqueante**. Um desvio declarado que a convenção exige seguir e que não foi seguido também é **Violação de convenção**.
 - Quando a revisão for de uma spec, o escopo são os arquivos do plano técnico e das tarefas dela; liste à parte as mudanças pendentes fora desse escopo, sem revisá-las.
 
 ### Não pode aparecer

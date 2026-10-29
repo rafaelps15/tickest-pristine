@@ -38,7 +38,7 @@ internal sealed class RemoveMembersOnProjectArchivedDomainEventHandler(IApplicat
 - **O evento leva ids**, nunca a entidade; um evento de alteração leva também o valor anterior. O handler carrega o que precisa.
 - **Sem `OccurredOnUtc` no evento**: um handler que precisa de hora usa o `IDateTimeProvider` ao processar o evento.
 - **Roda depois do `SaveChangesAsync`**, num escopo novo, fora da transação do command: pode falhar sozinho. Um handler que altera dados chama o próprio `SaveChangesAsync`.
-- **Não serve para registros que precisam existir junto com a mudança** (filho, histórico, auditoria): o método do agregado os cria e o command os salva (padrão 7 da `domain-modeling`). **Adaptação do Tickest:** por isso o histórico de chamados nunca é gravado por handler de evento.
+- **Não serve para registros que precisam existir junto com a mudança** (filho, histórico, auditoria): o método do agregado os cria e o command os salva (padrão 7 da `domain-modeling`).
 - **Quando o mesmo efeito colateral está copiado em vários command handlers**, ele vai para um handler de evento e sai dos command handlers.
 
 ## Referência de nomes

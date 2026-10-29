@@ -1,8 +1,9 @@
 """Testes das instruções do Tickest para o agente.
 
-Conferem que as skills de código do Tickest são adaptação declarada da biblioteca canônica
+Conferem que as skills de código do Tickest são tradução fiel e genérica da biblioteca canônica
 (`C:\\dev\\dotnet-universal-skills`) e que o `CLAUDE.md`, o agente `dotnet-architect` e o índice das skills
-seguem o padrão do domínio rico.
+seguem o padrão do domínio rico. As skills não citam o projeto nem outro projeto: os desvios do Tickest ficam
+só na seção "Desvios" do `CLAUDE.md`.
 
 Rodar na raiz do repositório:
     python -m unittest discover -s scripts -p "test_*.py"
@@ -13,8 +14,8 @@ a comparação com a biblioteca é pulada e o resto roda.
 Paridade: os blocos de código de cada par de arquivos são normalizados linha a linha (sem o prefixo
 `TickestPristine.`, espaços colapsados, texto de comentário trocado por `…` mantendo as tags de `///`,
 conteúdo de literais trocado por `…`) e comparados por `difflib.unified_diff`. O resultado precisa ser igual
-ao diff esperado do par, guardado em `scripts/instruction_parity/` e aprovado pelo responsável; sem arquivo,
-o diff esperado é vazio. Não se conferem valores de literais nem a tradução da prosa.
+ao diff esperado do par, guardado em `scripts/instruction_parity/` e aprovado pelo responsável; sem arquivo
+ou com o arquivo vazio (o caso normal, porque as skills são tradução fiel), o diff esperado é vazio. Não se conferem valores de literais nem a tradução da prosa.
 """
 from __future__ import annotations
 
@@ -34,6 +35,7 @@ EXPECTED_DIR = Path(__file__).resolve().parent / "instruction_parity"
 PAIRS = (
     "add-entity/SKILL.md",
     "add-entity/references/rich-entity.md",
+    "add-entity/references/persistence.md",
     "add-feature/SKILL.md",
     "add-feature/references/command-slice.md",
     "add-feature/references/query-slice.md",
@@ -48,8 +50,8 @@ PAIRS = (
     "domain-modeling/SKILL.md",
     "domain-modeling/references/patterns.md",
 )
-# Sem par, declarado: o Tickest não adota o conversor UTC nem a auditoria no SaveChanges.
-LIBRARY_ONLY = ("add-entity/references/persistence.md",)
+# Arquivos da biblioteca sem par no Tickest (nenhum hoje).
+LIBRARY_ONLY: tuple[str, ...] = ()
 # Só no Tickest, fora da comparação.
 TICKEST_ONLY = ("add-feature/references/pagination.md",)
 TICKEST_ONLY_SKILLS = ("spec-new", "spec-implement", "spec-verify")
@@ -65,6 +67,8 @@ FORBIDDEN_PHRASES = (
     re.compile(r"(?i)\bUseSeeding\b|\bHasData\b|\bseed"),
 )
 SPEC_IDS = re.compile(r"\b(SPEC|REQ|DEC)-\d")
+# As skills são genéricas: não citam o projeto (nem o domínio real dele), adaptações nem caminhos de outros projetos.
+PROJECT_MENTIONS = re.compile(r"(?i)tickest|\bticket|adaptação do|C:\\dev\\")
 # Caminhos que o agente dotnet-architect cria na primeira execução.
 CREATED_BY_AGENT = {"docs/audit/architecture-audit.md"}
 
@@ -241,6 +245,11 @@ class TickestInstructions(unittest.TestCase):
             for pattern in FORBIDDEN_PHRASES:
                 self.assertIsNone(pattern.search(text), f"{path}: {pattern.pattern}")
             self.assertIsNone(SPEC_IDS.search("\n".join(code_blocks(text))), path)
+
+    def test_skills_do_not_mention_the_project(self):
+        for path in [TICKEST_SKILLS / name for name in (*PAIRS, *TICKEST_ONLY)]:
+            match = PROJECT_MENTIONS.search(read(path))
+            self.assertIsNone(match, f"{path}: {match.group(0) if match else ''}")
 
     def test_claude_md_follows_rich_domain(self):
         text = read(ROOT / "CLAUDE.md")

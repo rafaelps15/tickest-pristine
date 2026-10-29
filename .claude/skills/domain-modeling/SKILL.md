@@ -22,8 +22,6 @@ argument-hint: '<entidade ou regra a modelar, ex.: "todo item completion" ou "pr
 
 As entidades guardam as próprias regras: o handler carrega a entidade, chama um método dela e salva. O estado nunca muda de fora — nenhum handler e nenhuma classe estática atribui as propriedades de uma entidade ou dispara os eventos dela. As demais convenções do código continuam como estão (`IApplicationDbContext`, `Entity.Raise`, `{Entity}Errors`, eventos com ids).
 
-**Adaptação do Tickest:** o código que ainda segue o modelo anêmico está listado na seção "Em migração" do `CLAUDE.md`; ele continua funcionando até a spec que o migrar. Código novo segue esta skill.
-
 ## Workflow
 
 1. **Ache onde a regra mora hoje.** Procure na Application atribuições às propriedades da entidade e `Raise(new ...)` sobre ela — em handlers e em classes estáticas.

@@ -2,8 +2,6 @@
 
 Cada conferência fica onde estão os dados dela: uma permissão fixa no endpoint, uma regra sobre o próprio estado da entidade na entidade, as permissões efetivas do usuário atrás de uma abstração, e tudo o que precisa de consulta no handler. O handler coordena; a entidade nunca consulta nada.
 
-**Adaptação do Tickest:** a permissão nova entra em `PermissionCodes` e em `PermissionCatalog`, e a constante da rota fica em `Endpoints/{Aggregate}/Permissions.cs`. Os guards atuais (`TicketAccessGuard`, `PrivilegeEscalationGuard`, `AdministratorGuard`) são legado listado em "Em migração" no `CLAUDE.md`; código novo não cria guard estático.
-
 ## Permissão fixa — no endpoint
 
 ```csharp

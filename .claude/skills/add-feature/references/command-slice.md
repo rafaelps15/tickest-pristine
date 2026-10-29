@@ -110,9 +110,8 @@ internal sealed class ArchiveTodoCommandHandler(
 Observações:
 - Dono: filtre por `userContext.UserId` na consulta (preferido) ou compare explicitamente e devolva `Result.Failure(UserErrors.Unauthorized())` ([authorization.md](authorization.md)).
 - `IDateTimeProvider` (do `SharedKernel`) para datas — nunca `DateTime.UtcNow` direto; o handler passa a hora para a entidade.
-- **Adaptação do Tickest:** nenhuma query usa cache, então nenhum command injeta `HybridCache` para invalidar leituras (o único uso é o `PermissionProvider`, invalidado com `IPermissionProvider.InvalidateAsync` depois do commit).
+- Se o command invalidar dados de query em cache, injete `HybridCache` e chame `cache.RemoveAsync({Feature}CacheKeys.X(...), cancellationToken)` depois de salvar.
 - Num command com retorno (`ICommand<Guid>`), devolva o valor direto — `Result<T>` tem conversão implícita: `return todoItem.Id;`.
-- **Adaptação do Tickest:** todo command que altera um chamado, uma mensagem ou um anexo grava um `TicketHistory` no mesmo `SaveChangesAsync` (hoje montado por `TicketHistoryEntries`, em migração; no modelo rico, criado pelo método do agregado).
 - Outros formatos (filho, histórico, objetos de valor): [rich-domain-handler.md](rich-domain-handler.md).
 
 ## Acréscimos no domínio (se necessário)
@@ -142,7 +141,7 @@ Fábrica de erro na classe `{Entity}Errors` existente em `src/Domain/{Feature}/`
 ```csharp
 public static Error AlreadyArchived(Guid todoItemId) => Error.Problem(
     "TodoItems.AlreadyArchived",
-    $"The todo item with Id = '{todoItemId}' is already archived.");
+    $"A tarefa com o Id = '{todoItemId}' já está arquivada.");
 ```
 
 Tipo do erro → status HTTP (pelo `CustomResults.Problem`): `NotFound` → 404, `Conflict` → 409, `Problem`/`Validation` → 400, `Failure` → 500.

@@ -98,7 +98,6 @@ using Application.Todos.Archive;
 using Application.UnitTests.Abstractions;
 using Domain.Todos;
 using Microsoft.EntityFrameworkCore;
-using SharedKernel;
 
 namespace Application.UnitTests.Todos;
 
@@ -173,6 +172,7 @@ Convenções:
 [Fact]
 public void CreateValidator_Should_HaveError_WhenDescriptionIsEmpty()
 {
+    // Arrange
     var command = new CreateTodoCommand
     {
         UserId = Guid.NewGuid(),
@@ -180,8 +180,10 @@ public void CreateValidator_Should_HaveError_WhenDescriptionIsEmpty()
         Priority = Priority.Low
     };
 
+    // Act
     TestValidationResult<CreateTodoCommand> result = _createValidator.TestValidate(command);
 
+    // Assert
     result.ShouldHaveValidationErrorFor(c => c.Description);
 }
 ```
@@ -191,8 +193,6 @@ Cubra a falha de cada regra mais um command totalmente válido (`ShouldNotHaveAn
 ## Testes de integração
 
 `tests/IntegrationTests/{Feature}/{Feature}Tests.cs` (estenda o arquivo existente, se houver). Herde `BaseIntegrationTest(factory)` — ele roda a API real contra um Postgres do Testcontainers e fornece `HttpClient`, `RegisterAndLoginAsync()` e `Authenticate(token)`. Os testes passam pelo HTTP real e nunca chamam handlers direto.
-
-**Adaptação do Tickest:** o cadastro de usuários exige `users:create`, então os testes cadastram pelo administrador (`BaseIntegrationTest.RegisterUserAsync` / `PostRegisterAsAdminAsync`) no lugar de `RegisterAndLoginAsync()`.
 
 Persistência — a mudança sobrevive à ida e volta ao banco:
 

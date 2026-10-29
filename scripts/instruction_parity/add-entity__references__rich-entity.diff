@@ -1,7 +1,0 @@
---- biblioteca/add-entity/references/rich-entity.md
-+++ tickest/add-entity/references/rich-entity.md
-@@
-+```
-+builder.PrimitiveCollection(t => t.Labels)
-+.HasField("…")
-+.UsePropertyAccessMode(PropertyAccessMode.Field);

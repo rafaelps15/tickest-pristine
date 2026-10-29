@@ -26,6 +26,7 @@ using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Domain.Todos;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
 using SharedKernel;
 
 namespace Application.Todos.Complete;
@@ -33,7 +34,8 @@ namespace Application.Todos.Complete;
 internal sealed class CompleteTodoCommandHandler(
     IApplicationDbContext context,
     IDateTimeProvider dateTimeProvider,
-    IUserContext userContext)
+    IUserContext userContext,
+    HybridCache cache)
     : ICommandHandler<CompleteTodoCommand>
 {
     public async Task<Result> Handle(CompleteTodoCommand command, CancellationToken cancellationToken)
@@ -55,6 +57,8 @@ internal sealed class CompleteTodoCommandHandler(
 
         await context.SaveChangesAsync(cancellationToken);
 
+        await cache.RemoveAsync(TodoCacheKeys.ById(todoItem.UserId, todoItem.Id), cancellationToken);
+
         return Result.Success();
     }
 }
@@ -63,7 +67,7 @@ internal sealed class CompleteTodoCommandHandler(
 - Nenhuma atribuição de propriedade e nenhum `Raise` no handler: `Complete` faz as duas coisas.
 - A hora atual vem do `IDateTimeProvider` e é passada para a entidade.
 - Em falha, o handler devolve antes do `SaveChangesAsync`; a entidade deixou o estado intacto.
-- **Adaptação do Tickest:** sem `HybridCache` no handler, porque nenhuma query usa cache.
+- A invalidação de cache fica no handler.
 
 ## Command que insere o registro que a entidade devolve
 
@@ -85,17 +89,17 @@ await context.SaveChangesAsync(cancellationToken);
 
 - A conferência que precisa de consulta fica no handler; a entidade cria o filho e dispara o evento; um único `SaveChangesAsync` salva os dois.
 
-Um registro de histórico segue o mesmo formato: o método da entidade que muda o estado também cria a entrada, e o handler a adiciona antes do único save. **Adaptação do Tickest:** o exemplo usa o histórico de chamados (`TicketHistory`), obrigatório em todo command que altera um chamado, uma mensagem ou um anexo. Hoje ele é montado pela classe estática `TicketHistoryEntries`, listada em "Em migração" no `CLAUDE.md`; no modelo rico, o método do `Ticket` cria a entrada.
+Um registro de histórico segue o mesmo formato: o método da entidade que muda o estado também cria a entrada, e o handler a adiciona antes do único save.
 
 ```csharp
-Result<TicketHistory> result = ticket.Reopen(userContext.UserId, dateTimeProvider.UtcNow);
+Result<TodoItemHistoryEntry> result = todoItem.Reopen(userContext.UserId, dateTimeProvider.UtcNow);
 
 if (result.IsFailure)
 {
     return result;
 }
 
-context.TicketHistories.Add(result.Value);
+context.TodoItemHistory.Add(result.Value);
 
 await context.SaveChangesAsync(cancellationToken);
 ```
