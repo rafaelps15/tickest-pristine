@@ -1,14 +1,25 @@
 using System.Data.Common;
 using Dapper;
+using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Tickets.GetVolume;
 
-internal sealed class GetTicketVolumeQueryHandler(IDbConnectionFactory dbConnectionFactory, IDateTimeProvider dateTimeProvider)
+/// <summary>
+/// O endpoint exige só usuário ativo: com filtro de recorte, a permissão <c>tickets:manage</c> é conferida aqui, para a
+/// falta dela responder 403 com mensagem de negócio (spec 031, DEC-2).
+/// </summary>
+internal sealed class GetTicketVolumeQueryHandler(
+    IDbConnectionFactory dbConnectionFactory,
+    IDateTimeProvider dateTimeProvider,
+    IUserContext userContext,
+    IPermissionProvider permissionProvider)
     : IQueryHandler<GetTicketVolumeQuery, List<TicketVolumeResponse>>
 {
     private const string Created = "Created";
@@ -47,6 +58,19 @@ internal sealed class GetTicketVolumeQueryHandler(IDbConnectionFactory dbConnect
         if (periods.IsFailure)
         {
             return Result.Failure<List<TicketVolumeResponse>>(periods.Error);
+        }
+
+        if (query.Scope.HasSlicingFilter)
+        {
+            bool canManageTickets = await permissionProvider.HasPermissionAsync(
+                userContext.UserId,
+                PermissionCodes.Tickets.Manage,
+                cancellationToken);
+
+            if (!canManageTickets)
+            {
+                return Result.Failure<List<TicketVolumeResponse>>(TicketErrors.StatsScopeForbidden);
+            }
         }
 
         DateOnly firstPeriod = periods.Value[0];

@@ -13,7 +13,9 @@ internal sealed class GetVolume : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        // Os filtros de recorte de GET tickets; createdFrom e createdTo definem o intervalo do gráfico (spec 028).
+        // Os filtros de recorte de GET tickets; createdFrom e createdTo definem o intervalo do gráfico (spec 028). Exige só
+        // usuário ativo: com filtro de recorte, o handler confere tickets:manage, para responder 403 com mensagem de
+        // negócio (spec 031).
         app.MapGet("tickets/stats/volume", async (
             TicketVolumeGrouping? groupBy,
             [FromQuery(Name = "sectorId")] Guid[]? sectorIds,
@@ -43,6 +45,6 @@ internal sealed class GetVolume : IEndpoint
             return result.Match(Results.Ok, CustomResults.Problem);
         })
         .WithTags(Tags.Tickets)
-        .HasPermission(Permissions.TicketsManage);
+        .RequireAuthorization();
     }
 }
