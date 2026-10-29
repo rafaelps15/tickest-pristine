@@ -10,6 +10,7 @@ Um pacote de skills que ensina ao Claude Code as convenções do TickestPristine
 | **add-entity** | `/add-entity Project with a name and owner` | Adiciona uma entidade de domínio de ponta a ponta: entidade, catálogo de erros, eventos de domínio, configuração do EF, ligação no DbContext e migration. |
 | **add-tests** | `/add-tests CopyTodoCommand` | Completa os testes de handler, de validator e de integração de casos de uso existentes. |
 | **ca-review** | `/ca-review` | Revisa as mudanças pendentes contra as convenções do TickestPristine: limites entre camadas, tratamento de erro, segurança, cache e cobertura de testes. |
+| **domain-modeling** | `/domain-modeling todo item completion` | Leva as regras de handlers e classes estáticas para as entidades, os objetos de valor e os serviços de domínio. |
 | **spec-new** | `/spec-new permitir remover o responsável de um chamado` | Escreve a spec de uma mudança (requisitos, critérios de aceitação, decisões, plano e tarefas) e para à espera da aprovação. |
 | **spec-implement** | `/spec-implement 001` | Implementa uma spec aprovada, tarefa por tarefa, com as skills acima. Só roda pelo comando. |
 | **spec-verify** | `/spec-verify 001` | Comprova cada critério de aceitação com testes aprovados na execução atual e atualiza a documentação de estado. |

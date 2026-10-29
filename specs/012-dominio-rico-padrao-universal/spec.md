@@ -1,0 +1,339 @@
+---
+id: 012
+titulo: Domínio rico como padrão universal das skills .NET
+status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+responsavel: Rafael Santos
+aprovada-em: 2026-10-29      # a aprovação de 2026-10-25 foi da versão desfeita (ver Histórico)
+branch: chore/SPEC-012-rich-domain-standard
+pr: 53
+---
+
+# 012 — Domínio rico como padrão universal das skills .NET
+
+> Pasta definitiva: `specs/012-dominio-rico-padrao-universal/`. Nesta conversa, esta spec é chamada de "Spec A"; a migração do `Ticket` é a "Spec B" e a skill de seed é a "Spec C" (números definidos na criação de cada uma).
+
+## 1. Contexto
+
+- **Pedido original (2026-10-24/25):** sair do domínio anêmico (regras em handlers e em classes estáticas da Application).
+- **Revisão de 2026-10-28 (Rafael Santos, no chat):**
+  - domínio rico passa a ser o padrão das skills universais .NET, substituindo explicitamente as orientações anêmicas;
+  - `C:\dev\dotnet-universal-skills` é a fonte canônica; o Tickest recebe adaptações documentadas, sem divergência silenciosa;
+  - o template `C:\dev\clean-architecture` passa a ser referência técnica, não autoridade;
+  - skills da biblioteca em inglês; comentários, `<summary>` e textos ao usuário em pt-BR;
+  - sem `OccurredOnUtc` obrigatório;
+  - `<summary>` obrigatório em membros públicos e internos de entidades, handlers e abstrações;
+  - esta spec estabelece o padrão e adapta as instruções do Tickest; a migração do `Ticket` é a Spec B; estratégia e política de seed são da Spec C.
+- **Por que a implementação anterior foi desfeita:** registro único: "desfaça todas alterações da spec 012. nao ficou bom. Vou fazer as outras specs antes de voltar a mexer nela" (2026-10-25). O motivo concreto não está documentado. Para reduzir o risco de repetir o problema, esta versão não muda código de produção e divide o trabalho em tarefas pequenas, cada uma com diff e ok.
+- **Estado comprovado (2026-10-28):**
+  - `CLAUDE.md` do Tickest: "Eventos de domínio" ("não têm métodos (domínio anêmico)") e "Regras permanentes" (domínio anêmico).
+  - Skills do Tickest: `add-entity`, `add-feature` (`command-slice`, `query-slice`, `endpoint`, `tests`, `pagination`), `add-tests`, `ca-review`, `spec-new`, `spec-implement`, `spec-verify`; `add-entity` ensina `{ get; set; }`; não existe `domain-modeling`.
+  - Biblioteca: `add-entity` (`rich-entity`, `persistence`), `add-feature` (`abstraction`, `authorization`, `command-slice`, `domain-event-handler`, `endpoint`, `query-slice`, `rich-domain-handler`, `tests`), `add-tests`, `ca-review`, `domain-modeling` (`patterns`). Sem git e sem backup. Validador com 261 linhas; 2 testes.
+    - `CLAUDE.md` e `docs/decision.md` da biblioteca proíbem `/// <summary>`; o validador o reprova (linhas 140 e 155).
+    - O validador exige as 4 skills do template byte a byte e a seção `## Beyond the template` (103–112, 185–219) e depende de `C:\dev\clean-architecture`.
+    - Limites: skill fora do template até 101 linhas, bloco até 16 linhas no `SKILL.md` (25–26, 115–120). Tamanhos: `add-entity` 117, `ca-review` 74, `add-feature` 55, `domain-modeling` 51, `add-tests` 37.
+    - Nenhuma menção a seed.
+  - `C:\dev\tickest-skills-merge` (sem git, 2026-10-27): tradução pt-BR da biblioteca com adaptações do Tickest.
+  - Defeitos do modelo atual: coleção pública mutável; padrão 9 usa método da entidade em queries; sem `Result<T> Create`; sem teste de invariante; `abstraction.md` mostra o handler atribuindo propriedade; título duplicado em `rich-domain-handler.md` (merge).
+  - Portão SDD: estado por `session_id`, sem teste com subagente; `sdd_gate.py:70-72` trata todo `git stash …` como mudança de árvore (um comando de leitura com `git stash list` foi bloqueado em 2026-10-28).
+  - CI (`build.yml:36,39`): testes dos hooks e `scripts/auditoria_sdd.py`; não há `scripts/test_instructions.py`.
+  - `dotnet-architect` (rascunho em `C:\Users\rafae\OneDrive\Desktop\revisao-tickest\`): segue o template anêmico, "Sem XML summary", escopo "solução inteira", cita `C:\dev\[projeto externo]` (inexistente), cita autores, aponta para conteúdo inexistente.
+  - README do rascunho anuncia `add-integration-event`, sem `SKILL.md`.
+  - Trabalho em paralelo: `feat/SPEC-029-tickets-awaiting-action` com mudanças não commitadas; specs 031 a 035 não entregues.
+- **Referências:** `CLAUDE.md` (Arquitetura, Eventos de domínio, Contexto do projeto, Regras permanentes, Política de autonomia); `SYSTEM_SPECIFICATION.md` 6.9.
+
+## 2. Requisitos
+
+| ID | Requisito | Fonte |
+|---|---|---|
+| REQ-1 | Antes de qualquer alteração na biblioteca: snapshot independente (`.tgz`), manifesto SHA-256 por arquivo, restauração comprovada e `git init` local sem remoto. Nenhuma tarefa que altera a biblioteca começa antes disso e da confirmação do responsável no momento da execução. | DEC-15; P-4 |
+| REQ-2 | Validador da biblioteca: sai a exigência byte a byte e da seção `## Beyond the template`; sai a dependência de `C:\dev\clean-architecture`; os limites atuais (101 e 16) passam a valer para todas as skills; reprova `{ get; set; }` em tipo derivado de `Entity`; exige `<summary>` no tipo de toda interface dos blocos que declaram tipo completo e reprova `<summary>` vazio em qualquer exemplo (revisto pela DEC-35); continua reprovando autores e projetos externos em todos os arquivos. | DEC-16, 19, 26, 29, 35 |
+| REQ-3 | O modelo canônico ensina o domínio rico no corpo principal das skills, sem exemplo anêmico conflitante, cobrindo C-1 a C-10. | pedido; DEC-16, 17 |
+| REQ-4 | Responsabilidades explícitas: entidade ou agregado (invariantes e transições), objeto de valor (valor com regra própria e vários usos), serviço de domínio (regra entre agregados, sem infraestrutura), handler (carrega, autoriza, coordena, grava), consulta (predicado traduzível). | pedido |
+| REQ-5 | Seed fica fora desta spec (Spec C). Aqui só vale a regra genérica de criar entidade rica pelo seu mecanismo válido (C-3). | DEC-18; DEC-24 |
+| REQ-6 | Padrão de comentários (revisto pela DEC-35): `<summary>` curto em pt-BR só onde explica algo — no tipo de toda interface e nos métodos cujo comportamento não é óbvio pelo nome e pela assinatura (o que acontece em falha, quando devolve `false`, efeitos colaterais); nada em propriedades, construtores, DTOs, endpoints, testes e métodos simples; nunca vazio; comentários internos objetivos; nenhum comentário cita SPEC, REQ ou DEC; nenhum `<summary>` existente no código do Tickest é removido. | DEC-19, DEC-35 |
+| REQ-7 | As skills do Tickest (`add-entity`, `add-feature`, `add-tests`, `ca-review` e a nova `domain-modeling`) são tradução fiel e genérica da biblioteca, conferida pelo teste de paridade (6.5), sem citar o Tickest nem outro projeto; as adaptações da 6.3 ficam declaradas só na seção "Desvios" do `CLAUDE.md` (revisto pela DEC-36). | DEC-15, DEC-36 |
+| REQ-8 | O `CLAUDE.md` do Tickest troca a regra anêmica pela de domínio rico, declara o padrão de comentários, lista as adaptações e ganha a seção "Em migração" com o legado anêmico (incluindo os seeders e o código das specs que seguem antes da Spec B), que permanece documentado até ser migrado. | pedido; DEC-22 |
+| REQ-9 | `dotnet-architect` em `.claude/agents/`, corrigido conforme a 6.4. | pedido |
+| REQ-10 | O `.claude/skills/README.md` do Tickest ganha só a linha da `domain-modeling`; `add-integration-event` não é adotada. | pedido |
+| REQ-11 | Teste de arquitetura "entidade declarada rica não tem `set` público": lista vazia (preenchida pela Spec B) e autoteste com fixture. | pedido; DEC-20 |
+| REQ-12 | Portão SDD testado com subagente, com evidência real de bloqueio e de liberação. | pedido |
+| REQ-13 | Nenhuma entidade, evento, handler, seeder ou contrato existente muda. | pedido |
+| REQ-14 | `scripts/test_instructions.py` (6.5), criado e mantido por esta spec, rodado no CI. Outras specs podem acrescentar pares e diffs esperados de arquivos que elas criam, sem alterar o método nem as entradas existentes. | DEC-28; `spec-verify` |
+
+## 3. Critérios de aceitação
+
+| ID | REQ | Dado | Quando | Então (resultado observável) |
+|---|---|---|---|---|
+| AC-1 | 1 | o snapshot | extraído numa pasta temporária e comparado com o manifesto | todos os hashes conferem; comando e saída na seção 9 |
+| AC-2 | 2, 6 | a biblioteca depois da T-4c | `python tools/validate_library.py` e `python -m unittest discover -s tests -v` | `RESULTADO: APROVADO` e 0 falhas; fixtures: entidade com `{ get; set; }` reprovada, DTO aprovado, interface sem `<summary>` reprovada, membros e tipos simples sem `<summary>` aprovados, `<summary>` vazio reprovado, nome de autor reprovado; o código do validador não referencia `clean-architecture` (revisto pela DEC-35) |
+| AC-3 | 3, 4 | as skills da biblioteca | testes em `tests/test_library.py`, um por item C-1 a C-10 | cada teste encontra a construção exigida no arquivo indicado na 6.1 (ex.: `IReadOnlyCollection` no C-2, `Result<` e `Create` no C-3, `Expression<Func<` no C-8) e não há `## Beyond the template` |
+| AC-4 | 5, 6 | as skills da biblioteca e do Tickest tocadas por esta spec | teste com lista fechada de frases | nenhuma frase que proíba `<summary>`, nenhum `SPEC-`, `REQ-` ou `DEC-` em exemplos, nenhuma instrução de seed (`UseSeeding`, `HasData`, "seed") |
+| AC-5 | 7, 14 | os pares de arquivos da 6.5 | `python -m unittest discover -s scripts -p "test_*.py"` | o diff normalizado de cada par é igual ao diff esperado aprovado (vazio quando não há adaptação); nenhum arquivo de skill fora do mapa |
+| AC-6 | 8 | o `CLAUDE.md` do Tickest | caso do `test_instructions.py` | sem regra mandando usar o modelo anêmico; seções "Regras permanentes", "Eventos de domínio", "Desvios" e "Em migração" existem; "Em migração" lista os seeders; sem nome de autor ou projeto externo |
+| AC-7 | 9 | `.claude/agents/dotnet-architect.md` | caso do `test_instructions.py` | sem "a solução inteira", "mesmo fora do escopo" e "Sem XML summary"; sem autores no corpo e na `description`; `tools` contém `WebFetch` e `WebSearch` (DEC-30) e o texto subordina fontes externas ao `CLAUDE.md`, à spec e às skills; todo caminho citado existe |
+| AC-8 | 10 | o README das skills do Tickest | caso do `test_instructions.py` | cada linha tem `.claude/skills/<nome>/SKILL.md` |
+| AC-9 | 11 | os `ArchitectureTests` | `dotnet test tests/TickestPristine.ArchitectureTests` | o teste novo passa com a lista vazia; o autoteste confirma que a fixture com `set` público é reprovada |
+| AC-10 | 12 | um subagente executando pela ferramenta PowerShell `Copy-Item tests\<arquivo> tests\<arquivo>` | (a) numa sessão nova, sem `/spec-implement`; (b) noutra sessão, depois de `/spec-implement 012` com a spec `Em implementação` | (a) o hook nega com a mensagem do portão; (b) o hook libera e o erro vem do próprio comando; `git status --porcelain` igual antes e depois; saídas e `session_id` na seção 9. Sem as duas evidências, o AC fica pendente |
+| AC-11 | 6, 13 | a branch e a biblioteca | `git status --porcelain` e `git diff origin/main` no Tickest; `git diff` da linha de base na biblioteca | em `src/`: nada; em `tests/`: só o teste e a fixture do REQ-11; nenhuma linha `/// <summary>` removida nos dois repositórios |
+| AC-12 | 13 | build e testes | `dotnet build TickestPristine.slnx` e `dotnet test TickestPristine.slnx` | 0 avisos; resultados iguais à linha de base da T-1, falhas preexistentes classificadas à parte |
+| AC-13 | 14 | o CI | passo novo no `build.yml` | roda `python -m unittest discover -s scripts -p "test_*.py"` e fica verde no PR |
+| AC-14 | 14 | os autotestes do teste de paridade | execução | reprovam: `private set` trocado por `set`; `/// <summary>` removido; `Raise` removido; bloco a mais; diff esperado que deixou de ocorrer. Aprova: só a tradução de um comentário ou de uma mensagem |
+
+## 4. Decisões
+
+Decisões da versão de 2026-10-25 (texto original preservado no histórico; backup em `C:\dev\_spec012_backup.tgz`):
+
+| ID | Opções | Situação em 2026-10-28 | Justificativa |
+|---|---|---|---|
+| DEC-1 (base nos projetos e artigos de um autor) | conforme o texto original (backup) | Superada pelas DEC-15 e DEC-16 | A autoridade é a biblioteca canônica |
+| DEC-2 (`UserCredential` separada e rica) | conforme o texto original (backup) | Adiada | Agregado `User` |
+| DEC-3 (objeto de valor só para valor com regra própria e vários usos) | conforme o texto original (backup) | Mantida como princípio; o `Email` fica adiado | — |
+| DEC-4 (sem guards; lógica copiada em cada handler) | conforme o texto original (backup) | Revista pela DEC-21 | Risco de divergência entre até 13 handlers |
+| DEC-5 (construtor primário) | conforme o texto original (backup) | Mantida | — |
+| DEC-6 (403 continua 403) | conforme o texto original (backup) | Mantida, aplicada na Spec B | — |
+| DEC-7 e DEC-8 (SLA) | conforme o texto original (backup) | Adiadas | Outro agregado |
+| DEC-9 (histórico, `UserCodes`, paginação) | conforme o texto original (backup) | Histórico: revisar na Spec B; demais adiadas | — |
+| DEC-10 (`add-domain-behavior`) | conforme o texto original (backup) | Superada pela `domain-modeling` | — |
+| DEC-11 (`MaxLength` como constante) | conforme o texto original (backup) | Mantida | — |
+| DEC-12 (uma branch e um PR) | conforme o texto original (backup) | Mantida | — |
+| DEC-13, DEC-14 e REQ-4(a) antigo | conforme o texto original (backup) | Superadas pela DEC-20 | — |
+| REQ-8 antigo (normalizar e-mail) | conforme o texto original (backup) | Adiado | — |
+| REQ-12 antigo (comentário não cita spec) | conforme o texto original (backup) | Mantido no REQ-6 | — |
+| REQ-13 antigo (revisar specs 004–011) | conforme o texto original (backup) | Substituído pela DEC-22 | — |
+| Merge: `bool` para "pode não mudar nada" | — | Mantida | — |
+| Merge: histórico criado pelo agregado | — | Mantida com salvaguarda (Spec B) | — |
+| Merge: `IFileContentInspector` | — | Adiada (DEC-23) | — |
+| Merge: `TicketSlaClock` | — | Revisar na Spec B | — |
+| Merge: conversor UTC e auditoria no `SaveChanges` | — | Mantida na biblioteca; o Tickest não adota agora (A-5) | — |
+
+Decisões novas:
+
+| ID | Pergunta | Opções | Decisão | Decidido por, em |
+|---|---|---|---|---|
+| DEC-15 | Fonte da verdade | biblioteca / Tickest | Biblioteca; o Tickest adapta e declara | Rafael Santos, 2026-10-28 |
+| DEC-16 | Regra byte a byte | manter / abandonar | Abandonar; o template é referência técnica | Rafael Santos, 2026-10-28 |
+| DEC-17 | Idioma | inglês / pt-BR | Skills da biblioteca em inglês, documentação dela em português; comentários, `<summary>` e textos ao usuário em pt-BR; skills do Tickest em pt-BR | Rafael Santos, 2026-10-28 |
+| DEC-18 | `OccurredOnUtc` | (a) sem `OccurredOnUtc` / (b) classe base com `OccurredOnUtc` recebido por parâmetro / (c) `DateTime.UtcNow` no SharedKernel | Eventos `record` com ids, sem `OccurredOnUtc`; consumidor futuro usa a hora do processamento; reavaliado na Spec B com o `IDateTimeProvider`. A parte sobre seeders passou para a Spec C | Rafael Santos, 2026-10-28 |
+| DEC-19 | `<summary>` | — | Obrigatório em membros públicos e internos de entidades, handlers e abstrações; opcional em privados. **Revista pela DEC-35.** | Rafael Santos, 2026-10-28 |
+| DEC-20 | Teste de arquitetura inicial | estáticas só em `Abstractions/` / entidade rica sem `set` público | Só "entidade rica sem `set` público", por lista explícita, com autoteste | Rafael Santos, 2026-10-28 (pedido) |
+| DEC-21 | Autorização | lógica copiada em cada handler / híbrida (entidade, `IPermissionProvider` e handler) | Híbrida: regra de domínio sem consulta na entidade; permissões efetivas pelo `IPermissionProvider`; o handler coordena; consulta de autorização nunca na entidade; regra repetida só vira peça compartilhada quando a Spec B demonstrar a repetição | Rafael Santos, 2026-10-28 |
+| DEC-22 | Specs de chamados não entregues (029, 031 a 035) | (a) seguem antes da Spec B / (b) as que não começaram esperam a Spec B | (a): seguem a ordem atual antes da Spec B; o legado fica documentado em "Em migração" até a migração | Rafael Santos, 2026-10-28 |
+| DEC-23 | `IFileContentInspector` | nesta spec / spec própria | Spec própria | Rafael Santos, 2026-10-28 |
+| DEC-24 | Mecanismo de seed | decidir nesta spec / transferir para a Spec C | Transferida para a Spec C (D-C8 (a) aprovada lá); esta spec não decide nada sobre seed | Rafael Santos, 2026-10-28 |
+| DEC-25 | Linha de base no git local da biblioteca | com commit de linha de base / sem | Commit local de linha de base, autorizado | Rafael Santos, 2026-10-28 |
+| DEC-26 | `<summary>` em exemplos de documentação | (a) em todo bloco / (b) só em blocos que declaram tipo completo | (b): exigido nos exemplos que declaram tipo completo; a DEC-19 vale integralmente para o código real **Revista pela DEC-35.** | Rafael Santos, 2026-10-28 |
+| DEC-27 | `exemplos.md` antigo | manter com aviso / remover | Restaurar do backup, com aviso no topo de que está superado e não é referência normativa, e com os nomes de autores externos trocados por `[autor externo]` e os de projetos externos por `[projeto externo]`; o resto do conteúdo fica como no original | Rafael Santos, 2026-10-28 |
+| DEC-28 | Local do teste de instruções | `scripts/` / pasta dos hooks do portão | `scripts/test_instructions.py`; o passo no CI depende de autorização na execução | agente, 2026-10-28 (técnica) |
+| DEC-29 | Limites do validador | manter 101 e 16 / novos limites (150 e 25) | Manter 101 e 16 para todas as skills; `add-entity` reduzida a até 101 linhas movendo código para `references/` | agente, 2026-10-28 (técnica, medida) |
+| DEC-30 | Ferramentas do `dotnet-architect` | manter / remover `WebFetch` e `WebSearch` | Manter `WebFetch` e `WebSearch`; fontes externas são referência técnica, subordinadas ao `CLAUDE.md`, à spec aprovada e às skills canônicas | Rafael Santos, 2026-10-28 |
+| DEC-31 | Commits na biblioteca | (a) o agente, depois do ok de cada diff / (b) o responsável | Commits locais por tarefa na biblioteca, só depois da aprovação explícita do diff correspondente; sem push, PR ou operação em outros repositórios; fora desse escopo, continua valendo a regra de não fazer stage | Rafael Santos, 2026-10-28 |
+| DEC-32 | Onde trabalhar | (a) worktree a partir da `origin/main` / (b) esperar o commit da 029 | (a): worktree nova a partir da `origin/main`, criada com as autorizações existentes e preservando integralmente as mudanças não commitadas da Spec 029. **Ajuste de 2026-10-29:** a partir da T-4a, a branch fica no repositório principal `C:\dev\tickest-pristine`, para o responsável acompanhar as alterações no Visual Studio; a worktree `C:\dev\tickest-pristine-spec012` ficou no mesmo commit, sem branch (`git switch --detach`), sem nada apagado; as pastas não rastreadas de outras specs no repositório principal não entram nos commits desta spec | Rafael Santos, 2026-10-28; ajuste por Rafael Santos, 2026-10-29 ("b": trazer a branch para o repositório principal; "sim": registrar o ajuste) |
+| DEC-33 | Método do teste de paridade | analisador léxico com mutação e corpus / linhas normalizadas com diff esperado | Comparação por linhas normalizadas com diff esperado aprovado (6.5); sem analisador léxico, mutação em massa nem corpus automatizado. Limites aceitos: valores de literais e fidelidade da tradução da prosa não são conferidos | agente, 2026-10-28 (técnica; depende da aprovação desta versão) |
+| DEC-34 | Paridade no CI, onde a biblioteca canônica não existe | (a) pular só a comparação com a biblioteca no CI e rodar o resto / (b) guardar uma cópia da biblioteca no repositório | (a): `scripts/test_instructions.py` lê a biblioteca de `DOTNET_SKILLS_LIBRARY` (padrão `C:\dev\dotnet-universal-skills`); sem ela, os dois testes de paridade são pulados e os demais (autotestes, mapa de arquivos, `CLAUDE.md`, agente, README, frases) rodam; a paridade é conferida localmente | Rafael Santos, 2026-10-29 ("sim" à opção recomendada) |
+| DEC-35 | Onde vai o `<summary>` | (a) em todo membro público e interno (DEC-19) / (b) só no tipo das interfaces e em métodos de comportamento não óbvio, com o validador exigindo só a interface e reprovando `<summary>` vazio / (c) sem regra no validador | (b). Pedido de Rafael Santos em 2026-10-29: "o sumary é pra ter explicando uma interface ou método mais complexo e não em todo o lugar como está. Pode corrigir."; escolha da opção delegada ao agente ("encontre a melhor solucao"). Os `<summary>` existentes no código do Tickest continuam. Aplicado na biblioteca (validador, fixtures, testes, exemplos e prosa), nas skills do Tickest, no `CLAUDE.md` e no agente | Rafael Santos, 2026-10-29 (pedido e delegação); opção escolhida pelo agente e aprovada por Rafael Santos em 2026-10-29 ("aprovo a revisão e autorizo os commits") |
+| DEC-36 | Onde ficam as adaptações do Tickest | (a) marcadas no texto das skills (REQ-7 original) / (b) só na seção "Desvios" do `CLAUDE.md`, com as skills como tradução fiel e genérica da biblioteca | (b). Rafael Santos no chat, 2026-10-29: "como eu citei anteriormente. essas skills modelos não devem ter nada do projeto. elas são skills modelos que podem serem usadas em qualquer projeto" e "nao é pra referenciar nas skills o meu prjeto ou qualquer outro". As notas "Adaptação do Tickest", o `TicketHistory` e o `PermissionCodes` saíram das skills; `persistence.md` ganhou par; os diffs esperados ficaram vazios; desvios novos no `CLAUDE.md` (persistência, `PermissionCodes`, peças do `SharedKernel`, registro do agregado, `Forbidden`); teste novo `test_skills_do_not_mention_the_project` | Rafael Santos, 2026-10-29 |
+
+## 5. Fora do escopo
+
+- Converter entidade, evento, handler, seeder ou classe estática existente (Spec B e seguintes).
+- `Ensure`, `ValueObject` e extensões de `Result` em `src/` (primeiro uso, na Spec B).
+- Estratégia de seed, política de eventos no seed e a skill de seed (Spec C).
+- Mensageria e `add-integration-event`.
+- Outros agregados, `IFileContentInspector`, normalização de e-mail, SLA.
+- Conversor UTC e auditoria no `SaveChanges` do Tickest.
+- Rota, payload, status HTTP ou banco.
+- Mudança no portão SDD, inclusive a regra do `git stash`; se o AC-10 revelar defeito, a spec para.
+
+## 6. Plano técnico
+
+### 6.0 Pré-condições (bloqueantes)
+
+| ID | Pré-condição | Quando |
+|---|---|---|
+| P-1 | Nenhuma pasta ou branch usa o número 012; o `C:\dev\_spec012_backup.tgz` é legível | na criação da spec |
+| P-2 | Worktree a partir da `origin/main` (DEC-32), sem tocar nas mudanças da 029 | na criação da spec |
+| P-3 | Confirmação do responsável no chat para o backup e o `git init`; listagem da biblioteca igual à da T-1 | antes da T-2 |
+| P-4 | AC-1 aprovado | antes da T-3 |
+| P-5 | Autorização explícita para `.claude/`, `CLAUDE.md` e CI | no início das tarefas que os alteram |
+| P-6 | AC-10 aprovado | antes de instalar o agente |
+
+### 6.1 Checklist do modelo canônico
+
+| ID | Item | Onde fica (biblioteca) |
+|---|---|---|
+| C-1 | Construtor privado com guardas e construtor privado vazio para o EF Core | `add-entity/references/rich-entity.md` |
+| C-2 | `private set`; coleção em campo privado exposta como `IReadOnlyCollection<T>` e mapeada pelo campo | `add-entity/references/rich-entity.md`, `add-entity/references/persistence.md` |
+| C-3 | `Create` simples quando não pode falhar; `Result<T> Create` quando pode ser rejeitada | `add-entity/references/rich-entity.md`, `domain-modeling/references/patterns.md` |
+| C-4 | `Ensure` para erro de programação; `Result` para falha de negócio esperada | `domain-modeling/references/patterns.md` |
+| C-5 | Transição confere tudo antes de mudar; em falha, estado e eventos intactos | `domain-modeling/references/patterns.md` |
+| C-6 | `Result` para o que pode falhar; `bool` para o que pode não mudar nada | `domain-modeling/references/patterns.md` |
+| C-7 | Filho e histórico criados pelo agregado e adicionados pelo handler no mesmo `SaveChangesAsync` | `domain-modeling/references/patterns.md`, `add-feature/references/rich-domain-handler.md` |
+| C-8 | Método da entidade para objeto carregado; predicado de consulta como `Expression<Func<T, bool>>` ou na própria query; sai a frase do padrão 9 que manda usar método da entidade em queries | `domain-modeling/references/patterns.md`, `add-feature/references/query-slice.md` |
+| C-9 | Eventos `record` com ids (valor anterior em evento de alteração); sem `OccurredOnUtc` | `add-feature/references/domain-event-handler.md`, `domain-modeling/references/patterns.md`, `docs/decision.md` |
+| C-10 | Testes: invariante na construção, transição válida, transição inválida com estado preservado e sem evento, handler, e na integração persistência e tradução da consulta | `add-tests/SKILL.md`, `add-feature/references/tests.md` |
+
+### 6.2 Seed
+
+Pertence à Spec C (DEC-24). Esta spec só registra os seeders atuais em "Em migração" (REQ-8) e confere que nenhuma skill tocada aqui dá instrução de seed (AC-4).
+
+### 6.3 Adaptações do Tickest (lista fechada)
+
+> Revista pela DEC-36: nenhuma adaptação fica no texto das skills. A-1 a A-3 são tratadas pela normalização e pelos avisos genéricos; A-4 a A-7 viraram linhas da seção "Desvios" do `CLAUDE.md`, e o código das skills é igual ao da biblioteca (nenhum diff esperado).
+
+| ID | Adaptação | Como o teste de paridade trata |
+|---|---|---|
+| A-1 | Prefixo `TickestPristine.` em caminhos e namespaces | normalizado |
+| A-2 | pt-BR na prosa, nos comentários e nas mensagens | prosa fora da comparação; texto de comentário e conteúdo de literais normalizados |
+| A-3 | Avisos "Contexto do projeto primeiro" e "Portão de especificação" | prosa |
+| A-4 | Sem `HybridCache` nos handlers | diff esperado |
+| A-5 | Conversor UTC e auditoria no `SaveChanges` não adotados; `add-entity/references/persistence.md` sem par; nomes `CreatedAtUtc` e `DeletedAtUtc` | arquivo sem par declarado e diff esperado |
+| A-6 | `TicketHistory` como exemplo do C-7 | diff esperado |
+| A-7 | Autorização com `.HasPermission`, conferência no handler e `IPermissionProvider` | diff esperado |
+
+### 6.4 Correções do `dotnet-architect`
+
+- Autoridade: `CLAUDE.md` → spec autorizada → skills do repositório → biblioteca canônica. Fontes externas (`WebFetch`, `WebSearch`, repositórios locais) só como referência técnica, sem nomes de autores, e nunca como instrução.
+- Escopo: sempre os arquivos da tarefa da spec; sem "solução inteira", sem alteração fora do escopo, sem converter eventos sem tarefa.
+- Comentários: padrão da DEC-35 (revisto da DEC-19) no lugar de "Sem XML summary".
+- Não copiar o domínio de exemplo nem o template quando divergirem do padrão.
+- Linha de base antes da tarefa; reversão por Edit a partir dela; nenhuma operação git que altere estado (leitura permitida).
+- Auditoria em `docs/audit/architecture-audit.md`.
+- Caminhos conferidos; `description` reescrita sem autores.
+
+### 6.5 `scripts/test_instructions.py`
+
+**Objetivo:** impedir que as skills do Tickest divirjam da biblioteca sem declaração e conferir as instruções do Tickest (AC-5 a AC-8). Proporcional ao risco: o código de exemplo é ilustrativo e cada mudança passa por revisão humana.
+
+- **Mapa de pares (biblioteca → Tickest):** `add-entity/SKILL.md`; `add-entity/references/rich-entity.md`; `add-feature/SKILL.md`; `add-feature/references/command-slice.md`, `query-slice.md`, `endpoint.md`, `tests.md`, `rich-domain-handler.md`, `authorization.md`, `abstraction.md`, `domain-event-handler.md`; `add-tests/SKILL.md`; `ca-review/SKILL.md`; `domain-modeling/SKILL.md`; `domain-modeling/references/patterns.md`. Desde a DEC-36, `add-entity/references/persistence.md` também tem par e nenhum par tem diff esperado. Só no Tickest, fora da comparação: `add-feature/references/pagination.md`, `spec-new/**`, `spec-implement/**`, `spec-verify/**`. Arquivo de skill fora do mapa reprova.
+- **Extração:** todos os blocos cercados (` ``` `), na ordem.
+- **Normalização, linha a linha:** remove o prefixo `TickestPristine.`; colapsa espaços; troca o texto depois de `//` por `//…`, mantendo as tags de `///` (`<summary>`, `</summary>`, `<param …>`, `<returns>`); troca o conteúdo de cada literal `"…"` por `"…"`.
+- **Comparação:** `difflib.unified_diff` das linhas normalizadas de cada par. O resultado precisa ser igual ao diff esperado do par, guardado em `scripts/instruction_parity/<par>.diff` e aprovado pelo responsável quando é criado ou muda. Divergência nova reprova; diff esperado que deixou de ocorrer também reprova.
+- **Instruções do Tickest:** casos para `CLAUDE.md` (AC-6), agente (AC-7) e README (AC-8), e a lista de frases do AC-4 aplicada às duas árvores.
+- **Autotestes:** AC-14.
+- **Limites aceitos (DEC-33):** não confere valores de literais (códigos, rotas, mensagens); não confere fidelidade da tradução da prosa nem a qualidade do texto do `<summary>`; um diff esperado aprovado por engano continua aprovado. Esses pontos ficam na revisão humana dos diffs.
+- **Execução:** `python -m unittest discover -s scripts -p "test_*.py"`, com passo no `build.yml`.
+
+### 6.6 Arquivos que a implementação pode alterar
+
+- **Biblioteca** (`C:\dev\dotnet-universal-skills`; só depois de P-3 e P-4; diff e ok por tarefa; commit local conforme DEC-31): `CLAUDE.md`, `README.md`, `docs/decision.md`, `docs/installation.md`, `tools/validate_library.py`, `tests/test_library.py`, `.claude/skills/README.md`, `.claude/skills/add-entity/SKILL.md`, `.claude/skills/add-entity/references/rich-entity.md`, `.claude/skills/add-entity/references/persistence.md`, `.claude/skills/add-feature/SKILL.md`, `.claude/skills/add-feature/references/command-slice.md`, `query-slice.md`, `rich-domain-handler.md`, `authorization.md`, `abstraction.md`, `domain-event-handler.md`, `tests.md`, `endpoint.md`, `.claude/skills/add-tests/SKILL.md`, `.claude/skills/ca-review/SKILL.md`, `.claude/skills/domain-modeling/SKILL.md`, `.claude/skills/domain-modeling/references/patterns.md`; criação de `.git/`.
+- **Backup:** `C:\dev\_backups\dotnet-universal-skills-<data>.tgz` e `C:\dev\_backups\dotnet-universal-skills-<data>.sha256`.
+- **Instruções do Tickest (P-5):** `CLAUDE.md`, `.claude/skills/README.md`, `.claude/skills/add-entity/**`, `.claude/skills/add-feature/**`, `.claude/skills/add-tests/**`, `.claude/skills/ca-review/**`; novos `.claude/skills/domain-modeling/**` e `.claude/agents/dotnet-architect.md`.
+- **Fluxo SDD:** `specs/012-dominio-rico-padrao-universal/spec.md` e `exemplos.md` (DEC-27); `SYSTEM_SPECIFICATION.md` 6.9 se o AC-10 revelar algo não documentado. As linhas 57 e 267 do `SYSTEM_SPECIFICATION.md` ("domínio anêmico") continuam válidas até a execução da Spec B, porque esta spec não muda o código (REQ-13).
+- **Verificação:** novos `scripts/test_instructions.py` e `scripts/instruction_parity/*.diff`; passo novo em `.github/workflows/build.yml` (P-5).
+- **Código do Tickest:** só `tests/TickestPristine.ArchitectureTests/` (REQ-11).
+- **Contratos:** nenhum. **Banco:** não.
+
+### 6.7 Riscos
+
+| Risco | Mitigação |
+|---|---|
+| Repetir o que levou ao rollback (motivo desconhecido) | Sem código de produção; tarefas pequenas com diff e ok |
+| Biblioteca sem git e sem backup | REQ-1, P-3 e P-4 bloqueiam |
+| Teste de paridade deixar passar diferença em literal ou na prosa | Limite aceito (DEC-33); revisão humana dos diffs esperados |
+| Custo de manter os diffs esperados | Aceito: toda mudança na biblioteca passa por revisão |
+| Código das specs que seguem antes da B no padrão antigo | DEC-22 e "Em migração" |
+| Portão inefetivo ou permissivo demais no subagente | AC-10 e P-6 |
+| Portão bloqueia `git stash list` | Comportamento registrado; não contornar |
+| Conflito com trabalho em paralelo | DEC-32; rebase ou merge só com autorização |
+| `add-entity` não caber em 101 linhas | Mover código para `references/`; se não couber, a tarefa para e pergunta |
+
+### 6.8 Relação com outras specs
+
+| Tema | Dona | Papel desta spec |
+|---|---|---|
+| Padrão de domínio rico, validador, git e backup da biblioteca, `test_instructions.py`, agente, teste de arquitetura, portão | esta spec | define e implementa |
+| Estratégia de seed, política de eventos no seed, `add-seed-data` e seus pares no teste de paridade | Spec C | só cita |
+| Migração do `Ticket`, implementação da política de seed, lista do REQ-11, reavaliação do `OccurredOnUtc` | Spec B | só cita |
+
+Ordem: esta spec `Entregue` → Spec C aprovada e entregue → Spec B. Esta spec não depende da C.
+
+## 7. Tarefas
+
+| ID | Tarefa | ACs | Skill | Feita |
+|---|---|---|---|---|
+| T-1 | Linha de base (somente leitura): build e testes do Tickest; validador e testes da biblioteca; listagem da biblioteca | AC-12 | manual, com diff e ok | [x] |
+| T-2 | Com P-3: snapshot, manifesto, restauração verificada, `git init` e commit de linha de base | AC-1 | manual, com diff e ok | [x] |
+| T-3 | Validador e testes da biblioteca com fixtures; as regras novas contra a biblioteca real só são ligadas na T-4c | AC-2 | manual, com diff e ok | [x] |
+| T-4a | Biblioteca: entidade e `domain-modeling` (C-1 a C-6, C-9); `add-entity` com até 101 linhas | AC-3 | manual, com diff e ok | [x] |
+| T-4b | Biblioteca: handler, consulta, autorização, abstração e evento (C-7, C-8) | AC-3 | manual, com diff e ok | [x] |
+| T-4c | Biblioteca: testes, revisão, `CLAUDE.md`, `docs/`, README (C-10); liga as regras novas | AC-2, AC-3, AC-4 | manual, com diff e ok | [x] |
+| T-5 | `scripts/test_instructions.py` com autotestes | AC-14 | manual, com diff e ok || [x] |
+| T-6 | Tickest: skills adaptadas, README e diffs esperados aprovados; passo no CI (P-5) | AC-4, AC-5, AC-8, AC-13 | manual, com diff e ok || [x] |
+| T-7 | Tickest: `CLAUDE.md` (P-5) | AC-6 | manual, com diff e ok || [x] |
+| T-8 | Teste do portão com subagente | AC-10 | manual, com diff e ok || [x] |
+| T-9 | `dotnet-architect` em `.claude/agents/` (P-5, P-6) | AC-7 | manual, com diff e ok || [x] |
+| T-10 | Teste de arquitetura e fixture (`/spec-implement`) | AC-9 | add-tests || [x] |
+| T-11 | Verificação, auditoria SDD, revisão independente e documentação de estado | todos, AC-11 | spec-verify | [ ] |
+
+## 8. Rastreabilidade
+
+| AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
+|---|---|---|---|
+| AC-1 | evidência por comando (`tar -xzf` + `sha256sum -c`) | restauração comprovada pelo manifesto | Aprovado em 2026-10-29: 24/24 `OK` (seção 9) |
+| AC-2, AC-3 | `tests/test_library.py` | AC-2: `test_rejects_entity_with_public_setter` (entidade com `{ get; set; }` reprovada), `test_accepts_dto_with_public_setter` (DTO aprovado), `test_rejects_interface_without_summary_and_accepts_plain_members` (interface sem `<summary>` reprovada; record, classe e membros simples aprovados), `test_rejects_empty_summary` (`<summary>` vazio reprovado), `test_accepts_documented_rich_types` (sem falso positivo), `test_rejects_author_mention_in_any_document` (autor reprovado), `test_validator_has_no_template_dependency` (sem `clean-architecture`), `test_enforces_line_limit_on_every_skill`, `test_catches_broken_copy`, `test_passes_on_library`. AC-3 (classe `CanonicalModel`): um teste por item, de `test_c1_private_constructor_with_guards_and_empty_one_for_ef` a `test_c10_tests_cover_invariant_transitions_handler_persistence_and_translation`, mais `test_no_skill_keeps_a_beyond_the_template_section`. AC-4 (biblioteca): `LibraryText.test_no_forbidden_phrases` e `LibraryText.test_examples_do_not_cite_spec_ids` | Aprovados na verificação de 2026-10-29 (23/23) |
+| AC-4 a AC-8, AC-14 | `scripts/test_instructions.py` | AC-4: `TickestInstructions.test_skills_have_no_forbidden_phrases_or_spec_ids_in_examples` (as duas árvores). AC-5: `SkillParity.test_every_tickest_skill_file_is_mapped`, `test_every_library_skill_file_is_mapped` e `test_pairs_match_expected_diffs` (16 pares, nenhum diff esperado, DEC-36) e `TickestInstructions.test_skills_do_not_mention_the_project` (nenhuma skill cita o Tickest, o domínio real, "adaptação do" nem caminho de projeto). AC-6: `test_claude_md_follows_rich_domain`. AC-7: `test_dotnet_architect_agent`. AC-8: `test_skills_readme_rows_point_to_existing_skills` (cada linha da tabela aponta para um `.claude/skills/<nome>/SKILL.md` existente; as linhas antigas não foram reescritas, conforme o REQ-10). AC-14: classe `ParityMethod`, 6 autotestes | 14/14 aprovados com a biblioteca; 12 aprovados e 2 pulados sem ela (modo do CI) |
+| AC-9 | `tests/TickestPristine.ArchitectureTests/Conventions/RichEntityTests.cs` | `RichEntities_Should_NotHaveNonPrivateSetters` (lista vazia); `Checker_Should_ReportViolation_When_EntityHasNonPrivateSetter` (`set`, `init` e `internal set` reprovados), `Checker_Should_NotReportViolation_When_EntityHasOnlyPrivateSetters`, `Checker_Should_ReportViolation_When_ListedTypeIsNotAnEntity` | 56/56 aprovados nos testes de arquitetura em 2026-10-29, depois das correções da revisão |
+| AC-10 | evidência por comando (duas sessões `claude -p`) | bloqueio e liberação reais (seção 9) | Aprovado em 2026-10-29 |
+| AC-11, AC-12 | `git status`, `git diff`, `dotnet build`, `dotnet test` | comparação com a linha de base | |
+| AC-13 | passo "Test agent instructions" no `build.yml` | roda o `test_instructions.py` no CI | Aprovado em 2026-10-29: no PR #53, o passo "Test agent instructions" rodou 14 testes, OK (2 pulados), e o check `build` ficou verde |
+
+## 9. Evidências de verificação
+
+- **Linha de base (T-1, 2026-10-29, `398f95a` sobre a `origin/main` `008eae2`):**
+  - Tickest: `dotnet build TickestPristine.slnx` com 0 avisos e 0 erros; `dotnet test TickestPristine.slnx` com 1.282 testes aprovados e 0 falhas (50 de arquitetura, 761 unitários, 471 de integração).
+  - Biblioteca: `python tools/validate_library.py` → `RESULTADO: APROVADO` (192 verificações, 5 skills). `python -m unittest discover -s tests -v` → 2 testes, 1 falha preexistente: `test_catches_broken_copy` espera "cita outro projeto ou autor", que o validador não produz nesse cenário; fica para a T-3, que reescreve o validador e os testes.
+  - Listagem da biblioteca: 24 arquivos, sem `.git`, com SHA-256 por arquivo (sem `__pycache__/`, que o próprio `unittest` criou em `tests/` durante a T-1 e que o `.gitignore` da biblioteca já ignora). Referência para a P-3.
+- **Backup e restauração (T-2, 2026-10-29):**
+  - P-3: confirmação de Rafael Santos no chat ("por enquanto prossiga"); listagem da biblioteca igual à da T-1 (24 arquivos, mesmos SHA-256).
+  - Snapshot `C:\dev\_backups\dotnet-universal-skills-2026-10-29.tgz` (30.717 bytes, SHA-256 `5adaa1c5f7bb28c27d68e452934fc0af47175989465f26765c9a0217f015f122`), sem `__pycache__/`; manifesto `C:\dev\_backups\dotnet-universal-skills-2026-10-29.sha256` com 24 linhas.
+  - AC-1: `tar -xzf` numa pasta temporária e `sha256sum -c` do manifesto → 24 `OK`, 0 falhas, 24 arquivos restaurados.
+  - `git init -b main` na biblioteca, sem remoto (`git remote` vazio); commit local de linha de base `c4e3c82` ("chore: linha de base da biblioteca antes da spec 012"), autorizado por Rafael Santos no chat ("sim"), com os 24 arquivos do manifesto e nenhum outro; árvore igual ao manifesto depois do commit.
+- **Validador e testes da biblioteca (T-3, 2026-10-29):**
+  - Saíram a comparação byte a byte com o template, a seção `## Beyond the template`, a proibição de `/// <summary>` e toda referência a `C:\dev\clean-architecture` (a isenção dos "originais do template" escondia menções a autores e causava a falha preexistente da T-1). A regra de autores e projetos externos vale para todos os `.md` das skills, `README.md`, `CLAUDE.md` e `docs/`.
+  - Regras novas atrás de `--enforce-new-rules` (ligadas por padrão na T-4c): 101 linhas para todas as skills; `{ get; set; }` reprovado em tipo derivado de `Entity`; `<summary>` não vazio exigido em tipos e membros públicos e internos (e membros de interface) dos blocos C# que declaram tipo completo. Sem a flag, os limites atuais continuam (250 linhas para `add-entity`, `add-feature`, `add-tests` e `ca-review`; 101 para as demais).
+  - `python tools/validate_library.py` → `RESULTADO: APROVADO` (174 verificações). `python -m unittest discover -s tests -v` → 11 testes, 0 falhas, com fixtures em `tests/fixtures/`.
+  - Informativo: com `--enforce-new-rules`, a biblioteca real tem 135 erros (membros sem `<summary>`, entidade `Project` com `{ get; set; }` e `add-entity/SKILL.md` acima de 101 linhas), todos conferidos como defeitos reais; ficam para a T-4a a T-4c.
+  - T-4a (2026-10-29): `add-entity/SKILL.md` reescrita sem o exemplo anêmico e sem `## Beyond the template` (100 linhas pela contagem do validador); `rich-entity.md` com `_labels` exposto como `IReadOnlyCollection<string>` e `Result<TodoItem> Create`; `persistence.md` com o mapeamento da coleção pelo campo; `patterns.md` com várias conferências antes da primeira mudança, `Create` simples e com `Result<T>`, `Ensure` contra `Result` e a nova seção 10 (eventos `record` com ids, sem `OccurredOnUtc`); `domain-modeling/SKILL.md` com o padrão 10. `<summary>` em pt-BR em todos os tipos e membros públicos e internos desses arquivos. Validador `APROVADO`; 18 testes, 0 falhas; com `--enforce-new-rules`, nenhum erro em `add-entity` e `domain-modeling` (55 restantes, em `add-feature`, para a T-4b e a T-4c).
+  - T-4b (2026-10-29): `add-feature/SKILL.md` sem `## Beyond the template`, com o fluxo do handler, a autorização híbrida (DEC-21) e a regra do `<summary>` no corpo; `command-slice.md` com o handler chamando `todoItem.Archive(...)` (sai a atribuição de propriedade e o `Raise` no handler) e o método `Archive` da entidade; `rich-domain-handler.md` com o registro de histórico criado pela entidade e adicionado antes do único `SaveChangesAsync`; `query-slice.md` com o predicado `Expression<Func<TodoItem, bool>> OverdueAt` e a seção "Rules in queries"; `authorization.md` reescrita conforme a DEC-21 (permissão fixa no endpoint, regra do próprio estado na entidade, permissões efetivas pelo `IPermissionProvider`, consulta em método privado do handler, peça compartilhada só depois de a repetição aparecer); `abstraction.md` sem "No XML comments" e sem o handler atribuindo `PasswordHash`; `domain-event-handler.md` com ids, valor anterior e sem `OccurredOnUtc`; `patterns.md` e `domain-modeling/SKILL.md` sem a frase do padrão 9 que mandava usar método da entidade em queries. Validador `APROVADO`; 20 testes, 0 falhas; com `--enforce-new-rules`, 15 erros restantes, só em `endpoint.md` e `tests.md` (T-4c).
+  - T-4c (2026-10-29): `add-tests/SKILL.md` e `ca-review/SKILL.md` sem `## Beyond the template`, com o domínio rico, a autorização da DEC-21, a regra do `<summary>` e os testes do C-10 no corpo; `add-feature/references/tests.md` com testes da entidade (invariante na construção, transição válida, transição inválida com estado e eventos preservados), handler montando a entidade pelo `Create` e integração com persistência e tradução da consulta; `endpoint.md` com `<summary>`; `CLAUDE.md`, `README.md`, `docs/decision.md`, `docs/installation.md` e `.claude/skills/README.md` sem a regra byte a byte, sem `## Beyond the template`, sem a proibição de `<summary>` e com o domínio rico como padrão. Regras novas ligadas por padrão no validador (sai `--enforce-new-rules`). `python tools/validate_library.py` → `RESULTADO: APROVADO` (424 verificações); `python -m unittest discover -s tests -v` → 23 testes, 0 falhas. `endpoint.md` e `test_library.py` normalizados para LF, como no índice.
+- **Build (verificação final de 2026-10-29):** `dotnet build TickestPristine.slnx` com 0 avisos e 0 erros.
+- **Testes (verificação final de 2026-10-29, relatórios `.trx` por teste):** `dotnet test TickestPristine.slnx` com 1.288 aprovados e 0 falhas (56 de arquitetura, 761 unitários, 471 de integração), contra 1.282 da linha de base mais os 6 testes do REQ-11 (AC-12); os 6 de `RichEntityTests` aparecem como `Passed` no `.trx`. Biblioteca: `validate_library.py` `APROVADO` e 23 testes aprovados. `test_instructions.py`: 14 aprovados; no modo do CI, 12 aprovados e 2 pulados. Testes do hook aprovados. Auditoria SDD 100%, código de saída 0. AC-1 refeito: 24/24 `OK`. AC-10 refeito: sessão `ee832aea-0b71-4c24-adf2-83a059ac531c` negada pelo portão; sessão `73d202ab-93e5-47f7-86c8-14c872c0287c` (com `/spec-implement 012`) liberada, com erro `PathNotFound` do próprio comando; `git status` igual antes e depois. AC-11: `git diff origin/main...HEAD -- src/` vazio; em `tests/`, só os 3 arquivos do REQ-11; nenhum `<summary>` de código removido (as linhas removidas na biblioteca são o texto da antiga proibição e a fixture antiga).
+- **Portão com subagente (bloqueio e liberação) (T-8, 2026-10-29):** duas sessões novas do Claude Code (`claude -p`, versão 2.1.312) em `C:\dev\tickest-pristine`, só com a ferramenta PowerShell e até 3 turnos, rodando `Copy-Item tests\nao-existe-sdd-gate.txt tests\copia-sdd-gate.txt`.
+  - (a) Sem `/spec-implement`, `session_id` `12bd097a-1bba-4bc5-a98f-f4ce005a258c`: negado pelo hook ("PreToolUse:PowerShell hook error: Portão SDD: escrita em src/ ou tests/ bloqueada. ..."); estado do portão `{'authorized_turn': False}`.
+  - (b) Mensagem iniciada por `/spec-implement 012`, com a spec `Em implementação`, `session_id` `1f9dbce2-0bdb-4785-b213-ecdd3e0df2fe`: liberado pelo hook; o erro veio do próprio comando (`Copy-Item : Não é possível localizar o caminho ... nao-existe-sdd-gate.txt`, `PathNotFound`); estado do portão `{'spec_implement': '012', 'authorized_turn': False}`.
+  - `git status --porcelain` igual antes e depois (30 linhas); nenhum arquivo criado em `tests/`. Nenhum defeito do portão revelado; o `SYSTEM_SPECIFICATION.md` 6.9 não muda.
+- **Revisão (independente, 2026-10-29):** **reprovada**. Bloqueante: as "Referências vivas" e o mapa do `CLAUDE.md` mandam seguir `Domain/Departments/Department.cs` (com `{ get; set; }`) e os slices com guard estático (`Tickets/Reopen/`, `Tickets/GetById/`), e o aviso "Contexto do projeto primeiro" das skills faz essas referências prevalecerem sobre o padrão rico (REQ-8). Violações: `authorization.md` do Tickest usa `Permissions.ProjectsArchiveAny` no handler, mas `Permissions` fica na Web.Api; `patterns.md` ensina `Ensure`, `ValueObject` e as extensões de `Result` sem dizer que ainda não existem no `SharedKernel` do Tickest; mensagens de `{Entity}Errors` dos exemplos em inglês (já vinham assim). Observações menores: linhas em branco duplas, `Complete` diferente entre `rich-entity.md` e `patterns.md`, Arrange/Act/Assert no exemplo de validator, `internal set` não detectado pelo verificador, "nenhuma operação git" ambíguo no agente. Corrigido (ver histórico). Segunda revisão independente: sem bloqueantes; 4 violações (formato do `PermissionCodes`, nomes de teste na rastreabilidade, REQ-2 e 6.4 desatualizados, `using` repetido no exemplo) corrigidas. Revisão focada da DEC-36: sem bloqueantes, nenhuma menção ao projeto nas skills; 3 violações (exemplos de projeto na `ca-review`, contradição do desvio de persistência no `CLAUDE.md`, frase perdida na tradução do `patterns.md`) e as observações corrigidas. Veredito final: aprovado.
+- **Documentação atualizada (2026-10-29):** `SYSTEM_SPECIFICATION.md` 1.3 (padrão rico para código novo), 3.1 (legado em migração), 6.1 (esta verificação), 6.2 (testes de arquitetura), 6.8 (passo do CI) e 6.9 (skills, biblioteca canônica, `test_instructions.py`, agente, `<summary>` e o teste do portão).
+- **CI:**
+- **Entrega:** PR #53 (https://github.com/rafaelps15/tickest-pristine/pull/53), aberto em 2026-10-29 da branch `chore/SPEC-012-rich-domain-standard` para a `main`. CI (run 40960247882): check `build` verde em 5m11s; passos "Test SDD gate hook", "Test agent instructions" (14 testes, OK, 2 pulados sem a biblioteca), "SDD compliance audit", "Build" e "Test" com sucesso. Merge pelo responsável.
+
+## 10. Histórico
+
+> As 12 linhas de 2026-10-25 são as originais, com únicas alterações: as referências nominais ao autor externo foram trocadas por `[autor externo]` e as ao projeto externo por `[projeto externo]`. Essas substituições não mudam o sentido do registro; o texto original, sem elas, está preservado no backup `C:\dev\_spec012_backup.tgz`, o que mantém a rastreabilidade.
+
+| Data | Status | Observação |
+|---|---|---|
+| 2026-10-25 | Rascunho | Spec criada a partir do pedido de Rafael Santos no chat (seção 1). |
+| 2026-10-25 | Em descoberta | Descoberta feita no chat entre 2026-10-24 e 2026-10-25: coleta do código (`C:\dev\tickest-coleta`), comparação com o template e o [projeto externo], DEC-1, DEC-2, DEC-3 e DEC-10 decididas pelo responsável. Pendentes: DEC-4, DEC-5, DEC-7 e DEC-9, com `[SUPOSIÇÃO]`. |
+| 2026-10-25 | Em descoberta | DEC-13 decidida por Rafael Santos: o catálogo de permissões e o `RoleNames` não vão para o Domain, e sim para `Application/Abstractions/Authorization/`; o tema saiu da DEC-9. |
+| 2026-10-25 | Em descoberta | DEC-4, DEC-5, DEC-7 e DEC-9 confirmadas por Rafael Santos no chat ("sim! depois se eu achar que nao ficou bom a gente muda!"); nenhuma `[SUPOSIÇÃO]` pendente. Exemplos da modelagem em `exemplos.md`. Aguardando a aprovação explícita. |
+| 2026-10-25 | Em descoberta | DEC-4 revista por Rafael Santos ("eu quero como o [autor externo] faz. ele nao tem nenhum guard"): sem guards nem serviços, lógica no handler. T-5 passa a incluir a sintaxe `Fixed`/`FromEaster` e o `SlaCalendar.Default`. |
+| 2026-10-25 | Aprovada | Aprovada por Rafael Santos no chat ("aprovo a spec 012"). Checklist de completude atendido, sem `[SUPOSIÇÃO]` pendente. |
+| 2026-10-25 | Em implementação | Implementação iniciada por `/spec-implement 012`, na branch `refactor/SPEC-012-rich-domain-model` criada a partir da `origin/main` (`93a495a`). |
+| 2026-10-25 | Em implementação | Ajuste do REQ-1 e do AC-1 aprovado por Rafael Santos no chat ("1"): as regras de domínio no `CLAUDE.md` e nas skills ficam com o motivo técnico, sem nome de autor ou projeto de terceiros, como já pedia a orientação permanente do responsável (2026-10-05: "Não deixe nome de projeto de terceiros"). A coluna "Referência do [autor externo]" da 6.1 continua só nesta spec, como registro da descoberta. T-1 feita. |
+| 2026-10-25 | Em implementação | T-2 feita com a autorização de Rafael Santos no chat ("autorizo a T-2"): skill `add-domain-behavior` e linha no `README.md` das skills. |
+| 2026-10-25 | Em implementação | T-3 feita com a autorização de Rafael Santos no chat ("autorizo a T-3"): `add-entity`, `add-feature` (`SKILL.md`, `command-slice.md`, `tests.md`), `add-tests` e `ca-review` sem o padrão anêmico, apontando para a `add-domain-behavior`. |
+| 2026-10-25 | Em implementação | DEC-14 decidida por Rafael Santos no chat. T-4 feita: `DomainModelTests`, `StaticClassPlacementChecker` e `EntitySetterChecker`, com 22 classes estáticas pendentes e nenhuma entidade rica listada; build sem avisos e 789 testes aprovados (57 de arquitetura, 462 unitários, 270 de integração). |
+| 2026-10-25 | Em descoberta | Implementação desfeita a pedido de Rafael Santos no chat ("desfaça todas alterações da spec 012. nao ficou bom. Vou fazer as outras specs antes de voltar a mexer nela"): os commits da T-1 a T-3 (`CLAUDE.md` e skills) e os testes da T-4 foram descartados com a branch `refactor/SPEC-012-rich-domain-model`, e as tarefas voltaram a `[ ]`. A spec volta para revisão antes de nova aprovação. Pontos a rever: o resultado das tarefas não agradou ao responsável; a T-5 depende do código do calendário de SLA da spec 004 (PR #24), que não está na `origin/main`; a DEC-14 e o ajuste do REQ-1 e do AC-1 (sem nomes de terceiros) continuam registrados para a revisão. |
+| 2026-10-28 | Em descoberta | Revisão completa: escopo reduzido ao padrão universal e às instruções do Tickest; `Ticket` na Spec B; seed na Spec C; decisões antigas classificadas; DEC-15 a DEC-33; `aprovada-em` limpo; pasta renomeada sem nome de autor; método de paridade simplificado. |
+| 2026-10-28 | Aprovada | Aprovada por Rafael Santos no chat ("Aprovo a Spec 012. Registre a aprovação e atualize o histórico, sem iniciar a implementação."), depois da revisão do texto integral gravado e das correções autorizadas (R-2 a R-7, DEC-27 e nota do histórico). Sem `[SUPOSIÇÃO]` pendente; auditoria SDD 100% conforme. A aprovação é documental: a implementação só começa com `/spec-implement 012`. |
+| 2026-10-29 | Em implementação | Implementação iniciada por `/spec-implement 012` na branch `chore/SPEC-012-rich-domain-standard`, depois do rebase sobre a `origin/main` (`008eae2`, com as Specs 029 e 031 já mergeadas) feito por Rafael Santos (`! git rebase origin/main`). |
+| 2026-10-29 | Em implementação | T-1 a T-3 feitas, com commits autorizados por Rafael Santos no chat. Ajuste da DEC-32 aprovado por ele no chat ("b"; "sim"): a branch passou da worktree para o repositório principal, para acompanhamento no Visual Studio. A partir da T-4a, as alterações ficam sem stage e sem commit até a autorização explícita de cada commit. |
+| 2026-10-29 | Em implementação | T-4a a T-10 feitas a pedido de Rafael Santos no chat ("a": seguir em sequência e parar uma vez no fim, com os commits pendentes, incluindo os da T-4c, autorizados ao final). P-5 autorizada no chat ("sim") para `.claude/`, `CLAUDE.md` e o CI; P-6 cumprida pelo AC-10. DEC-34 registrada. AC-8 lido como "cada linha da tabela aponta para um `SKILL.md` existente", sem reescrever as linhas antigas (REQ-10). |
+| 2026-10-29 | Em descoberta | Revisão pedida por Rafael Santos no chat ("o sumary é pra ter explicando uma interface ou método mais complexo e não em todo o lugar como está. Pode corrigir."; "encontre a melhor solucao"): REQ-6, AC-2, DEC-19 e DEC-26 revistos pela DEC-35, o que refaz partes da T-3, T-4a a T-4c, T-6, T-7 e T-9. As correções já foram aplicadas fora de `src/` e `tests/` (biblioteca, skills, `CLAUDE.md`, agente) e conferidas: validador `APROVADO`, 23 testes da biblioteca e 13 do `test_instructions.py` aprovados; a suíte do Tickest (1.287 testes, 0 avisos) não é afetada. A spec precisa de nova aprovação explícita do trecho revisto antes de voltar a `Em implementação` e seguir para a verificação. |
+| 2026-10-29 | Aprovada | Revisão aprovada por Rafael Santos no chat ("aprovo a revisão e autorizo os commits"): REQ-6, AC-2 e DEC-35. Sem `[SUPOSIÇÃO]` pendente; auditoria SDD 100% conforme. |
+| 2026-10-29 | Em implementação | Retomada depois da aprovação; T-1 a T-10 feitas; falta a T-11 (`spec-verify`). |
+| 2026-10-29 | Em implementação | Verificação (`spec-verify`) reprovada pela revisão independente: build, testes, auditoria e ACs verdes, mas há um bloqueante nas "Referências vivas" do `CLAUDE.md` (apontam código anêmico e guards estáticos como modelo) e violações nas skills (seção 9). A spec continua `Em implementação`; falta corrigir e verificar de novo. O `SYSTEM_SPECIFICATION.md` não foi alterado. |
+| 2026-10-29 | Em implementação | Correções da revisão feitas com a autorização de Rafael Santos no chat ("prossiga"): "Referências vivas" e mapa do `CLAUDE.md` marcam os slices, a `Department.cs` e os guards como legado e apontam os modelos das skills; `authorization.md` do Tickest usa `PermissionCodes` (A-7, diff esperado novo); `patterns.md` avisa que `Ensure`, `ValueObject` e as extensões de `Result` ainda não existem no `SharedKernel`; mensagens dos exemplos em pt-BR nas duas árvores; `Complete` igual em `rich-entity.md` e `patterns.md`; Arrange/Act/Assert no exemplo de validator; linhas em branco duplas removidas; nota do `CreateCache()`; o agente permite leitura de git; o verificador do teste de arquitetura passa a reprovar todo setter não privado (`internal set` incluído). Nova verificação em seguida. |
+| 2026-10-29 | Em implementação | DEC-36 aplicada a pedido de Rafael Santos no chat ("nao é pra referenciar nas skills o meu prjeto ou qualquer outro"): REQ-7, 6.3 e 6.5 revistos; skills de código do Tickest refeitas como tradução fiel da biblioteca, sem nenhuma menção ao projeto; desvios no `CLAUDE.md`. Correções da segunda revisão independente: formato aninhado do `PermissionCodes` no desvio, `Forbidden` (403) nos desvios, regra explícita em "Em migração", `using SharedKernel;` repetido removido do exemplo de teste nas duas árvores, REQ-2 e 6.4 alinhados à DEC-35, rastreabilidade com os nomes reais, teste de arquitetura renomeado. |
+| 2026-10-29 | Verificada | Verificação (`spec-verify`) aprovada: build com 0 avisos, 1.288 testes aprovados, biblioteca e `test_instructions.py` verdes, auditoria SDD 100%, todos os ACs cobertos por testes ou evidências desta execução, revisões sem bloqueantes depois das correções. Documentação de estado atualizada. Pendente: o resultado do passo novo no CI do PR (AC-13) e o número do PR. |

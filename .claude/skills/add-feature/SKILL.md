@@ -1,6 +1,6 @@
 ---
 name: add-feature
-description: Cria um slice vertical completo num projeto .NET de Clean Architecture com handlers próprios de command/query — command ou query, handler próprio, validator do FluentValidation, endpoint de minimal API e testes (unitário, de validator e de integração). Use quando o usuário pedir para adicionar uma feature, caso de uso, command, query ou endpoint ao projeto.
+description: Cria um slice vertical completo num projeto .NET de Clean Architecture — command ou query, handler próprio que delega as regras à entidade, validator do FluentValidation, endpoint de minimal API e testes (unitário, de validator e de integração). Use quando o usuário pedir para adicionar uma feature, caso de uso, command, query ou endpoint ao projeto.
 argument-hint: '<descrição da feature, ex.: "archive a todo item" ou "get todos due this week">'
 ---
 
@@ -20,29 +20,36 @@ argument-hint: '<descrição da feature, ex.: "archive a todo item" ou "get todo
 > escreva código: procure em `specs/` uma spec que cubra o pedido e indique o comando de implementação
 > dela; se não houver, use a skill de especificação.
 
-Crie um caso de uso completo seguindo as convenções do projeto: um caso de uso na camada Application com um handler próprio de command/query, um endpoint de minimal API na Web.Api e testes. Sem MediatR — este código usa as suas próprias abstrações `ICommand`/`IQuery`, com handlers e decorators registrados pelo Scrutor.
+Crie um caso de uso completo: um caso de uso na Application com handler próprio de command/query, um endpoint de minimal API na Web.Api e os testes. Sem MediatR — o código usa as próprias abstrações `ICommand`/`IQuery`, com handlers e decorators registrados pelo Scrutor. A entidade guarda as próprias regras (veja a `domain-modeling`); o handler carrega, autoriza, chama a entidade e salva.
 
-## Fluxo de trabalho
+## Workflow
 
-1. **Classifique o caso de uso.** Uma mudança de estado é um **command**; uma leitura é uma **query**. Derive os nomes do padrão existente: verbo do caso de uso + entidade, ex.: `ArchiveTodoCommand`, `GetOverdueTodosQuery`.
-2. **Confira a camada Domain.** Se a entidade, a sua classe `{Entity}Errors` ou um evento de domínio necessário não existir, crie-o primeiro (veja a skill `add-entity`). Commands que mudam estado devem disparar um evento de domínio via `entity.Raise(...)`.
-3. **Crie o slice da Application** em `src/Application/{Feature}/{UseCase}/` — command/query, handler, validator (só commands), DTO de resposta (só queries). Modelos: [references/command-slice.md](references/command-slice.md) e [references/query-slice.md](references/query-slice.md).
+1. **Classifique o caso de uso.** Mudança de estado é **command**; leitura é **query**. Derive os nomes do padrão existente: verbo do caso de uso + entidade, ex.: `ArchiveTodoCommand`, `GetOverdueTodosQuery`.
+2. **Confira o Domain.** Se a entidade, a classe `{Entity}Errors`, o método da entidade para a mudança ou o evento de domínio não existirem, crie-os antes (`add-entity`, `domain-modeling`). O método da entidade dispara o evento; o handler nunca chama `Raise`.
+3. **Crie o slice na Application** em `src/Application/{Feature}/{UseCase}/` — command/query, handler, validator (só commands), DTO de resposta (só queries). Modelos: [references/command-slice.md](references/command-slice.md), [references/query-slice.md](references/query-slice.md), [references/rich-domain-handler.md](references/rich-domain-handler.md).
 4. **Crie o endpoint** em `src/Web.Api/Endpoints/{Feature}/{UseCase}.cs`. Modelo: [references/endpoint.md](references/endpoint.md).
-5. **Escreva os testes** — testes unitários do handler, testes de validator e um teste de integração. Modelos: [references/tests.md](references/tests.md).
-6. **Verifique:** `dotnet build` e depois `dotnet test`. Os três projetos de teste precisam passar, inclusive os `ArchitectureTests` (regras de dependência entre camadas).
+5. **Escreva os testes** — da entidade, unitários do handler, do validator e de integração. Modelos: [references/tests.md](references/tests.md).
+6. **Verifique:** `dotnet build` e depois `dotnet test`. Todos os projetos de teste precisam passar, inclusive os `ArchitectureTests` (regras de dependência entre camadas).
 
 ## Convenções inegociáveis
 
-- **Pasta = caso de uso.** Uma pasta por caso de uso em `src/Application/{Feature}/` (ex.: `Todos/Archive/`), com todos os arquivos daquele slice.
-- **Handlers são `internal sealed`**, com construtor primário, implementando `ICommandHandler<TCommand>`, `ICommandHandler<TCommand, TResponse>` ou `IQueryHandler<TQuery, TResponse>`.
-- **Nada de registro manual na DI.** Handlers, validators e endpoints são descobertos por varredura de assembly (`Scrutor`, `AddValidatorsFromAssembly`, `AddEndpoints`). Nunca mexa em `DependencyInjection.cs` por causa de um slice novo.
-- **Retorne `Result` / `Result<T>`, nunca lance exceção** para falhas esperadas. Os erros vêm dos métodos de fábrica estáticos de `{Entity}Errors` na camada Domain, com códigos como `"Todos.NotFound"`.
-- **A validação fica num `{Command}Validator`** (FluentValidation). Ela roda automaticamente pelo `ValidationDecorator` — o handler nunca valida o formato da entrada. Queries não têm validator (o decorator só envolve commands).
-- **Acesso a dados via `IApplicationDbContext`** (de `Application.Abstractions.Data`) — nunca referencie a Infrastructure a partir da Application.
-- **Conferência de autorização** nos handlers que agem sobre dados de um usuário: compare `IUserContext.UserId` e retorne `UserErrors.Unauthorized()` se não bater, ou filtre as queries por `userContext.UserId`. Se o projeto declarar outras formas de autorização (permissão na rota, guards por recurso), siga o `CLAUDE.md`.
-- **Queries projetam direto num DTO `{X}Response`** com `.Select(...)` — nunca retorne entidades de domínio. Quando o projeto usar cache em leituras, coloque em cache as leituras frequentes com `HybridCache`, usando uma classe estática `{Feature}CacheKeys`; invalide nos commands que alteram os dados em cache.
+- **Pasta = caso de uso.** Uma pasta por caso de uso em `src/Application/{Feature}/` (ex.: `Todos/Archive/`), com todos os arquivos do slice.
+- **Handlers são `internal sealed`** com construtor primário, implementando `ICommandHandler<TCommand>`, `ICommandHandler<TCommand, TResponse>` ou `IQueryHandler<TQuery, TResponse>`.
+- **Fluxo do handler:** carrega → não encontrado → conferência de permissão → chama o método da entidade → devolve a falha dele → `SaveChangesAsync`. O handler nunca atribui as propriedades da entidade e nunca chama `Raise`.
+- **Objetos de valor são criados no handler**, e a primeira falha é devolvida antes de montar a entidade (`Result.FirstFailureOrSuccess(...)`).
+- **Um registro que precisa existir junto com a mudança** (filho, histórico, auditoria) é criado pelo método da entidade e adicionado pelo handler antes do único `SaveChangesAsync` (padrão 7 da `domain-modeling`).
+- **Outras reações a uma mudança de estado são handlers de evento de domínio**: um por reação, `{Action}On{Event}DomainEventHandler`, em `src/Application/{Feature}/{Event}/` ([references/domain-event-handler.md](references/domain-event-handler.md)).
+- **Sem registro manual na DI.** Handlers, validators e endpoints são descobertos por varredura de assembly (`Scrutor`, `AddValidatorsFromAssembly`, `AddEndpoints`). Nunca mexa no `DependencyInjection.cs` para um slice novo.
+- **Devolva `Result` / `Result<T>`, nunca lance exceção** para falhas esperadas. Os erros vêm de métodos de fábrica estáticos em `{Entity}Errors` no Domain, com códigos como `"Todos.NotFound"`.
+- **A validação fica num `{Command}Validator`** (FluentValidation): o formato da entrada. Ela roda sozinha pelo `ValidationDecorator`. Regras sobre o estado da entidade são da entidade. Queries não têm validator.
+- **Acesso a dados pelo `IApplicationDbContext`** (de `Application.Abstractions.Data`) — nunca referencie a Infrastructure a partir da Application.
+- **Autorização** ([references/authorization.md](references/authorization.md)): permissão fixa no endpoint (`.HasPermission(...)`); regra sobre o próprio estado da entidade no método dela; permissões efetivas pelo `IPermissionProvider`; conferência que precisa de consulta num método privado `HasPermissionTo{Action}` do handler. Peça compartilhada só depois de a repetição aparecer, nunca classe estática.
+- **Queries projetam direto num DTO `{X}Response`** com `.Select(...)` — nunca devolva entidades de domínio, e nunca chame um método da entidade dentro de `Where` ou `Select`: use um predicado traduzível. Coloque em cache as leituras frequentes com `HybridCache`, usando uma classe estática `{Feature}CacheKeys`; invalide nos commands que alteram os dados em cache.
 - **Pagine as coleções sem limite** com `PageRequest` (offset) ou `CursorPageRequest` (cursor) e os helpers de `PaginationExtensions`. Veja [references/pagination.md](references/pagination.md).
-- **Endpoints** implementam `IEndpoint`, resolvem a interface do handler direto da DI, usam `result.Match(Results.Ok, CustomResults.Problem)` (ou `Results.NoContent` para commands sem retorno), recebem a tag da classe `Tags` e chamam `.RequireAuthorization()` (ou `.HasPermission(Permissions.X)` quando existir uma constante de permissão).
+- **Trabalho técnico fica atrás de uma interface.** Hash, tokens, arquivos, bytes ou ZIP: uma interface em `Application/Abstractions/{Area}/`, implementada `internal sealed` em `Infrastructure/{Area}/` ([references/abstraction.md](references/abstraction.md)).
+- **Endpoints** implementam `IEndpoint`, resolvem a interface do handler direto da DI, usam `result.Match(Results.Ok, CustomResults.Problem)` (ou `Results.NoContent` para commands sem retorno), recebem a tag da classe `Tags` e chamam `.RequireAuthorization()`.
+- **Comentários:** um `<summary>` curto em português só onde explica algo: em toda interface e nos métodos cujo comportamento não é óbvio pelo nome e pela assinatura (o que acontece em falha, quando devolve `false`, efeitos colaterais). Nada em propriedades, construtores, DTOs, endpoints, testes e métodos simples; nunca vazio.
+- **Não usado:** repositórios, `IUnitOfWork`, MediatR, controllers, `Maybe<T>`, uma classe central `DomainErrors`.
 
 ## Referência de nomes
 
