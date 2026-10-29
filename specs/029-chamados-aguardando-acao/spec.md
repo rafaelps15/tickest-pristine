@@ -77,7 +77,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | T-2 | Campo e filtro na listagem; contadores no agregado | AC-6, AC-7 | `add-feature` | [x] |
 | T-3 | Testes unitários e de integração | AC-1 a AC-8 | `add-tests` | [x] |
 | T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-9 | — | [x] |
-| T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-9 | `ca-review` | [ ] |
+| T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-9 | `ca-review` | [x] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
@@ -90,7 +90,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | AC-6 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetAll_Should_ReturnOnlyTicketsWaitingOnTheGivenParty_WithTheFieldInEachItem` (Requester e Agent); `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketsQueryHandlerTests.cs` › `Handle_Should_ReturnOnlyTicketsWaitingOnTheGivenParty_WhenWaitingOnIsGiven` | No mesmo setor, o filtro `waitingOn` traz só o chamado da situação pedida, com o campo `waitingOn` no item; o resolvido vem com o campo nulo. | Aprovado |
 | AC-7 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_MatchWaitingCountsWithListing` (sem recorte e com o setor) | `waitingOnRequesterCount` e `waitingOnAgentCount` do agregado são iguais ao `totalCount` da listagem com `waitingOn=Requester` e `waitingOn=Agent`, sem recorte e com o setor do cenário (1 e 1). | Aprovado |
 | AC-8 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `WaitingOn_Should_NotPauseSla_WhenTicketWaitsOnRequesterPastDueDate` | Um chamado aguardando o solicitante com o prazo vencido aparece em `slaStatus=Breached` e continua Aberto: a espera não pausa o SLA nem muda o status. | Aprovado |
-| AC-9 | | | |
+| AC-9 | `dotnet build TickestPristine.slnx` e `dotnet test TickestPristine.slnx` (suíte inteira) | Build com 0 avisos e 0 erros; 1.270 testes aprovados e 0 com falha (50 de arquitetura, 756 unitários, 464 de integração), com o `deps.json` dos testes conferido antes e depois da execução. | Aprovado |
 
 ## 9. Evidências de verificação
 - **Build:**
@@ -108,3 +108,4 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | 2026-10-28 | Aprovada | Aprovada por Rafael Santos no chat do front-end ("Pode aprovar as specs", confirmando "As seis (025 a 030)"). Checklist de completude conferido: nenhuma pergunta aberta e nenhum `[SUPOSIÇÃO]`. Implementação depois do merge da 026. |
 | 2026-10-28 | Em implementação | `/spec-implement 029` na branch `feat/SPEC-029-tickets-awaiting-action`, com a `origin/main` mesclada depois do merge da 026 (PR #45) e das 025, 027, 028 e 030. Rafael Santos pediu a implementação completa seguindo as skills ("desenvolva seguindo minhas skills modelo como senior e so pare quando finalizar"). DEC-4 respondida por Rafael Santos no chat: permissão atual, recalculada no banco depois do commit. Tabelas de rastreabilidade e de evidências criadas. |
 | 2026-10-28 | Em implementação | T-1: dois testes de migration anteriores quebraram com a coluna nova, porque gravam ou leem chamados pelo EF com o banco num esquema antigo. `TicketActivityTests.Migration_Should_BackfillLastActivityFromHistory_WhenApplied` (spec 015) não voltava à última migration no fim, ao contrário dos demais, e deixava o banco compartilhado sem as colunas posteriores: ganhou o `finally` que volta à última migration. `TicketsTests.Migration_Should_TurnDescriptionIntoCitextKeepingExistingText` (spec 019) passou a gravar o chamado antes de descer a migration; o teste continua provando que o texto é mantido na troca de tipo. Só testes mudaram. |
+| 2026-10-28 | Em implementação | T-5: revisão de convenções sem achados bloqueantes. Camadas e slices conferidos; o recálculo ficou no `TicketWaitingInterceptor` (Infrastructure) em vez dos handlers da Application previstos no plano, conforme a DEC-4. Por isso a regra, que é SQL, é coberta pelos testes de integração, e não por unitários. Único ajuste: quebra de linha no comentário de `GetTicketsQuery`. Build com 0 avisos e suíte inteira verde (1.270 testes). Todas as tarefas concluídas; próximo passo: `/spec-verify 029`. |
