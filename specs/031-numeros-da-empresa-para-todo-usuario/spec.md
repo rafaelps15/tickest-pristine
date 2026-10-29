@@ -68,19 +68,19 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
 | T-1 | Autorização das duas rotas por usuário autenticado; `tickets:manage` só com filtro de recorte no volume | AC-1 a AC-6 | `add-feature` | [x] |
-| T-2 | Testes de integração | AC-1 a AC-6 | `add-tests` | [ ] |
+| T-2 | Testes de integração | AC-1 a AC-6 | `add-tests` | [x] |
 | T-3 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-7 | — | [ ] |
 | T-4 | Revisão de convenções, build sem avisos e suíte inteira | AC-7 | `ca-review` | [ ] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | | | |
-| AC-2 | | | |
-| AC-3 | | | |
-| AC-4 | | | |
-| AC-5 | | | |
-| AC-6 | | | |
+| AC-1 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetStatusCounts_Should_ReturnSameTotalsAsAgent_WhenCallerLacksManagePermission` | Com um chamado aberto e um resolvido, um Solicitante (Colaborador, sem `tickets:manage`) recebe 200 em `GET tickets/stats/status`, com os mesmos totais que um Atendente recebe logo depois (pelo menos 1 aberto e 1 resolvido). | Aprovado |
+| AC-2 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetStatusCounts_Should_ReturnUnauthorized_WhenNoTokenProvided`, `GetVolume_Should_ReturnUnauthorized_WhenNoTokenProvided` | Sem token, as duas rotas respondem 401. | Aprovado |
+| AC-3 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetVolume_Should_ReturnSameCompanyPointsAsAgent_WhenCallerLacksManagePermission` | Com chamados abertos ontem e três dias atrás, o Solicitante recebe 200 em `?groupBy=Day` com os mesmos pontos do Atendente, e os dois dias contados. | Aprovado |
+| AC-4 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetVolume_Should_ReturnPointsOfThePeriod_WhenCallerLacksManagePermissionAndGivesOnlyThePeriod` | Só com `createdFrom`/`createdTo` (10 a 16/02/2025), o Solicitante recebe 200 com um ponto por dia do período, os mesmos do Atendente, e os dois dias com chamados contados. | Aprovado |
+| AC-5 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetVolume_Should_ReturnForbiddenToRequesterAndOkToAgent_WhenSlicingFilterIsGiven` (setor, setor com período, prioridade, solicitante, responsável e só sem responsável); `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketVolumeQueryHandlerTests.cs` › `Handle_Should_ReturnStatsScopeForbidden_WhenSlicingFilterIsGivenWithoutManagePermission` (cada filtro) | Com cada filtro de recorte, o Solicitante recebe 403 `Tickets.StatsScopeForbidden` e o Atendente, 200; no unitário, o handler confere `tickets:manage` de quem chama e não abre a conexão. Uma mutação que tirava "só sem responsável" do recorte foi detectada por 1 caso unitário e 1 de integração. | Aprovado |
+| AC-6 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetSlaSummary_Should_ReturnForbidden_WhenCallerLacksManagePermission`, `GetOverview_Should_ReturnForbidden_WhenCallerLacksManagePermission` | Um usuário recém-cadastrado (Colaborador, sem `tickets:manage`) continua recebendo 403 em `GET tickets/sla-summary` e no agregado da 026. | Aprovado |
 | AC-7 | | | |
 
 ## 9. Evidências de verificação

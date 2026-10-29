@@ -52,6 +52,38 @@ public sealed class GetTicketVolumeQueryHandlerTests : BaseHandlerTest
         await dbConnectionFactory.DidNotReceive().OpenConnectionAsync(Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("sector")]
+    [InlineData("priority")]
+    [InlineData("requester")]
+    [InlineData("assignee")]
+    [InlineData("unassigned")]
+    public async Task Handle_Should_ReturnStatsScopeForbidden_WhenSlicingFilterIsGivenWithoutManagePermission(string filter)
+    {
+        // Arrange: quem chama não tem tickets:manage
+        IDbConnectionFactory dbConnectionFactory = Substitute.For<IDbConnectionFactory>();
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        GetTicketVolumeQueryHandler handler = CreateHandler(dbConnectionFactory, permissionProvider);
+        TicketScopeFilter scope = filter switch
+        {
+            "sector" => NoScope with { SectorIds = [Guid.NewGuid()] },
+            "priority" => NoScope with { Priority = TicketPriority.Urgent },
+            "requester" => NoScope with { RequesterId = Guid.NewGuid() },
+            "assignee" => NoScope with { AssignedToUserId = Guid.NewGuid() },
+            _ => NoScope with { UnassignedOnly = true }
+        };
+        var query = new GetTicketVolumeQuery(TicketVolumeGrouping.Day, scope, null, null);
+
+        // Act
+        Result<List<TicketVolumeResponse>> result = await handler.Handle(query, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketErrors.StatsScopeForbidden);
+        await permissionProvider.Received(1).HasPermissionAsync(CallerId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>());
+        await dbConnectionFactory.DidNotReceive().OpenConnectionAsync(Arg.Any<CancellationToken>());
+    }
+
     private static GetTicketVolumeQueryHandler CreateHandler(IDbConnectionFactory dbConnectionFactory, IPermissionProvider permissionProvider)
     {
         IUserContext userContext = Substitute.For<IUserContext>();
