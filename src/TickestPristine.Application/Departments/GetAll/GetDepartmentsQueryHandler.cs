@@ -18,6 +18,7 @@ internal sealed class GetDepartmentsQueryHandler(IApplicationDbContext context)
                 Id = d.Id,
                 Name = d.Name,
                 Description = d.Description,
+                ResponsibleUserId = d.ResponsibleUserId,
                 ResponsibleUserName = context.Users
                     .Where(u => u.Id == d.ResponsibleUserId)
                     .Select(u => u.FirstName + " " + u.LastName)
