@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-023-department-list-responsible-id                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: "#52"                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 023 — Listagem de departamentos traz o id do responsável, para editar sem buscar o detalhe
@@ -90,8 +90,8 @@ Dados comuns: departamento TI com responsável Ana; departamento Financeiro sem 
 - **Testes:** 2026-10-28, `dotnet test TickestPristine.slnx`: 1.275 aprovados, 0 com falha (50 de arquitetura, 757 unitários, 468 de integração); os 14 testes da rastreabilidade conferidos um a um na execução filtrada (todos aprovados). Auditoria `python scripts/auditoria_sdd.py .`: score 100%, CONFORME, código de saída 0.
 - **Revisão:** `ca-review` sobre os arquivos da spec: nenhum achado bloqueante nem violação de convenção (mudança no slice `GetAll`, projeção com `.Select`, sem command nem endpoint novos; testes unitário e de integração no padrão `Handle_Should_` / `GetAll_Should_` / `Update_Should_`).
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 2.7 (C-07) e 4.3.1 (linha de `GET departments`), no commit da T-3.
-- **CI:**
-- **Entrega:**
+- **CI:** roda no PR para a `main`.
+- **Entrega:** PR [#52](https://github.com/rafaelps15/tickest-pristine/pull/52) aberto para a `main` em 2026-10-29; a spec fica `Entregue` quando ele for mergeado.
 
 ## 10. Histórico
 | Data | Status | Observação |
