@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-028-tickets-volume-resolved                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: "#48"                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 028 — Resolvidos por período no volume de chamados, ao lado dos criados, com filtros
@@ -90,7 +90,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 - **Revisão:** `ca-review` sobre as mudanças da spec: nenhum achado bloqueante nem violação de convenção; a lacuna de teste apontada (caminhos de falha do handler sem teste unitário) foi corrigida na T-4, antes desta verificação. Observação sem defeito: o "hoje" das janelas padrão passou do `now()` do banco para o `IDateTimeProvider`, sem mudança observável.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 4.3.1 (filtros, intervalo e o 400 de `GET tickets/stats/volume`) e 5.7 (volume com resolvidos), no commit `95d5d21` (T-3); conferidas nesta verificação, sem outra seção afetada.
 - **CI:** roda no PR para a `main`.
-- **Entrega:** pendente (PR ainda não aberto).
+- **Entrega:** PR [#48](https://github.com/rafaelps15/tickest-pristine/pull/48) aberto para a `main` em 2026-10-28; a spec fica `Entregue` quando ele for mergeado.
 
 ## 10. Histórico
 | Data | Status | Observação |
