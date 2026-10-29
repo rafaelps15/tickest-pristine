@@ -633,10 +633,12 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     [Fact]
     public async Task Migration_Should_TurnDescriptionIntoCitextKeepingExistingText()
     {
-        // Arrange: o banco antes da migration, com um chamado já gravado
+        // Arrange: um chamado já gravado antes da migration. Ele é gravado com o esquema atual, antes de descer: o modelo
+        // do EF tem colunas que migrations posteriores criam (spec 029), e a descida mantém o texto, só troca o tipo.
         (Guid requesterId, Guid sectorId) = await CreateRequesterAndSectorAsync();
         const string description = "Outlook pede a SENHA toda hora";
-        Guid ticketId = Guid.Empty;
+        Guid ticketId = await InsertOwnTicketAsync(
+            requesterId, sectorId, TicketStatus.Open, "Acesso ao e-mail", DateTime.UtcNow.AddHours(-1), description);
         string? typeBeforeMigration = null;
         string? typeAfterMigration = null;
 
@@ -649,8 +651,6 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             try
             {
                 await migrator.MigrateAsync(migrations[index - 1]);
-                ticketId = await InsertOwnTicketAsync(
-                    requesterId, sectorId, TicketStatus.Open, "Acesso ao e-mail", DateTime.UtcNow.AddHours(-1), description);
                 typeBeforeMigration = await GetDescriptionColumnTypeAsync(context);
 
                 // Act

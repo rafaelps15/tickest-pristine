@@ -138,8 +138,17 @@ public sealed class TicketActivityTests(IntegrationTestWebAppFactory factory) : 
             var migrations = context.Database.GetMigrations().ToList();
             int index = migrations.FindIndex(m => m.EndsWith(LastActivityMigration, StringComparison.Ordinal));
 
-            await migrator.MigrateAsync(migrations[index - 1]);
-            await migrator.MigrateAsync(migrations[index]);
+            try
+            {
+                await migrator.MigrateAsync(migrations[index - 1]);
+                await migrator.MigrateAsync(migrations[index]);
+            }
+            finally
+            {
+                // O banco é compartilhado pela coleção: volta à última migration, mesmo se o teste falhar no meio. Sem isso,
+                // os testes seguintes ficariam sem as colunas das migrations posteriores (spec 029).
+                await migrator.MigrateAsync();
+            }
         });
 
         // Assert

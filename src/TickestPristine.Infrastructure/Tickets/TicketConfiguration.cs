@@ -27,6 +27,9 @@ internal sealed class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 
         builder.Property(t => t.Priority).HasConversion<string>().HasMaxLength(20);
 
+        // Situação de espera pelo nome (ex.: "Requester"), mantida pelo TicketWaitingInterceptor (spec 029).
+        builder.Property(t => t.WaitingOn).HasConversion<string>().HasMaxLength(20);
+
         // Propriedade comum convertida para jsonb, e não ToJson, como a grade do calendário de SLA: o plano entra no
         // registro de auditoria do chamado. O plano é imutável, então a igualdade do record basta para o EF.
         builder.Property(t => t.SlaPlan)
@@ -43,6 +46,9 @@ internal sealed class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 
         // Painel de SLA: filtra por status e ordena pelo prazo.
         builder.HasIndex(t => new { t.Status, t.DueAtUtc });
+
+        // Filtro e contagem por situação de espera: só os chamados ativos têm situação, então só eles entram (spec 029).
+        builder.HasIndex(t => t.WaitingOn).HasFilter("waiting_on IS NOT NULL");
 
         // Todos os chamados: ordena do mais novo para o mais antigo, com o id para desempatar.
         builder.HasIndex(t => new { t.CreatedAtUtc, t.Id })

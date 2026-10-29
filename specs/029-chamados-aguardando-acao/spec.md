@@ -1,7 +1,7 @@
 ---
 id: 029
 titulo: Chamados aguardando ação do solicitante ou de quem atende
-status: Aprovada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+status: Em implementação        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-029-tickets-awaiting-action                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
@@ -48,6 +48,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | DEC-1 | Como saber quem é aguardado? | (a) pela última mensagem, sem mudar status nem SLA; (b) status novo que pode pausar o SLA | (a) | Rafael Santos, 2026-10-28, no chat |
 | DEC-2 | Como guardar? | (a) coluna no chamado, mantida a cada ação; (b) calcular na consulta | (a): filtrar e contar fica barato, como a última atividade da 015 | Rafael Santos, 2026-10-28, no chat |
 | DEC-3 | Entra no agregado? | (a) sim, depois da 026; (b) só na listagem | (a) | Rafael Santos, 2026-10-28, no chat |
+| DEC-4 | A mensagem não guarda a permissão do autor no momento em que foi escrita. Ao excluir mensagem, trocar o status e preencher os chamados existentes, como decidir se o autor da última mensagem válida atende? | (a) permissão atual: uma regra só, recalculada no banco depois do commit (mensagem nova ou alterada, chamado criado ou com status alterado e migration), com o critério do `PermissionProvider` (usuário ativo com `tickets:manage` em alguma role); (b) gravar na mensagem se o autor atendia (coluna nova, fora do plano, volta para `Em descoberta`); (c) só pelo solicitante, ignorando a permissão (contradiz o REQ-2) | (a): sem corrida entre mensagens simultâneas e dentro do plano. A regra fica num interceptor da Infrastructure que atualiza o chamado depois do commit, sem checagem de versão, como a última atividade (spec 015, DEC-11); os handlers não mudam. Ressalva aceita, como no R-1: um recálculo depois de o autor perder ou ganhar `tickets:manage` usa a permissão de hoje | Rafael Santos, 2026-10-28, no chat (escolheu "Permissão atual (Recommended)") |
 
 ## 5. Fora do escopo
 - Status "aguardando" com pausa do SLA (DEC-1).
@@ -72,17 +73,32 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 ## 7. Tarefas
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
-| T-1 | Situação de espera no chamado, recálculo nas ações e migration | AC-1 a AC-5, AC-8 | `add-entity` | [ ] |
+| T-1 | Situação de espera no chamado, recálculo nas ações e migration | AC-1 a AC-5, AC-8 | `add-entity` | [x] |
 | T-2 | Campo e filtro na listagem; contadores no agregado | AC-6, AC-7 | `add-feature` | [ ] |
 | T-3 | Testes unitários e de integração | AC-1 a AC-8 | `add-tests` | [ ] |
 | T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-9 | — | [ ] |
 | T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-9 | `ca-review` | [ ] |
 
 ## 8. Rastreabilidade
-Não se aplica até a aprovação.
+| AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
+|---|---|---|---|
+| AC-1 | | | |
+| AC-2 | | | |
+| AC-3 | | | |
+| AC-4 | | | |
+| AC-5 | | | |
+| AC-6 | | | |
+| AC-7 | | | |
+| AC-8 | | | |
+| AC-9 | | | |
 
 ## 9. Evidências de verificação
-Não se aplica até a implementação.
+- **Build:**
+- **Testes:**
+- **Revisão:**
+- **Documentação atualizada:**
+- **CI:**
+- **Entrega:**
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -90,3 +106,5 @@ Não se aplica até a implementação.
 | 2026-10-28 | Rascunho | Criada a partir do pedido de Rafael Santos no chat do front-end; número reservado já na criação, porque outra sessão cria specs em paralelo. |
 | 2026-10-28 | Em descoberta | Perguntas respondidas no chat (DEC-1 a DEC-3). Aguardando aprovação. |
 | 2026-10-28 | Aprovada | Aprovada por Rafael Santos no chat do front-end ("Pode aprovar as specs", confirmando "As seis (025 a 030)"). Checklist de completude conferido: nenhuma pergunta aberta e nenhum `[SUPOSIÇÃO]`. Implementação depois do merge da 026. |
+| 2026-10-28 | Em implementação | `/spec-implement 029` na branch `feat/SPEC-029-tickets-awaiting-action`, com a `origin/main` mesclada depois do merge da 026 (PR #45) e das 025, 027, 028 e 030. Rafael Santos pediu a implementação completa seguindo as skills ("desenvolva seguindo minhas skills modelo como senior e so pare quando finalizar"). DEC-4 respondida por Rafael Santos no chat: permissão atual, recalculada no banco depois do commit. Tabelas de rastreabilidade e de evidências criadas. |
+| 2026-10-28 | Em implementação | T-1: dois testes de migration anteriores quebraram com a coluna nova, porque gravam ou leem chamados pelo EF com o banco num esquema antigo. `TicketActivityTests.Migration_Should_BackfillLastActivityFromHistory_WhenApplied` (spec 015) não voltava à última migration no fim, ao contrário dos demais, e deixava o banco compartilhado sem as colunas posteriores: ganhou o `finally` que volta à última migration. `TicketsTests.Migration_Should_TurnDescriptionIntoCitextKeepingExistingText` (spec 019) passou a gravar o chamado antes de descer a migration; o teste continua provando que o texto é mantido na troca de tipo. Só testes mudaram. |
