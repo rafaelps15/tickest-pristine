@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-29      # a aprovação de 2026-10-25 foi da versão desfeita (ver Histórico)
 branch: chore/SPEC-012-rich-domain-standard
-pr:
+pr: 53
 ---
 
 # 012 — Domínio rico como padrão universal das skills .NET
@@ -275,7 +275,7 @@ Ordem: esta spec `Entregue` → Spec C aprovada e entregue → Spec B. Esta spec
 | AC-9 | `tests/TickestPristine.ArchitectureTests/Conventions/RichEntityTests.cs` | `RichEntities_Should_NotHaveNonPrivateSetters` (lista vazia); `Checker_Should_ReportViolation_When_EntityHasNonPrivateSetter` (`set`, `init` e `internal set` reprovados), `Checker_Should_NotReportViolation_When_EntityHasOnlyPrivateSetters`, `Checker_Should_ReportViolation_When_ListedTypeIsNotAnEntity` | 56/56 aprovados nos testes de arquitetura em 2026-10-29, depois das correções da revisão |
 | AC-10 | evidência por comando (duas sessões `claude -p`) | bloqueio e liberação reais (seção 9) | Aprovado em 2026-10-29 |
 | AC-11, AC-12 | `git status`, `git diff`, `dotnet build`, `dotnet test` | comparação com a linha de base | |
-| AC-13 | passo "Test agent instructions" no `build.yml` | roda o `test_instructions.py` no CI | Passo criado; local no modo do CI: 12 aprovados, 2 pulados; resultado no GitHub a registrar na "Entrega" depois do PR |
+| AC-13 | passo "Test agent instructions" no `build.yml` | roda o `test_instructions.py` no CI | Aprovado em 2026-10-29: no PR #53, o passo "Test agent instructions" rodou 14 testes, OK (2 pulados), e o check `build` ficou verde |
 
 ## 9. Evidências de verificação
 
@@ -305,7 +305,7 @@ Ordem: esta spec `Entregue` → Spec C aprovada e entregue → Spec B. Esta spec
 - **Revisão (independente, 2026-10-29):** **reprovada**. Bloqueante: as "Referências vivas" e o mapa do `CLAUDE.md` mandam seguir `Domain/Departments/Department.cs` (com `{ get; set; }`) e os slices com guard estático (`Tickets/Reopen/`, `Tickets/GetById/`), e o aviso "Contexto do projeto primeiro" das skills faz essas referências prevalecerem sobre o padrão rico (REQ-8). Violações: `authorization.md` do Tickest usa `Permissions.ProjectsArchiveAny` no handler, mas `Permissions` fica na Web.Api; `patterns.md` ensina `Ensure`, `ValueObject` e as extensões de `Result` sem dizer que ainda não existem no `SharedKernel` do Tickest; mensagens de `{Entity}Errors` dos exemplos em inglês (já vinham assim). Observações menores: linhas em branco duplas, `Complete` diferente entre `rich-entity.md` e `patterns.md`, Arrange/Act/Assert no exemplo de validator, `internal set` não detectado pelo verificador, "nenhuma operação git" ambíguo no agente. Corrigido (ver histórico). Segunda revisão independente: sem bloqueantes; 4 violações (formato do `PermissionCodes`, nomes de teste na rastreabilidade, REQ-2 e 6.4 desatualizados, `using` repetido no exemplo) corrigidas. Revisão focada da DEC-36: sem bloqueantes, nenhuma menção ao projeto nas skills; 3 violações (exemplos de projeto na `ca-review`, contradição do desvio de persistência no `CLAUDE.md`, frase perdida na tradução do `patterns.md`) e as observações corrigidas. Veredito final: aprovado.
 - **Documentação atualizada (2026-10-29):** `SYSTEM_SPECIFICATION.md` 1.3 (padrão rico para código novo), 3.1 (legado em migração), 6.1 (esta verificação), 6.2 (testes de arquitetura), 6.8 (passo do CI) e 6.9 (skills, biblioteca canônica, `test_instructions.py`, agente, `<summary>` e o teste do portão).
 - **CI:**
-- **Entrega:**
+- **Entrega:** PR #53 (https://github.com/rafaelps15/tickest-pristine/pull/53), aberto em 2026-10-29 da branch `chore/SPEC-012-rich-domain-standard` para a `main`. CI (run 40960247882): check `build` verde em 5m11s; passos "Test SDD gate hook", "Test agent instructions" (14 testes, OK, 2 pulados sem a biblioteca), "SDD compliance audit", "Build" e "Test" com sucesso. Merge pelo responsável.
 
 ## 10. Histórico
 
