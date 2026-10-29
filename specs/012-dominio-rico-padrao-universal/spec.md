@@ -248,7 +248,7 @@ Ordem: esta spec `Entregue` → Spec C aprovada e entregue → Spec B. Esta spec
 |---|---|---|---|---|
 | T-1 | Linha de base (somente leitura): build e testes do Tickest; validador e testes da biblioteca; listagem da biblioteca | AC-12 | manual, com diff e ok | [x] |
 | T-2 | Com P-3: snapshot, manifesto, restauração verificada, `git init` e commit de linha de base | AC-1 | manual, com diff e ok | [x] |
-| T-3 | Validador e testes da biblioteca com fixtures; as regras novas contra a biblioteca real só são ligadas na T-4c | AC-2 | manual, com diff e ok | [ ] |
+| T-3 | Validador e testes da biblioteca com fixtures; as regras novas contra a biblioteca real só são ligadas na T-4c | AC-2 | manual, com diff e ok | [x] |
 | T-4a | Biblioteca: entidade e `domain-modeling` (C-1 a C-6, C-9); `add-entity` com até 101 linhas | AC-3 | manual, com diff e ok | [ ] |
 | T-4b | Biblioteca: handler, consulta, autorização, abstração e evento (C-7, C-8) | AC-3 | manual, com diff e ok | [ ] |
 | T-4c | Biblioteca: testes, revisão, `CLAUDE.md`, `docs/`, README (C-10); liga as regras novas | AC-2, AC-3, AC-4 | manual, com diff e ok | [ ] |
@@ -265,7 +265,7 @@ Ordem: esta spec `Entregue` → Spec C aprovada e entregue → Spec B. Esta spec
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
 | AC-1 | evidência por comando (`tar -xzf` + `sha256sum -c`) | restauração comprovada pelo manifesto | Aprovado em 2026-10-29: 24/24 `OK` (seção 9) |
-| AC-2, AC-3 | `tests/test_library.py` | fixtures do validador; um teste por item C-1 a C-10 | |
+| AC-2, AC-3 | `tests/test_library.py` | AC-2 (T-3): `test_rejects_entity_with_public_setter` (entidade com `{ get; set; }` reprovada), `test_accepts_dto_with_public_setter` (DTO aprovado), `test_rejects_missing_summary` e `test_rejects_empty_summary` (tipo e membro sem `<summary>` ou com `<summary>` vazio reprovados), `test_accepts_documented_rich_types` (sem falso positivo), `test_rejects_author_mention_in_any_document` (autor reprovado), `test_validator_has_no_template_dependency` (sem `clean-architecture`), `test_enforces_line_limit_on_every_skill`, `test_new_rules_are_off_by_default`, `test_catches_broken_copy`, `test_passes_on_library`; AC-3: um teste por item C-1 a C-10 (T-4) | AC-2: 11/11 aprovados em 2026-10-29 com as regras novas só nas fixtures; aprovação final depois da T-4c |
 | AC-4 a AC-8, AC-14 | `scripts/test_instructions.py` | frases, paridade, `CLAUDE.md`, agente, README, autotestes | |
 | AC-9 | `tests/TickestPristine.ArchitectureTests` | lista vazia e autoteste | |
 | AC-10 | evidência por comando (duas sessões) | bloqueio e liberação reais | |
@@ -283,7 +283,11 @@ Ordem: esta spec `Entregue` → Spec C aprovada e entregue → Spec B. Esta spec
   - Snapshot `C:\dev\_backups\dotnet-universal-skills-2026-10-29.tgz` (30.717 bytes, SHA-256 `5adaa1c5f7bb28c27d68e452934fc0af47175989465f26765c9a0217f015f122`), sem `__pycache__/`; manifesto `C:\dev\_backups\dotnet-universal-skills-2026-10-29.sha256` com 24 linhas.
   - AC-1: `tar -xzf` numa pasta temporária e `sha256sum -c` do manifesto → 24 `OK`, 0 falhas, 24 arquivos restaurados.
   - `git init -b main` na biblioteca, sem remoto (`git remote` vazio); commit local de linha de base `c4e3c82` ("chore: linha de base da biblioteca antes da spec 012"), autorizado por Rafael Santos no chat ("sim"), com os 24 arquivos do manifesto e nenhum outro; árvore igual ao manifesto depois do commit.
-- **Validador e testes da biblioteca:**
+- **Validador e testes da biblioteca (T-3, 2026-10-29):**
+  - Saíram a comparação byte a byte com o template, a seção `## Beyond the template`, a proibição de `/// <summary>` e toda referência a `C:\dev\clean-architecture` (a isenção dos "originais do template" escondia menções a autores e causava a falha preexistente da T-1). A regra de autores e projetos externos vale para todos os `.md` das skills, `README.md`, `CLAUDE.md` e `docs/`.
+  - Regras novas atrás de `--enforce-new-rules` (ligadas por padrão na T-4c): 101 linhas para todas as skills; `{ get; set; }` reprovado em tipo derivado de `Entity`; `<summary>` não vazio exigido em tipos e membros públicos e internos (e membros de interface) dos blocos C# que declaram tipo completo. Sem a flag, os limites atuais continuam (250 linhas para `add-entity`, `add-feature`, `add-tests` e `ca-review`; 101 para as demais).
+  - `python tools/validate_library.py` → `RESULTADO: APROVADO` (174 verificações). `python -m unittest discover -s tests -v` → 11 testes, 0 falhas, com fixtures em `tests/fixtures/`.
+  - Informativo: com `--enforce-new-rules`, a biblioteca real tem 135 erros (membros sem `<summary>`, entidade `Project` com `{ get; set; }` e `add-entity/SKILL.md` acima de 101 linhas), todos conferidos como defeitos reais; ficam para a T-4a a T-4c.
 - **Build:**
 - **Testes:**
 - **Portão com subagente (bloqueio e liberação):**
