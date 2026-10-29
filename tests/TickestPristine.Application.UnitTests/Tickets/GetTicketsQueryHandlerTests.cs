@@ -390,7 +390,8 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
         DateOnly? createdFrom = null,
         DateOnly? createdTo = null,
         DateOnly? resolvedFrom = null,
-        DateOnly? resolvedTo = null) =>
+        DateOnly? resolvedTo = null,
+        TicketWaitingOn? waitingOn = null) =>
         new(
             statuses ?? [],
             new TicketScopeFilter(
@@ -404,6 +405,7 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
                 resolvedFrom,
                 resolvedTo),
             slaStatus,
+            waitingOn,
             search,
             sort,
             new PageRequest(1, 20));

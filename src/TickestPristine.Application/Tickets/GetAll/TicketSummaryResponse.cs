@@ -20,4 +20,9 @@ public sealed class TicketSummaryResponse
     public DateTime SlaWarningAtUtc { get; set; }
     public DateTime? ResolvedAtUtc { get; set; }
     public TicketSlaStatus SlaStatus { get; set; }
+
+    /// <summary>
+    /// Quem o chamado ativo está aguardando; nulo enquanto o chamado está inativo (spec 029).
+    /// </summary>
+    public TicketWaitingOn? WaitingOn { get; set; }
 }

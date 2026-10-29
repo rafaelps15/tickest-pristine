@@ -74,7 +74,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
 | T-1 | Situação de espera no chamado, recálculo nas ações e migration | AC-1 a AC-5, AC-8 | `add-entity` | [x] |
-| T-2 | Campo e filtro na listagem; contadores no agregado | AC-6, AC-7 | `add-feature` | [ ] |
+| T-2 | Campo e filtro na listagem; contadores no agregado | AC-6, AC-7 | `add-feature` | [x] |
 | T-3 | Testes unitários e de integração | AC-1 a AC-8 | `add-tests` | [ ] |
 | T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-9 | — | [ ] |
 | T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-9 | `ca-review` | [ ] |
