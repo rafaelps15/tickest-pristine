@@ -2,55 +2,89 @@ using System.Data.Common;
 using Dapper;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.SlaCalendars;
+using TickestPristine.Domain.Tickets;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Tickets.GetVolume;
 
-internal sealed class GetTicketVolumeQueryHandler(IDbConnectionFactory dbConnectionFactory)
+internal sealed class GetTicketVolumeQueryHandler(IDbConnectionFactory dbConnectionFactory, IDateTimeProvider dateTimeProvider)
     : IQueryHandler<GetTicketVolumeQuery, List<TicketVolumeResponse>>
 {
+    private const string Created = "Created";
+    private const string Resolved = "Resolved";
+
+    // Criados pela data de abertura e resolvidos pela data de cada mudança de status para Resolvido no histórico, os dois
+    // agrupados pelo horário de Brasília (o date_trunc começa a semana na segunda-feira). O recorte vale para os dois,
+    // e o filtro de excluídos do recorte também tira do gráfico as resoluções dos chamados excluídos (spec 028, R-1).
+    private const string Sql =
+        $"""
+         SELECT '{Created}' AS {nameof(VolumeRow.Kind)},
+                date_trunc(@Unit::text, t.created_at_utc AT TIME ZONE 'America/Sao_Paulo')::date AS {nameof(VolumeRow.PeriodStart)},
+                COUNT(*)::int AS {nameof(VolumeRow.Count)}
+         FROM public.tickets t
+         WHERE {TicketScopeFilter.SqlCondition}
+           AND t.created_at_utc >= @RangeStartUtc AND t.created_at_utc < @RangeEndUtc
+         GROUP BY 2
+         UNION ALL
+         SELECT '{Resolved}',
+                date_trunc(@Unit::text, h.occurred_at_utc AT TIME ZONE 'America/Sao_Paulo')::date,
+                COUNT(*)::int
+         FROM public.ticket_histories h
+         JOIN public.tickets t ON t.id = h.ticket_id
+         WHERE {TicketScopeFilter.SqlCondition}
+           AND h.action = '{nameof(TicketHistoryAction.StatusChanged)}'
+           AND h.new_value = '{nameof(TicketStatus.Resolved)}'
+           AND h.occurred_at_utc >= @RangeStartUtc AND h.occurred_at_utc < @RangeEndUtc
+         GROUP BY 2
+         """;
+
     public async Task<Result<List<TicketVolumeResponse>>> Handle(GetTicketVolumeQuery query, CancellationToken cancellationToken)
     {
+        DateOnly today = LocalDatePeriod.ToLocalDate(dateTimeProvider.UtcNow);
+        Result<IReadOnlyList<DateOnly>> periods = TicketVolumePeriods.Build(query.GroupBy, query.From, query.To, today);
+
+        if (periods.IsFailure)
+        {
+            return Result.Failure<List<TicketVolumeResponse>>(periods.Error);
+        }
+
+        DateOnly firstPeriod = periods.Value[0];
+        DateOnly afterLastPeriod = TicketVolumePeriods.Step(query.GroupBy, periods.Value[^1], 1);
+        var range = LocalDatePeriod.FromLocalDates(firstPeriod, afterLastPeriod.AddDays(-1));
+
+        // Os períodos do recorte não se aplicam: o intervalo do gráfico é o de From e To.
+        TicketScopeFilter scope = query.Scope with { CreatedFrom = null, CreatedTo = null, ResolvedFrom = null, ResolvedTo = null };
+        DynamicParameters parameters = scope.ToSqlParameters();
+        parameters.Add("Unit", TicketVolumePeriods.SqlUnit(query.GroupBy));
+        parameters.Add("RangeStartUtc", range.FromUtc);
+        parameters.Add("RangeEndUtc", range.UntilUtc);
+
         await using DbConnection connection = await dbConnectionFactory.OpenConnectionAsync(cancellationToken);
 
-        // @GroupBy chega como o número do TicketVolumeGrouping (0 = dia, 1 = semana, 2 = mês). Os períodos seguem o
-        // horário de Brasília e a semana do date_trunc começa na segunda-feira. Chamados excluídos ficam de fora, como
-        // no filtro global do EF.
-        const string sql =
-            $"""
-             WITH settings AS (
-                 SELECT
-                     CASE @GroupBy WHEN 1 THEN 'week' WHEN 2 THEN 'month' ELSE 'day' END AS unit,
-                     CASE @GroupBy WHEN 1 THEN interval '7 days' WHEN 2 THEN interval '1 month' ELSE interval '1 day' END AS step,
-                     CASE @GroupBy WHEN 1 THEN 12 WHEN 2 THEN 12 ELSE 30 END AS points,
-                     now() AT TIME ZONE 'America/Sao_Paulo' AS local_now
-             ),
-             periods AS (
-                 SELECT generate_series(
-                     date_trunc(s.unit, s.local_now) - (s.points - 1) * s.step,
-                     date_trunc(s.unit, s.local_now),
-                     s.step) AS period_start
-                 FROM settings s
-             ),
-             tickets_in_window AS (
-                 SELECT date_trunc(s.unit, t.created_at_utc AT TIME ZONE 'America/Sao_Paulo') AS period_start
-                 FROM public.tickets t
-                 CROSS JOIN settings s
-                 WHERE t.deleted_at_utc IS NULL
-                   AND t.created_at_utc >= (SELECT MIN(period_start) FROM periods) AT TIME ZONE 'America/Sao_Paulo'
-             )
-             SELECT
-                 p.period_start::date AS {nameof(TicketVolumeResponse.PeriodStart)},
-                 COUNT(t.period_start)::int AS {nameof(TicketVolumeResponse.Count)}
-             FROM periods p
-             LEFT JOIN tickets_in_window t ON t.period_start = p.period_start
-             GROUP BY p.period_start
-             ORDER BY p.period_start
-             """;
+        List<VolumeRow> rows = (await connection.QueryAsync<VolumeRow>(
+            new CommandDefinition(Sql, parameters, cancellationToken: cancellationToken))).AsList();
 
-        IEnumerable<TicketVolumeResponse> volume = await connection.QueryAsync<TicketVolumeResponse>(
-            new CommandDefinition(sql, query, cancellationToken: cancellationToken));
+        var created = rows.Where(r => r.Kind == Created).ToDictionary(r => r.PeriodStart, r => r.Count);
+        var resolved = rows.Where(r => r.Kind == Resolved).ToDictionary(r => r.PeriodStart, r => r.Count);
 
-        return volume.AsList();
+        return periods.Value
+            .Select(period => new TicketVolumeResponse
+            {
+                PeriodStart = period,
+                Count = created.GetValueOrDefault(period),
+                ResolvedCount = resolved.GetValueOrDefault(period)
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Linha do SQL: o tipo da contagem (criados ou resolvidos), o início do período e a quantidade.
+    /// </summary>
+    internal sealed class VolumeRow
+    {
+        public string Kind { get; init; }
+        public DateOnly PeriodStart { get; init; }
+        public int Count { get; init; }
     }
 }
