@@ -1,7 +1,7 @@
 ---
 id: 023
 titulo: Listagem de departamentos traz o id do responsável, para editar sem buscar o detalhe
-status: Em implementação        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-023-department-list-responsible-id                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
@@ -79,17 +79,17 @@ Dados comuns: departamento TI com responsável Ana; departamento Financeiro sem 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | `Application.UnitTests/Departments/GetDepartmentsQueryHandlerTests.cs` › `Handle_Should_ReturnResponsibleIdAndName_WhenDepartmentHasResponsible`; `IntegrationTests/Departments/DepartmentsTests.cs` › `GetAll_Should_ReturnResponsibleIdAndName` | Departamento com responsável traz id e nome dele; o sem responsável traz os dois nulos (no handler e pelo HTTP) | Aprovado |
-| AC-2 | `IntegrationTests/Departments/DepartmentsTests.cs` › `Update_Should_KeepResponsible_WhenClientSendsTheIdReadFromGetAll` | Lê o departamento em `GET departments`, envia o `PUT` com nome novo e o `responsibleUserId` lido; 204 e o detalhe mostra o nome novo com o mesmo responsável | Aprovado |
-| AC-3 | `IntegrationTests/Departments/DepartmentsTests.cs` › `Update_Should_ReplaceResponsible_WhenAnotherUserIdIsSent` e `Update_Should_RemoveResponsible_WhenNullIsSent`; testes existentes do `PUT`, sem alteração: `DepartmentsTests.cs` › `Update_Should_ReflectChangesInGetById`, `Update_Should_ReturnNotFound_WhenDepartmentDoesNotExist`, `Update_Should_ReturnConflict_WhenAnotherActiveDepartmentHasTheName`, `Update_Should_ReturnNotFound_WhenResponsibleUserDoesNotExist`; `UpdateDepartmentCommandHandlerTests.cs` (4 testes) | Pelo HTTP, o `PUT` com o id de Bruno troca Ana por Bruno, e o `PUT` com nulo deixa o departamento sem responsável (204 e conferido no detalhe); os testes existentes passam sem alteração | Aprovado |
-| AC-4 | Revisão de `GetDepartmentsQueryHandler.cs` | `ResponsibleUserId = d.ResponsibleUserId` vem da própria linha do departamento, dentro do mesmo `.Select` da projeção única; nenhuma consulta nova | Aprovado |
-| AC-5 | `dotnet build TickestPristine.slnx` e `dotnet test TickestPristine.slnx` | Build com 0 avisos e 0 erros; suíte inteira: 50 de arquitetura, 757 unitários e 466 de integração aprovados, 0 falhas | Aprovado |
+| AC-1 | `Application.UnitTests/Departments/GetDepartmentsQueryHandlerTests.cs` › `Handle_Should_ReturnResponsibleIdAndName_WhenDepartmentHasResponsible`; `IntegrationTests/Departments/DepartmentsTests.cs` › `GetAll_Should_ReturnResponsibleIdAndName` | Departamento com responsável traz id e nome dele; o sem responsável traz os dois nulos (no handler e pelo HTTP) | Aprovado em 2026-10-28 (execução da verificação) |
+| AC-2 | `IntegrationTests/Departments/DepartmentsTests.cs` › `Update_Should_KeepResponsible_WhenClientSendsTheIdReadFromGetAll` | Lê o departamento em `GET departments`, envia o `PUT` com nome novo e o `responsibleUserId` lido; 204 e o detalhe mostra o nome novo com o mesmo responsável | Aprovado em 2026-10-28 (execução da verificação) |
+| AC-3 | `IntegrationTests/Departments/DepartmentsTests.cs` › `Update_Should_ReplaceResponsible_WhenAnotherUserIdIsSent` e `Update_Should_RemoveResponsible_WhenNullIsSent`; testes existentes do `PUT`, sem alteração: `DepartmentsTests.cs` › `Update_Should_ReflectChangesInGetById`, `Update_Should_ReturnNotFound_WhenDepartmentDoesNotExist`, `Update_Should_ReturnConflict_WhenAnotherActiveDepartmentHasTheName`, `Update_Should_ReturnNotFound_WhenResponsibleUserDoesNotExist`; `UpdateDepartmentCommandHandlerTests.cs` (4 testes) | Pelo HTTP, o `PUT` com o id de Bruno troca Ana por Bruno, e o `PUT` com nulo deixa o departamento sem responsável (204 e conferido no detalhe); os testes existentes passam sem alteração | Aprovado em 2026-10-28 (execução da verificação) |
+| AC-4 | Revisão de `GetDepartmentsQueryHandler.cs` | `ResponsibleUserId = d.ResponsibleUserId` vem da própria linha do departamento, dentro do mesmo `.Select` da projeção única; nenhuma consulta nova | Aprovado na revisão de 2026-10-28 |
+| AC-5 | `dotnet build TickestPristine.slnx` e `dotnet test TickestPristine.slnx` | Build com 0 avisos e 0 erros; suíte inteira: 50 de arquitetura, 757 unitários e 468 de integração aprovados, 0 falhas | Aprovado em 2026-10-28 (execução da verificação) |
 
 ## 9. Evidências de verificação
-- **Build:**
-- **Testes:**
-- **Revisão:**
-- **Documentação atualizada:**
+- **Build:** 2026-10-28, `dotnet build TickestPristine.slnx --no-incremental`: 0 avisos, 0 erros.
+- **Testes:** 2026-10-28, `dotnet test TickestPristine.slnx`: 1.275 aprovados, 0 com falha (50 de arquitetura, 757 unitários, 468 de integração); os 14 testes da rastreabilidade conferidos um a um na execução filtrada (todos aprovados). Auditoria `python scripts/auditoria_sdd.py .`: score 100%, CONFORME, código de saída 0.
+- **Revisão:** `ca-review` sobre os arquivos da spec: nenhum achado bloqueante nem violação de convenção (mudança no slice `GetAll`, projeção com `.Select`, sem command nem endpoint novos; testes unitário e de integração no padrão `Handle_Should_` / `GetAll_Should_` / `Update_Should_`).
+- **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 2.7 (C-07) e 4.3.1 (linha de `GET departments`), no commit da T-3.
 - **CI:**
 - **Entrega:**
 
@@ -102,3 +102,4 @@ Dados comuns: departamento TI com responsável Ana; departamento Financeiro sem 
 | 2026-10-28 | Aprovada | Aprovada por Rafael Santos no chat ("Aprovo a 023 e a 024."). |
 | 2026-10-28 | Em implementação | `/spec-implement 023` pedido por Rafael Santos, na worktree `tickest-pristine-023`, branch `feat/SPEC-023-department-list-responsible-id` criada a partir da `origin/main` (`ad732da`). Mesmos arquivos da spec 022 (`GetAll/DepartmentResponse.cs`, `GetDepartmentsQueryHandler.cs`, `DepartmentsTests.cs`), ainda sem código da 022: segue isolada (R-1). Commits por tarefa aguardam autorização explícita do responsável. |
 | 2026-10-28 | Em implementação | Ajuste do AC-3 aprovado no chat por Rafael Santos ("AC-3: aprovo a opção 1."): o texto supunha testes de troca e de remoção do responsável no `PUT` que não existiam; o AC passa a exigir esses dois casos por teste de integração, sem mudar o comportamento do `PUT` (REQ-2 e DEC-2 intactos). |
+| 2026-10-28 | Verificada | `spec-verify`: build sem avisos, suíte inteira verde (1.275 testes), auditoria SDD 100% (saída 0), AC-1 a AC-5 cobertos por testes lidos e aprovados nesta execução, revisão sem achados bloqueantes. Documentação de estado já atualizada na T-3 (2.7 C-07 e 4.3.1). |
