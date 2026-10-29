@@ -86,6 +86,63 @@ public sealed class RoleLinksMigrationTests(IntegrationTestWebAppFactory factory
     }
 
     [Fact]
+    public async Task Migration_Should_RollBackAndReapplyWithoutCuttingName_WhenRoleHas100Characters()
+    {
+        // Arrange: no esquema atual, uma role com o nome no limite de 100 caracteres, com um usuário e uma permissão
+        Guid userId = await RegisterUserAsync(UniqueEmail());
+        var roleId = Guid.NewGuid();
+        string longName = Guid.NewGuid().ToString("N").PadRight(100, 'x');
+
+        List<string> userLinksAfterDown = [];
+        List<string> permissionLinksAfterDown = [];
+        List<string> userLinksAfterUp = [];
+        List<string> permissionLinksAfterUp = [];
+        string? nameAfterDown = null;
+        string? nameAfterUp = null;
+
+        await ExecuteAsync(async context =>
+        {
+            IMigrator migrator = context.GetService<IMigrator>();
+
+            try
+            {
+                await context.Database.ExecuteSqlAsync(
+                    $"""
+                    INSERT INTO public.roles (id, name) VALUES ({roleId}, {longName});
+                    INSERT INTO public.role_permissions (id, role_id, permission_code) VALUES ({Guid.NewGuid()}, {roleId}, 'tickets:manage');
+                    INSERT INTO public.user_roles (id, user_id, role_id) VALUES ({Guid.NewGuid()}, {userId}, {roleId});
+                    """);
+
+                // Act: desfaz a migration (o nome volta a character varying, agora de 100, DEC-17) e aplica de novo
+                await migrator.MigrateAsync(PreviousMigration(context));
+                nameAfterDown = await RoleNameAsync(context, roleId);
+                userLinksAfterDown = await ReadAsync(context, UserLinksByNameSql);
+                permissionLinksAfterDown = await ReadAsync(context, PermissionLinksByNameSql);
+
+                await migrator.MigrateAsync();
+                nameAfterUp = await RoleNameAsync(context, roleId);
+                userLinksAfterUp = await ReadAsync(context, UserLinksByIdSql);
+                permissionLinksAfterUp = await ReadAsync(context, PermissionLinksByIdSql);
+            }
+            finally
+            {
+                // Volta à última migration mesmo se o teste falhar no meio e tira a role criada aqui.
+                await migrator.MigrateAsync();
+                await context.Database.ExecuteSqlAsync($"DELETE FROM public.user_roles WHERE role_id = {roleId}");
+                await context.Database.ExecuteSqlAsync($"DELETE FROM public.roles WHERE id = {roleId}");
+            }
+        });
+
+        // Assert: o nome não é cortado nem impede o rollback, e os vínculos continuam inteiros na ida e na volta
+        nameAfterDown.ShouldBe(longName);
+        nameAfterUp.ShouldBe(longName);
+        userLinksAfterDown.ShouldContain($"{userId}|{longName}");
+        permissionLinksAfterDown.ShouldContain($"tickets:manage|{longName}");
+        userLinksAfterUp.ShouldContain($"{userId}|{longName}");
+        permissionLinksAfterUp.ShouldContain($"tickets:manage|{longName}");
+    }
+
+    [Fact]
     public async Task Migration_Should_FailWithoutTouchingLinks_WhenTwoRoleNamesDifferOnlyInCase()
     {
         // Arrange: antes da migration, duas roles que o índice único do citext não aceitaria juntas
@@ -209,6 +266,11 @@ public sealed class RoleLinksMigrationTests(IntegrationTestWebAppFactory factory
 
     private static Task<List<string>> ReadAsync(ApplicationDbContext context, string sql) =>
         context.Database.SqlQueryRaw<string>(sql).ToListAsync();
+
+    private static async Task<string?> RoleNameAsync(ApplicationDbContext context, Guid roleId) =>
+        await context.Database
+            .SqlQuery<string>($"SELECT name::text AS \"Value\" FROM public.roles WHERE id = {roleId}")
+            .SingleOrDefaultAsync();
 
     private static async Task<bool> RoleNameColumnExistsAsync(ApplicationDbContext context) =>
         await context.Database

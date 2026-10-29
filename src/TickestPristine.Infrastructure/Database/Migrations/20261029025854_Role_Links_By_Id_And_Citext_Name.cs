@@ -10,7 +10,8 @@ namespace TickestPristine.Infrastructure.Database.Migrations
     /// diferenciar maiúsculas) com até 100 caracteres. Escrita à mão: o EF apagaria role_name antes de existir role_id
     /// e perderia todos os vínculos, inclusive os concedidos pela API depois das seeds. Aqui role_id é preenchido a partir
     /// do nome antes de role_name sair; os vínculos semeados recebem o mesmo id do HasData nesse UPDATE, por isso os
-    /// UpdateData gerados para eles saíram. O Down faz o caminho inverso, preenchendo role_name a partir do id.
+    /// UpdateData gerados para eles saíram. O Down faz o caminho inverso, preenchendo role_name a partir do id, com o nome
+    /// em character varying(100) (DEC-17): os nomes de até 100 caracteres criados depois desta migration voltam inteiros.
     /// </remarks>
     public partial class Role_Links_By_Id_And_Citext_Name : Migration
     {
@@ -73,16 +74,16 @@ namespace TickestPristine.Infrastructure.Database.Migrations
 
                 DROP INDEX public.ix_roles_name;
                 ALTER TABLE public.roles DROP CONSTRAINT ck_roles_name_max_length;
-                -- Falha (e o Down é desfeito) se alguma role tiver nome com mais de 50 caracteres, o limite anterior.
-                ALTER TABLE public.roles ALTER COLUMN name TYPE character varying(50);
+                -- 100 e não os 50 de antes da spec 036 (DEC-17): um nome criado depois dela não impede a volta nem é cortado.
+                ALTER TABLE public.roles ALTER COLUMN name TYPE character varying(100);
                 ALTER TABLE public.roles ADD CONSTRAINT ak_roles_name UNIQUE (name);
 
-                ALTER TABLE public.role_permissions ADD COLUMN role_name character varying(50);
+                ALTER TABLE public.role_permissions ADD COLUMN role_name character varying(100);
                 UPDATE public.role_permissions rp SET role_name = r.name FROM public.roles r WHERE r.id = rp.role_id;
                 ALTER TABLE public.role_permissions ALTER COLUMN role_name SET NOT NULL;
                 ALTER TABLE public.role_permissions DROP COLUMN role_id;
 
-                ALTER TABLE public.user_roles ADD COLUMN role_name character varying(50);
+                ALTER TABLE public.user_roles ADD COLUMN role_name character varying(100);
                 UPDATE public.user_roles ur SET role_name = r.name FROM public.roles r WHERE r.id = ur.role_id;
                 ALTER TABLE public.user_roles ALTER COLUMN role_name SET NOT NULL;
                 ALTER TABLE public.user_roles DROP COLUMN role_id;

@@ -2,7 +2,11 @@ using System.Net;
 using System.Net.Http.Json;
 using TickestPristine.Application.Permissions;
 using TickestPristine.Application.Roles;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using TickestPristine.Domain.Audit;
 using TickestPristine.Domain.Roles;
+using TickestPristine.Infrastructure.Database;
 
 namespace TickestPristine.IntegrationTests.Roles;
 
@@ -292,6 +296,219 @@ public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseInteg
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 
+    [Fact]
+    public async Task Create_Should_ReturnCreatedWithLocationAndTheRole_WhenNameIsFree()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string name = $"Supervisor {Guid.NewGuid():N}";
+
+        try
+        {
+            // Act
+            HttpResponseMessage response = await HttpClient.PostAsJsonAsync("roles", new { name = $"  {name}  " });
+
+            // Assert: 201 com o endereço da consulta pelo id e a role sem permissões nem usuários
+            response.StatusCode.ShouldBe(HttpStatusCode.Created);
+            RoleDto? created = await response.Content.ReadFromJsonAsync<RoleDto>();
+            created.ShouldNotBeNull();
+            created.Name.ShouldBe(name);
+            created.IsSystem.ShouldBeFalse();
+            created.ActiveUserCount.ShouldBe(0);
+            created.UserCount.ShouldBe(0);
+            created.PermissionCodes.ShouldBeEmpty();
+            response.Headers.Location!.ToString().ShouldBe($"/roles/{created.Id}");
+
+            RoleDto? fetched = await HttpClient.GetFromJsonAsync<RoleDto>(response.Headers.Location);
+            fetched!.Name.ShouldBe(name);
+            List<RoleDto>? roles = await HttpClient.GetFromJsonAsync<List<RoleDto>>("roles");
+            roles!.ShouldContain(r => r.Id == created.Id);
+        }
+        finally
+        {
+            await DeleteRolesNamedAsync(name);
+        }
+    }
+
+    [Fact]
+    public async Task Create_Should_ReturnConflict_WhenNameExistsIgnoringCase()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string name = $"Supervisor-{Guid.NewGuid():N}";
+        string upperName = name.ToUpperInvariant();
+
+        try
+        {
+            (await HttpClient.PostAsJsonAsync("roles", new { name })).EnsureSuccessStatusCode();
+
+            // Act
+            HttpResponseMessage response = await HttpClient.PostAsJsonAsync("roles", new { name = $"  {upperName}  " });
+
+            // Assert
+            response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+            ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+            problem!.Title.ShouldBe("Roles.NameNotUnique");
+            problem.Detail.ShouldBe($"Já existe uma função com o nome \"{upperName}\"");
+
+            List<RoleDto>? roles = await HttpClient.GetFromJsonAsync<List<RoleDto>>("roles");
+            roles!.Count(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase)).ShouldBe(1);
+        }
+        finally
+        {
+            await DeleteRolesNamedAsync(name);
+        }
+    }
+
+    [Theory]
+    [InlineData("", "'Função' deve ser informado.")]
+    [InlineData("   ", "'Função' deve ser informado.")]
+    [InlineData("101", "'Função' deve ter no máximo 100 caracteres.")]
+    [InlineData("guid", "'Função' não pode ter o formato de um identificador (Guid).")]
+    public async Task Create_Should_ReturnBadRequest_WhenNameIsInvalid(string kind, string message)
+    {
+        // Arrange: vazio, só espaços, 101 caracteres ou um Guid (DEC-11)
+        await AuthenticateAsAdminAsync();
+        string name = kind switch
+        {
+            "101" => new string('a', 101),
+            "guid" => Guid.NewGuid().ToString(),
+            _ => kind
+        };
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("roles", new { name });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        ValidationProblemDto? problem = await response.Content.ReadFromJsonAsync<ValidationProblemDto>();
+        problem!.Errors.Select(e => e.Description).ShouldContain(message);
+    }
+
+    [Fact]
+    public async Task Create_Should_ReturnCreated_WhenNameHas100CharactersAfterTrimming()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string name = Guid.NewGuid().ToString("N").PadRight(100, 'x');
+
+        try
+        {
+            // Act
+            HttpResponseMessage response = await HttpClient.PostAsJsonAsync("roles", new { name = $"  {name}  " });
+
+            // Assert
+            response.StatusCode.ShouldBe(HttpStatusCode.Created);
+            (await response.Content.ReadFromJsonAsync<RoleDto>())!.Name.ShouldBe(name);
+        }
+        finally
+        {
+            await DeleteRolesNamedAsync(name);
+        }
+    }
+
+    [Fact]
+    public async Task Create_Should_CreateOnlyOne_WhenTwoRequestsRaceWithNamesDifferingOnlyInCase()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string name = $"Coordenação-{Guid.NewGuid():N}";
+
+        try
+        {
+            // Act: as duas podem passar pela checagem do handler; o índice único do citext barra a segunda
+            HttpResponseMessage[] responses = await Task.WhenAll(
+                HttpClient.PostAsJsonAsync("roles", new { name }),
+                HttpClient.PostAsJsonAsync("roles", new { name = name.ToUpperInvariant() }));
+
+            // Assert: uma criada e a outra em conflito legível, nunca 500
+            responses.Select(r => r.StatusCode).ShouldBe([HttpStatusCode.Created, HttpStatusCode.Conflict], ignoreOrder: true);
+            ProblemDto? problem = await responses.Single(r => r.StatusCode == HttpStatusCode.Conflict)
+                .Content.ReadFromJsonAsync<ProblemDto>();
+            problem!.Detail.ShouldNotBeNullOrWhiteSpace();
+
+            List<RoleDto>? roles = await HttpClient.GetFromJsonAsync<List<RoleDto>>("roles");
+            roles!.Count(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase)).ShouldBe(1);
+        }
+        finally
+        {
+            await DeleteRolesNamedAsync(name);
+        }
+    }
+
+    [Fact]
+    public async Task Create_Should_ReturnForbidden_WhenCallerLacksRolesManagePermission()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("roles", new { name = $"Role-{Guid.NewGuid():N}" });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Create_Should_ReturnUnauthorized_WhenNoTokenProvided()
+    {
+        // Arrange
+        HttpClient.DefaultRequestHeaders.Authorization = null;
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("roles", new { name = $"Role-{Guid.NewGuid():N}" });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Create_Should_AuditTheNewRole()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string name = $"Auditada-{Guid.NewGuid():N}";
+
+        try
+        {
+            // Act
+            HttpResponseMessage response = await HttpClient.PostAsJsonAsync("roles", new { name });
+
+            // Assert: a role é auditável (DEC-8), então a criação fica registrada com o nome
+            response.StatusCode.ShouldBe(HttpStatusCode.Created);
+            Guid roleId = (await response.Content.ReadFromJsonAsync<RoleDto>())!.Id;
+
+            using IServiceScope scope = Services.CreateScope();
+            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            AuditLogEntry entry = await context.AuditLogs.AsNoTracking()
+                .SingleAsync(e => e.EntityName == "Role" && e.EntityId == roleId.ToString());
+            entry.Action.ShouldBe("Added");
+            entry.NewValues.ShouldNotBeNull().ShouldContain(name);
+        }
+        finally
+        {
+            await DeleteRolesNamedAsync(name);
+        }
+    }
+
+    /// <summary>
+    /// Apaga as roles criadas por um teste de criação, comparando o nome sem maiúsculas como o citext: o banco é
+    /// compartilhado pela coleção, e um nome longo deixado para trás atrapalharia os testes que voltam migrations.
+    /// </summary>
+    private async Task DeleteRolesNamedAsync(string name)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var roleIds = (await context.Roles.AsNoTracking().Select(r => new { r.Id, r.Name }).ToListAsync())
+            .Where(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase))
+            .Select(r => r.Id)
+            .ToList();
+
+        await context.Roles.Where(r => roleIds.Contains(r.Id)).ExecuteDeleteAsync();
+    }
+
     /// <summary>
     /// Cria uma role de teste vazia e autentica como um colaborador cuja role só gerencia e lê funções.
     /// </summary>
@@ -329,4 +546,8 @@ public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseInteg
         List<string> PermissionCodes);
 
     private sealed record ProblemDto(int Status, string Title, string Detail);
+
+    private sealed record ValidationProblemDto(int Status, string Title, List<ValidationErrorDto> Errors);
+
+    private sealed record ValidationErrorDto(string Code, string Description);
 }
