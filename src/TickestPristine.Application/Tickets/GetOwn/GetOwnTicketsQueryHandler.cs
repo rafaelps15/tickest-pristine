@@ -37,12 +37,12 @@ internal sealed class GetOwnTicketsQueryHandler(
             _ => null
         };
 
-        // O título é citext: a busca não diferencia maiúsculas, como na listagem geral.
+        // Título e descrição são citext: a busca não diferencia maiúsculas, como na listagem geral (spec 019).
         PagedResponse<OwnTicketResponse> tickets = await context.Tickets
             .Where(t =>
                 t.CreatedByUserId == userId &&
                 (statuses == null || statuses.Contains(t.Status)) &&
-                (search == null || t.Title.Contains(search)))
+                (search == null || t.Title.Contains(search) || t.Description.Contains(search)))
             .OrderByDescending(t => t.LastActivityAtUtc)
             .ThenByDescending(t => t.Id)
             .Select(t => new OwnTicketResponse

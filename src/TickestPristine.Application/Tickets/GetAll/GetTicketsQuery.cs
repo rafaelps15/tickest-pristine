@@ -5,18 +5,14 @@ using TickestPristine.Domain.Tickets;
 namespace TickestPristine.Application.Tickets.GetAll;
 
 /// <summary>
-/// Todos os chamados do sistema, para quem gerencia chamados. Sem status informado, lista todos os status. Os filtros
-/// de solicitante, responsável e setor permitem acompanhar um funcionário ou um setor; a busca procura no título.
-/// <c>UnassignedOnly</c> lista só os chamados sem responsável e, quando ligado, ignora o filtro de responsável.
-/// Ordena dos mais recentes para os mais antigos, ou do prazo de SLA mais próximo para o mais distante (painel de SLA).
+/// Todos os chamados do sistema, para quem gerencia chamados. Sem status informado, lista todos os status. O
+/// <see cref="Scope"/> traz o recorte comum às estatísticas (setores, prioridade, solicitante, responsável e períodos);
+/// a busca procura no título. Ordena dos mais recentes para os mais antigos, ou do prazo de SLA mais próximo para o mais
+/// distante (painel de SLA).
 /// </summary>
 public sealed record GetTicketsQuery(
     IReadOnlyCollection<TicketStatus> Statuses,
-    TicketPriority? Priority,
-    Guid? SectorId,
-    Guid? RequesterId,
-    Guid? AssignedToUserId,
-    bool UnassignedOnly,
+    TicketScopeFilter Scope,
     TicketSlaStatus? SlaStatus,
     string? Search,
     TicketSortOrder Sort,

@@ -697,7 +697,7 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
+                        .HasColumnType("citext")
                         .HasColumnName("description");
 
                     b.Property<DateTime>("DueAtUtc")
@@ -947,6 +947,11 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_on_utc");
+
+                    b.Property<string>("CompletionCause")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("completion_cause");
 
                     b.Property<int>("Cycle")
                         .HasColumnType("integer")

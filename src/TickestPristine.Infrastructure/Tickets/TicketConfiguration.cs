@@ -19,7 +19,8 @@ internal sealed class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         // citext: a busca do painel não diferencia maiúsculas de minúsculas.
         builder.Property(t => t.Title).HasMaxLength(200).HasColumnType("citext");
 
-        builder.Property(t => t.Description).HasMaxLength(500);
+        // citext também: a busca de "Meus chamados" procura no título e na descrição sem diferenciar maiúsculas (spec 019).
+        builder.Property(t => t.Description).HasMaxLength(500).HasColumnType("citext");
 
         // Enums gravados pelo nome (ex.: "InProgress"), legíveis no banco; a API continua recebendo e devolvendo o número.
         builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(20);
