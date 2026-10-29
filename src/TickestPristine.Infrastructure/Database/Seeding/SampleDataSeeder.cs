@@ -34,10 +34,10 @@ internal sealed class SampleDataSeeder(
     /// Usuários fictícios por role, com o prefixo do e-mail e a quantidade. O Administrador fica de fora: o primeiro
     /// administrador já vem do <see cref="AdminUserSeeder"/>.
     /// </summary>
-    private static readonly (string RoleName, string EmailPrefix, int Count)[] SampleUserGroups =
+    private static readonly (string RoleName, Guid RoleId, string EmailPrefix, int Count)[] SampleUserGroups =
     [
-        (RoleNames.Agent, "atendente", 3),
-        (RoleNames.Collaborator, "colaborador", 6)
+        (RoleNames.Agent, RoleIds.Agent, "atendente", 3),
+        (RoleNames.Collaborator, RoleIds.Collaborator, "colaborador", 6)
     ];
 
     /// <summary>
@@ -117,7 +117,7 @@ internal sealed class SampleDataSeeder(
 
         var userIdsByRole = new Dictionary<string, Guid[]>();
 
-        foreach ((string roleName, string emailPrefix, int count) in SampleUserGroups)
+        foreach ((string roleName, Guid roleId, string emailPrefix, int count) in SampleUserGroups)
         {
             var userIds = new List<Guid>();
 
@@ -152,7 +152,7 @@ internal sealed class SampleDataSeeder(
                     PasswordHash = passwordHasher.Hash(password),
                     MustChangePassword = false
                 });
-                context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = roleName });
+                context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = roleId });
 
                 userIds.Add(user.Id);
             }

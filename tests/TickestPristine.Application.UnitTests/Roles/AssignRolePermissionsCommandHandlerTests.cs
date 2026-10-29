@@ -44,12 +44,12 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
 
         Role role = CreateRole("Manager");
         context.Roles.Add(role);
-        context.RolePermissions.Add(new RolePermission { RoleName = role.Name, PermissionCode = PermissionCodes.Tickets.ReopenOwn });
+        context.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionCode = PermissionCodes.Tickets.ReopenOwn });
 
         var firstUserId = Guid.NewGuid();
         var secondUserId = Guid.NewGuid();
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = firstUserId, RoleName = role.Name });
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = secondUserId, RoleName = role.Name });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = firstUserId, RoleId = role.Id });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = secondUserId, RoleId = role.Id });
 
         await context.SaveChangesAsync();
 
@@ -73,7 +73,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
         result.IsSuccess.ShouldBeTrue();
 
         List<string> permissionCodes = await context.RolePermissions
-            .Where(p => p.RoleName == role.Name)
+            .Where(p => p.RoleId == role.Id)
             .Select(p => p.PermissionCode)
             .ToListAsync();
         permissionCodes.ShouldBe([PermissionCodes.Tickets.Create, PermissionCodes.Tickets.ViewOwn], ignoreOrder: true);
@@ -91,7 +91,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
 
         Role role = CreateRole("Gestor");
         context.Roles.Add(role);
-        context.RolePermissions.Add(new RolePermission { RoleName = role.Name, PermissionCode = PermissionCodes.Tickets.Create });
+        context.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionCode = PermissionCodes.Tickets.Create });
         await context.SaveChangesAsync();
 
         var callerId = Guid.NewGuid();
@@ -116,7 +116,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
         result.Error.ShouldBe(RoleErrors.PrivilegeEscalation([PermissionCatalog.GetDisplayName(PermissionCodes.Users.AssignRoles)]));
 
         List<string> permissionCodes = await context.RolePermissions
-            .Where(p => p.RoleName == role.Name)
+            .Where(p => p.RoleId == role.Id)
             .Select(p => p.PermissionCode)
             .ToListAsync();
         permissionCodes.ShouldBe([PermissionCodes.Tickets.Create]);
@@ -130,8 +130,8 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
 
         Role managerRole = CreateRole("Gestor");
         context.Roles.Add(managerRole);
-        context.RolePermissions.Add(new RolePermission { RoleName = managerRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
-        context.RolePermissions.Add(new RolePermission { RoleName = managerRole.Name, PermissionCode = PermissionCodes.Users.AssignRoles });
+        context.RolePermissions.Add(new RolePermission { RoleId = managerRole.Id, PermissionCode = PermissionCodes.Roles.Manage });
+        context.RolePermissions.Add(new RolePermission { RoleId = managerRole.Id, PermissionCode = PermissionCodes.Users.AssignRoles });
         await context.SaveChangesAsync();
 
         var callerId = Guid.NewGuid();
@@ -156,7 +156,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
         result.Error.ShouldBe(RoleErrors.PrivilegeEscalation([PermissionCatalog.GetDisplayName(PermissionCodes.Users.AssignRoles)]));
 
         List<string> permissionCodes = await context.RolePermissions
-            .Where(p => p.RoleName == managerRole.Name)
+            .Where(p => p.RoleId == managerRole.Id)
             .Select(p => p.PermissionCode)
             .ToListAsync();
         permissionCodes.ShouldBe([PermissionCodes.Roles.Manage, PermissionCodes.Users.AssignRoles], ignoreOrder: true);
@@ -170,7 +170,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
 
         Role adminRole = CreateSystemRole(RoleNames.Administrator);
         context.Roles.Add(adminRole);
-        context.RolePermissions.Add(new RolePermission { RoleName = adminRole.Name, PermissionCode = PermissionCodes.Users.Read });
+        context.RolePermissions.Add(new RolePermission { RoleId = adminRole.Id, PermissionCode = PermissionCodes.Users.Read });
         await context.SaveChangesAsync();
 
         IUserContext userContext = Substitute.For<IUserContext>();
@@ -187,6 +187,6 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(RoleErrors.AdministratorRoleIsManaged);
-        (await context.RolePermissions.CountAsync(p => p.RoleName == adminRole.Name)).ShouldBe(1);
+        (await context.RolePermissions.CountAsync(p => p.RoleId == adminRole.Id)).ShouldBe(1);
     }
 }

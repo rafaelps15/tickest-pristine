@@ -28,7 +28,8 @@ internal sealed class GetUsersQueryHandler(IApplicationDbContext context, IDateT
                 (createdFromUtc == null || u.CreatedAtUtc >= createdFromUtc) &&
                 (createdUntilUtc == null || u.CreatedAtUtc < createdUntilUtc) &&
                 (!withoutRole || !context.UserRoles.Any(ur => ur.UserId == u.Id)) &&
-                (roleName == null || context.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleName == roleName)));
+                (roleName == null || context.UserRoles.Any(ur =>
+                    ur.UserId == u.Id && context.Roles.Any(r => r.Id == ur.RoleId && r.Name == roleName))));
 
         PagedResponse<UserSummaryResponse> users = await Sort(filtered, query.SortBy ?? UserSortField.Name, query.SortDirection)
             .Select(u => new UserSummaryResponse
@@ -63,9 +64,11 @@ internal sealed class GetUsersQueryHandler(IApplicationDbContext context, IDateT
                         .Where(i => i.UserId == u.Id && i.UsedAtUtc == null && i.RevokedAtUtc == null && i.ExpiresAtUtc > nowUtc)
                         .Max(i => (DateTime?)i.ExpiresAtUtc)
                     : null,
-                Roles = context.UserRoles
-                    .Where(ur => ur.UserId == u.Id)
-                    .Select(ur => new RoleSummaryResponse { Name = ur.RoleName })
+                Roles = (
+                    from userRole in context.UserRoles
+                    where userRole.UserId == u.Id
+                    join role in context.Roles on userRole.RoleId equals role.Id
+                    select new RoleSummaryResponse { Name = role.Name })
                     .ToList()
             })
             .ToPagedListAsync(query.Paging, cancellationToken);

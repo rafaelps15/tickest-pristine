@@ -16,6 +16,6 @@ internal static class TicketAssigneeEligibility
             context.UserRoles.Any(userRole =>
                 userRole.UserId == user.Id &&
                 context.RolePermissions.Any(rolePermission =>
-                    rolePermission.RoleName == userRole.RoleName &&
+                    rolePermission.RoleId == userRole.RoleId &&
                     rolePermission.PermissionCode == PermissionCodes.Tickets.Manage)));
 }

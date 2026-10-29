@@ -22,9 +22,19 @@ internal sealed class DatabaseSeeder(
     /// <summary>
     /// Roda os seeders em ordem: os chamados de exemplo dependem do administrador e dos setores já criados.
     /// </summary>
+    /// <remarks>
+    /// Com migration pendente (um rollback, ou um Migrate até uma migration anterior), o esquema não é o do modelo e os
+    /// seeders consultariam colunas que ainda não existem ou que já saíram; como o seed roda na mesma transação das
+    /// migrations, a falha desfaria o próprio rollback (spec 036, DEC-15). Os seeders só rodam com o banco atualizado.
+    /// </remarks>
     public async Task SeedAsync(DbContext context, CancellationToken cancellationToken)
     {
         var applicationDbContext = (ApplicationDbContext)context;
+
+        if ((await applicationDbContext.Database.GetPendingMigrationsAsync(cancellationToken)).Any())
+        {
+            return;
+        }
 
         await ReloadDatabaseTypesAsync(applicationDbContext, cancellationToken);
 

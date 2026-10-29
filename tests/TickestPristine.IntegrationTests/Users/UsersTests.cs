@@ -2138,6 +2138,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         using (IServiceScope scope = Services.CreateScope())
         {
             ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Guid attendantRoleId = await context.Roles.Where(r => r.Name == attendantRole).Select(r => r.Id).SingleAsync();
 
             for (int i = 0; i < 120; i++)
             {
@@ -2152,7 +2153,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
                     CreatedAtUtc = DateTime.UtcNow
                 };
                 context.Users.Add(user);
-                context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = attendantRole });
+                context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = attendantRoleId });
             }
 
             await context.SaveChangesAsync();

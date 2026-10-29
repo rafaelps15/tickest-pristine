@@ -253,10 +253,10 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
 
     private static async Task GrantPermissionAsync(TestDbContext context, Guid userId, string permissionCode)
     {
-        string roleName = $"Role-{Guid.NewGuid():N}";
-        context.Roles.Add(CreateRole(roleName));
-        context.RolePermissions.Add(new RolePermission { RoleName = roleName, PermissionCode = permissionCode });
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = userId, RoleName = roleName });
+        Role role = CreateRole($"Role-{Guid.NewGuid():N}");
+        context.Roles.Add(role);
+        context.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionCode = permissionCode });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = userId, RoleId = role.Id });
         await context.SaveChangesAsync();
     }
 
@@ -290,7 +290,7 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
     private static async Task<Guid> SeedUserAsync(TestDbContext context, bool isActive, Role role)
     {
         Guid userId = await SeedUserAsync(context, isActive);
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = userId, RoleName = role.Name });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = userId, RoleId = role.Id });
         await context.SaveChangesAsync();
 
         return userId;

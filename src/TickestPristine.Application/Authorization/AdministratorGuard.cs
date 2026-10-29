@@ -26,10 +26,10 @@ internal static class AdministratorGuard
         Guid leavingUserId,
         CancellationToken cancellationToken)
     {
-        string administratorRoleName = RoleNames.Administrator;
+        Guid administratorRoleId = RoleIds.Administrator;
 
         bool isAdministrator = await context.UserRoles.AnyAsync(
-            userRole => userRole.UserId == leavingUserId && userRole.RoleName == administratorRoleName,
+            userRole => userRole.UserId == leavingUserId && userRole.RoleId == administratorRoleId,
             cancellationToken);
 
         if (!isAdministrator)
@@ -39,10 +39,10 @@ internal static class AdministratorGuard
 
         // A role é lida antes da checagem: o valor original do token passa a ser o do momento da decisão, então uma
         // remoção concorrente que salvar primeiro faz esta falhar no SaveChanges (409), em vez de passar as duas.
-        Role administratorRole = await context.Roles.SingleAsync(r => r.Id == RoleIds.Administrator, cancellationToken);
+        Role administratorRole = await context.Roles.SingleAsync(r => r.Id == administratorRoleId, cancellationToken);
 
         bool anotherActiveAdministratorExists = await context.UserRoles.AnyAsync(
-            userRole => userRole.RoleName == administratorRoleName &&
+            userRole => userRole.RoleId == administratorRoleId &&
                         userRole.UserId != leavingUserId &&
                         context.Users.Any(user => user.Id == userRole.UserId && user.IsActive),
             cancellationToken);

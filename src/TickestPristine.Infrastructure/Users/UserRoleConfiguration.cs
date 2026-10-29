@@ -11,15 +11,16 @@ internal sealed class UserRoleConfiguration : IEntityTypeConfiguration<UserRole>
     {
         builder.HasKey(userRole => userRole.Id);
 
-        builder.HasIndex(userRole => new { userRole.UserId, userRole.RoleName }).IsUnique();
+        builder.HasIndex(userRole => new { userRole.UserId, userRole.RoleId }).IsUnique();
 
         builder.HasOne<User>()
             .WithMany()
             .HasForeignKey(userRole => userRole.UserId);
 
+        // Restrict: uma role atribuída a alguém não sai do banco, nem numa exclusão concorrente com a atribuição (spec 036).
         builder.HasOne<Role>()
             .WithMany()
-            .HasForeignKey(userRole => userRole.RoleName)
-            .HasPrincipalKey(role => role.Name);
+            .HasForeignKey(userRole => userRole.RoleId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

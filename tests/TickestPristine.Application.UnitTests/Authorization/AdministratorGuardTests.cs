@@ -54,7 +54,7 @@ public sealed class AdministratorGuardTests : BaseHandlerTest
     {
         User user = CreateUser(isActive: true);
         context.Users.Add(user);
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = administratorRole.Name });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = administratorRole.Id });
 
         return user.Id;
     }

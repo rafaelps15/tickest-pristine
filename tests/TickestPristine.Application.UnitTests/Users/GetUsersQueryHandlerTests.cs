@@ -173,7 +173,7 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
         User user = AddUser(context, "Ana", "ana@tickestpristine.dev", isActive: true);
         Role role = CreateRole("Atendente");
         context.Roles.Add(role);
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = role.Name });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = role.Id });
         await context.SaveChangesAsync();
 
         var handler = new GetUsersQueryHandler(context, CreateClock());
@@ -478,12 +478,15 @@ public sealed class GetUsersQueryHandlerTests : BaseHandlerTest
         User bruno = AddUser(context, "Bruno", "bruno@tickestpristine.dev", isActive: true);
         User carla = AddUser(context, "Carla", "carla@tickestpristine.dev", isActive: false);
         User davi = AddUser(context, "Davi", "davi@tickestpristine.dev", isActive: true);
-        context.Roles.AddRange(CreateRole("Atendente"), CreateRole("Administrador"), CreateRole("Colaborador"));
+        Role agentRole = CreateRole("Atendente");
+        Role administratorRole = CreateRole("Administrador");
+        Role collaboratorRole = CreateRole("Colaborador");
+        context.Roles.AddRange(agentRole, administratorRole, collaboratorRole);
         context.UserRoles.AddRange(
-            new UserRole { Id = Guid.NewGuid(), UserId = ana.Id, RoleName = "Atendente" },
-            new UserRole { Id = Guid.NewGuid(), UserId = bruno.Id, RoleName = "Atendente" },
-            new UserRole { Id = Guid.NewGuid(), UserId = bruno.Id, RoleName = "Administrador" },
-            new UserRole { Id = Guid.NewGuid(), UserId = carla.Id, RoleName = "Colaborador" });
+            new UserRole { Id = Guid.NewGuid(), UserId = ana.Id, RoleId = agentRole.Id },
+            new UserRole { Id = Guid.NewGuid(), UserId = bruno.Id, RoleId = agentRole.Id },
+            new UserRole { Id = Guid.NewGuid(), UserId = bruno.Id, RoleId = administratorRole.Id },
+            new UserRole { Id = Guid.NewGuid(), UserId = carla.Id, RoleId = collaboratorRole.Id });
         await context.SaveChangesAsync();
 
         return (ana, bruno, carla, davi);

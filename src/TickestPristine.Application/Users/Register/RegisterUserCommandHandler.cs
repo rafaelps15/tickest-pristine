@@ -44,7 +44,7 @@ internal sealed class RegisterUserCommandHandler(
         user.Raise(new UserRegisteredDomainEvent(user.Id));
 
         context.Users.Add(user);
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = RoleNames.Collaborator });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = RoleIds.Collaborator });
 
         IssuedInvitation invitation = await UserInvitations.IssueAsync(context, user.Id, nowUtc, cancellationToken);
 

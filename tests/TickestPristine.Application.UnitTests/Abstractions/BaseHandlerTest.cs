@@ -195,11 +195,11 @@ public abstract class BaseHandlerTest
         Role role = CreateRole($"Role-{Guid.NewGuid():N}");
 
         context.Roles.Add(role);
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = userId, RoleName = role.Name });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = userId, RoleId = role.Id });
         context.RolePermissions.AddRange(permissionCodes.Select(code => new RolePermission
         {
             Id = Guid.NewGuid(),
-            RoleName = role.Name,
+            RoleId = role.Id,
             PermissionCode = code
         }));
 

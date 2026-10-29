@@ -19,7 +19,7 @@ internal sealed class GetRolesQueryHandler(IApplicationDbContext context)
                 IsDefault = r.Id == RoleIds.Collaborator,
                 IsAdministrator = r.Id == RoleIds.Administrator,
                 PermissionCodes = context.RolePermissions
-                    .Where(p => p.RoleName == r.Name)
+                    .Where(p => p.RoleId == r.Id)
                     .Select(p => p.PermissionCode)
                     .ToList()
             })

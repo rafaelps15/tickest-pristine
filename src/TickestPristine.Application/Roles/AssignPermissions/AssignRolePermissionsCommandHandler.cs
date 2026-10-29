@@ -32,7 +32,7 @@ internal sealed class AssignRolePermissionsCommandHandler(
         }
 
         List<RolePermission> existingPermissions = await context.RolePermissions
-            .Where(p => p.RoleName == role.Name)
+            .Where(p => p.RoleId == role.Id)
             .ToListAsync(cancellationToken);
 
         HashSet<string> currentCodes = [.. existingPermissions.Select(p => p.PermissionCode)];
@@ -53,7 +53,7 @@ internal sealed class AssignRolePermissionsCommandHandler(
             return escalationCheck;
         }
 
-        // O par (RoleName, PermissionCode) é único: remove só as que saíram e inclui só as que entraram.
+        // O par (RoleId, PermissionCode) é único: remove só as que saíram e inclui só as que entraram.
         context.RolePermissions.RemoveRange(existingPermissions.Where(p => !requestedCodes.Contains(p.PermissionCode)));
 
         foreach (string permissionCode in requestedCodes.Except(currentCodes))
@@ -61,7 +61,7 @@ internal sealed class AssignRolePermissionsCommandHandler(
             context.RolePermissions.Add(new RolePermission
             {
                 Id = Guid.NewGuid(),
-                RoleName = role.Name,
+                RoleId = role.Id,
                 PermissionCode = permissionCode
             });
         }
@@ -69,7 +69,7 @@ internal sealed class AssignRolePermissionsCommandHandler(
         role.Raise(new RolePermissionsAssignedDomainEvent(role.Id));
 
         List<Guid> affectedUserIds = await context.UserRoles
-            .Where(userRole => userRole.RoleName == role.Name)
+            .Where(userRole => userRole.RoleId == role.Id)
             .Select(userRole => userRole.UserId)
             .ToListAsync(cancellationToken);
 

@@ -60,7 +60,7 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         user.DomainEvents.ShouldContain(domainEvent => domainEvent is UserRegisteredDomainEvent);
 
         (await context.UserCredentials.AnyAsync(c => c.UserId == user.Id)).ShouldBeFalse();
-        (await context.UserRoles.SingleAsync(ur => ur.UserId == user.Id)).RoleName.ShouldBe(RoleNames.Collaborator);
+        (await context.UserRoles.SingleAsync(ur => ur.UserId == user.Id)).RoleId.ShouldBe(RoleIds.Collaborator);
 
         UserInvitation invitation = await context.UserInvitations.SingleAsync(i => i.UserId == user.Id);
         invitation.CreatedAtUtc.ShouldBe(DefaultUtcNow);

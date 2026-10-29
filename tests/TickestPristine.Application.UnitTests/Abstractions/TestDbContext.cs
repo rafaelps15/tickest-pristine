@@ -70,7 +70,7 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
             permission.Property(p => p.Group);
             permission.Property(p => p.IsAdministrative);
         });
-        modelBuilder.Entity<RolePermission>().HasKey(p => new { p.RoleName, p.PermissionCode });
+        modelBuilder.Entity<RolePermission>().HasKey(p => new { p.RoleId, p.PermissionCode });
 
         modelBuilder.Entity<Ticket>().HasQueryFilter(t => t.DeletedAtUtc == null);
 

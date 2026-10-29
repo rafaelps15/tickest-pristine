@@ -80,7 +80,7 @@ public sealed class GetCurrentUserQueryHandlerTests : BaseHandlerTest
         Role otherRole = CreateRole("Outra");
         context.Users.Add(user);
         context.Roles.AddRange(assignedRole, otherRole);
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = assignedRole.Name });
+        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleId = assignedRole.Id });
         await context.SaveChangesAsync();
 
         IUserContext userContext = Substitute.For<IUserContext>();

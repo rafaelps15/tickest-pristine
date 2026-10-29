@@ -150,7 +150,7 @@ internal sealed class TicketWaitingInterceptor : SaveChangesInterceptor
                     SELECT 1
                     FROM public.users AS u
                     JOIN public.user_roles AS ur ON ur.user_id = u.id
-                    JOIN public.role_permissions AS rp ON rp.role_name = ur.role_name
+                    JOIN public.role_permissions AS rp ON rp.role_id = ur.role_id
                     WHERE u.id = m.author_user_id
                       AND u.is_active
                       AND rp.permission_code = {PermissionCodes.Tickets.Manage})

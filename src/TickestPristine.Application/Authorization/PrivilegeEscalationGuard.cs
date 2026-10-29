@@ -45,7 +45,7 @@ internal static class PrivilegeEscalationGuard
         List<string> targetPermissions = await (
             from userRole in context.UserRoles
             where userRole.UserId == targetUserId
-            join rolePermission in context.RolePermissions on userRole.RoleName equals rolePermission.RoleName
+            join rolePermission in context.RolePermissions on userRole.RoleId equals rolePermission.RoleId
             select rolePermission.PermissionCode)
             .Distinct()
             .ToListAsync(cancellationToken);

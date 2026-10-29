@@ -13,14 +13,15 @@ internal sealed class RolePermissionConfiguration : IEntityTypeConfiguration<Rol
     {
         builder.HasKey(rolePermission => rolePermission.Id);
 
-        builder.HasIndex(rolePermission => new { rolePermission.RoleName, rolePermission.PermissionCode }).IsUnique();
+        builder.HasIndex(rolePermission => new { rolePermission.RoleId, rolePermission.PermissionCode }).IsUnique();
 
         builder.Property(rolePermission => rolePermission.PermissionCode).HasMaxLength(100);
 
+        // Excluir uma role apaga os vínculos dela com permissões junto (spec 036).
         builder.HasOne<Role>()
             .WithMany()
-            .HasForeignKey(rolePermission => rolePermission.RoleName)
-            .HasPrincipalKey(role => role.Name);
+            .HasForeignKey(rolePermission => rolePermission.RoleId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasOne<Permission>()
             .WithMany()
@@ -32,29 +33,30 @@ internal sealed class RolePermissionConfiguration : IEntityTypeConfiguration<Rol
         // ON CONFLICT DO NOTHING (o vínculo pode já ter sido concedido à mão).
         RolePermission[] defaultRolePermissions =
             [
-                .. PermissionCatalog.All.Select(permission => Create(RoleNames.Administrator, permission)),
+                .. PermissionCatalog.All.Select(permission => Create(RoleIds.Administrator, RoleNames.Administrator, permission)),
 
                 // Atendente
-                Create(RoleNames.Agent, PermissionCatalog.TicketsCreate),
-                Create(RoleNames.Agent, PermissionCatalog.TicketsViewOwn),
-                Create(RoleNames.Agent, PermissionCatalog.TicketsUpdateOwn),
-                Create(RoleNames.Agent, PermissionCatalog.TicketsReopenOwn),
-                Create(RoleNames.Agent, PermissionCatalog.TicketsManage),
+                Create(RoleIds.Agent, RoleNames.Agent, PermissionCatalog.TicketsCreate),
+                Create(RoleIds.Agent, RoleNames.Agent, PermissionCatalog.TicketsViewOwn),
+                Create(RoleIds.Agent, RoleNames.Agent, PermissionCatalog.TicketsUpdateOwn),
+                Create(RoleIds.Agent, RoleNames.Agent, PermissionCatalog.TicketsReopenOwn),
+                Create(RoleIds.Agent, RoleNames.Agent, PermissionCatalog.TicketsManage),
 
                 // Colaborador
-                Create(RoleNames.Collaborator, PermissionCatalog.TicketsCreate),
-                Create(RoleNames.Collaborator, PermissionCatalog.TicketsViewOwn),
-                Create(RoleNames.Collaborator, PermissionCatalog.TicketsUpdateOwn),
-                Create(RoleNames.Collaborator, PermissionCatalog.TicketsReopenOwn)
+                Create(RoleIds.Collaborator, RoleNames.Collaborator, PermissionCatalog.TicketsCreate),
+                Create(RoleIds.Collaborator, RoleNames.Collaborator, PermissionCatalog.TicketsViewOwn),
+                Create(RoleIds.Collaborator, RoleNames.Collaborator, PermissionCatalog.TicketsUpdateOwn),
+                Create(RoleIds.Collaborator, RoleNames.Collaborator, PermissionCatalog.TicketsReopenOwn)
             ];
 
         builder.HasData(defaultRolePermissions);
     }
 
-    private static RolePermission Create(string roleName, PermissionCatalogEntry permission) => new()
+    // O id do vínculo continua derivado do nome da role, como foi gravado: as roles fixas não mudam de nome.
+    private static RolePermission Create(Guid roleId, string roleName, PermissionCatalogEntry permission) => new()
     {
         Id = DeterministicGuid.Create($"role-permission:{roleName}:{permission.Code}"),
-        RoleName = roleName,
+        RoleId = roleId,
         PermissionCode = permission.Code
     };
 }

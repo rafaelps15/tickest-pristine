@@ -29,10 +29,12 @@ internal sealed class GetCurrentUserQueryHandler(
                     Email = u.Email,
                     FirstName = u.FirstName,
                     LastName = u.LastName,
-                    Roles = context.UserRoles
-                        .Where(ur => ur.UserId == u.Id)
-                        .OrderBy(ur => ur.RoleName)
-                        .Select(ur => new CurrentUserRoleResponse { Name = ur.RoleName })
+                    Roles = (
+                        from userRole in context.UserRoles
+                        where userRole.UserId == u.Id
+                        join role in context.Roles on userRole.RoleId equals role.Id
+                        orderby role.Name
+                        select new CurrentUserRoleResponse { Name = role.Name })
                         .ToList()
                 }
             })

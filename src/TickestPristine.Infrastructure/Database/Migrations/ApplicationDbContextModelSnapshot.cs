@@ -337,8 +337,7 @@ namespace TickestPristine.Infrastructure.Database.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
+                        .HasColumnType("citext")
                         .HasColumnName("name");
 
                     b.Property<int>("Version")
@@ -351,10 +350,14 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasKey("Id")
                         .HasName("pk_roles");
 
-                    b.HasAlternateKey("Name")
-                        .HasName("ak_roles_name");
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_roles_name");
 
-                    b.ToTable("roles", "public");
+                    b.ToTable("roles", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_roles_name_max_length", "char_length(name) <= 100");
+                        });
 
                     b.HasData(
                         new
@@ -387,10 +390,9 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("permission_code");
 
-                    b.Property<string>("RoleName")
-                        .IsRequired()
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("role_name");
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("role_id");
 
                     b.HasKey("Id")
                         .HasName("pk_role_permissions");
@@ -398,9 +400,9 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasIndex("PermissionCode")
                         .HasDatabaseName("ix_role_permissions_permission_code");
 
-                    b.HasIndex("RoleName", "PermissionCode")
+                    b.HasIndex("RoleId", "PermissionCode")
                         .IsUnique()
-                        .HasDatabaseName("ix_role_permissions_role_name_permission_code");
+                        .HasDatabaseName("ix_role_permissions_role_id_permission_code");
 
                     b.ToTable("role_permissions", "public");
 
@@ -409,163 +411,163 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         {
                             Id = new Guid("44ab1ea5-87a7-5364-9671-be7877fb806b"),
                             PermissionCode = "tickets:create",
-                            RoleName = "Administrador"
+                            RoleId = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86")
                         },
                         new
                         {
                             Id = new Guid("c85b12e5-37d0-8ff6-2f72-8d5cec7a7255"),
                             PermissionCode = "tickets:view-own",
-                            RoleName = "Administrador"
+                            RoleId = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86")
                         },
                         new
                         {
                             Id = new Guid("58febfa5-b3a9-22a8-3336-aba51c888bb3"),
                             PermissionCode = "tickets:update-own",
-                            RoleName = "Administrador"
+                            RoleId = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86")
                         },
                         new
                         {
                             Id = new Guid("99cd2325-9d85-79fe-6e0b-835560aa5680"),
                             PermissionCode = "tickets:reopen-own",
-                            RoleName = "Administrador"
+                            RoleId = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86")
                         },
                         new
                         {
                             Id = new Guid("b0513a1c-f631-a369-cdee-72ce420f2d87"),
                             PermissionCode = "tickets:manage",
-                            RoleName = "Administrador"
+                            RoleId = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86")
                         },
                         new
                         {
                             Id = new Guid("d7074855-9d42-a15a-a220-5868fe60f767"),
                             PermissionCode = "tickets:assign",
-                            RoleName = "Administrador"
+                            RoleId = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86")
                         },
                         new
                         {
                             Id = new Guid("0ffd1d86-7c1f-76be-fcc8-78e1b0056ef6"),
                             PermissionCode = "tickets:cancel",
-                            RoleName = "Administrador"
+                            RoleId = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86")
                         },
                         new
                         {
                             Id = new Guid("29c29b02-a075-3856-0c6b-4cdeb4704702"),
                             PermissionCode = "tickets:delete",
-                            RoleName = "Administrador"
+                            RoleId = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86")
                         },
                         new
                         {
                             Id = new Guid("285c0340-dd3c-fab6-1c1a-a73a84c240e0"),
                             PermissionCode = "users:read",
-                            RoleName = "Administrador"
+                            RoleId = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86")
                         },
                         new
                         {
                             Id = new Guid("33ec3031-f828-13f9-444d-9cece14b50c0"),
                             PermissionCode = "users:create",
-                            RoleName = "Administrador"
+                            RoleId = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86")
                         },
                         new
                         {
                             Id = new Guid("aeadfd71-415d-ac6b-7715-0582d035bc57"),
                             PermissionCode = "users:update",
-                            RoleName = "Administrador"
+                            RoleId = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86")
                         },
                         new
                         {
                             Id = new Guid("e3aa5fdf-ff60-0bd0-8b58-b3fd47a9bc79"),
                             PermissionCode = "users:deactivate",
-                            RoleName = "Administrador"
+                            RoleId = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86")
                         },
                         new
                         {
                             Id = new Guid("ff42df69-f2e1-d225-5ac7-3dff68ac8735"),
                             PermissionCode = "users:assign-roles",
-                            RoleName = "Administrador"
+                            RoleId = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86")
                         },
                         new
                         {
                             Id = new Guid("d4a767dc-7561-5054-1217-dfa02692f5af"),
                             PermissionCode = "roles:read",
-                            RoleName = "Administrador"
+                            RoleId = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86")
                         },
                         new
                         {
                             Id = new Guid("54f6f69d-2888-0857-2e61-9d68638f8fd0"),
                             PermissionCode = "roles:manage",
-                            RoleName = "Administrador"
+                            RoleId = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86")
                         },
                         new
                         {
                             Id = new Guid("f59d392f-8643-dee7-0101-7b5fc9e6690c"),
                             PermissionCode = "departments:manage",
-                            RoleName = "Administrador"
+                            RoleId = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86")
                         },
                         new
                         {
                             Id = new Guid("b459209f-6d78-5925-4760-a11abf66dee9"),
                             PermissionCode = "sectors:manage",
-                            RoleName = "Administrador"
+                            RoleId = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86")
                         },
                         new
                         {
                             Id = new Guid("750af9f1-7257-d133-2f06-fc0add073e71"),
                             PermissionCode = "audit:read",
-                            RoleName = "Administrador"
+                            RoleId = new Guid("f0614f12-a27a-3667-406d-22e22fe33e86")
                         },
                         new
                         {
                             Id = new Guid("69c17723-7284-f173-858e-591cee64be75"),
                             PermissionCode = "tickets:create",
-                            RoleName = "Atendente"
+                            RoleId = new Guid("726e4001-4a5f-44ee-bb07-9cd652d3ac12")
                         },
                         new
                         {
                             Id = new Guid("0439551b-7fba-6a61-1622-831195728b59"),
                             PermissionCode = "tickets:view-own",
-                            RoleName = "Atendente"
+                            RoleId = new Guid("726e4001-4a5f-44ee-bb07-9cd652d3ac12")
                         },
                         new
                         {
                             Id = new Guid("1a4c4790-af31-a236-9c99-a69ab77be9da"),
                             PermissionCode = "tickets:update-own",
-                            RoleName = "Atendente"
+                            RoleId = new Guid("726e4001-4a5f-44ee-bb07-9cd652d3ac12")
                         },
                         new
                         {
                             Id = new Guid("8856e21a-cb64-85cc-5e39-dcbf34cfc31e"),
                             PermissionCode = "tickets:reopen-own",
-                            RoleName = "Atendente"
+                            RoleId = new Guid("726e4001-4a5f-44ee-bb07-9cd652d3ac12")
                         },
                         new
                         {
                             Id = new Guid("72c6b7da-f2f9-5963-e2d0-926ea669ddb8"),
                             PermissionCode = "tickets:manage",
-                            RoleName = "Atendente"
+                            RoleId = new Guid("726e4001-4a5f-44ee-bb07-9cd652d3ac12")
                         },
                         new
                         {
                             Id = new Guid("dfb54b55-bfa4-ecb9-bc3f-4d1e592cc8e9"),
                             PermissionCode = "tickets:create",
-                            RoleName = "Colaborador"
+                            RoleId = new Guid("3a989d00-fc17-bef6-ea31-c01d46507743")
                         },
                         new
                         {
                             Id = new Guid("57bf1063-3266-fe33-a01a-bbf8429e360f"),
                             PermissionCode = "tickets:view-own",
-                            RoleName = "Colaborador"
+                            RoleId = new Guid("3a989d00-fc17-bef6-ea31-c01d46507743")
                         },
                         new
                         {
                             Id = new Guid("cbf0cb78-7768-aa71-e5ae-dc79b2bfe6c5"),
                             PermissionCode = "tickets:update-own",
-                            RoleName = "Colaborador"
+                            RoleId = new Guid("3a989d00-fc17-bef6-ea31-c01d46507743")
                         },
                         new
                         {
                             Id = new Guid("bc96648d-77d8-a641-2946-c6afb0638774"),
                             PermissionCode = "tickets:reopen-own",
-                            RoleName = "Colaborador"
+                            RoleId = new Guid("3a989d00-fc17-bef6-ea31-c01d46507743")
                         });
                 });
 
@@ -1236,10 +1238,9 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("RoleName")
-                        .IsRequired()
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("role_name");
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("role_id");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
@@ -1248,12 +1249,12 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasKey("Id")
                         .HasName("pk_user_roles");
 
-                    b.HasIndex("RoleName")
-                        .HasDatabaseName("ix_user_roles_role_name");
+                    b.HasIndex("RoleId")
+                        .HasDatabaseName("ix_user_roles_role_id");
 
-                    b.HasIndex("UserId", "RoleName")
+                    b.HasIndex("UserId", "RoleId")
                         .IsUnique()
-                        .HasDatabaseName("ix_user_roles_user_id_role_name");
+                        .HasDatabaseName("ix_user_roles_user_id_role_id");
 
                     b.ToTable("user_roles", "public");
                 });
@@ -1279,11 +1280,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
 
                     b.HasOne("TickestPristine.Domain.Roles.Role", null)
                         .WithMany()
-                        .HasForeignKey("RoleName")
-                        .HasPrincipalKey("Name")
+                        .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_role_permissions_roles_role_name");
+                        .HasConstraintName("fk_role_permissions_roles_role_id");
                 });
 
             modelBuilder.Entity("TickestPristine.Domain.Sectors.Sector", b =>
@@ -1432,11 +1432,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                 {
                     b.HasOne("TickestPristine.Domain.Roles.Role", null)
                         .WithMany()
-                        .HasForeignKey("RoleName")
-                        .HasPrincipalKey("Name")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_user_roles_roles_role_name");
+                        .HasConstraintName("fk_user_roles_roles_role_id");
 
                     b.HasOne("TickestPristine.Domain.Users.User", null)
                         .WithMany()

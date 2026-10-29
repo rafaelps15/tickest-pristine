@@ -2100,9 +2100,9 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
                 await migrator.MigrateAsync(migrations[index - 1]);
                 await context.Database.ExecuteSqlAsync(
                     $"INSERT INTO public.role_permissions (id, role_name, permission_code) VALUES ({Guid.NewGuid()}, {roleName}, 'tickets:delete-own')");
-                grantedBeforeMigration = await context.RolePermissions.AsNoTracking()
-                    .Where(rp => rp.PermissionCode == "tickets:delete-own")
-                    .Select(rp => rp.RoleName)
+                // Antes da spec 036 os vínculos guardavam o nome da role: lido em SQL, porque o modelo atual usa role_id.
+                grantedBeforeMigration = await context.Database
+                    .SqlQuery<string>($"SELECT role_name AS \"Value\" FROM public.role_permissions WHERE permission_code = 'tickets:delete-own'")
                     .ToListAsync();
 
                 // Act
@@ -2128,8 +2128,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             foreach (string code in NewTicketPermissions)
             {
                 (await context.Permissions.SingleAsync(p => p.Code == code)).IsAdministrative.ShouldBeTrue();
-                (await context.RolePermissions.Where(rp => rp.PermissionCode == code).Select(rp => rp.RoleName).ToListAsync())
-                    .ShouldBe([RoleNames.Administrator]);
+                (await context.RolePermissions.Where(rp => rp.PermissionCode == code).Select(rp => rp.RoleId).ToListAsync())
+                    .ShouldBe([RoleIds.Administrator]);
             }
         });
     }
@@ -5162,24 +5162,35 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         // Arrange
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        IMigrator migrator = context.GetService<IMigrator>();
 
-        // Act: o vínculo já existe, então a migration roda de novo sem erro e sem duplicar
-        await context.Database.ExecuteSqlRawAsync(
-            Add_User_Sector_And_Tickets_Assign_Permission.InsertTicketsAssignPermissionSql);
+        // Act: o vínculo já existe, então a migration roda de novo sem erro e sem duplicar. O SQL dela grava role_name, a
+        // coluna daquela época (a spec 036 trocou por role_id): roda no esquema da própria migration.
+        try
+        {
+            await migrator.MigrateAsync(nameof(Add_User_Sector_And_Tickets_Assign_Permission));
+            await context.Database.ExecuteSqlRawAsync(
+                Add_User_Sector_And_Tickets_Assign_Permission.InsertTicketsAssignPermissionSql);
+        }
+        finally
+        {
+            // O banco é compartilhado pela coleção: volta à última migration, mesmo se o teste falhar no meio.
+            await migrator.MigrateAsync();
+        }
 
         // Assert
         Domain.Roles.Permission permission = await context.Permissions.AsNoTracking()
             .SingleAsync(p => p.Code == "tickets:assign");
         permission.IsAdministrative.ShouldBeTrue();
 
-        List<string> roles = await context.RolePermissions.AsNoTracking()
+        List<Guid> roles = await context.RolePermissions.AsNoTracking()
             .Where(rp => rp.PermissionCode == "tickets:assign")
-            .Select(rp => rp.RoleName)
+            .Select(rp => rp.RoleId)
             .ToListAsync();
-        roles.ShouldContain(RoleNames.Administrator);
-        roles.Count(role => role == RoleNames.Administrator).ShouldBe(1);
-        roles.ShouldNotContain(RoleNames.Agent);
-        roles.ShouldNotContain(RoleNames.Collaborator);
+        roles.ShouldContain(RoleIds.Administrator);
+        roles.Count(role => role == RoleIds.Administrator).ShouldBe(1);
+        roles.ShouldNotContain(RoleIds.Agent);
+        roles.ShouldNotContain(RoleIds.Collaborator);
     }
 
     [Fact]

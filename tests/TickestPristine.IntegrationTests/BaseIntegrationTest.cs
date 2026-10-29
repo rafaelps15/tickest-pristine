@@ -186,12 +186,16 @@ public abstract class BaseIntegrationTest
             SectorId = sectorId
         };
 
+        Dictionary<string, Guid> roleIdsByName = await context.Roles
+            .Where(r => roleNames.Contains(r.Name))
+            .ToDictionaryAsync(r => r.Name, r => r.Id);
+
         context.Users.Add(user);
         context.UserRoles.AddRange(roleNames.Select(roleName => new UserRole
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
-            RoleName = roleName
+            RoleId = roleIdsByName[roleName]
         }));
         await context.SaveChangesAsync();
 

@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Application.Abstractions.Notifications;
+using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Audit;
 using TickestPristine.Domain.Users;
 using TickestPristine.Infrastructure.Database;
@@ -44,7 +45,7 @@ public sealed partial class UserInvitationsTests(IntegrationTestWebAppFactory fa
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         User user = await context.Users.AsNoTracking().SingleAsync(u => u.Id == userId);
         user.IsActive.ShouldBeTrue();
-        (await context.UserRoles.SingleAsync(r => r.UserId == userId)).RoleName.ShouldBe("Colaborador");
+        (await context.UserRoles.SingleAsync(r => r.UserId == userId)).RoleId.ShouldBe(RoleIds.Collaborator);
         (await context.UserCredentials.AnyAsync(c => c.UserId == userId)).ShouldBeFalse();
         UserInvitation invitation = await context.UserInvitations.AsNoTracking().SingleAsync(i => i.UserId == userId);
         invitation.ExpiresAtUtc.ShouldBe(invitation.CreatedAtUtc.AddHours(72));
