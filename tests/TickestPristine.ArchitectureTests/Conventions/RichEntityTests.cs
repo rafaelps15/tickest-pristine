@@ -9,7 +9,7 @@ public class RichEntityTests : BaseTest
     private static readonly Type[] RichEntities = [];
 
     [Fact]
-    public void RichEntities_Should_NotHavePublicSetters()
+    public void RichEntities_Should_NotHaveNonPrivateSetters()
     {
         // Arrange
         Type[] types = RichEntities;
@@ -37,7 +37,8 @@ public class RichEntityTests : BaseTest
     [Theory]
     [InlineData(typeof(PublicSetterFixtureEntity))]
     [InlineData(typeof(InitSetterFixtureEntity))]
-    public void Checker_Should_ReportViolation_When_EntityHasPublicSetter(Type invalidEntity)
+    [InlineData(typeof(InternalSetterFixtureEntity))]
+    public void Checker_Should_ReportViolation_When_EntityHasNonPrivateSetter(Type invalidEntity)
     {
         // Arrange
         Type[] types = [typeof(RichFixtureEntity), invalidEntity];
@@ -47,7 +48,7 @@ public class RichEntityTests : BaseTest
 
         // Assert
         string message = messages.ShouldHaveSingleItem(string.Join(Environment.NewLine, messages));
-        message.ShouldBe($"{invalidEntity.FullName}.Name tem setter público: use private set e um método da entidade.");
+        message.ShouldBe($"{invalidEntity.FullName}.Name tem setter não privado: use private set e um método da entidade.");
     }
 
     [Fact]

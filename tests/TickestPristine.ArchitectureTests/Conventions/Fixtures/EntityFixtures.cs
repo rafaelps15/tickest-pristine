@@ -25,6 +25,11 @@ public sealed class InitSetterFixtureEntity : Entity
     public string Name { get; init; } = string.Empty;
 }
 
+public sealed class InternalSetterFixtureEntity : Entity
+{
+    public string Name { get; internal set; } = string.Empty;
+}
+
 public sealed class NotAnEntityFixture
 {
     public string Name { get; private set; } = string.Empty;
