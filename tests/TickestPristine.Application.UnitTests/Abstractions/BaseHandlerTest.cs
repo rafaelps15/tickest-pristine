@@ -140,6 +140,22 @@ public abstract class BaseHandlerTest
     protected static Role CreateRole(string name) => new() { Id = Guid.NewGuid(), Name = name };
 
     /// <summary>
+    /// Uma das roles fixas de <see cref="RoleNames"/>, com o id de <see cref="RoleIds"/> que o HasData grava: as regras
+    /// das roles fixas reconhecem a role pelo id, não pelo nome.
+    /// </summary>
+    protected static Role CreateSystemRole(string name) => new()
+    {
+        Id = name switch
+        {
+            RoleNames.Administrator => RoleIds.Administrator,
+            RoleNames.Agent => RoleIds.Agent,
+            RoleNames.Collaborator => RoleIds.Collaborator,
+            _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Não é uma role fixa.")
+        },
+        Name = name
+    };
+
+    /// <summary>
     /// Setor num departamento novo, gravados no banco, para os testes que leem o setor do usuário.
     /// </summary>
     protected static async Task<Sector> SeedSectorAsync(

@@ -42,8 +42,8 @@ public sealed class GetRolesQueryHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
 
-        Role administrator = CreateRole(RoleNames.Administrator);
-        Role collaborator = CreateRole(RoleNames.Collaborator);
+        Role administrator = CreateSystemRole(RoleNames.Administrator);
+        Role collaborator = CreateSystemRole(RoleNames.Collaborator);
         Role agent = CreateRole("Atendente");
         context.Roles.AddRange(administrator, collaborator, agent);
         await context.SaveChangesAsync();

@@ -299,7 +299,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         };
         context.Users.Add(admin);
 
-        Role adminRole = CreateRole(RoleNames.Administrator);
+        Role adminRole = CreateSystemRole(RoleNames.Administrator);
         context.Roles.Add(adminRole);
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleName = adminRole.Name });
         await context.SaveChangesAsync();
@@ -347,7 +347,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         };
         context.Users.AddRange(admin, otherAdmin);
 
-        Role adminRole = CreateRole(RoleNames.Administrator);
+        Role adminRole = CreateSystemRole(RoleNames.Administrator);
         context.Roles.Add(adminRole);
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleName = adminRole.Name });
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = otherAdmin.Id, RoleName = adminRole.Name });
@@ -382,7 +382,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         User deactivatedAdmin = CreateUser(isActive: false);
         context.Users.AddRange(admin, deactivatedAdmin);
 
-        Role adminRole = CreateRole(RoleNames.Administrator);
+        Role adminRole = CreateSystemRole(RoleNames.Administrator);
         context.Roles.Add(adminRole);
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleName = adminRole.Name });
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = deactivatedAdmin.Id, RoleName = adminRole.Name });

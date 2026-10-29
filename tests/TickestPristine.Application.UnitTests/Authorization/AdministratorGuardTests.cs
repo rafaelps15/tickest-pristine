@@ -19,7 +19,7 @@ public sealed class AdministratorGuardTests : BaseHandlerTest
 
         await using (TestDbContext seedContext = CreateDbContext(databaseName))
         {
-            Role administratorRole = CreateRole(RoleNames.Administrator);
+            Role administratorRole = CreateSystemRole(RoleNames.Administrator);
             seedContext.Roles.Add(administratorRole);
             firstAdministratorId = SeedAdministrator(seedContext, administratorRole);
             secondAdministratorId = SeedAdministrator(seedContext, administratorRole);

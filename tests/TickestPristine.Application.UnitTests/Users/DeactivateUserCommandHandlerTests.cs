@@ -270,7 +270,7 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
 
     private static async Task<Role> SeedAdministratorRoleAsync(TestDbContext context)
     {
-        Role role = CreateRole(RoleNames.Administrator);
+        Role role = CreateSystemRole(RoleNames.Administrator);
         context.Roles.Add(role);
         await context.SaveChangesAsync();
 

@@ -41,6 +41,25 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
     }
 
     [Fact]
+    public async Task Seeding_Should_CreateFixedRolesWithTheIdsDeclaredInTheApplication()
+    {
+        // Arrange
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // Act
+        Dictionary<string, Guid> seededIds = await context.Roles
+            .Where(r => RoleIds.System.Contains(r.Id))
+            .ToDictionaryAsync(r => r.Name, r => r.Id);
+
+        // Assert: as regras das roles fixas usam RoleIds; um id diferente do HasData as deixaria sem efeito
+        seededIds.Count.ShouldBe(3);
+        seededIds[RoleNames.Administrator].ShouldBe(RoleIds.Administrator);
+        seededIds[RoleNames.Agent].ShouldBe(RoleIds.Agent);
+        seededIds[RoleNames.Collaborator].ShouldBe(RoleIds.Collaborator);
+    }
+
+    [Fact]
     public async Task Seeding_Should_GrantEveryCatalogPermissionToAdministrator()
     {
         // Arrange

@@ -168,7 +168,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
 
-        Role adminRole = CreateRole(RoleNames.Administrator);
+        Role adminRole = CreateSystemRole(RoleNames.Administrator);
         context.Roles.Add(adminRole);
         context.RolePermissions.Add(new RolePermission { RoleName = adminRole.Name, PermissionCode = PermissionCodes.Users.Read });
         await context.SaveChangesAsync();
