@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-029-tickets-awaiting-action                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: "#49"                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 029 — Chamados aguardando ação do solicitante ou de quem atende
@@ -98,7 +98,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 - **Revisão:** `ca-review` sobre as mudanças da spec: nenhum achado bloqueante nem violação de convenção. A regra fica no `TicketWaitingInterceptor` (Infrastructure), e não nos handlers da Application como previa o plano, conforme a DEC-4; por ser SQL, é coberta por testes de integração. O único ajuste, de formatação (comentário de `GetTicketsQuery`), foi feito na T-5, antes desta verificação. Observações sem defeito: o recálculo depois do commit não passa pela auditoria do chamado, como a última atividade (spec 015); se o processo cair entre o commit e o `UPDATE`, a situação fica para trás até a próxima mensagem ou troca de status.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 2.4 (coluna `waiting_on`), 2.6 (RN-34), 2.7 (C-13), 4.3.1 (`waitingOn` em `GET tickets`), 4.7 (recálculo depois do commit) e 5.7 (contadores do agregado), no commit `f553939` (T-4); conferidas nesta verificação, sem outra seção afetada.
 - **CI:** roda no PR para a `main`.
-- **Entrega:**
+- **Entrega:** PR [#49](https://github.com/rafaelps15/tickest-pristine/pull/49) aberto para a `main` em 2026-10-28; a spec fica `Entregue` quando ele for mergeado.
 
 ## 10. Histórico
 | Data | Status | Observação |
