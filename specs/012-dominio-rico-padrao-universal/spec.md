@@ -1,7 +1,7 @@
 ---
 id: 012
 titulo: Domínio rico como padrão universal das skills .NET
-status: Aprovada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+status: Em implementação        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28      # a aprovação de 2026-10-25 foi da versão desfeita (ver Histórico)
 branch: chore/SPEC-012-rich-domain-standard
@@ -246,7 +246,7 @@ Ordem: esta spec `Entregue` → Spec C aprovada e entregue → Spec B. Esta spec
 
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
-| T-1 | Linha de base (somente leitura): build e testes do Tickest; validador e testes da biblioteca; listagem da biblioteca | AC-12 | manual, com diff e ok | [ ] |
+| T-1 | Linha de base (somente leitura): build e testes do Tickest; validador e testes da biblioteca; listagem da biblioteca | AC-12 | manual, com diff e ok | [x] |
 | T-2 | Com P-3: snapshot, manifesto, restauração verificada, `git init` e commit de linha de base | AC-1 | manual, com diff e ok | [ ] |
 | T-3 | Validador e testes da biblioteca com fixtures; as regras novas contra a biblioteca real só são ligadas na T-4c | AC-2 | manual, com diff e ok | [ ] |
 | T-4a | Biblioteca: entidade e `domain-modeling` (C-1 a C-6, C-9); `add-entity` com até 101 linhas | AC-3 | manual, com diff e ok | [ ] |
@@ -274,7 +274,10 @@ Ordem: esta spec `Entregue` → Spec C aprovada e entregue → Spec B. Esta spec
 
 ## 9. Evidências de verificação
 
-- **Linha de base:**
+- **Linha de base (T-1, 2026-10-29, `398f95a` sobre a `origin/main` `008eae2`):**
+  - Tickest: `dotnet build TickestPristine.slnx` com 0 avisos e 0 erros; `dotnet test TickestPristine.slnx` com 1.282 testes aprovados e 0 falhas (50 de arquitetura, 761 unitários, 471 de integração).
+  - Biblioteca: `python tools/validate_library.py` → `RESULTADO: APROVADO` (192 verificações, 5 skills). `python -m unittest discover -s tests -v` → 2 testes, 1 falha preexistente: `test_catches_broken_copy` espera "cita outro projeto ou autor", que o validador não produz nesse cenário; fica para a T-3, que reescreve o validador e os testes.
+  - Listagem da biblioteca: 24 arquivos, sem `.git`, com SHA-256 por arquivo (sem `__pycache__/`, que o próprio `unittest` criou em `tests/` durante a T-1 e que o `.gitignore` da biblioteca já ignora). Referência para a P-3.
 - **Backup e restauração:**
 - **Validador e testes da biblioteca:**
 - **Build:**
@@ -305,3 +308,4 @@ Ordem: esta spec `Entregue` → Spec C aprovada e entregue → Spec B. Esta spec
 | 2026-10-25 | Em descoberta | Implementação desfeita a pedido de Rafael Santos no chat ("desfaça todas alterações da spec 012. nao ficou bom. Vou fazer as outras specs antes de voltar a mexer nela"): os commits da T-1 a T-3 (`CLAUDE.md` e skills) e os testes da T-4 foram descartados com a branch `refactor/SPEC-012-rich-domain-model`, e as tarefas voltaram a `[ ]`. A spec volta para revisão antes de nova aprovação. Pontos a rever: o resultado das tarefas não agradou ao responsável; a T-5 depende do código do calendário de SLA da spec 004 (PR #24), que não está na `origin/main`; a DEC-14 e o ajuste do REQ-1 e do AC-1 (sem nomes de terceiros) continuam registrados para a revisão. |
 | 2026-10-28 | Em descoberta | Revisão completa: escopo reduzido ao padrão universal e às instruções do Tickest; `Ticket` na Spec B; seed na Spec C; decisões antigas classificadas; DEC-15 a DEC-33; `aprovada-em` limpo; pasta renomeada sem nome de autor; método de paridade simplificado. |
 | 2026-10-28 | Aprovada | Aprovada por Rafael Santos no chat ("Aprovo a Spec 012. Registre a aprovação e atualize o histórico, sem iniciar a implementação."), depois da revisão do texto integral gravado e das correções autorizadas (R-2 a R-7, DEC-27 e nota do histórico). Sem `[SUPOSIÇÃO]` pendente; auditoria SDD 100% conforme. A aprovação é documental: a implementação só começa com `/spec-implement 012`. |
+| 2026-10-29 | Em implementação | Implementação iniciada por `/spec-implement 012` na branch `chore/SPEC-012-rich-domain-standard`, depois do rebase sobre a `origin/main` (`008eae2`, com as Specs 029 e 031 já mergeadas) feito por Rafael Santos (`! git rebase origin/main`). |
