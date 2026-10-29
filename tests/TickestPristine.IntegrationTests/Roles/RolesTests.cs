@@ -193,6 +193,105 @@ public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseInteg
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 
+    [Fact]
+    public async Task GetAll_Should_ReturnIdSystemFlagAndUserCounts_WhenRoleHasActivePendingAndInactiveUsers()
+    {
+        // Arrange: na role de teste, um usuário ativo com senha, um com convite pendente e um inativo
+        await AuthenticateAsAdminAsync();
+        string roleName = await CreateTestRoleAsync();
+
+        Guid activeUserId = await RegisterUserAsync(UniqueEmail());
+        (await HttpClient.PutAsJsonAsync($"users/{activeUserId}/roles", new { roleNames = new[] { roleName } }))
+            .EnsureSuccessStatusCode();
+        await InsertUserAsync("Pendente", "Teste", UniqueEmail(), null, true, roleName);
+        await InsertUserAsync("Inativo", "Teste", UniqueEmail(), null, false, roleName);
+
+        // Act
+        List<RoleDto>? roles = await HttpClient.GetFromJsonAsync<List<RoleDto>>("roles");
+
+        // Assert: convite pendente conta como ativo (DEC-10); o total inclui o inativo (DEC-4)
+        RoleDto role = roles!.Single(r => r.Name == roleName);
+        role.Id.ShouldNotBe(Guid.Empty);
+        role.IsSystem.ShouldBeFalse();
+        role.ActiveUserCount.ShouldBe(2);
+        role.UserCount.ShouldBe(3);
+
+        roles!.Where(r => r.IsSystem).Select(r => r.Id)
+            .ShouldBe([RoleIds.Administrator, RoleIds.Agent, RoleIds.Collaborator], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task GetById_Should_ReturnRoleInTheListingFormat_WhenRoleExists()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string roleName = await CreateTestRoleAsync();
+        (await HttpClient.PutAsJsonAsync($"roles/{roleName}/permissions", new { permissionCodes = AssignedPermissionCodes }))
+            .EnsureSuccessStatusCode();
+        await InsertUserAsync("Pendente", "Teste", UniqueEmail(), null, true, roleName);
+
+        List<RoleDto>? roles = await HttpClient.GetFromJsonAsync<List<RoleDto>>("roles");
+        RoleDto listed = roles!.Single(r => r.Name == roleName);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"roles/{listed.Id}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        RoleDto? role = await response.Content.ReadFromJsonAsync<RoleDto>();
+        role.ShouldNotBeNull();
+        role.Id.ShouldBe(listed.Id);
+        role.Name.ShouldBe(roleName);
+        role.IsSystem.ShouldBeFalse();
+        role.ActiveUserCount.ShouldBe(1);
+        role.UserCount.ShouldBe(1);
+        role.PermissionCodes.ShouldBe(AssignedPermissionCodes, ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task GetById_Should_ReturnNotFound_WhenRoleDoesNotExist()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        var roleId = Guid.NewGuid();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"roles/{roleId}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Roles.NotFound");
+        problem.Detail.ShouldBe($"A função com o id '{roleId}' não foi encontrada");
+    }
+
+    [Fact]
+    public async Task GetById_Should_ReturnForbidden_WhenCallerLacksRolesReadPermission()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"roles/{RoleIds.Collaborator}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetById_Should_ReturnUnauthorized_WhenNoTokenProvided()
+    {
+        // Arrange
+        HttpClient.DefaultRequestHeaders.Authorization = null;
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"roles/{RoleIds.Collaborator}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
     /// <summary>
     /// Cria uma role de teste vazia e autentica como um colaborador cuja role só gerencia e lê funções.
     /// </summary>
@@ -219,7 +318,15 @@ public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseInteg
         return targetRoleName;
     }
 
-    private sealed record RoleDto(string Name, bool IsDefault, bool IsAdministrator, List<string> PermissionCodes);
+    private sealed record RoleDto(
+        Guid Id,
+        string Name,
+        bool IsDefault,
+        bool IsAdministrator,
+        bool IsSystem,
+        int ActiveUserCount,
+        int UserCount,
+        List<string> PermissionCodes);
 
     private sealed record ProblemDto(int Status, string Title, string Detail);
 }

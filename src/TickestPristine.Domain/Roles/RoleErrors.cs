@@ -8,6 +8,10 @@ public static class RoleErrors
         "Roles.NotFound",
         $"A função '{roleName}' não foi encontrada");
 
+    public static Error NotFound(Guid roleId) => Error.NotFound(
+        "Roles.NotFound",
+        $"A função com o id '{roleId}' não foi encontrada");
+
     public static Error PrivilegeEscalation(IEnumerable<string> permissionNames) => Error.Forbidden(
         "Roles.PrivilegeEscalation",
         $"Você não pode conceder nem remover permissões administrativas que não possui: {string.Join(", ", permissionNames)}");
