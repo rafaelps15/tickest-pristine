@@ -78,7 +78,7 @@ O `Application/DependencyInjection.cs` envolve todos os handlers de command/quer
 
 ### Eventos de domínio
 
-As entidades herdam de `Entity` e não têm métodos (domínio anêmico): são os handlers da Application que chamam `entity.Raise(new SomeDomainEvent(...))` ao mudar o estado, antes do `SaveChangesAsync`. O `DomainEventsDispatcher` (Infrastructure) despacha os eventos disparados depois do `SaveChangesAsync`; os handlers de evento implementam `IDomainEventHandler<T>` e são registrados automaticamente pela varredura de assembly.
+As entidades herdam de `Entity` e guardam as próprias regras (domínio rico): os métodos da entidade mudam o estado e chamam `Raise(new SomeDomainEvent(...))`; o handler carrega a entidade, chama o método e salva. Os eventos são `sealed record` com ids (mais o valor anterior numa alteração), sem `OccurredOnUtc`. O código listado em [Em migração](#em-migração) ainda dispara os eventos pelos handlers. O `DomainEventsDispatcher` (Infrastructure) despacha os eventos disparados depois do `SaveChangesAsync`; os handlers de evento implementam `IDomainEventHandler<T>` e são registrados automaticamente pela varredura de assembly.
 
 ## Convenções a manter ao ampliar
 
@@ -86,7 +86,7 @@ As entidades herdam de `Entity` e não têm métodos (domínio anêmico): são o
 - Entidades novas ganham a sua própria classe estática `{Entity}Errors` no Domain, em vez de lançar exceções cruas ou reaproveitar os erros de outro agregado.
 - As configurações do EF Core (`IEntityTypeConfiguration<T>`) ficam em `Infrastructure/{Aggregate}/{Entity}Configuration.cs` e precisam ser adicionadas ao `ApplicationDbContext`.
 - Endpoints são uma classe por rota em `Web.Api/Endpoints/{Aggregate}/`, com tag via `Web.Api/Endpoints/Tags.cs`, e registrados automaticamente — não há tabela de rotas para atualizar.
-- Este repositório tem `.claude/skills/` (`add-entity`, `add-feature`, `add-tests`, `ca-review`) com essas convenções em forma de roteiro executável — prefira usá-las a escrever à mão, para que o código novo fique exatamente igual aos slices existentes. Ao usá-las, os caminhos, nomes e desvios da seção [Contexto do projeto](#contexto-do-projeto) prevalecem sobre os exemplos delas. As skills `spec-new`, `spec-implement` e `spec-verify` conduzem o fluxo SDD; `add-entity`, `add-feature` e `add-tests` só escrevem código dentro dele.
+- Este repositório tem `.claude/skills/` (`add-entity`, `add-feature`, `add-tests`, `ca-review`, `domain-modeling`) com essas convenções em forma de roteiro executável — prefira usá-las a escrever à mão, para que o código novo fique exatamente igual aos slices existentes. Ao usá-las, os caminhos, nomes e desvios da seção [Contexto do projeto](#contexto-do-projeto) prevalecem sobre os exemplos delas. As skills `spec-new`, `spec-implement` e `spec-verify` conduzem o fluxo SDD; `add-entity`, `add-feature`, `add-tests` e `domain-modeling` só escrevem código dentro dele. As skills de código são adaptação da biblioteca canônica `C:\dev\dotnet-universal-skills`: cada adaptação fica marcada no texto delas como "Adaptação do Tickest" e é conferida por `scripts/test_instructions.py`, com os diffs esperados em `scripts/instruction_parity/`.
 
 ## Contexto do projeto
 
@@ -128,22 +128,34 @@ Antes de criar algo, siga o slice real mais parecido (caminhos a partir de `src/
 - **Caminhos e namespaces** têm o prefixo `TickestPristine.` (ex.: `src/TickestPristine.Application`, não `src/Application`).
 - **Autorização** tem três formas, conforme o caso:
   1. permissão na rota com `.HasPermission(Permissions.X)`, que recebe uma única permissão;
-  2. `.RequireAuthorization()` na rota e um guard no handler para regras por recurso (dono, participante, privilégio);
+  2. `.RequireAuthorization()` na rota e, para regras por recurso (dono, participante, privilégio), a forma híbrida: a regra sobre o próprio estado no método da entidade, as permissões efetivas pelo `IPermissionProvider` e a conferência que precisa de consulta num método privado do handler (os guards estáticos atuais estão em [Em migração](#em-migração));
   3. filtro por `IUserContext.UserId` só nas consultas de dados do próprio usuário (`Tickets/GetOwn`, `Tickets/GetOwnSummary`).
   Permissão nova entra em `PermissionCodes` e em `PermissionCatalog`.
 - **Cache:** nenhuma query da Application usa cache; o único uso de `HybridCache` é o `PermissionProvider` (Infrastructure), invalidado com `IPermissionProvider.InvalidateAsync` depois do commit. O padrão de cache dos exemplos de Todo não se aplica aqui sem uma decisão explícita.
-- **Histórico de chamados:** todo command que altera um chamado, uma mensagem ou um anexo grava o registro com `TicketHistoryEntries` no mesmo `SaveChangesAsync`.
+- **Histórico de chamados:** todo command que altera um chamado, uma mensagem ou um anexo grava um `TicketHistory` no mesmo `SaveChangesAsync`; no modelo rico, o método do agregado cria a entrada e o handler a adiciona (hoje ela é montada por `TicketHistoryEntries`, em migração).
 - **Exclusão lógica** (`DeletedAtUtc` + filtro global) em `Ticket`, `TicketMessage` e `TicketAttachment`.
 - **Textos em pt-BR:** mensagens de `{Entity}Errors`, `.WithMessage(...)` dos validators e textos escritos à mão nos `ProblemDetails` (`GlobalExceptionHandler`, `CustomResults`). Os nomes exibidos das propriedades validadas ficam em `Abstractions/Behaviors/ValidationDisplayNames.cs`.
 - **Testes de integração:** o cadastro de usuários exige `users:create`, então os testes cadastram pelo administrador (`BaseIntegrationTest.RegisterUserAsync` / `PostRegisterAsAdminAsync`).
+- **Adaptações em relação à biblioteca canônica** (marcadas no texto das skills como "Adaptação do Tickest"): prefixo `TickestPristine.` nos caminhos e namespaces; prosa, comentários e mensagens em pt-BR; avisos "Contexto do projeto primeiro" e "Portão de especificação"; sem `HybridCache` nos handlers; sem conversor UTC nem auditoria no `SaveChangesAsync` (nomes `CreatedAtUtc` e `DeletedAtUtc`); `TicketHistory` como exemplo do registro criado pelo agregado; autorização com `.HasPermission`, conferência no handler e `IPermissionProvider`.
 
 ### Regras permanentes
 
-- Sem MediatR (ver [Convenções a manter ao ampliar](#convenções-a-manter-ao-ampliar)); domínio anêmico, com regras nos handlers ou em classes estáticas da pasta do agregado na Application (ex.: `Tickets/TicketStatusTransitions.cs`).
+- Sem MediatR (ver [Convenções a manter ao ampliar](#convenções-a-manter-ao-ampliar)); domínio rico: a entidade guarda as invariantes e as transições (construtor privado com guardas, `private set`, `Create`, métodos que devolvem `Result` ou `bool` e disparam o próprio evento); objeto de valor só para valor com regra própria e vários usos; serviço de domínio para regra entre agregados, sem infraestrutura; o handler carrega, autoriza, coordena e grava; a consulta usa predicado traduzível. Padrão completo na skill `domain-modeling`; o legado está em [Em migração](#em-migração).
+- **Comentários:** um `<summary>` curto em pt-BR só onde explica algo: em toda interface e nos métodos cujo comportamento não é óbvio pelo nome e pela assinatura (o que acontece em falha, quando devolve `false`, efeitos colaterais). Nada em propriedades, construtores, DTOs, endpoints, testes e métodos simples; nunca vazio; comentários internos objetivos; nenhum comentário cita SPEC, REQ ou DEC; nenhum `<summary>` existente é removido.
 - Datas e horas pelo `IDateTimeProvider`, nunca `DateTime.UtcNow` na Application.
 - Identificadores de código em inglês; comentários e textos ao usuário em pt-BR.
 - Mensagens de commit em pt-BR, no formato `tipo(escopo): descrição [SPEC-NNN T00n]` (`tipo` em `feat`, `fix`, `refactor`, `perf`, `test`, `docs` ou `chore`; `T00n` é a tarefa da spec, omitido em commits que não são de uma tarefa), com o trailer de coautoria do agente.
 - Toda spec tem uma branch própria e atômica, criada a partir da `main` atualizada (`origin/main`) e entregue por pull request para a `main`, onde o CI e a proteção da branch valem, no padrão `<tipo>/SPEC-NNN-<slug>`: `tipo` é `feat`, `fix`, `bugfix`, `chore`, `docs`, `test` ou `refactor`; `NNN` é o número da spec; o slug fica em inglês, em kebab-case (ex.: `feat/SPEC-009-attendant-lookup-assignment`). A branch só contém a spec dela. O título do PR cita `SPEC-NNN`, e o corpo traz o link para o `spec.md` e a lista de REQs atendidos.
+
+### Em migração
+
+Código que ainda segue o modelo anêmico. Ele continua valendo e funcionando até a spec que o migrar (a migração do `Ticket` é a primeira); código novo e código alterado fora desta lista seguem o domínio rico. As specs de chamados que seguem antes dessa migração (como a 029, a 031 e as seguintes) mantêm o padrão do código que alteram e entram nesta lista.
+
+- **Entidades com `{ get; set; }`:** todas as do Domain (`Ticket`, `TicketMessage`, `TicketAttachment`, `TicketHistory`, `TicketSlaTimer`, `User`, `UserCredential`, `UserInvitation`, `UserRole`, `RefreshToken`, `Role`, `Permission`, `RolePermission`, `Department`, `Sector`, `SlaCalendar`, `SlaCalendarHoliday`, `AuditLogEntry`).
+- **Regras em classes estáticas da Application:** `Tickets/TicketStatusTransitions.cs`, `Tickets/TicketSla.cs`, `TicketHistories/TicketHistoryEntries.cs`, `Users/UserCodes.cs` e os calendários de SLA em `SlaCalendars/`.
+- **Guards estáticos de autorização:** `Authorization/TicketAccessGuard.cs`, `Authorization/PrivilegeEscalationGuard.cs` e `Authorization/AdministratorGuard.cs`.
+- **Eventos disparados pelos handlers** (`entity.Raise(...)` na Application) e propriedades atribuídas pelos handlers.
+- **Seeders** em `src/TickestPristine.Infrastructure/Database/Seeding/` (`DatabaseSeeder`, `AdminUserSeeder`, `DefaultOrganizationSeeder`, `SampleDataSeeder`), que montam as entidades pelos setters; a estratégia de seed para o modelo rico é de uma spec própria.
 
 ### Documentos de estado
 
