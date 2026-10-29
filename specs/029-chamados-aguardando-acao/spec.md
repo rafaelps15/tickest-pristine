@@ -75,21 +75,21 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 |---|---|---|---|---|
 | T-1 | Situação de espera no chamado, recálculo nas ações e migration | AC-1 a AC-5, AC-8 | `add-entity` | [x] |
 | T-2 | Campo e filtro na listagem; contadores no agregado | AC-6, AC-7 | `add-feature` | [x] |
-| T-3 | Testes unitários e de integração | AC-1 a AC-8 | `add-tests` | [ ] |
+| T-3 | Testes unitários e de integração | AC-1 a AC-8 | `add-tests` | [x] |
 | T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-9 | — | [ ] |
 | T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-9 | `ca-review` | [ ] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | | | |
-| AC-2 | | | |
-| AC-3 | | | |
-| AC-4 | | | |
-| AC-5 | | | |
-| AC-6 | | | |
-| AC-7 | | | |
-| AC-8 | | | |
+| AC-1 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `WaitingOn_Should_FollowTheLastMessage_WhenAgentAndRequesterAnswer` (abertura) | Logo depois de aberto pela API, sem mensagens, o chamado aguarda quem atende. | Aprovado |
+| AC-2 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `WaitingOn_Should_FollowTheLastMessage_WhenAgentAndRequesterAnswer` | Um Atendente responde e o chamado passa a aguardar o solicitante; o solicitante responde e volta a aguardar quem atende. | Aprovado |
+| AC-3 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `WaitingOn_Should_FallBackToPreviousMessage_WhenLastMessageIsDeleted` | Com a mensagem do solicitante e depois a do Atendente (aguardando o solicitante), excluir a do Atendente faz valer a do solicitante: volta a aguardar quem atende. | Aprovado |
+| AC-4 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `WaitingOn_Should_BeClearedWhileInactive_AndRecalculatedOnReopen` | Respondido pelo Atendente e resolvido, fica sem situação; reaberto sem motivo pelo solicitante, a situação é recalculada pela última mensagem (aguardando o solicitante). Uma mutação que deixava de recalcular na troca de status foi detectada por 4 casos. | Aprovado |
+| AC-5 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `Migration_Should_FillWaitingOnOfExistingTickets` | Com um chamado sem mensagens, um respondido pelo Atendente e um resolvido, a migration desce (apagando a coluna) e sobe: aguardando quem atende, aguardando o solicitante e sem situação. | Aprovado |
+| AC-6 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetAll_Should_ReturnOnlyTicketsWaitingOnTheGivenParty_WithTheFieldInEachItem` (Requester e Agent); `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketsQueryHandlerTests.cs` › `Handle_Should_ReturnOnlyTicketsWaitingOnTheGivenParty_WhenWaitingOnIsGiven` | No mesmo setor, o filtro `waitingOn` traz só o chamado da situação pedida, com o campo `waitingOn` no item; o resolvido vem com o campo nulo. | Aprovado |
+| AC-7 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetOverview_Should_MatchWaitingCountsWithListing` (sem recorte e com o setor) | `waitingOnRequesterCount` e `waitingOnAgentCount` do agregado são iguais ao `totalCount` da listagem com `waitingOn=Requester` e `waitingOn=Agent`, sem recorte e com o setor do cenário (1 e 1). | Aprovado |
+| AC-8 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `WaitingOn_Should_NotPauseSla_WhenTicketWaitsOnRequesterPastDueDate` | Um chamado aguardando o solicitante com o prazo vencido aparece em `slaStatus=Breached` e continua Aberto: a espera não pausa o SLA nem muda o status. | Aprovado |
 | AC-9 | | | |
 
 ## 9. Evidências de verificação

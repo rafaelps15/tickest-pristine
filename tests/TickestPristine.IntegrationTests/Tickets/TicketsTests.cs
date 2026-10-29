@@ -3466,6 +3466,215 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         await context.SaveChangesAsync();
     }
 
+    [Fact]
+    public async Task WaitingOn_Should_FollowTheLastMessage_WhenAgentAndRequesterAnswer()
+    {
+        // Arrange
+        (Guid ticketId, AccessTokens requesterTokens) = await CreateTicketAsRequesterAsync();
+        TicketWaitingOn? onCreation = GetWaitingOn(ticketId);
+        AccessTokens agentTokens = await CreateAgentAsync();
+
+        // Act
+        (await SendMessageAsAsync(agentTokens, ticketId, "Já estou verificando.")).EnsureSuccessStatusCode();
+        TicketWaitingOn? afterAgent = GetWaitingOn(ticketId);
+        (await SendMessageAsAsync(requesterTokens, ticketId, "Continua sem imprimir.")).EnsureSuccessStatusCode();
+        TicketWaitingOn? afterRequester = GetWaitingOn(ticketId);
+
+        // Assert: sem mensagens, aguarda quem atende; depois segue a última mensagem
+        onCreation.ShouldBe(TicketWaitingOn.Agent);
+        afterAgent.ShouldBe(TicketWaitingOn.Requester);
+        afterRequester.ShouldBe(TicketWaitingOn.Agent);
+    }
+
+    [Fact]
+    public async Task WaitingOn_Should_FallBackToPreviousMessage_WhenLastMessageIsDeleted()
+    {
+        // Arrange: o solicitante escreve e depois o atendente responde
+        (Guid ticketId, AccessTokens requesterTokens) = await CreateTicketAsRequesterAsync();
+        AccessTokens agentTokens = await CreateAgentAsync();
+        (await SendMessageAsAsync(requesterTokens, ticketId, "Continua sem imprimir.")).EnsureSuccessStatusCode();
+        HttpResponseMessage agentMessage = await SendMessageAsAsync(agentTokens, ticketId, "Já estou verificando.");
+        agentMessage.EnsureSuccessStatusCode();
+        Guid agentMessageId = await agentMessage.Content.ReadFromJsonAsync<Guid>();
+        TicketWaitingOn? beforeDelete = GetWaitingOn(ticketId);
+
+        // Act
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"ticket-messages/{agentMessageId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", agentTokens.AccessToken);
+        (await HttpClient.SendAsync(request)).EnsureSuccessStatusCode();
+
+        // Assert: volta a valer a mensagem do solicitante
+        beforeDelete.ShouldBe(TicketWaitingOn.Requester);
+        GetWaitingOn(ticketId).ShouldBe(TicketWaitingOn.Agent);
+    }
+
+    [Fact]
+    public async Task WaitingOn_Should_BeClearedWhileInactive_AndRecalculatedOnReopen()
+    {
+        // Arrange: o atendente responde, e o chamado aguarda o solicitante
+        (Guid ticketId, AccessTokens requesterTokens) = await CreateTicketAsRequesterAsync();
+        AccessTokens agentTokens = await CreateAgentAsync();
+        (await SendMessageAsAsync(agentTokens, ticketId, "Troquei o toner.")).EnsureSuccessStatusCode();
+
+        // Act
+        await ResolveTicketAsync(ticketId);
+        TicketWaitingOn? whileResolved = GetWaitingOn(ticketId);
+        Authenticate(requesterTokens.AccessToken);
+        (await HttpClient.PostAsync($"tickets/{ticketId}/reopen", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Assert: sem situação enquanto inativo; ao reabrir sem motivo, recalculada pela última mensagem (do atendente)
+        whileResolved.ShouldBeNull();
+        GetWaitingOn(ticketId).ShouldBe(TicketWaitingOn.Requester);
+    }
+
+    [Fact]
+    public async Task Migration_Should_FillWaitingOnOfExistingTickets()
+    {
+        // Arrange: um chamado sem mensagens, um respondido pelo atendente e um resolvido, antes da migration
+        (Guid withoutMessages, _) = await CreateTicketAsRequesterAsync();
+        (Guid answered, _) = await CreateTicketAsRequesterAsync();
+        AccessTokens agentTokens = await CreateAgentAsync();
+        (await SendMessageAsAsync(agentTokens, answered, "Já estou verificando.")).EnsureSuccessStatusCode();
+        (Guid resolved, _) = await CreateTicketAsRequesterAsync();
+        await ResolveTicketAsync(resolved);
+
+        await ExecuteInScopeAsync(async context =>
+        {
+            IMigrator migrator = context.GetService<IMigrator>();
+            var migrations = context.Database.GetMigrations().ToList();
+            int index = migrations.FindIndex(m => m.EndsWith(nameof(Add_Ticket_Waiting_On), StringComparison.Ordinal));
+
+            try
+            {
+                // A volta apaga a coluna; a ida a recria e preenche pela regra da migration
+                await migrator.MigrateAsync(migrations[index - 1]);
+
+                // Act
+                await migrator.MigrateAsync(migrations[index]);
+            }
+            finally
+            {
+                // O banco é compartilhado pela coleção: volta à última migration, mesmo se o teste falhar no meio.
+                await migrator.MigrateAsync();
+            }
+        });
+
+        // Assert
+        GetWaitingOn(withoutMessages).ShouldBe(TicketWaitingOn.Agent);
+        GetWaitingOn(answered).ShouldBe(TicketWaitingOn.Requester);
+        GetWaitingOn(resolved).ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData(TicketWaitingOn.Requester)]
+    [InlineData(TicketWaitingOn.Agent)]
+    public async Task GetAll_Should_ReturnOnlyTicketsWaitingOnTheGivenParty_WithTheFieldInEachItem(TicketWaitingOn waitingOn)
+    {
+        // Arrange: no mesmo setor, um chamado respondido pelo atendente, um sem resposta e um resolvido
+        WaitingScenario scenario = await SeedWaitingScenarioAsync();
+
+        // Act
+        PagedWaitingTicketsDto filtered = (await HttpClient.GetFromJsonAsync<PagedWaitingTicketsDto>(
+            $"tickets?sectorId={scenario.SectorId}&waitingOn={waitingOn}"))!;
+        PagedWaitingTicketsDto all = (await HttpClient.GetFromJsonAsync<PagedWaitingTicketsDto>(
+            $"tickets?sectorId={scenario.SectorId}"))!;
+
+        // Assert
+        Guid expectedId = waitingOn == TicketWaitingOn.Requester ? scenario.Answered : scenario.Unanswered;
+        WaitingTicketDto item = filtered.Items.ShouldHaveSingleItem();
+        item.Id.ShouldBe(expectedId);
+        item.WaitingOn.ShouldBe((int)waitingOn);
+        all.Items.Single(t => t.Id == scenario.Resolved).WaitingOn.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetOverview_Should_MatchWaitingCountsWithListing(bool bySector)
+    {
+        // Arrange: sem recorte e com o setor do cenário
+        WaitingScenario scenario = await SeedWaitingScenarioAsync();
+        string scope = bySector ? $"sectorId={scenario.SectorId}&" : string.Empty;
+
+        // Act
+        OverviewWaitingDto overview = (await HttpClient.GetFromJsonAsync<OverviewWaitingDto>($"tickets/stats/overview?{scope}"))!;
+        PagedWaitingTicketsDto waitingOnRequester = (await HttpClient.GetFromJsonAsync<PagedWaitingTicketsDto>(
+            $"tickets?{scope}waitingOn=Requester&pageSize=1"))!;
+        PagedWaitingTicketsDto waitingOnAgent = (await HttpClient.GetFromJsonAsync<PagedWaitingTicketsDto>(
+            $"tickets?{scope}waitingOn=Agent&pageSize=1"))!;
+
+        // Assert
+        overview.Attention.WaitingOnRequesterCount.ShouldBe(waitingOnRequester.TotalCount);
+        overview.Attention.WaitingOnAgentCount.ShouldBe(waitingOnAgent.TotalCount);
+        if (bySector)
+        {
+            overview.Attention.WaitingOnRequesterCount.ShouldBe(1);
+            overview.Attention.WaitingOnAgentCount.ShouldBe(1);
+        }
+    }
+
+    [Fact]
+    public async Task WaitingOn_Should_NotPauseSla_WhenTicketWaitsOnRequesterPastDueDate()
+    {
+        // Arrange: o atendente responde, e o prazo do chamado passa enquanto ele aguarda o solicitante
+        WaitingScenario scenario = await SeedWaitingScenarioAsync();
+        await ExecuteInScopeAsync(async context =>
+            await context.Tickets
+                .Where(t => t.Id == scenario.Answered)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(t => t.SlaWarningAtUtc, DateTime.UtcNow.AddHours(-2))
+                    .SetProperty(t => t.DueAtUtc, DateTime.UtcNow.AddHours(-1))));
+
+        // Act
+        PagedWaitingTicketsDto breached = (await HttpClient.GetFromJsonAsync<PagedWaitingTicketsDto>(
+            $"tickets?sectorId={scenario.SectorId}&slaStatus=Breached"))!;
+
+        // Assert: o SLA corre como sempre e o status não muda (a espera é só informativa)
+        WaitingTicketDto item = breached.Items.ShouldHaveSingleItem();
+        item.Id.ShouldBe(scenario.Answered);
+        item.WaitingOn.ShouldBe((int)TicketWaitingOn.Requester);
+        GetStoredStatus(scenario.Answered).ShouldBe(TicketStatus.Open);
+    }
+
+    /// <summary>
+    /// Num setor novo: um chamado respondido pelo atendente (aguarda o solicitante), um sem resposta (aguarda quem
+    /// atende) e um resolvido (sem situação). Termina autenticado como administrador.
+    /// </summary>
+    private async Task<WaitingScenario> SeedWaitingScenarioAsync()
+    {
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid answered = await CreateTicketAsync(sectorId);
+        Guid unanswered = await CreateTicketAsync(sectorId);
+        Guid resolved = await CreateTicketAsync(sectorId);
+
+        AccessTokens agentTokens = await CreateAgentAsync();
+        (await SendMessageAsAsync(agentTokens, answered, "Já estou verificando.")).EnsureSuccessStatusCode();
+        await ResolveTicketAsync(resolved);
+        await AuthenticateAsAdminAsync();
+
+        return new WaitingScenario(sectorId, answered, unanswered, resolved);
+    }
+
+    private TicketWaitingOn? GetWaitingOn(Guid ticketId)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return context.Tickets.AsNoTracking().Where(t => t.Id == ticketId).Select(t => t.WaitingOn).Single();
+    }
+
+    private sealed record WaitingScenario(Guid SectorId, Guid Answered, Guid Unanswered, Guid Resolved);
+
+    private sealed record WaitingTicketDto(Guid Id, int Status, int? WaitingOn);
+
+    private sealed record PagedWaitingTicketsDto(List<WaitingTicketDto> Items, int TotalCount);
+
+    private sealed record OverviewWaitingDto(OverviewWaitingAttentionDto Attention);
+
+    private sealed record OverviewWaitingAttentionDto(int WaitingOnRequesterCount, int WaitingOnAgentCount);
+
     private sealed record PagedTicketsDto(List<TicketSummaryDto> Items, int TotalCount);
 
     private sealed record TicketSummaryDto(
