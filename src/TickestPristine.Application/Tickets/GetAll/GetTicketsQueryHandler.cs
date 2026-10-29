@@ -24,6 +24,7 @@ internal sealed class GetTicketsQueryHandler(IApplicationDbContext context, IDat
             .Apply(context.Tickets)
             .Where(t =>
                 (allStatuses || query.Statuses.Contains(t.Status)) &&
+                (query.WaitingOn == null || t.WaitingOn == query.WaitingOn) &&
                 (search == null || t.Title.Contains(search)))
             .WhereSlaStatus(query.SlaStatus, nowUtc);
 
@@ -62,6 +63,7 @@ internal sealed class GetTicketsQueryHandler(IApplicationDbContext context, IDat
                 DueAtUtc = x.Ticket.DueAtUtc,
                 SlaWarningAtUtc = x.Ticket.SlaWarningAtUtc,
                 ResolvedAtUtc = x.Ticket.ResolvedAtUtc,
+                WaitingOn = x.Ticket.WaitingOn,
                 // Regra do Domain: o EF lê as colunas e calcula a situação na projeção final.
                 SlaStatus = TicketSla.GetStatus(
                     x.Ticket.Status,

@@ -20,6 +20,12 @@ public sealed class Ticket : Entity, IAuditable
     /// </summary>
     public DateTime LastActivityAtUtc { get; set; }
 
+    /// <summary>
+    /// Quem o chamado ativo está aguardando, recalculado no banco a cada mensagem e a cada troca de status; nulo enquanto
+    /// o chamado está inativo (spec 029).
+    /// </summary>
+    public TicketWaitingOn? WaitingOn { get; set; }
+
     public DateTime DueAtUtc { get; set; }
     public DateTime SlaWarningAtUtc { get; set; }
     public DateTime? ResolvedAtUtc { get; set; }

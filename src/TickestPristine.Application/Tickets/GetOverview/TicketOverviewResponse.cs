@@ -40,12 +40,14 @@ public sealed class TicketOverviewSlaResponse
 }
 
 /// <summary>
-/// Pontos de atenção: atrasados (a situação de SLA "atrasado"), críticos (Urgentes ainda ativos) e ativos sem
-/// responsável.
+/// Pontos de atenção: atrasados (a situação de SLA "atrasado"), críticos (Urgentes ainda ativos), ativos sem
+/// responsável e ativos aguardando o solicitante ou quem atende (spec 029).
 /// </summary>
 public sealed class TicketOverviewAttentionResponse
 {
     public int BreachedCount { get; set; }
     public int CriticalCount { get; set; }
     public int UnassignedCount { get; set; }
+    public int WaitingOnRequesterCount { get; set; }
+    public int WaitingOnAgentCount { get; set; }
 }

@@ -749,6 +749,11 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
 
+                    b.Property<string>("WaitingOn")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("waiting_on");
+
                     b.HasKey("Id")
                         .HasName("pk_tickets");
 
@@ -757,6 +762,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
 
                     b.HasIndex("SectorId")
                         .HasDatabaseName("ix_tickets_sector_id");
+
+                    b.HasIndex("WaitingOn")
+                        .HasDatabaseName("ix_tickets_waiting_on")
+                        .HasFilter("waiting_on IS NOT NULL");
 
                     b.HasIndex("CreatedAtUtc", "Id")
                         .IsDescending()

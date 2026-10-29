@@ -22,6 +22,7 @@ internal sealed class GetAll : IEndpoint
             Guid? assignedToUserId,
             bool? unassignedOnly,
             TicketSlaStatus? slaStatus,
+            TicketWaitingOn? waitingOn,
             string? search,
             DateOnly? createdFrom,
             DateOnly? createdTo,
@@ -42,7 +43,7 @@ internal sealed class GetAll : IEndpoint
                 createdTo,
                 resolvedFrom,
                 resolvedTo);
-            var query = new GetTicketsQuery(statuses ?? [], scope, slaStatus, search, sort ?? TicketSortOrder.Newest, paging);
+            var query = new GetTicketsQuery(statuses ?? [], scope, slaStatus, waitingOn, search, sort ?? TicketSortOrder.Newest, paging);
 
             Result<PagedResponse<TicketSummaryResponse>> result = await handler.Handle(query, cancellationToken);
 

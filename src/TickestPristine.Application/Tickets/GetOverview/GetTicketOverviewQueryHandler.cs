@@ -42,7 +42,9 @@ internal sealed class GetTicketOverviewQueryHandler(IDbConnectionFactory dbConne
              COUNT(*) FILTER (WHERE t.resolved_at_utc IS NOT NULL AND t.resolved_at_utc > t.due_at_utc)::int AS {nameof(OverviewCounts.MissedCount)},
              COUNT(*) FILTER (WHERE t.resolved_at_utc IS NULL AND t.status = '{Canceled}')::int AS {nameof(OverviewCounts.NotApplicableCount)},
              COUNT(*) FILTER (WHERE {Active} AND t.priority = '{Urgent}')::int AS {nameof(OverviewCounts.CriticalCount)},
-             COUNT(*) FILTER (WHERE {Active} AND t.assigned_to_user_id IS NULL)::int AS {nameof(OverviewCounts.UnassignedCount)}
+             COUNT(*) FILTER (WHERE {Active} AND t.assigned_to_user_id IS NULL)::int AS {nameof(OverviewCounts.UnassignedCount)},
+             COUNT(*) FILTER (WHERE t.waiting_on = '{nameof(TicketWaitingOn.Requester)}')::int AS {nameof(OverviewCounts.WaitingOnRequesterCount)},
+             COUNT(*) FILTER (WHERE t.waiting_on = '{nameof(TicketWaitingOn.Agent)}')::int AS {nameof(OverviewCounts.WaitingOnAgentCount)}
          FROM public.tickets t
          WHERE {TicketScopeFilter.SqlCondition}
          """;
@@ -89,7 +91,9 @@ internal sealed class GetTicketOverviewQueryHandler(IDbConnectionFactory dbConne
             {
                 BreachedCount = counts.BreachedCount,
                 CriticalCount = counts.CriticalCount,
-                UnassignedCount = counts.UnassignedCount
+                UnassignedCount = counts.UnassignedCount,
+                WaitingOnRequesterCount = counts.WaitingOnRequesterCount,
+                WaitingOnAgentCount = counts.WaitingOnAgentCount
             }
         };
     }
@@ -113,5 +117,7 @@ internal sealed class GetTicketOverviewQueryHandler(IDbConnectionFactory dbConne
         public int NotApplicableCount { get; init; }
         public int CriticalCount { get; init; }
         public int UnassignedCount { get; init; }
+        public int WaitingOnRequesterCount { get; init; }
+        public int WaitingOnAgentCount { get; init; }
     }
 }

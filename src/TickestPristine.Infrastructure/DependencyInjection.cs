@@ -135,8 +135,10 @@ public static class DependencyInjection
                     npgsqlOptions.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schemas.Default))
                 .UseSnakeCaseNamingConvention()
                 // A última atividade do chamado é atualizada antes da auditoria, para entrar no registro de alteração dele.
+                // A situação de espera é recalculada depois do commit (spec 029).
                 .AddInterceptors(
                     new TicketActivityInterceptor(),
+                    new TicketWaitingInterceptor(),
                     serviceProvider.GetRequiredService<AuditLoggingInterceptor>())
                 .UseSeeding((context, _) =>
                     serviceProvider.GetRequiredService<DatabaseSeeder>().Seed(context))

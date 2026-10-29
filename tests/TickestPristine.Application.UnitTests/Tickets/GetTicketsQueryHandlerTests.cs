@@ -341,6 +341,35 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
         result.Error.ShouldBe(TicketErrors.InvalidPeriod);
     }
 
+    [Theory]
+    [InlineData(TicketWaitingOn.Requester)]
+    [InlineData(TicketWaitingOn.Agent)]
+    public async Task Handle_Should_ReturnOnlyTicketsWaitingOnTheGivenParty_WhenWaitingOnIsGiven(TicketWaitingOn waitingOn)
+    {
+        // Arrange: um chamado aguardando o solicitante, um aguardando quem atende e um resolvido, sem situação
+        await using TestDbContext context = CreateDbContext();
+        (User requester, Sector sector) = await SeedRequesterAndSectorAsync(context);
+        Ticket waitingOnRequester = await SeedTicketAsync(context, requester, sector, TicketStatus.InProgress, NowUtc.AddHours(-1));
+        Ticket waitingOnAgent = await SeedTicketAsync(context, requester, sector, TicketStatus.Open, NowUtc.AddHours(-2));
+        Ticket resolved = await SeedTicketAsync(context, requester, sector, TicketStatus.Resolved, NowUtc.AddHours(-3), resolvedAtUtc: NowUtc);
+        waitingOnRequester.WaitingOn = TicketWaitingOn.Requester;
+        waitingOnAgent.WaitingOn = TicketWaitingOn.Agent;
+        await context.SaveChangesAsync();
+
+        GetTicketsQueryHandler handler = CreateHandler(context);
+
+        // Act
+        Result<PagedResponse<TicketSummaryResponse>> filtered = await handler.Handle(CreateQuery(waitingOn: waitingOn), CancellationToken.None);
+        Result<PagedResponse<TicketSummaryResponse>> all = await handler.Handle(CreateQuery(), CancellationToken.None);
+
+        // Assert: só a situação pedida, e a situação vem em cada item (nula no inativo)
+        Guid expectedId = waitingOn == TicketWaitingOn.Requester ? waitingOnRequester.Id : waitingOnAgent.Id;
+        TicketSummaryResponse item = filtered.Value.Items.ShouldHaveSingleItem();
+        item.Id.ShouldBe(expectedId);
+        item.WaitingOn.ShouldBe(waitingOn);
+        all.Value.Items.Single(t => t.Id == resolved.Id).WaitingOn.ShouldBeNull();
+    }
+
     [Fact]
     public async Task Handle_Should_ReturnTicketsOfEverySector_WhenSeveralSectorsAreGiven()
     {
@@ -390,7 +419,8 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
         DateOnly? createdFrom = null,
         DateOnly? createdTo = null,
         DateOnly? resolvedFrom = null,
-        DateOnly? resolvedTo = null) =>
+        DateOnly? resolvedTo = null,
+        TicketWaitingOn? waitingOn = null) =>
         new(
             statuses ?? [],
             new TicketScopeFilter(
@@ -404,6 +434,7 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
                 resolvedFrom,
                 resolvedTo),
             slaStatus,
+            waitingOn,
             search,
             sort,
             new PageRequest(1, 20));
