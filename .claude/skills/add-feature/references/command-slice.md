@@ -1,8 +1,6 @@
 # Modelos de slice de command
 
-> Exemplos ilustrativos do modelo de referência (Todos). Use os caminhos, namespaces e referências vivas do `CLAUDE.md` do projeto.
-
-Os arquivos ficam em `src/Application/{Feature}/{UseCase}/`. Troque `{Feature}` (no plural, ex.: `Todos`), `{Entity}` (ex.: `TodoItem`) e os nomes do caso de uso em todo o texto.
+Os arquivos vão em `src/Application/{Feature}/{UseCase}/`. Troque `{Feature}` (plural, ex.: `Todos`), `{Entity}` (ex.: `TodoItem`) e os nomes do caso de uso em todo o texto.
 
 ## Command
 
@@ -16,7 +14,7 @@ namespace Application.Todos.Archive;
 public sealed record ArchiveTodoCommand(Guid TodoItemId) : ICommand;
 ```
 
-Classe com setters quando há muitos parâmetros (igual ao `CreateTodoCommand`):
+Classe com propriedades graváveis quando há muitos parâmetros (como o `CreateTodoCommand`); um command é um DTO, então setters públicos são aceitáveis aqui:
 
 ```csharp
 using Application.Abstractions.Messaging;
@@ -27,40 +25,45 @@ namespace Application.Todos.Create;
 public sealed class CreateTodoCommand : ICommand<Guid>
 {
     public Guid UserId { get; set; }
+
     public string Description { get; set; }
+
     public DateTime? DueDate { get; set; }
+
     public List<string> Labels { get; set; } = [];
+
     public Priority Priority { get; set; }
 }
 ```
 
-- `ICommand` → o handler retorna `Result` (o endpoint responde `204 NoContent`).
-- `ICommand<TResponse>` → o handler retorna `Result<TResponse>` (o endpoint responde `200 Ok`).
+- `ICommand` → o handler devolve `Result` (o endpoint responde `204 NoContent`).
+- `ICommand<TResponse>` → o handler devolve `Result<TResponse>` (o endpoint responde `200 Ok`).
 
 ## Validator
 
-`internal sealed`, na mesma pasta. Registrado automaticamente (o `AddValidatorsFromAssembly` inclui os tipos internos) e executado pelo `ValidationDecorator` antes de o handler rodar.
+Classe pública, na mesma pasta. Registrado automaticamente e executado pelo `ValidationDecorator` antes do handler.
 
 ```csharp
 using FluentValidation;
 
 namespace Application.Todos.Create;
 
-internal sealed class CreateTodoCommandValidator : AbstractValidator<CreateTodoCommand>
+public class CreateTodoCommandValidator : AbstractValidator<CreateTodoCommand>
 {
     public CreateTodoCommandValidator()
     {
         RuleFor(c => c.UserId).NotEmpty();
         RuleFor(c => c.Priority).IsInEnum();
         RuleFor(c => c.Description).NotEmpty().MaximumLength(255);
-        RuleFor(c => c.DueDate).GreaterThanOrEqualTo(DateTime.Today).When(x => x.DueDate.HasValue);
     }
 }
 ```
 
+- O validator confere o formato da entrada. Uma regra sobre o estado da entidade ou sobre o tempo (prazo anterior à criação) é da entidade (`TodoItem.Create` devolve `Result<TodoItem>`).
+
 ## Handler
 
-`internal sealed`, construtor primário, `IApplicationDbContext` para acesso a dados. As guard clauses retornam `Result.Failure` com erros do Domain; o caminho feliz altera, dispara um evento de domínio, salva e retorna.
+`internal sealed`, construtor primário, `IApplicationDbContext` para o acesso a dados. O handler carrega, autoriza, chama o método da entidade, devolve a falha dele e salva; a entidade muda o próprio estado e dispara o próprio evento.
 
 ```csharp
 using Application.Abstractions.Authentication;
@@ -90,15 +93,12 @@ internal sealed class ArchiveTodoCommandHandler(
             return Result.Failure(TodoItemErrors.NotFound(command.TodoItemId));
         }
 
-        if (todoItem.IsArchived)
+        Result result = todoItem.Archive(dateTimeProvider.UtcNow);
+
+        if (result.IsFailure)
         {
-            return Result.Failure(TodoItemErrors.AlreadyArchived(command.TodoItemId));
+            return result;
         }
-
-        todoItem.IsArchived = true;
-        todoItem.ArchivedAt = dateTimeProvider.UtcNow;
-
-        todoItem.Raise(new TodoItemArchivedDomainEvent(todoItem.Id));
 
         await context.SaveChangesAsync(cancellationToken);
 
@@ -108,14 +108,36 @@ internal sealed class ArchiveTodoCommandHandler(
 ```
 
 Observações:
-- Dono do dado: filtre por `userContext.UserId` na consulta (preferível) ou compare explicitamente e retorne `Result.Failure(UserErrors.Unauthorized())`. Se o projeto declarar outras formas de autorização (permissão na rota, guards por recurso), siga o `CLAUDE.md`.
-- `IDateTimeProvider` (do `SharedKernel`) para datas e horas — nunca `DateTime.UtcNow` direto.
-- Se o projeto usar cache em leituras e o command invalidar dados de query em cache, injete `HybridCache` e chame `cache.RemoveAsync({Feature}CacheKeys.X(...), cancellationToken)` depois de salvar.
-- Para um command com retorno (`ICommand<Guid>`), retorne o valor direto — `Result<T>` tem conversão implícita: `return todoItem.Id;`.
+- Dono: filtre por `userContext.UserId` na consulta (preferido) ou compare explicitamente e devolva `Result.Failure(UserErrors.Unauthorized())` ([authorization.md](authorization.md)).
+- `IDateTimeProvider` (do `SharedKernel`) para datas — nunca `DateTime.UtcNow` direto; o handler passa a hora para a entidade.
+- **Adaptação do Tickest:** nenhuma query usa cache, então nenhum command injeta `HybridCache` para invalidar leituras (o único uso é o `PermissionProvider`, invalidado com `IPermissionProvider.InvalidateAsync` depois do commit).
+- Num command com retorno (`ICommand<Guid>`), devolva o valor direto — `Result<T>` tem conversão implícita: `return todoItem.Id;`.
+- **Adaptação do Tickest:** todo command que altera um chamado, uma mensagem ou um anexo grava um `TicketHistory` no mesmo `SaveChangesAsync` (hoje montado por `TicketHistoryEntries`, em migração; no modelo rico, criado pelo método do agregado).
+- Outros formatos (filho, histórico, objetos de valor): [rich-domain-handler.md](rich-domain-handler.md).
 
-## Acréscimos no Domain (se necessário)
+## Acréscimos no domínio (se necessário)
 
-Método de fábrica do erro na classe `{Entity}Errors` existente, em `src/Domain/{Feature}/`:
+O método da entidade que o handler chama, em `src/Domain/{Feature}/{Entity}.cs` (padrão 1 da `domain-modeling`):
+
+```csharp
+/// <summary>Arquiva a tarefa; em falha, nada muda e nenhum evento é disparado.</summary>
+public Result Archive(DateTime utcNow)
+{
+    if (IsArchived)
+    {
+        return Result.Failure(TodoItemErrors.AlreadyArchived(Id));
+    }
+
+    IsArchived = true;
+    ArchivedAt = utcNow;
+
+    Raise(new TodoItemArchivedDomainEvent(Id));
+
+    return Result.Success();
+}
+```
+
+Fábrica de erro na classe `{Entity}Errors` existente em `src/Domain/{Feature}/`:
 
 ```csharp
 public static Error AlreadyArchived(Guid todoItemId) => Error.Problem(
@@ -123,7 +145,7 @@ public static Error AlreadyArchived(Guid todoItemId) => Error.Problem(
     $"The todo item with Id = '{todoItemId}' is already archived.");
 ```
 
-Tipo de erro → status HTTP (pelo `CustomResults.Problem`): `NotFound` → 404, `Conflict` → 409, `Problem`/`Validation` → 400, `Failure` → 500.
+Tipo do erro → status HTTP (pelo `CustomResults.Problem`): `NotFound` → 404, `Conflict` → 409, `Problem`/`Validation` → 400, `Failure` → 500.
 
 Evento de domínio, um arquivo cada em `src/Domain/{Feature}/`:
 
@@ -135,20 +157,4 @@ namespace Domain.Todos;
 public sealed record TodoItemArchivedDomainEvent(Guid TodoItemId) : IDomainEvent;
 ```
 
-Handler de evento opcional (camada Application, na pasta do caso de uso):
-
-```csharp
-using Domain.Todos;
-using SharedKernel;
-
-namespace Application.Todos.Archive;
-
-internal sealed class TodoItemArchivedDomainEventHandler : IDomainEventHandler<TodoItemArchivedDomainEvent>
-{
-    public Task Handle(TodoItemArchivedDomainEvent domainEvent, CancellationToken cancellationToken)
-    {
-        // Side effects here (notifications, projections, ...)
-        return Task.CompletedTask;
-    }
-}
-```
+Uma reação ao evento (notificação, projeção) é um handler de evento de domínio em `src/Application/{Feature}/{Event}/`, com o nome `{Action}On{Event}DomainEventHandler`: [domain-event-handler.md](domain-event-handler.md).

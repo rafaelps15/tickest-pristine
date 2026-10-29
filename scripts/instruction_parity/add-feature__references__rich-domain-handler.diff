@@ -1,0 +1,16 @@
+--- biblioteca/add-feature/references/rich-domain-handler.md
++++ tickest/add-feature/references/rich-domain-handler.md
+@@
+-using Microsoft.Extensions.Caching.Hybrid;
+@@
+-IUserContext userContext,
+-HybridCache cache)
++IUserContext userContext)
+@@
+-await cache.RemoveAsync(TodoCacheKeys.ById(todoItem.UserId, todoItem.Id), cancellationToken);
+@@
+-Result<TodoItemHistoryEntry> result = todoItem.Reopen(userContext.UserId, dateTimeProvider.UtcNow);
++Result<TicketHistory> result = ticket.Reopen(userContext.UserId, dateTimeProvider.UtcNow);
+@@
+-context.TodoItemHistory.Add(result.Value);
++context.TicketHistories.Add(result.Value);

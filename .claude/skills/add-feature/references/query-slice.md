@@ -1,8 +1,6 @@
 # Modelos de slice de query
 
-> Exemplos ilustrativos do modelo de referência (Todos). Use os caminhos, namespaces e referências vivas do `CLAUDE.md` do projeto.
-
-Os arquivos ficam em `src/Application/{Feature}/{UseCase}/`. Queries são leituras: sem validator, sem eventos de domínio, sem `SaveChangesAsync`.
+Os arquivos vão em `src/Application/{Feature}/{UseCase}/`. Queries são leituras: sem validator, sem eventos de domínio, sem `SaveChangesAsync`.
 
 ## Query
 
@@ -18,7 +16,7 @@ Com parâmetros: `public sealed record GetTodoByIdQuery(Guid TodoItemId) : IQuer
 
 ## DTO de resposta
 
-Fica ao lado da query. Plano, fácil de serializar, nunca uma entidade de domínio.
+Fica ao lado da query. Plano, fácil de serializar, nunca uma entidade de domínio; como DTO, tem setters públicos.
 
 ```csharp
 namespace Application.Todos.GetOverdue;
@@ -26,26 +24,26 @@ namespace Application.Todos.GetOverdue;
 public sealed class TodoResponse
 {
     public Guid Id { get; set; }
-    public Guid UserId { get; set; }
+
     public string Description { get; set; }
+
     public DateTime? DueDate { get; set; }
+
     public List<string> Labels { get; set; } = [];
-    public bool IsCompleted { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public DateTime? CompletedAt { get; set; }
 }
 ```
 
-Cada pasta de caso de uso tem o seu próprio `TodoResponse` — não compartilhe DTOs entre slices, mesmo que hoje pareçam iguais.
+Cada pasta de caso de uso tem o próprio `TodoResponse` — não compartilhe DTOs entre slices, mesmo que hoje pareçam iguais.
 
 ## Handler
 
-Restrinja ao usuário atual e projete com `.Select` direto no DTO:
+Limite ao usuário atual, filtre com um predicado que o EF Core consiga traduzir e projete com `.Select` direto no DTO:
 
 ```csharp
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
+using Domain.Todos;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 
@@ -62,19 +60,14 @@ internal sealed class GetOverdueTodosQueryHandler(
         CancellationToken cancellationToken)
     {
         List<TodoResponse> todos = await context.TodoItems
-            .Where(todoItem => todoItem.UserId == userContext.UserId &&
-                               !todoItem.IsCompleted &&
-                               todoItem.DueDate < dateTimeProvider.UtcNow)
+            .Where(todoItem => todoItem.UserId == userContext.UserId)
+            .Where(TodoItem.OverdueAt(dateTimeProvider.UtcNow))
             .Select(todoItem => new TodoResponse
             {
                 Id = todoItem.Id,
-                UserId = todoItem.UserId,
                 Description = todoItem.Description,
                 DueDate = todoItem.DueDate,
-                Labels = todoItem.Labels,
-                IsCompleted = todoItem.IsCompleted,
-                CreatedAt = todoItem.CreatedAt,
-                CompletedAt = todoItem.CompletedAt
+                Labels = todoItem.Labels.ToList()
             })
             .ToListAsync(cancellationToken);
 
@@ -83,11 +76,30 @@ internal sealed class GetOverdueTodosQueryHandler(
 }
 ```
 
-Para queries de um único item, retorne `Result.Failure<TodoResponse>(TodoItemErrors.NotFound(id))` quando nada for encontrado.
+Em queries de um único item, devolva `Result.Failure<TodoResponse>(TodoItemErrors.NotFound(id))` quando nada corresponder.
 
-## Cache (opcional, só para leituras frequentes e quando o projeto usar cache em leituras)
+Para coleções sem limite, pagine com `PageRequest` (offset) ou `CursorPageRequest` (cursor): [pagination.md](pagination.md).
 
-Envolva a consulta ao banco em `HybridCache.GetOrCreateAsync`, com uma chave da classe de chaves de cache da feature (veja o `GetTodoByIdQueryHandler` como exemplo real):
+## Regras em consultas
+
+Um método da entidade (`todoItem.IsOverdue(utcNow)`) funciona num objeto já carregado; o EF Core não consegue traduzi-lo para SQL, então uma consulta nunca o chama dentro de `Where` ou `Select`. Quando uma consulta precisa da mesma regra, ela usa um predicado:
+
+- escrito na própria consulta, quando só uma consulta o usa; ou
+- um `Expression<Func<T, bool>>` na entidade, quando várias consultas o compartilham:
+
+```csharp
+/// <summary>Predicado traduzível das tarefas atrasadas, para consultas.</summary>
+public static Expression<Func<TodoItem, bool>> OverdueAt(DateTime utcNow) =>
+    todoItem => !todoItem.IsCompleted && todoItem.DueDate < utcNow;
+```
+
+- O predicado e o método da entidade expressam a mesma regra; os testes unitários da entidade cobrem o método, e o teste de integração cobre a consulta traduzida.
+
+## Cache (opcional, só para leituras frequentes)
+
+**Adaptação do Tickest:** nenhuma query da Application usa cache; o único uso de `HybridCache` é o `PermissionProvider` (Infrastructure). Os modelos abaixo não se aplicam aqui sem uma decisão explícita.
+
+Envolva a consulta ao banco em `HybridCache.GetOrCreateAsync`, com uma chave da classe de chaves de cache da feature:
 
 ```csharp
 namespace Application.Todos;
@@ -97,6 +109,8 @@ internal static class TodoCacheKeys
     internal static string ById(Guid userId, Guid todoItemId) => $"todos-{userId}-{todoItemId}";
 }
 ```
+
+
 
 ```csharp
 TodoResponse? todo = await cache.GetOrCreateAsync(
