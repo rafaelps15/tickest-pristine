@@ -29,7 +29,8 @@ public sealed class CreateSectorCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var department = new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Customer support department", IsActive = false };
+        var department = Department.Create("Support", "Customer support department", responsibleUser: null);
+        department.Deactivate();
         context.Departments.Add(department);
         await context.SaveChangesAsync();
 
@@ -49,7 +50,7 @@ public sealed class CreateSectorCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var department = new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Customer support department", IsActive = true };
+        var department = Department.Create("Support", "Customer support department", responsibleUser: null);
         context.Departments.Add(department);
         await context.SaveChangesAsync();
 
@@ -74,9 +75,9 @@ public sealed class CreateSectorCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var department = new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Customer support department", IsActive = true };
+        var department = Department.Create("Support", "Customer support department", responsibleUser: null);
         context.Departments.Add(department);
-        context.Sectors.Add(new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = department.Id, IsActive = true });
+        context.Sectors.Add(Sector.Create(department, "Helpdesk", description: null));
         await context.SaveChangesAsync();
 
         var handler = new CreateSectorCommandHandler(context);
@@ -95,9 +96,9 @@ public sealed class CreateSectorCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var department = new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Customer support department", IsActive = true };
+        var department = Department.Create("Support", "Customer support department", responsibleUser: null);
         context.Departments.Add(department);
-        context.Sectors.Add(new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = Guid.NewGuid(), IsActive = true });
+        context.Sectors.Add(Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Helpdesk", description: null));
         await context.SaveChangesAsync();
 
         var handler = new CreateSectorCommandHandler(context);

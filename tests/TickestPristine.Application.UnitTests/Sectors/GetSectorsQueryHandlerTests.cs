@@ -1,5 +1,6 @@
 using TickestPristine.Application.Sectors.GetAll;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 
 namespace TickestPristine.Application.UnitTests.Sectors;
@@ -11,9 +12,9 @@ public sealed class GetSectorsQueryHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var activeSector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = Guid.NewGuid(), IsActive = true };
-        var inactiveSector = new Sector { Id = Guid.NewGuid(), Name = "Retired Sector", DepartmentId = Guid.NewGuid(), IsActive = true };
-        inactiveSector.IsActive = false;
+        var activeSector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Helpdesk", description: null);
+        var inactiveSector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Retired Sector", description: null);
+        inactiveSector.Deactivate();
 
         context.Sectors.AddRange(activeSector, inactiveSector);
         await context.SaveChangesAsync();

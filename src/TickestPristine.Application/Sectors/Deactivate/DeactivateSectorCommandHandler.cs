@@ -24,18 +24,14 @@ internal sealed class DeactivateSectorCommandHandler(IApplicationDbContext conte
             return Result.Failure(SectorErrors.AlreadyDeactivated(sector.Id));
         }
 
-        bool hasActiveTickets = await context.Tickets
+        if (await context.Tickets
             .WhereActive()
-            .AnyAsync(t => t.SectorId == sector.Id, cancellationToken);
-
-        if (hasActiveTickets)
+            .AnyAsync(t => t.SectorId == sector.Id, cancellationToken))
         {
             return Result.Failure(SectorErrors.HasActiveTickets());
         }
 
-        sector.IsActive = false;
-
-        sector.Raise(new SectorDeactivatedDomainEvent(sector.Id));
+        sector.Deactivate();
 
         await context.SaveChangesAsync(cancellationToken);
 

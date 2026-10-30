@@ -23,10 +23,10 @@ Revise o escopo informado (padrão: `git diff` + arquivos não rastreados) contr
 - Os endpoints da Web.Api não têm lógica de negócio — só o mapeamento requisição→command e o match do resultado.
 
 ### Domínio rico
-- Entidades: construtor privado com guardas, construtor privado sem parâmetros para o EF Core, `private set` em toda propriedade, coleções num campo privado expostas como `IReadOnlyCollection<T>`.
+- Entidades: um único construtor privado sem parâmetros; o `Create` monta a entidade com inicializador de objeto; `private set` em toda propriedade, coleções num campo privado expostas como `IReadOnlyCollection<T>`.
 - `Create` devolve a entidade quando a criação não pode falhar e `Result<T>` quando uma regra pode recusá-la; dispara o evento `Created`.
-- As mudanças de estado passam por métodos da entidade que conferem tudo antes da primeira mudança, devolvem `Result` (pode falhar) ou `bool` (pode não mudar nada, com evento só quando mudou) e disparam o próprio evento; a hora atual é parâmetro. Uma chamada que falha deixa o estado e os eventos intactos.
-- `Ensure` só para erro de programação; as falhas que o usuário pode provocar são `Result.Failure(...)`.
+- As mudanças de estado passam por métodos da entidade que conferem tudo antes da primeira mudança, devolvem `Result` (pode falhar), `bool` (pode não mudar nada, com evento só quando mudou) ou `void` (o handler já conferiu o estado, sem repetir a conferência) e disparam o próprio evento; a hora atual é parâmetro. Uma chamada que falha deixa o estado e os eventos intactos.
+- Nenhuma guarda na entidade: o validator confere o formato da entrada; as falhas que o usuário pode provocar e que o validator não enxerga são `Result.Failure(...)`.
 - Nenhum handler atribui as propriedades de uma entidade nem chama `Raise` por ela (bloqueante para código novo). O contexto preenche `CreatedOnUtc` / `ModifiedOnUtc` / `DeletedOnUtc`.
 - Registros filho, de histórico ou de auditoria são criados pelo método do agregado e adicionados pelo handler antes do único `SaveChangesAsync` — nunca num handler de evento de domínio, nunca montados por uma classe estática.
 - Nenhuma classe estática, `*Service`, `*Helper`, `*Manager` ou `*Clock` na Application muda ou inspeciona o estado de uma entidade: o comportamento vira membro da entidade (bloqueante para código novo). Trabalho técnico (hash, arquivos, bytes, ZIP) é uma interface em `Application/Abstractions/` com implementação `internal sealed` na Infrastructure.
@@ -39,6 +39,7 @@ Revise o escopo informado (padrão: `git diff` + arquivos não rastreados) contr
 - Nomes: `{Verb}{Entity}Command` / `Get{X}Query` / `...Handler` / `...Validator` / `{X}Response`.
 - Handlers são `internal sealed` com construtor primário, implementando os `ICommandHandler<>`/`IQueryHandler<>` próprios — sem MediatR, sem registro manual na DI para handlers/validators/endpoints.
 - Os DTOs de resposta são por slice; as queries projetam com `.Select(...)` e nunca devolvem entidades de domínio.
+- Uma entidade que o `Create` referencia é carregada pelo handler e passada a ele, com `NotFound` quando falta; uma pergunta sim ou não é um `AnyAsync` direto no `if`; nenhuma classe estática faz essas consultas.
 
 ### Tratamento de erro
 - Falhas esperadas devolvem `Result`/`Result<T>` — sem exceção para controle de fluxo, sem try/catch em volta de regras de negócio.
@@ -46,7 +47,7 @@ Revise o escopo informado (padrão: `git diff` + arquivos não rastreados) contr
 - Os endpoints convertem falhas só por `result.Match(Results.Ok|NoContent, CustomResults.Problem)`.
 
 ### Validação e autorização
-- Todo command tem um `{Command}Validator` do FluentValidation para o formato da entrada; as regras sobre o estado da entidade ficam na entidade.
+- Todo command tem um `{Command}Validator` do FluentValidation para o formato da entrada; as regras sobre o estado da entidade ficam na entidade. O tamanho das colunas fica só na configuração do EF (`HasMaxLength`), nunca como regra de validator nem como constante na entidade.
 - Permissão fixa no endpoint (`.HasPermission(...)`); regra sobre o próprio estado da entidade no método dela; permissões efetivas pelo `IPermissionProvider`; conferência que precisa de consulta num método privado `HasPermissionTo{Action}` do handler. Nenhuma consulta dentro de uma entidade.
 - Nenhuma classe estática de guard nova (bloqueante para código novo); uma conferência compartilhada só depois de a repetição ser mostrada, como instância injetada. Uma conferência movida devolve o mesmo erro e o mesmo status de antes.
 - Endpoints novos chamam `.RequireAuthorization()` (ou `.HasPermission(...)`) e `.WithTags(Tags.X)`.

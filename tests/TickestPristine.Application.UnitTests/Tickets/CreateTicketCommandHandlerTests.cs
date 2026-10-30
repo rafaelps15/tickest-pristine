@@ -4,6 +4,7 @@ using TickestPristine.Application.Permissions;
 using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Application.Tickets.Create;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
@@ -26,7 +27,7 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
 
     private static async Task<Guid> SeedSectorAsync(TestDbContext context)
     {
-        var sector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = Guid.NewGuid(), IsActive = true };
+        var sector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Helpdesk", description: null);
         context.Sectors.Add(sector);
         await context.SaveChangesAsync();
 
@@ -59,7 +60,8 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var sector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = Guid.NewGuid(), IsActive = false };
+        var sector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Helpdesk", description: null);
+        sector.Deactivate();
         context.Sectors.Add(sector);
         await context.SaveChangesAsync();
 

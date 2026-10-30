@@ -90,32 +90,6 @@ public sealed class SectorValidatorsTests
     }
 
     [Fact]
-    public void CreateValidator_Should_HaveError_WhenNameExceedsMaxLength()
-    {
-        // Arrange
-        var command = new CreateSectorCommand { Name = new string('a', 101), Description = null, DepartmentId = Guid.NewGuid() };
-
-        // Act
-        TestValidationResult<CreateSectorCommand> result = _createValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Name);
-    }
-
-    [Fact]
-    public void CreateValidator_Should_HaveError_WhenDescriptionExceedsMaxLength()
-    {
-        // Arrange
-        var command = new CreateSectorCommand { Name = "Helpdesk", Description = new string('a', 501), DepartmentId = Guid.NewGuid() };
-
-        // Act
-        TestValidationResult<CreateSectorCommand> result = _createValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Description);
-    }
-
-    [Fact]
     public void UpdateValidator_Should_HaveError_WhenNameIsEmpty()
     {
         // Arrange
@@ -126,32 +100,6 @@ public sealed class SectorValidatorsTests
 
         // Assert
         result.ShouldHaveValidationErrorFor(c => c.Name);
-    }
-
-    [Fact]
-    public void UpdateValidator_Should_HaveError_WhenNameExceedsMaxLength()
-    {
-        // Arrange
-        var command = new UpdateSectorCommand { SectorId = Guid.NewGuid(), Name = new string('a', 101), Description = null };
-
-        // Act
-        TestValidationResult<UpdateSectorCommand> result = _updateValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Name);
-    }
-
-    [Fact]
-    public void UpdateValidator_Should_HaveError_WhenDescriptionExceedsMaxLength()
-    {
-        // Arrange
-        var command = new UpdateSectorCommand { SectorId = Guid.NewGuid(), Name = "Helpdesk", Description = new string('a', 501) };
-
-        // Act
-        TestValidationResult<UpdateSectorCommand> result = _updateValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Description);
     }
 
     [Fact]

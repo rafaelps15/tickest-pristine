@@ -207,20 +207,8 @@ public abstract class BaseIntegrationTest
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        var department = new Department
-        {
-            Id = Guid.NewGuid(),
-            Name = departmentName,
-            Description = "A department created by tests",
-            IsActive = true
-        };
-        var sector = new Sector
-        {
-            Id = Guid.NewGuid(),
-            Name = sectorName,
-            IsActive = true,
-            DepartmentId = department.Id
-        };
+        var department = Department.Create(departmentName, "A department created by tests", responsibleUser: null);
+        var sector = Sector.Create(department, sectorName, description: null);
 
         context.Departments.Add(department);
         context.Sectors.Add(sector);

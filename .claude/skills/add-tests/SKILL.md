@@ -26,7 +26,7 @@ Complete os tipos de teste de que toda entidade e todo slice precisam. Leia prim
 
 1. **Ache o slice.** Encontre os métodos da entidade que ele chama, e o command/query, o handler, o validator e o endpoint do caso de uso. Liste cada resultado distinto: cada `return Result.Failure(...)` na entidade e no handler, e cada caminho feliz.
 2. **Confira o que já existe** em `tests/Application.UnitTests/{Feature}/` e `tests/IntegrationTests/{Feature}/` — estenda as classes existentes, não duplique.
-3. **Escreva os testes da entidade** — as invariantes conferidas na construção (`Create` devolvendo o erro, ou a guarda lançando exceção para erro de programação); cada transição válida (estado novo e evento disparado); cada transição inválida (o erro exato, com o estado e os eventos inalterados).
+3. **Escreva os testes da entidade** — as invariantes conferidas na construção (`Create` devolvendo o erro); cada transição válida (estado novo e evento disparado); cada transição inválida (o erro exato, com o estado e os eventos inalterados).
 4. **Escreva os testes unitários do handler** — um teste por caminho de falha do handler (não encontrado, permissão, a falha devolvida pela entidade) mais um caminho feliz conferindo o estado gravado e os eventos de domínio disparados.
 5. **Escreva os testes de validator** (só commands) — um teste de falha por regra mais um command totalmente válido.
 6. **Escreva os testes de integração** — caminho feliz por HTTP real, com o estado conferido por um GET seguinte (persistência); para toda query com predicado, um teste que prove que ela filtra no banco (tradução); conversão de erro (404/409/400) onde o handler tiver caminhos de falha; 401 sem token se a família de rotas for nova.

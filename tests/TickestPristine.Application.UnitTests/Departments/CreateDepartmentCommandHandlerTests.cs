@@ -86,7 +86,7 @@ public sealed class CreateDepartmentCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        context.Departments.Add(new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Existing", IsActive = true });
+        context.Departments.Add(Department.Create("Support", "Existing", responsibleUser: null));
         await context.SaveChangesAsync();
 
         var handler = new CreateDepartmentCommandHandler(context);
@@ -104,7 +104,8 @@ public sealed class CreateDepartmentCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var inactive = new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Old", IsActive = false };
+        var inactive = Department.Create("Support", "Old", responsibleUser: null);
+        inactive.Deactivate();
         context.Departments.Add(inactive);
         await context.SaveChangesAsync();
 

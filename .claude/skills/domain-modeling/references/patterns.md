@@ -39,17 +39,6 @@ Quando a criação não pode falhar, `Create` devolve a entidade:
 ```csharp
 public sealed class Project : Entity
 {
-    private Project(Guid ownerId, ProjectName name)
-    {
-        Ensure.NotEmpty(ownerId, "O dono é obrigatório.", nameof(ownerId));
-        Ensure.NotNull(name, "O nome é obrigatório.", nameof(name));
-
-        Id = Guid.NewGuid();
-        OwnerId = ownerId;
-        Name = name;
-    }
-
-    // Exigido pelo EF Core.
     private Project()
     {
     }
@@ -60,9 +49,14 @@ public sealed class Project : Entity
 
     public ProjectName Name { get; private set; }
 
-    public static Project Create(Guid ownerId, ProjectName name)
+    public static Project Create(User owner, ProjectName name)
     {
-        var project = new Project(ownerId, name);
+        var project = new Project
+        {
+            Id = Guid.NewGuid(),
+            OwnerId = owner.Id,
+            Name = name
+        };
 
         project.Raise(new ProjectCreatedDomainEvent(project.Id));
 
@@ -82,7 +76,17 @@ public static Result<TodoItem> Create(Guid userId, string description, Priority 
         return Result.Failure<TodoItem>(TodoItemErrors.DueDateBeforeCreation);
     }
 
-    var todoItem = new TodoItem(userId, description, priority, dueDate, labels, createdAt);
+    var todoItem = new TodoItem
+    {
+        Id = Guid.NewGuid(),
+        UserId = userId,
+        Description = description,
+        Priority = priority,
+        DueDate = dueDate,
+        CreatedAt = createdAt
+    };
+
+    todoItem._labels.AddRange(labels);
 
     todoItem.Raise(new TodoItemCreatedDomainEvent(todoItem.Id));
 
@@ -90,54 +94,12 @@ public static Result<TodoItem> Create(Guid userId, string description, Priority 
 }
 ```
 
-- Os construtores continuam privados: `Create` é a única entrada, então nenhuma entidade existe num estado inválido.
+- O único construtor é privado e sem parâmetros: o `Create` é a única entrada e monta a entidade com inicializador de objeto, então nenhuma entidade existe num estado inválido.
 
-## 3. Guardas
+## 3. A entidade não repete o validator
 
-`SharedKernel/Ensure.cs`:
-
-```csharp
-namespace SharedKernel;
-
-public static class Ensure
-{
-    public static void NotEmpty(string value, string message, string argumentName)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            throw new ArgumentException(message, argumentName);
-        }
-    }
-
-    public static void NotEmpty(Guid value, string message, string argumentName)
-    {
-        if (value == Guid.Empty)
-        {
-            throw new ArgumentException(message, argumentName);
-        }
-    }
-
-    public static void NotEmpty(DateTime value, string message, string argumentName)
-    {
-        if (value == default)
-        {
-            throw new ArgumentException(message, argumentName);
-        }
-    }
-
-    public static void NotNull<T>(T value, string message, string argumentName)
-        where T : class
-    {
-        if (value is null)
-        {
-            throw new ArgumentNullException(argumentName, message);
-        }
-    }
-}
-```
-
-- `Ensure` é para erro de programação: quem chama quebrou o contrato (um id vazio, um nome ausente). Ele lança exceção, e nada a captura.
-- Uma falha que o usuário pode provocar (prazo anterior à criação, tarefa já concluída) é uma falha de negócio esperada: `Result.Failure(...)` com um erro de `{Entity}Errors`, nunca uma exceção.
+- O validator confere o formato da entrada (`NotEmpty()`, `EmailAddress()`, `MinimumLength(6)`); o `Create` e os métodos de comportamento confiam nele e não acrescentam guardas.
+- Uma falha que o usuário pode provocar e que o validator não enxerga (prazo anterior à criação, tarefa já concluída) é um `Result.Failure(...)` com um erro de `{Entity}Errors`, nunca uma exceção.
 
 ## 4. Objeto de valor com fábrica `Create`
 
@@ -317,7 +279,7 @@ public sealed class TodoItemTransferService
 /// <summary>Cria o membro e dispara o evento; o handler o adiciona antes de salvar.</summary>
 public ProjectMember AddMember(Guid userId)
 {
-    var member = new ProjectMember(Id, userId);
+    var member = ProjectMember.Create(Id, userId);
 
     Raise(new ProjectMemberAddedDomainEvent(Id, member.Id));
 
@@ -328,17 +290,6 @@ public ProjectMember AddMember(Guid userId)
 ```csharp
 public sealed class ProjectMember : Entity
 {
-    internal ProjectMember(Guid projectId, Guid userId)
-    {
-        Ensure.NotEmpty(projectId, "O projeto é obrigatório.", nameof(projectId));
-        Ensure.NotEmpty(userId, "O usuário é obrigatório.", nameof(userId));
-
-        Id = Guid.NewGuid();
-        ProjectId = projectId;
-        UserId = userId;
-    }
-
-    // Exigido pelo EF Core.
     private ProjectMember()
     {
     }
@@ -348,16 +299,25 @@ public sealed class ProjectMember : Entity
     public Guid ProjectId { get; private set; }
 
     public Guid UserId { get; private set; }
+
+    /// <summary>Cria o membro; chamado só por <c>Project.AddMember</c>, por isso é interno.</summary>
+    internal static ProjectMember Create(Guid projectId, Guid userId)
+    {
+        return new ProjectMember
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = projectId,
+            UserId = userId
+        };
+    }
 }
 ```
 
 O handler confere o que precisa de consulta, depois adiciona o filho e salva uma vez:
 
 ```csharp
-bool alreadyMember = await context.ProjectMembers
-    .AnyAsync(m => m.ProjectId == project.Id && m.UserId == command.UserId, cancellationToken);
-
-if (alreadyMember)
+if (await context.ProjectMembers
+    .AnyAsync(m => m.ProjectId == project.Id && m.UserId == command.UserId, cancellationToken))
 {
     return Result.Failure(ProjectErrors.MemberAlreadyAdded(command.UserId));
 }
@@ -396,6 +356,18 @@ public bool ChangeDescription(string description)
 - `false` significa que nada mudou e nenhum evento foi disparado; não é uma falha.
 - Um evento de alteração leva o id e o valor anterior.
 - Um método nunca devolve as duas coisas: ou pode falhar (`Result`), ou pode não fazer nada (`bool`).
+- Quando o handler já conferiu o estado antes da chamada (ele precisa, para devolver esse erro antes de uma consulta), o método é `void` e não repete a conferência:
+
+```csharp
+public void Archive()
+{
+    IsArchived = true;
+
+    Raise(new ProjectArchivedDomainEvent(Id));
+}
+```
+
+- O handler faz `if (project.IsArchived) return Result.Failure(ProjectErrors.AlreadyArchived(project.Id));`, roda as consultas e depois chama `project.Archive()`.
 
 ## 9. Regras que só leem o estado da entidade ficam na entidade
 

@@ -29,21 +29,20 @@ Crie uma entidade que guarda o próprio estado e as próprias regras, e ligue-a 
 ```csharp
 public sealed class Project : Entity
 {
-    // Exigido pelo EF Core.
     private Project() { }
 
     public Guid Id { get; private set; }
 
     public ProjectName Name { get; private set; }
 
-    public static Project Create(Guid ownerId, ProjectName name) { /* ... */ }
+    public static Project Create(User owner, ProjectName name) { /* ... */ }
 }
 ```
 
-- `sealed`, herda `Entity` (que dá `DomainEvents` + `Raise(...)`), `Guid Id`. Um construtor privado protege os argumentos (`Ensure`); outro, privado e sem parâmetros, existe só para o EF Core.
+- `sealed`, herda `Entity` (que dá `DomainEvents` + `Raise(...)`), `Guid Id`. Um único construtor privado sem parâmetros, usado pelo EF Core e pelo `Create`; o `Create` monta a entidade com inicializador de objeto, o único lugar em que ele aparece (os métodos de comportamento alteram a instância que já existe).
 - `private set` em toda propriedade. Uma coleção fica num campo privado e é exposta como `IReadOnlyCollection<T>`.
 - Um `Create` simples quando a criação não pode falhar; `Result<T> Create` quando uma regra de negócio pode recusá-la. Os dois disparam o evento `Created`.
-- Os métodos de comportamento mudam o estado, disparam o próprio evento e devolvem `Result` (pode falhar) ou `bool` (pode não mudar nada). A hora atual é parâmetro. Um `<summary>` em português só onde o comportamento não é óbvio.
+- Os métodos de comportamento mudam o estado, disparam o próprio evento e devolvem `Result` (pode falhar), `bool` (pode não mudar nada) ou nada (`void`) quando o handler já conferiu o estado. A hora atual é parâmetro. Um `<summary>` em português só onde o comportamento não é óbvio.
 
 2. **Catálogo de erros** — `src/Domain/{Feature}/{Entity}Errors.cs`
 
@@ -82,7 +81,7 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
 }
 ```
 
-Os relacionamentos são configurados no estilo shadow (`HasOne<User>().WithMany()`): as entidades guardam ids de chave estrangeira, não propriedades de navegação. Objetos de valor usam `OwnsOne` com o `MaxLength` deles; uma coleção é mapeada pelo campo (`references/persistence.md`). As configurações são encontradas pelo `ApplyConfigurationsFromAssembly`.
+Os relacionamentos são configurados no estilo shadow (`HasOne<User>().WithMany()`): as entidades guardam ids de chave estrangeira, não propriedades de navegação. Uma coluna `string` simples recebe o tamanho aqui e só aqui (`builder.Property(u => u.FirstName).HasMaxLength(200);`); objetos de valor usam `OwnsOne` com o `MaxLength` deles; uma coleção é mapeada pelo campo (`references/persistence.md`). As configurações são encontradas pelo `ApplyConfigurationsFromAssembly`.
 
 5. **Ligação no DbContext** — adicione `DbSet<{Entity}> {Plural}` **nos dois**:
    - `src/Application/Abstractions/Data/IApplicationDbContext.cs`

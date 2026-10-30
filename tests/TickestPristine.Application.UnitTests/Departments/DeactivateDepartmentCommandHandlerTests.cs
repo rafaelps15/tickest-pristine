@@ -30,9 +30,11 @@ public sealed class DeactivateDepartmentCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var department = new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Customer support department", IsActive = false };
+        var department = Department.Create("Support", "Customer support department", responsibleUser: null);
+        department.Deactivate();
         context.Departments.Add(department);
         await context.SaveChangesAsync();
+        department.ClearDomainEvents();
 
         var handler = new DeactivateDepartmentCommandHandler(context);
         var command = new DeactivateDepartmentCommand(department.Id);
@@ -51,7 +53,7 @@ public sealed class DeactivateDepartmentCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var department = new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Customer support department", IsActive = true };
+        var department = Department.Create("Support", "Customer support department", responsibleUser: null);
         context.Departments.Add(department);
         await context.SaveChangesAsync();
 
@@ -76,8 +78,8 @@ public sealed class DeactivateDepartmentCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var department = new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Customer support department", IsActive = true };
-        var sector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = department.Id, IsActive = true };
+        var department = Department.Create("Support", "Customer support department", responsibleUser: null);
+        var sector = Sector.Create(department, "Helpdesk", description: null);
         context.Departments.Add(department);
         context.Sectors.Add(sector);
         context.Tickets.Add(CreateTicket(sector.Id, status));
@@ -101,9 +103,9 @@ public sealed class DeactivateDepartmentCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var department = new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Customer support department", IsActive = true };
-        var sector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = department.Id, IsActive = true };
-        var otherDepartmentSector = new Sector { Id = Guid.NewGuid(), Name = "Payroll", DepartmentId = Guid.NewGuid(), IsActive = true };
+        var department = Department.Create("Support", "Customer support department", responsibleUser: null);
+        var sector = Sector.Create(department, "Helpdesk", description: null);
+        var otherDepartmentSector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Payroll", description: null);
         context.Departments.Add(department);
         context.Sectors.AddRange(sector, otherDepartmentSector);
         context.Tickets.Add(CreateTicket(sector.Id, TicketStatus.Closed));

@@ -54,12 +54,12 @@ public class CreateTodoCommandValidator : AbstractValidator<CreateTodoCommand>
     {
         RuleFor(c => c.UserId).NotEmpty();
         RuleFor(c => c.Priority).IsInEnum();
-        RuleFor(c => c.Description).NotEmpty().MaximumLength(255);
+        RuleFor(c => c.Description).NotEmpty();
     }
 }
 ```
 
-- O validator confere o formato da entrada. Uma regra sobre o estado da entidade ou sobre o tempo (prazo anterior à criação) é da entidade (`TodoItem.Create` devolve `Result<TodoItem>`).
+- O validator confere o formato da entrada (`NotEmpty()`, `EmailAddress()`, `MinimumLength(6)`). O tamanho das colunas não se repete aqui: ele fica só na configuração do EF (`HasMaxLength`). Uma regra sobre o estado da entidade ou sobre o tempo (prazo anterior à criação) é da entidade (`TodoItem.Create` devolve `Result<TodoItem>`).
 
 ## Handler
 

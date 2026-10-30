@@ -96,15 +96,7 @@ public sealed class DomainEventsPublishingTests(IntegrationTestWebAppFactory fac
 
     private static Department AddDepartment(ApplicationDbContext context, string? name = null)
     {
-        var department = new Department
-        {
-            Id = Guid.NewGuid(),
-            Name = name ?? $"Departamento {Guid.NewGuid():N}",
-            Description = "Criado pelo teste de publicação de eventos.",
-            IsActive = true
-        };
-
-        department.Raise(new DepartmentCreatedDomainEvent(department.Id));
+        var department = Department.Create(name ?? $"Departamento {Guid.NewGuid():N}", "Criado pelo teste de publicação de eventos.", responsibleUser: null);
 
         context.Departments.Add(department);
 

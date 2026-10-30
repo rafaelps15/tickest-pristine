@@ -1,5 +1,6 @@
 using TickestPristine.Application.Sectors.Deactivate;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.Domain.Tickets;
@@ -29,9 +30,11 @@ public sealed class DeactivateSectorCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var sector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = Guid.NewGuid(), IsActive = false };
+        var sector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Helpdesk", description: null);
+        sector.Deactivate();
         context.Sectors.Add(sector);
         await context.SaveChangesAsync();
+        sector.ClearDomainEvents();
 
         var handler = new DeactivateSectorCommandHandler(context);
         var command = new DeactivateSectorCommand(sector.Id);
@@ -50,7 +53,7 @@ public sealed class DeactivateSectorCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var sector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = Guid.NewGuid(), IsActive = true };
+        var sector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Helpdesk", description: null);
         context.Sectors.Add(sector);
         await context.SaveChangesAsync();
 
@@ -73,7 +76,7 @@ public sealed class DeactivateSectorCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var sector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = Guid.NewGuid(), IsActive = true };
+        var sector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Helpdesk", description: null);
         context.Sectors.Add(sector);
         context.Tickets.Add(new Ticket
         {

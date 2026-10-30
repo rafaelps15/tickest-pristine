@@ -1,5 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using TickestPristine.Infrastructure.Database;
 
 namespace TickestPristine.IntegrationTests.Departments;
 
@@ -149,6 +152,28 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task Create_Should_BeRejectedByDatabase_WhenNameIsLongerThanColumnLimit()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string name = Guid.NewGuid().ToString("N").PadRight(101, 'a');
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("departments", new
+        {
+            name,
+            description = "A department created by tests"
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await context.Departments.AnyAsync(d => d.Name == name)).ShouldBeFalse();
     }
 
     [Fact]

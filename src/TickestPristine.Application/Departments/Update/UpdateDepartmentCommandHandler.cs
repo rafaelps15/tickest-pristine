@@ -1,6 +1,7 @@
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Domain.Departments;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -19,30 +20,28 @@ internal sealed class UpdateDepartmentCommandHandler(IApplicationDbContext conte
             return Result.Failure(DepartmentErrors.NotFound(command.DepartmentId));
         }
 
-        bool nameInUse = await context.Departments.AnyAsync(
+        if (await context.Departments.AnyAsync(
             d => d.Id != department.Id && d.IsActive && d.Name == command.Name,
-            cancellationToken);
-
-        if (nameInUse)
+            cancellationToken))
         {
             return Result.Failure(DepartmentErrors.NameNotUnique(command.Name));
         }
 
-        Result responsibleCheck = await DepartmentResponsibleUser.EnsureExistsAsync(
-            context,
-            command.ResponsibleUserId,
-            cancellationToken);
+        User? responsibleUser = null;
 
-        if (responsibleCheck.IsFailure)
+        if (command.ResponsibleUserId is { } responsibleUserId)
         {
-            return responsibleCheck;
+            responsibleUser = await context.Users
+                .AsNoTracking()
+                .SingleOrDefaultAsync(u => u.Id == responsibleUserId, cancellationToken);
+
+            if (responsibleUser is null)
+            {
+                return Result.Failure(UserErrors.NotFound(responsibleUserId));
+            }
         }
 
-        department.Name = command.Name;
-        department.Description = command.Description;
-        department.ResponsibleUserId = command.ResponsibleUserId;
-
-        department.Raise(new DepartmentUpdatedDomainEvent(department.Id));
+        department.Update(command.Name, command.Description, responsibleUser);
 
         await context.SaveChangesAsync(cancellationToken);
 

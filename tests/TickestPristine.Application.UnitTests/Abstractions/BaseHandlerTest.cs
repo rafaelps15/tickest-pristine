@@ -148,20 +148,13 @@ public abstract class BaseHandlerTest
         string departmentName,
         bool isActive = true)
     {
-        var department = new Department
+        var department = Department.Create(departmentName, departmentName, responsibleUser: null);
+        var sector = Sector.Create(department, sectorName, description: null);
+
+        if (!isActive)
         {
-            Id = Guid.NewGuid(),
-            Name = departmentName,
-            Description = departmentName,
-            IsActive = true
-        };
-        var sector = new Sector
-        {
-            Id = Guid.NewGuid(),
-            Name = sectorName,
-            IsActive = isActive,
-            DepartmentId = department.Id
-        };
+            sector.Deactivate();
+        }
 
         context.Departments.Add(department);
         context.Sectors.Add(sector);
