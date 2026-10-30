@@ -5,7 +5,7 @@ status: Verificada              # Rascunho | Em descoberta | Bloqueada | Aprovad
 responsavel: Rafael Santos
 aprovada-em: 2026-10-29
 branch: refactor/SPEC-039-ticket-rich-domain-status                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: 55                  # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 039 — Ticket no domínio rico — parte 1 (entidade e transições de status)
@@ -126,7 +126,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 - **Documentação atualizada:** `CLAUDE.md` (Em migração, desvio do `Update`, histórico de chamados, convenções) e `SYSTEM_SPECIFICATION.md` (seções 1, 2.5, 3.1, 3.2, 5.4, 5.10, 8 e o diagrama de camadas).
 - **Verificação de 2026-10-30 (T-7):** `dotnet build TickestPristine.slnx --no-incremental` com 0 avisos e 0 erros; `dotnet test` (trx) com 1.339 aprovados e 0 falhas (56 + 810 + 473), entre eles os 53 de `TicketTests`, os 5 de `TicketActivityTests`, `RichEntities_Should_NotHaveNonPrivateSetters` e `MigrationsTests.Model_Should_HaveNoPendingChanges` (evidência do AC-11, porque o portão SDD bloqueia o `dotnet ef` sobre `src/`); auditoria SDD 100%, código de saída 0; `test_instructions.py` com 14 testes OK; busca do AC-7 sem ocorrências em `.cs`. Revisão `ca-review` independente: **reprova**, com um bloqueante: cerca de 55 `<summary>` existentes removidos (convertidos em `//` ou apagados), contra a regra permanente "nenhum `<summary>` existente é removido"; com a DEC-14, de Rafael Santos, os `<summary>` ficam removidos e o achado deixa de bloquear. Veredito final: aprova. Estão em `TicketHistoryEntries.Create` (o "restaurado" acima não está na árvore), em `Ticket.LastActivityAtUtc` e `Ticket.WaitingOn`, em `SampleDataSeeder` (`SampleUserGroups`, `StatusPaths`) e em 14 arquivos de teste (`BaseHandlerTest` 10, `TicketsTests` 22, `SlaMonitorBackgroundServiceTests` 4, entre outros); onde o texto citava uma spec, sai só a citação. Não bloqueantes: o handler de criação passa a devolver `UserErrors.NotFound` quando o usuário logado não existe no banco (antes, falha de FK); `slaPlan!` nos `TicketTestData`; `resolvedAtUtc` ignorado fora de Resolvido/Fechado no `TicketTestData`; arquivos em LF.
 - **CI:**
-- **Entrega:**
+- **Entrega:** PR #55 (https://github.com/rafaelps15/tickest-pristine/pull/55), aberto em 2026-10-30 para a `main`.
 
 ## 10. Histórico
 | Data | Status | Observação |
