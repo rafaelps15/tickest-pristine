@@ -72,10 +72,8 @@ internal sealed class CompleteTodoCommandHandler(
 ## Command que insere o registro que a entidade devolve
 
 ```csharp
-bool alreadyMember = await context.ProjectMembers
-    .AnyAsync(m => m.ProjectId == project.Id && m.UserId == command.UserId, cancellationToken);
-
-if (alreadyMember)
+if (await context.ProjectMembers
+    .AnyAsync(m => m.ProjectId == project.Id && m.UserId == command.UserId, cancellationToken))
 {
     return Result.Failure(ProjectErrors.MemberAlreadyAdded(command.UserId));
 }
@@ -116,7 +114,16 @@ if (nameResult.IsFailure)
     return Result.Failure<Guid>(nameResult.Error);
 }
 
-var project = Project.Create(userContext.UserId, nameResult.Value);
+User? owner = await context.Users
+    .AsNoTracking()
+    .SingleOrDefaultAsync(u => u.Id == userContext.UserId, cancellationToken);
+
+if (owner is null)
+{
+    return Result.Failure<Guid>(UserErrors.NotFound(userContext.UserId));
+}
+
+var project = Project.Create(owner, nameResult.Value);
 
 context.Projects.Add(project);
 
@@ -125,3 +132,6 @@ await context.SaveChangesAsync(cancellationToken);
 return project.Id;
 ```
 
+- O `Create` recebe a entidade que referencia (`Project.Create(owner, ...)`, `Order.Create(customer)`): o handler a carrega, devolve `NotFound` quando ela não existe e passa a entidade, não só o id.
+- Uma pergunta sim ou não que não repassa nada (nome único, "já é membro") é um `AnyAsync` direto no `if`.
+- Nenhuma classe estática faz essas consultas: cada handler mostra as suas.

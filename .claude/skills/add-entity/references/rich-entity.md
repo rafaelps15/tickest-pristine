@@ -13,22 +13,6 @@ public sealed class TodoItem : Entity
 {
     private readonly List<string> _labels = [];
 
-    private TodoItem(Guid userId, string description, Priority priority, DateTime? dueDate, IEnumerable<string> labels, DateTime createdAt)
-    {
-        Ensure.NotEmpty(userId, "O usuário é obrigatório.", nameof(userId));
-        Ensure.NotEmpty(description, "A descrição é obrigatória.", nameof(description));
-        Ensure.NotEmpty(createdAt, "A data de criação é obrigatória.", nameof(createdAt));
-
-        Id = Guid.NewGuid();
-        UserId = userId;
-        Description = description;
-        Priority = priority;
-        DueDate = dueDate;
-        CreatedAt = createdAt;
-        _labels.AddRange(labels);
-    }
-
-    // Exigido pelo EF Core.
     private TodoItem()
     {
     }
@@ -59,7 +43,17 @@ public sealed class TodoItem : Entity
             return Result.Failure<TodoItem>(TodoItemErrors.DueDateBeforeCreation);
         }
 
-        var todoItem = new TodoItem(userId, description, priority, dueDate, labels, createdAt);
+        var todoItem = new TodoItem
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Description = description,
+            Priority = priority,
+            DueDate = dueDate,
+            CreatedAt = createdAt
+        };
+
+        todoItem._labels.AddRange(labels);
 
         todoItem.Raise(new TodoItemCreatedDomainEvent(todoItem.Id));
 
@@ -91,28 +85,17 @@ public sealed class TodoItem : Entity
 }
 ```
 
-- `sealed`, herda `Entity`. O construtor privado protege os argumentos; o construtor privado sem parâmetros existe só para o EF Core.
+- `sealed`, herda `Entity`. Um único construtor privado sem parâmetros, usado pelo EF Core e pelo `Create`; o `Create` monta a entidade com inicializador de objeto, o único lugar em que ele aparece (os métodos de comportamento alteram a instância que já existe).
 - `private set` em toda propriedade. A coleção fica num campo privado e é exposta como `IReadOnlyCollection<T>`; o EF Core a mapeia pelo campo (`persistence.md`), e só os métodos da entidade a alteram.
 - `Create` devolve `Result<TodoItem>` porque uma regra de negócio pode recusar a criação; quando a criação não pode falhar, `Create` devolve a própria entidade (`Project.Create`, padrão 2 da `domain-modeling`). Nos dois casos, dispara o evento `Created`.
 - Os métodos de comportamento devolvem `Result` e disparam os próprios eventos. A hora atual é parâmetro.
-- Um `<summary>` curto em português só onde explica algo: em toda interface e nos métodos cujo comportamento não é óbvio pelo nome e pela assinatura (o que acontece em falha, quando devolve `false`, efeitos colaterais). Nada em propriedades, construtores, DTOs, endpoints, testes e métodos simples; nunca vazio. O único comentário comum explica o construtor do EF Core.
+- Um `<summary>` curto em português só onde explica algo: em toda interface e nos métodos cujo comportamento não é óbvio pelo nome e pela assinatura (o que acontece em falha, quando devolve `false`, efeitos colaterais). Nada em propriedades, construtores, DTOs, endpoints, testes e métodos simples; nunca vazio.
 
 ## Filho criado pelo agregado
 
 ```csharp
 public sealed class ProjectMember : Entity
 {
-    internal ProjectMember(Guid projectId, Guid userId)
-    {
-        Ensure.NotEmpty(projectId, "O projeto é obrigatório.", nameof(projectId));
-        Ensure.NotEmpty(userId, "O usuário é obrigatório.", nameof(userId));
-
-        Id = Guid.NewGuid();
-        ProjectId = projectId;
-        UserId = userId;
-    }
-
-    // Exigido pelo EF Core.
     private ProjectMember()
     {
     }
@@ -122,10 +105,21 @@ public sealed class ProjectMember : Entity
     public Guid ProjectId { get; private set; }
 
     public Guid UserId { get; private set; }
+
+    /// <summary>Cria o membro; chamado só por <c>Project.AddMember</c>, por isso é interno.</summary>
+    internal static ProjectMember Create(Guid projectId, Guid userId)
+    {
+        return new ProjectMember
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = projectId,
+            UserId = userId
+        };
+    }
 }
 ```
 
-- Construtor `internal`: só `Project.AddMember(userId)` o cria (padrão 7 da `domain-modeling`).
+- `internal static Create`: só `Project.AddMember(userId)` o cria (padrão 7 da `domain-modeling`).
 
 ## Configuração do objeto de valor
 
