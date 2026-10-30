@@ -152,18 +152,10 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
 
     private static async Task<Guid> SeedTicketAsync(TestDbContext context)
     {
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Medium,
-            Status = TicketStatus.Open,
-            CreatedByUserId = CreatorId,
-            AssignedToUserId = AssignedId,
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow
-        };
+        Ticket ticket = TicketTestData.Create(
+            requesterId: CreatorId,
+            assignedToUserId: AssignedId,
+            description: "Original description");
 
         context.Tickets.Add(ticket);
         await context.SaveChangesAsync();
@@ -263,7 +255,8 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         Ticket ticket = await SeedTicketWithSlaAsync(context, RequesterId, OpenedAtUtc);
         var formerAssigneeId = Guid.NewGuid();
-        ticket.AssignedToUserId = formerAssigneeId;
+        ticket.Assign(new User { Id = formerAssigneeId }, RequesterId, OpenedAtUtc);
+        ticket.ClearDomainEvents();
         await context.SaveChangesAsync();
 
         // Act

@@ -1,6 +1,7 @@
 using TickestPristine.Application.Tickets.GetSlaSummary;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Tickets;
+using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
@@ -14,14 +15,14 @@ public sealed class GetTicketSlaSummaryQueryHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var sectorId = Guid.NewGuid();
-        await SeedTicketAsync(context, sectorId, TicketStatus.Open, NowUtc.AddHours(-1));
-        await SeedTicketAsync(context, sectorId, TicketStatus.Open, NowUtc.AddHours(-2));
-        await SeedTicketAsync(context, sectorId, TicketStatus.InProgress, NowUtc.AddHours(-3.5));
-        await SeedTicketAsync(context, sectorId, TicketStatus.InProgress, NowUtc.AddHours(-5));
+        Sector sector = TicketTestData.CreateSector();
+        await SeedTicketAsync(context, sector, TicketStatus.Open, NowUtc.AddHours(-1));
+        await SeedTicketAsync(context, sector, TicketStatus.Open, NowUtc.AddHours(-2));
+        await SeedTicketAsync(context, sector, TicketStatus.InProgress, NowUtc.AddHours(-3.5));
+        await SeedTicketAsync(context, sector, TicketStatus.InProgress, NowUtc.AddHours(-5));
         // Reaberto depois de resolvido: conta como ativo, mas o SLA já foi decidido.
-        await SeedTicketAsync(context, sectorId, TicketStatus.Open, NowUtc.AddHours(-30), NowUtc.AddHours(-28));
-        await SeedTicketAsync(context, sectorId, TicketStatus.Closed, NowUtc.AddHours(-30), NowUtc.AddHours(-20));
+        await SeedTicketAsync(context, sector, TicketStatus.Open, NowUtc.AddHours(-30), NowUtc.AddHours(-28));
+        await SeedTicketAsync(context, sector, TicketStatus.Closed, NowUtc.AddHours(-30), NowUtc.AddHours(-20));
 
         GetTicketSlaSummaryQueryHandler handler = CreateHandler(context);
 
@@ -42,14 +43,14 @@ public sealed class GetTicketSlaSummaryQueryHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var sectorId = Guid.NewGuid();
-        await SeedTicketAsync(context, sectorId, TicketStatus.Open, NowUtc.AddHours(-5));
-        await SeedTicketAsync(context, Guid.NewGuid(), TicketStatus.Open, NowUtc.AddHours(-5));
+        Sector sector = TicketTestData.CreateSector();
+        await SeedTicketAsync(context, sector, TicketStatus.Open, NowUtc.AddHours(-5));
+        await SeedTicketAsync(context, TicketTestData.CreateSector(), TicketStatus.Open, NowUtc.AddHours(-5));
 
         GetTicketSlaSummaryQueryHandler handler = CreateHandler(context);
 
         // Act
-        Result<TicketSlaSummaryResponse> result = await handler.Handle(new GetTicketSlaSummaryQuery(sectorId), CancellationToken.None);
+        Result<TicketSlaSummaryResponse> result = await handler.Handle(new GetTicketSlaSummaryQuery(sector.Id), CancellationToken.None);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
@@ -63,8 +64,8 @@ public sealed class GetTicketSlaSummaryQueryHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
         // Só chamados encerrados: nenhum entra na contagem dos ativos.
-        await SeedTicketAsync(context, Guid.NewGuid(), TicketStatus.Closed, NowUtc.AddHours(-30), NowUtc.AddHours(-20));
-        await SeedTicketAsync(context, Guid.NewGuid(), TicketStatus.Canceled, NowUtc.AddHours(-30));
+        await SeedTicketAsync(context, TicketTestData.CreateSector(), TicketStatus.Closed, NowUtc.AddHours(-30), NowUtc.AddHours(-20));
+        await SeedTicketAsync(context, TicketTestData.CreateSector(), TicketStatus.Canceled, NowUtc.AddHours(-30));
 
         GetTicketSlaSummaryQueryHandler handler = CreateHandler(context);
 
@@ -88,30 +89,34 @@ public sealed class GetTicketSlaSummaryQueryHandlerTests : BaseHandlerTest
         return new GetTicketSlaSummaryQueryHandler(context, dateTimeProvider);
     }
 
-    /// <summary>
-    /// Chamado de prioridade Urgente (4 h de SLA, alerta em 3 h) aberto no instante informado.
-    /// </summary>
+    // Chamado de prioridade Urgente (4 h de SLA, alerta em 3 h) aberto no instante informado.
     private static async Task SeedTicketAsync(
         TestDbContext context,
-        Guid sectorId,
+        Sector sector,
         TicketStatus status,
         DateTime createdAtUtc,
         DateTime? resolvedAtUtc = null)
     {
-        context.Tickets.Add(new Ticket
+        // Ativo com data de resolução: resolvido nessa data e reaberto depois.
+        bool reopened = Ticket.IsActiveStatus(status) && resolvedAtUtc is not null;
+
+        Ticket ticket = TicketTestData.Create(
+            sector: sector,
+            status: reopened ? TicketStatus.Resolved : status,
+            createdAtUtc: createdAtUtc,
+            priority: TicketPriority.Urgent,
+            description: "Original description",
+            dueAtUtc: TicketSla.DueAt(createdAtUtc, TicketPriority.Urgent),
+            slaWarningAtUtc: TicketSla.WarningAt(createdAtUtc, TicketPriority.Urgent),
+            resolvedAtUtc: resolvedAtUtc);
+
+        if (reopened)
         {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Urgent,
-            Status = status,
-            CreatedByUserId = Guid.NewGuid(),
-            SectorId = sectorId,
-            CreatedAtUtc = createdAtUtc,
-            DueAtUtc = TicketSla.DueAt(createdAtUtc, TicketPriority.Urgent),
-            SlaWarningAtUtc = TicketSla.WarningAt(createdAtUtc, TicketPriority.Urgent),
-            ResolvedAtUtc = resolvedAtUtc
-        });
+            ticket.Reopen(ticket.CreatedByUserId, resolvedAtUtc!.Value);
+            ticket.ClearDomainEvents();
+        }
+
+        context.Tickets.Add(ticket);
 
         await context.SaveChangesAsync();
     }

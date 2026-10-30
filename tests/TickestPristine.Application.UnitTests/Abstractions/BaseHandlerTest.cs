@@ -26,14 +26,9 @@ public abstract class BaseHandlerTest
         return new TestDbContext(options);
     }
 
-    /// <summary>
-    /// Instante padrão dos testes que não dependem de um horário: segunda-feira, 26/10/2026, 08:10 em São Paulo.
-    /// </summary>
+    // Instante padrão dos testes que não dependem de um horário: segunda-feira, 26/10/2026, 08:10 em São Paulo.
     protected static readonly DateTime DefaultUtcNow = new(2026, 10, 26, 11, 10, 0, DateTimeKind.Utc);
 
-    /// <summary>
-    /// Relógio parado no instante informado (ou no <see cref="DefaultUtcNow"/>).
-    /// </summary>
     protected static IDateTimeProvider CreateClock(DateTime? utcNow = null)
     {
         IDateTimeProvider clock = Substitute.For<IDateTimeProvider>();
@@ -44,66 +39,65 @@ public abstract class BaseHandlerTest
 
     protected static ISlaCalendarProvider CreateSlaCalendarProvider() => new TestSlaCalendarProvider();
 
-    /// <summary>
-    /// Plano "Padrão" de um chamado Urgente, no calendário "Expediente".
-    /// </summary>
+    // Plano "Padrão" de um chamado Urgente, no calendário "Expediente".
     protected static TicketSlaPlan CreateSlaPlan() => TicketSla.DefaultPlan(TicketPriority.Urgent);
 
-    /// <summary>
-    /// Chamado Urgente aberto em <paramref name="createdAtUtc"/> com o plano de <see cref="CreateSlaPlan"/> e os
-    /// cronômetros do ciclo 1, como a abertura pela API grava.
-    /// </summary>
-    protected static async Task<Ticket> SeedTicketWithSlaAsync(
+    // Chamado Urgente aberto em createdAtUtc com o plano de CreateSlaPlan e os
+    // cronômetros do ciclo 1, como a abertura pela API grava.
+    protected static Task<Ticket> SeedTicketWithSlaAsync(
         TestDbContext context,
         Guid requesterId,
         DateTime createdAtUtc,
-        TicketStatus status = TicketStatus.Open)
-    {
-        TicketSlaPlan plan = CreateSlaPlan();
-        var ticketId = Guid.NewGuid();
-        List<TicketSlaTimer> timers = TicketSlaClock.Start(ticketId, plan, DefaultSlaCalendar.Create(), createdAtUtc);
-        TicketSlaTimer resolution = timers.Single(t => t.Metric == SlaMetric.Resolution);
+        TicketStatus status = TicketStatus.Open) =>
+        SeedTicketWithSlaAsync(context, requesterId, createdAtUtc, status, resolvedAtUtc: null);
 
-        var ticket = new Ticket
-        {
-            Id = ticketId,
-            Title = "Printer is broken",
-            Description = "The printer on the 3rd floor is not working",
-            Priority = TicketPriority.Urgent,
-            Status = status,
-            CreatedByUserId = requesterId,
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = createdAtUtc,
-            DueAtUtc = resolution.DueOnUtc,
-            SlaWarningAtUtc = resolution.WarningOnUtc,
-            SlaPlan = plan
-        };
-
-        context.Tickets.Add(ticket);
-        context.TicketSlaTimers.AddRange(timers);
-        await context.SaveChangesAsync();
-
-        return ticket;
-    }
-
-    /// <summary>
-    /// Chamado de <see cref="SeedTicketWithSlaAsync"/> já resolvido em <paramref name="resolvedAtUtc"/>, com os dois
-    /// cronômetros concluídos nesse instante.
-    /// </summary>
+    // Chamado de SeedTicketWithSlaAsync já resolvido em resolvedAtUtc, com os dois
+    // cronômetros concluídos nesse instante.
     protected static async Task<Ticket> SeedResolvedTicketWithSlaAsync(
         TestDbContext context,
         Guid requesterId,
         DateTime createdAtUtc,
         DateTime resolvedAtUtc)
     {
-        Ticket ticket = await SeedTicketWithSlaAsync(context, requesterId, createdAtUtc, TicketStatus.Resolved);
-        ticket.ResolvedAtUtc = resolvedAtUtc;
+        Ticket ticket = await SeedTicketWithSlaAsync(context, requesterId, createdAtUtc, TicketStatus.Resolved, resolvedAtUtc);
 
         foreach (TicketSlaTimer timer in context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id))
         {
             TicketSlaClock.Complete(timer, resolvedAtUtc, SlaCompletionCause.Resolution);
         }
 
+        await context.SaveChangesAsync();
+
+        return ticket;
+    }
+
+    private static async Task<Ticket> SeedTicketWithSlaAsync(
+        TestDbContext context,
+        Guid requesterId,
+        DateTime createdAtUtc,
+        TicketStatus status,
+        DateTime? resolvedAtUtc)
+    {
+        TicketSlaPlan plan = CreateSlaPlan();
+
+        // Os prazos do chamado vêm do cronômetro de resolução; o id do chamado entra depois, como na abertura pela API.
+        List<TicketSlaTimer> timers = TicketSlaClock.Start(Guid.Empty, plan, DefaultSlaCalendar.Create(), createdAtUtc);
+        TicketSlaTimer resolution = timers.Single(t => t.Metric == SlaMetric.Resolution);
+
+        Ticket ticket = TicketTestData.Create(
+            requesterId: requesterId,
+            status: status,
+            createdAtUtc: createdAtUtc,
+            priority: TicketPriority.Urgent,
+            slaPlan: plan,
+            dueAtUtc: resolution.DueOnUtc,
+            slaWarningAtUtc: resolution.WarningOnUtc,
+            resolvedAtUtc: resolvedAtUtc);
+
+        timers.ForEach(timer => timer.TicketId = ticket.Id);
+
+        context.Tickets.Add(ticket);
+        context.TicketSlaTimers.AddRange(timers);
         await context.SaveChangesAsync();
 
         return ticket;
@@ -120,9 +114,7 @@ public abstract class BaseHandlerTest
         return services.BuildServiceProvider().GetRequiredService<HybridCache>();
     }
 
-    /// <summary>
-    /// Usuário válido para os testes, com e-mail único; os demais campos podem ser ajustados depois de criado.
-    /// </summary>
+    // Usuário válido para os testes, com e-mail único; os demais campos podem ser ajustados depois de criado.
     protected static User CreateUser(bool isActive = true) => new()
     {
         Id = Guid.NewGuid(),
@@ -134,14 +126,10 @@ public abstract class BaseHandlerTest
         CreatedAtUtc = new DateTime(2026, 10, 1, 9, 0, 0, DateTimeKind.Utc)
     };
 
-    /// <summary>
-    /// Role com qualquer nome, como as que já existem no banco além das fixas de <see cref="RoleNames"/>.
-    /// </summary>
+    // Role com qualquer nome, como as que já existem no banco além das fixas de RoleNames.
     protected static Role CreateRole(string name) => new() { Id = Guid.NewGuid(), Name = name };
 
-    /// <summary>
-    /// Setor num departamento novo, gravados no banco, para os testes que leem o setor do usuário.
-    /// </summary>
+    // Setor num departamento novo, gravados no banco, para os testes que leem o setor do usuário.
     protected static async Task<Sector> SeedSectorAsync(
         TestDbContext context,
         string sectorName,
@@ -163,10 +151,8 @@ public abstract class BaseHandlerTest
         return sector;
     }
 
-    /// <summary>
-    /// Dá ao usuário uma role nova com as permissões informadas, gravada no banco (como a elegibilidade de atendente
-    /// lê, sem o cache de permissões).
-    /// </summary>
+    // Dá ao usuário uma role nova com as permissões informadas, gravada no banco (como a elegibilidade de atendente
+    // lê, sem o cache de permissões).
     protected static async Task GrantPermissionsAsync(TestDbContext context, Guid userId, params string[] permissionCodes)
     {
         Role role = CreateRole($"Role-{Guid.NewGuid():N}");
@@ -183,9 +169,6 @@ public abstract class BaseHandlerTest
         await context.SaveChangesAsync();
     }
 
-    /// <summary>
-    /// Provedor em que nenhum calendário existe, para os caminhos de falha do calendário do plano.
-    /// </summary>
     protected static ISlaCalendarProvider CreateMissingSlaCalendarProvider()
     {
         ISlaCalendarProvider provider = Substitute.For<ISlaCalendarProvider>();

@@ -9,7 +9,7 @@ namespace TickestPristine.Application.Tickets;
 internal static class TicketSlaFilters
 {
     /// <summary>
-    /// Chamados ativos (Aberto e Em andamento), a mesma regra de <see cref="TicketStatusTransitions.IsActive"/>.
+    /// Chamados ativos (Aberto e Em andamento), a mesma regra de <see cref="Ticket.IsActiveStatus"/>.
     /// </summary>
     internal static IQueryable<Ticket> WhereActive(this IQueryable<Ticket> tickets) =>
         tickets.Where(t => t.Status == TicketStatus.Open || t.Status == TicketStatus.InProgress);

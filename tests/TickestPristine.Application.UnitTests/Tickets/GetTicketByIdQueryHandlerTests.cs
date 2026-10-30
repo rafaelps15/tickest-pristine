@@ -159,10 +159,8 @@ public sealed class GetTicketByIdQueryHandlerTests : BaseHandlerTest
         return new GetTicketByIdQueryHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), dateTimeProvider);
     }
 
-    /// <summary>
-    /// Chamado Urgente aberto, por padrão, 3,5 h antes de <see cref="NowUtc"/>: já passou do alerta (3 h) e não venceu
-    /// (4 h).
-    /// </summary>
+    // Chamado Urgente aberto, por padrão, 3,5 h antes de NowUtc: já passou do alerta (3 h) e não venceu
+    // (4 h).
     private static async Task<Ticket> SeedTicketAsync(
         TestDbContext context,
         DateTime? openedAtUtc = null,
@@ -172,20 +170,16 @@ public sealed class GetTicketByIdQueryHandlerTests : BaseHandlerTest
         var sector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Helpdesk", description: null);
         DateTime createdAtUtc = openedAtUtc ?? NowUtc.AddHours(-3.5);
 
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Urgent,
-            Status = status,
-            CreatedByUserId = requester.Id,
-            SectorId = sector.Id,
-            CreatedAtUtc = createdAtUtc,
-            DueAtUtc = TicketSla.DueAt(createdAtUtc, TicketPriority.Urgent),
-            SlaWarningAtUtc = TicketSla.WarningAt(createdAtUtc, TicketPriority.Urgent),
-            SlaPlan = TicketSla.LegacyPlan(TicketPriority.Urgent)
-        };
+        Ticket ticket = TicketTestData.Create(
+            requesterId: requester.Id,
+            sector: sector,
+            status: status,
+            createdAtUtc: createdAtUtc,
+            priority: TicketPriority.Urgent,
+            description: "Original description",
+            slaPlan: TicketSla.LegacyPlan(TicketPriority.Urgent),
+            dueAtUtc: TicketSla.DueAt(createdAtUtc, TicketPriority.Urgent),
+            slaWarningAtUtc: TicketSla.WarningAt(createdAtUtc, TicketPriority.Urgent));
 
         context.Users.Add(requester);
         context.Sectors.Add(sector);

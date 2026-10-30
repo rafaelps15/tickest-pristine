@@ -125,12 +125,18 @@ public sealed class GetTicketHistoryQueryHandlerTests : BaseHandlerTest
         beto.LastName = "Lima";
         context.Users.AddRange(ana, beto);
 
-        var removedUserId = Guid.NewGuid();
+        var removedUser = new User { Id = Guid.NewGuid() };
         DateTime occurredAtUtc = DateTime.UtcNow.AddMinutes(5);
-        context.TicketHistories.AddRange(
-            TicketHistoryEntries.Assigned(ticketId, CreatorId, ana.Id, occurredAtUtc),
-            TicketHistoryEntries.Reassigned(ticketId, CreatorId, ana.Id, beto.Id, occurredAtUtc.AddMinutes(1)),
-            TicketHistoryEntries.Unassigned(ticketId, CreatorId, removedUserId, occurredAtUtc.AddMinutes(2)));
+        Ticket ticket = (await context.Tickets.FindAsync(ticketId))!;
+        TicketHistory assigned = ticket.Assign(ana, CreatorId, occurredAtUtc);
+        TicketHistory reassigned = ticket.Assign(beto, CreatorId, occurredAtUtc.AddMinutes(1));
+
+        // O usuário removido só passa a ser o responsável para a remoção registrá-lo; essa troca não entra no histórico.
+        ticket.Assign(removedUser, CreatorId, occurredAtUtc.AddMinutes(2));
+        TicketHistory unassigned = ticket.Unassign(CreatorId, occurredAtUtc.AddMinutes(2));
+        ticket.ClearDomainEvents();
+
+        context.TicketHistories.AddRange(assigned, reassigned, unassigned);
         await context.SaveChangesAsync();
 
         IUserContext userContext = Substitute.For<IUserContext>();
@@ -153,18 +159,7 @@ public sealed class GetTicketHistoryQueryHandlerTests : BaseHandlerTest
 
     private static async Task<Guid> SeedTicketWithHistoryAsync(TestDbContext context)
     {
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Medium,
-            Status = TicketStatus.Open,
-            CreatedByUserId = CreatorId,
-            AssignedToUserId = null,
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow
-        };
+        Ticket ticket = TicketTestData.Create(requesterId: CreatorId, description: "Original description");
         context.Tickets.Add(ticket);
 
         var created = new TicketHistory

@@ -327,18 +327,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
 
     private static async Task<Guid> SeedTicketAsync(TestDbContext context)
     {
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Medium,
-            Status = TicketStatus.Open,
-            CreatedByUserId = CreatorId,
-            AssignedToUserId = null,
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow
-        };
+        Ticket ticket = TicketTestData.Create(requesterId: CreatorId, description: "Original description");
 
         context.Tickets.Add(ticket);
         await context.SaveChangesAsync();

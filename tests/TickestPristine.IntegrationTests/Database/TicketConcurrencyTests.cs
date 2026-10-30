@@ -6,9 +6,7 @@ using TickestPristine.Infrastructure.Database;
 
 namespace TickestPristine.IntegrationTests.Database;
 
-/// <summary>
-/// Valida que o token de concorrência do chamado (xmin) impede que uma mudança de status sobrescreva outra.
-/// </summary>
+// Valida que o token de concorrência do chamado (xmin) impede que uma mudança de status sobrescreva outra.
 public sealed class TicketConcurrencyTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
     [Fact]
@@ -26,8 +24,10 @@ public sealed class TicketConcurrencyTests(IntegrationTestWebAppFactory factory)
         Ticket firstCopy = await firstContext.Tickets.SingleAsync(t => t.Id == ticketId);
         Ticket secondCopy = await secondContext.Tickets.SingleAsync(t => t.Id == ticketId);
 
-        firstCopy.Status = TicketStatus.InProgress;
-        secondCopy.Status = TicketStatus.Canceled;
+        firstCopy.Update(firstCopy.Description, TicketStatus.InProgress, firstCopy.CreatedByUserId, DateTime.UtcNow);
+        secondCopy.Update(secondCopy.Description, TicketStatus.Canceled, secondCopy.CreatedByUserId, DateTime.UtcNow);
+        firstCopy.ClearDomainEvents();
+        secondCopy.ClearDomainEvents();
 
         // Act
         await firstContext.SaveChangesAsync();

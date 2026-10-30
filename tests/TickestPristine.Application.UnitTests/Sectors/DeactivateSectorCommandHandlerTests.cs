@@ -78,17 +78,10 @@ public sealed class DeactivateSectorCommandHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         var sector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Helpdesk", description: null);
         context.Sectors.Add(sector);
-        context.Tickets.Add(new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "The printer on the second floor is not working",
-            Priority = TicketPriority.Medium,
-            Status = TicketStatus.InProgress,
-            CreatedByUserId = Guid.NewGuid(),
-            SectorId = sector.Id,
-            CreatedAtUtc = DateTime.UtcNow
-        });
+        context.Tickets.Add(TicketTestData.Create(
+            sector: sector,
+            status: TicketStatus.InProgress,
+            description: "The printer on the second floor is not working"));
         await context.SaveChangesAsync();
 
         var handler = new DeactivateSectorCommandHandler(context);

@@ -5,7 +5,6 @@ using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Sla;
 using TickestPristine.Application.Authorization;
 using TickestPristine.Application.SlaCalendars;
-using TickestPristine.Application.TicketHistories;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
@@ -24,13 +23,13 @@ internal sealed class CreateTicketCommandHandler(
 {
     public async Task<Result<Guid>> Handle(CreateTicketCommand command, CancellationToken cancellationToken)
     {
-        Guid openedByUserId = command.RequesterId ?? userContext.UserId;
+        Guid requesterId = command.RequesterId ?? userContext.UserId;
 
         // Abrir em nome de outra pessoa exige gerenciar chamados.
         Result access = await TicketAccessGuard.EnsureOwnerOrManagerAsync(
             permissionProvider,
             userContext.UserId,
-            openedByUserId,
+            requesterId,
             ownPermission: null,
             cancellationToken);
 
@@ -39,32 +38,28 @@ internal sealed class CreateTicketCommandHandler(
             return Result.Failure<Guid>(access.Error);
         }
 
-        // Solicitante e responsável informados são conferidos numa única consulta; o usuário logado já é válido. Usuário
-        // desativado conta como inexistente, como o setor inativo logo abaixo.
-        Guid[] referencedUserIds = new[] { command.RequesterId, command.AssignedToUserId }
-            .OfType<Guid>()
-            .Where(id => id != userContext.UserId)
-            .Distinct()
-            .ToArray();
+        // Solicitante e responsável são carregados numa única consulta, com o usuário logado, que já é válido mesmo
+        // desativado. Usuário informado desativado conta como inexistente, como o setor inativo logo abaixo.
+        Guid?[] referencedUserIds = [command.RequesterId, command.AssignedToUserId];
+        Guid[] userIds = referencedUserIds.OfType<Guid>().Append(userContext.UserId).Distinct().ToArray();
 
-        if (referencedUserIds.Length > 0)
+        List<User> users = await context.Users
+            .AsNoTracking()
+            .Where(u => userIds.Contains(u.Id) && (u.IsActive || u.Id == userContext.UserId))
+            .ToListAsync(cancellationToken);
+
+        Guid? missingUserId = userIds.Where(id => users.All(u => u.Id != id)).Cast<Guid?>().FirstOrDefault();
+
+        if (missingUserId is { } userId)
         {
-            List<Guid> existingUserIds = await context.Users
-                .Where(u => referencedUserIds.Contains(u.Id) && u.IsActive)
-                .Select(u => u.Id)
-                .ToListAsync(cancellationToken);
-
-            Guid? missingUserId = referencedUserIds.Except(existingUserIds).Cast<Guid?>().FirstOrDefault();
-
-            if (missingUserId is { } userId)
-            {
-                return Result.Failure<Guid>(UserErrors.NotFound(userId));
-            }
+            return Result.Failure<Guid>(UserErrors.NotFound(userId));
         }
 
-        bool sectorExists = await context.Sectors.AnyAsync(s => s.Id == command.SectorId && s.IsActive, cancellationToken);
+        Sector? sector = await context.Sectors
+            .AsNoTracking()
+            .SingleOrDefaultAsync(s => s.Id == command.SectorId && s.IsActive, cancellationToken);
 
-        if (!sectorExists)
+        if (sector is null)
         {
             return Result.Failure<Guid>(SectorErrors.NotFound(command.SectorId));
         }
@@ -80,34 +75,30 @@ internal sealed class CreateTicketCommandHandler(
         }
 
         DateTime createdAtUtc = dateTimeProvider.UtcNow;
-        var ticketId = Guid.NewGuid();
 
-        List<TicketSlaTimer> slaTimers = TicketSlaClock.Start(ticketId, slaPlan, calendar.Value, createdAtUtc);
-
-        // Os prazos do chamado seguem o primeiro ciclo de resolução, como o SLA que o resumo e os filtros já usam.
+        // Os prazos do chamado seguem o primeiro ciclo de resolução, como o SLA que o resumo e os filtros já usam. Os
+        // cronômetros são calculados antes do chamado, que recebe esses prazos, e passam a apontar para ele em seguida.
+        List<TicketSlaTimer> slaTimers = TicketSlaClock.Start(Guid.Empty, slaPlan, calendar.Value, createdAtUtc);
         TicketSlaTimer resolution = slaTimers.Single(t => t.Metric == SlaMetric.Resolution);
 
-        var ticket = new Ticket
-        {
-            Id = ticketId,
-            Title = command.Title,
-            Description = command.Description,
-            Priority = command.Priority,
-            Status = TicketStatus.Open,
-            CreatedByUserId = openedByUserId,
-            AssignedToUserId = command.AssignedToUserId,
-            SectorId = command.SectorId,
-            CreatedAtUtc = createdAtUtc,
-            DueAtUtc = resolution.DueOnUtc,
-            SlaWarningAtUtc = resolution.WarningOnUtc,
-            SlaPlan = slaPlan
-        };
+        var ticket = Ticket.Create(
+            command.Title,
+            command.Description,
+            command.Priority,
+            sector,
+            users.Single(u => u.Id == requesterId),
+            users.SingleOrDefault(u => u.Id == command.AssignedToUserId),
+            slaPlan,
+            resolution.DueOnUtc,
+            resolution.WarningOnUtc,
+            userContext.UserId,
+            createdAtUtc);
 
-        ticket.Raise(new TicketCreatedDomainEvent(ticket.Id, userContext.UserId));
+        slaTimers.ForEach(timer => timer.TicketId = ticket.Id);
 
         context.Tickets.Add(ticket);
         context.TicketSlaTimers.AddRange(slaTimers);
-        context.TicketHistories.Add(TicketHistoryEntries.Created(ticket.Id, userContext.UserId, createdAtUtc));
+        context.TicketHistories.Add(ticket.RecordOpening(userContext.UserId));
 
         await context.SaveChangesAsync(cancellationToken);
 

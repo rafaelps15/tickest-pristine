@@ -124,18 +124,10 @@ public sealed class TicketAccessGuardTests : BaseHandlerTest
 
     private static async Task<Guid> SeedTicketAsync(TestDbContext context)
     {
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Medium,
-            Status = TicketStatus.Open,
-            CreatedByUserId = RequesterId,
-            AssignedToUserId = AssigneeId,
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow
-        };
+        Ticket ticket = TicketTestData.Create(
+            requesterId: RequesterId,
+            assignedToUserId: AssigneeId,
+            description: "Original description");
 
         context.Tickets.Add(ticket);
         await context.SaveChangesAsync();

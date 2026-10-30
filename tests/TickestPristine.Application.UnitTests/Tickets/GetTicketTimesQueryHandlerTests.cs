@@ -2,18 +2,18 @@ using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Tickets.GetTimes;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
-/// <summary>
-/// Os cronômetros usam o calendário contínuo (24 horas), em que o minuto útil é o minuto do relógio, para os tempos
-/// do teste serem exatos.
-/// </summary>
+// Os cronômetros usam o calendário contínuo (24 horas), em que o minuto útil é o minuto do relógio, para os tempos
+// do teste serem exatos.
 public sealed class GetTicketTimesQueryHandlerTests : BaseHandlerTest
 {
     private static readonly DateTime StartUtc = new(2026, 9, 10, 12, 0, 0, DateTimeKind.Utc);
-    private static readonly Guid SectorId = Guid.NewGuid();
+    private static readonly Sector DefaultSector = TicketTestData.CreateSector();
+    private static readonly Guid SectorId = DefaultSector.Id;
 
     [Fact]
     public async Task Handle_Should_CountOnlyFirstResponsesCompletedByMessage_WhenSomeWereCompletedByResolution()
@@ -111,7 +111,7 @@ public sealed class GetTicketTimesQueryHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         await SeedTimerAsync(context, SlaMetric.FirstResponse, 1, 30, SlaCompletionCause.Message);
         await SeedTimerAsync(context, SlaMetric.FirstResponse, 1, 30, SlaCompletionCause.Message, startUtc: StartUtc.AddMonths(1));
-        await SeedTimerAsync(context, SlaMetric.FirstResponse, 1, 30, SlaCompletionCause.Message, sectorId: Guid.NewGuid());
+        await SeedTimerAsync(context, SlaMetric.FirstResponse, 1, 30, SlaCompletionCause.Message, sector: TicketTestData.CreateSector());
 
         GetTicketTimesQueryHandler handler = CreateHandler(context);
         var scope = new TicketScopeFilter([SectorId], null, null, null, false, null, null, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30));
@@ -145,10 +145,8 @@ public sealed class GetTicketTimesQueryHandlerTests : BaseHandlerTest
     private static GetTicketTimesQuery CreateQuery() =>
         new(new TicketScopeFilter([], null, null, null, false, null, null, null, null));
 
-    /// <summary>
-    /// Chamado (ou o informado) com um cronômetro concluído <paramref name="minutes"/> minutos depois do início, pela
-    /// causa informada; sem causa, o cronômetro fica em aberto.
-    /// </summary>
+    // Chamado (ou o informado) com um cronômetro concluído minutes minutos depois do início, pela
+    // causa informada; sem causa, o cronômetro fica em aberto.
     private static async Task<Guid> SeedTimerAsync(
         TestDbContext context,
         SlaMetric metric,
@@ -157,25 +155,20 @@ public sealed class GetTicketTimesQueryHandlerTests : BaseHandlerTest
         SlaCompletionCause? cause,
         Guid? ticketId = null,
         DateTime? startUtc = null,
-        Guid? sectorId = null)
+        Sector? sector = null)
     {
         DateTime startedAtUtc = startUtc ?? StartUtc;
 
         if (ticketId is null)
         {
-            var ticket = new Ticket
-            {
-                Id = Guid.NewGuid(),
-                Title = "Chamado dos tempos médios",
-                Description = "Chamado gravado direto no banco",
-                Priority = TicketPriority.Medium,
-                Status = TicketStatus.Resolved,
-                CreatedByUserId = Guid.NewGuid(),
-                SectorId = sectorId ?? SectorId,
-                CreatedAtUtc = startedAtUtc,
-                DueAtUtc = startedAtUtc.AddHours(8),
-                SlaWarningAtUtc = startedAtUtc.AddHours(6)
-            };
+            Ticket ticket = TicketTestData.Create(
+                sector: sector ?? DefaultSector,
+                status: TicketStatus.Resolved,
+                createdAtUtc: startedAtUtc,
+                title: "Chamado dos tempos médios",
+                description: "Chamado gravado direto no banco",
+                dueAtUtc: startedAtUtc.AddHours(8),
+                slaWarningAtUtc: startedAtUtc.AddHours(6));
             context.Tickets.Add(ticket);
             ticketId = ticket.Id;
         }

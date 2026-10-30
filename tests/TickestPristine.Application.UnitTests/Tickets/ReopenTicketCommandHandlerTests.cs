@@ -348,10 +348,8 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
             .AddInterceptors(probe)
             .Options);
 
-    /// <summary>
-    /// Conta as chamadas de SaveChanges, guarda o tipo das entidades gravadas e, quando pedido, faz a próxima gravação
-    /// falhar antes de chegar ao banco.
-    /// </summary>
+    // Conta as chamadas de SaveChanges, guarda o tipo das entidades gravadas e, quando pedido, faz a próxima gravação
+    // falhar antes de chegar ao banco.
     private sealed class SaveChangesProbe : SaveChangesInterceptor
     {
         public int Saves { get; private set; }
@@ -389,26 +387,21 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
 
     private static async Task<Guid> SeedTicketAsync(TestDbContext context, Guid createdByUserId, TicketStatus status)
     {
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Medium,
-            Status = TicketStatus.Open,
-            CreatedByUserId = createdByUserId,
-            AssignedToUserId = null,
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow,
-            SlaPlan = CreateSlaPlan()
-        };
+        bool isKnownStatus = Enum.IsDefined(status);
 
-        if (status != TicketStatus.Open)
-        {
-            ticket.Status = status;
-        }
+        Ticket ticket = TicketTestData.Create(
+            requesterId: createdByUserId,
+            status: isKnownStatus ? status : TicketStatus.Open,
+            description: "Original description",
+            slaPlan: CreateSlaPlan());
 
         context.Tickets.Add(ticket);
+
+        // Um status fora do enum não é produzido pelo domínio; entra pelo EF.
+        if (!isKnownStatus)
+        {
+            context.Entry(ticket).Property(t => t.Status).CurrentValue = status;
+        }
         await context.SaveChangesAsync();
 
         return ticket.Id;

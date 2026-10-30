@@ -27,7 +27,7 @@ internal sealed class DeleteTicketCommandHandler(
             return Result.Failure(TicketErrors.NotFound(command.TicketId));
         }
 
-        // Só quem tem tickets:delete exclui; ser o dono ou atender a fila não basta (spec 016).
+        // Só quem tem tickets:delete exclui; ser o dono ou atender a fila não basta.
         bool canDelete = await permissionProvider.HasPermissionAsync(
             userContext.UserId,
             PermissionCodes.Tickets.Delete,
@@ -38,16 +38,12 @@ internal sealed class DeleteTicketCommandHandler(
             return Result.Failure(UserErrors.Unauthorized());
         }
 
-        if (!TicketStatusTransitions.IsActive(ticket.Status))
+        if (!ticket.IsActive)
         {
             return Result.Failure(TicketErrors.NotActive(ticket.Id));
         }
 
-        DateTime nowUtc = dateTimeProvider.UtcNow;
-
-        ticket.DeletedAtUtc = nowUtc;
-
-        ticket.Raise(new TicketDeletedDomainEvent(ticket.Id));
+        context.TicketHistories.Add(ticket.Delete(userContext.UserId, dateTimeProvider.UtcNow));
 
         // Os cronômetros do chamado excluído saem da fila do monitoramento, sem violação nem evento.
         List<TicketSlaTimer> slaTimers = await context.TicketSlaTimers
@@ -55,12 +51,6 @@ internal sealed class DeleteTicketCommandHandler(
             .ToListAsync(cancellationToken);
 
         slaTimers.ForEach(TicketSlaClock.Dequeue);
-
-        context.TicketHistories.Add(TicketHistoryEntries.Create(
-            ticket.Id,
-            userContext.UserId,
-            TicketHistoryAction.Deleted,
-            nowUtc));
 
         await context.SaveChangesAsync(cancellationToken);
 
