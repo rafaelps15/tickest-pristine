@@ -26,13 +26,11 @@ internal sealed class DeactivateDepartmentCommandHandler(IApplicationDbContext c
             return Result.Failure(DepartmentErrors.AlreadyDeactivated(department.Id));
         }
 
-        bool hasActiveTickets = await context.Tickets
+        if (await context.Tickets
             .WhereActive()
             .AnyAsync(
                 t => context.Sectors.Any(s => s.Id == t.SectorId && s.DepartmentId == department.Id),
-                cancellationToken);
-
-        if (hasActiveTickets)
+                cancellationToken))
         {
             return Result.Failure(DepartmentErrors.HasActiveTickets());
         }
@@ -44,13 +42,10 @@ internal sealed class DeactivateDepartmentCommandHandler(IApplicationDbContext c
 
         foreach (Sector sector in activeSectors)
         {
-            sector.IsActive = false;
-            sector.Raise(new SectorDeactivatedDomainEvent(sector.Id));
+            sector.Deactivate();
         }
 
-        department.IsActive = false;
-
-        department.Raise(new DepartmentDeactivatedDomainEvent(department.Id));
+        department.Deactivate();
 
         await context.SaveChangesAsync(cancellationToken);
 

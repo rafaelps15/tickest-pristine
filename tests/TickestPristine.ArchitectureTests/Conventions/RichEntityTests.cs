@@ -1,12 +1,14 @@
 using Shouldly;
 using TickestPristine.ArchitectureTests.Conventions.Fixtures;
+using TickestPristine.Domain.Departments;
+using TickestPristine.Domain.Sectors;
 
 namespace TickestPristine.ArchitectureTests.Conventions;
 
 public class RichEntityTests : BaseTest
 {
     // Entidades já migradas para o domínio rico; cada migração acrescenta as suas.
-    private static readonly Type[] RichEntities = [];
+    private static readonly Type[] RichEntities = [typeof(Department), typeof(Sector)];
 
     [Fact]
     public void RichEntities_Should_NotHaveNonPrivateSetters()

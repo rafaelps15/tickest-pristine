@@ -7,7 +7,6 @@ internal sealed class UpdateSectorCommandValidator : AbstractValidator<UpdateSec
     public UpdateSectorCommandValidator()
     {
         RuleFor(c => c.SectorId).NotEmpty();
-        RuleFor(c => c.Name).NotEmpty().MaximumLength(SectorValidationRules.NameMaxLength);
-        RuleFor(c => c.Description).MaximumLength(SectorValidationRules.DescriptionMaxLength);
+        RuleFor(c => c.Name).NotEmpty();
     }
 }

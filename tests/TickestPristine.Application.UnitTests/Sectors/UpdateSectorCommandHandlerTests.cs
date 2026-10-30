@@ -1,5 +1,6 @@
 using TickestPristine.Application.Sectors.Update;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,14 +29,7 @@ public sealed class UpdateSectorCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var sector = new Sector
-        {
-            Id = Guid.NewGuid(),
-            Name = "Helpdesk",
-            DepartmentId = Guid.NewGuid(),
-            Description = "Original description",
-            IsActive = true
-        };
+        var sector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Helpdesk", "Original description");
         context.Sectors.Add(sector);
         await context.SaveChangesAsync();
 
@@ -59,10 +53,10 @@ public sealed class UpdateSectorCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var departmentId = Guid.NewGuid();
-        var sector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = departmentId, IsActive = true };
+        var department = Department.Create("Suporte", "Departamento de teste", responsibleUser: null);
+        var sector = Sector.Create(department, "Helpdesk", description: null);
         context.Sectors.Add(sector);
-        context.Sectors.Add(new Sector { Id = Guid.NewGuid(), Name = "Networks", DepartmentId = departmentId, IsActive = true });
+        context.Sectors.Add(Sector.Create(department, "Networks", description: null));
         await context.SaveChangesAsync();
 
         var handler = new UpdateSectorCommandHandler(context);

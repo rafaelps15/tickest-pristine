@@ -4,6 +4,7 @@ using TickestPristine.Application.Tickets.GetById;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
@@ -168,7 +169,7 @@ public sealed class GetTicketByIdQueryHandlerTests : BaseHandlerTest
         TicketStatus status = TicketStatus.Open)
     {
         User requester = CreateUser();
-        var sector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = Guid.NewGuid(), IsActive = true };
+        var sector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Helpdesk", description: null);
         DateTime createdAtUtc = openedAtUtc ?? NowUtc.AddHours(-3.5);
 
         var ticket = new Ticket

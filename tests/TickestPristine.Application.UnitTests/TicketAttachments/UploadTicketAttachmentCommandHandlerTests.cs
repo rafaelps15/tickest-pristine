@@ -2,6 +2,7 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Storage;
 using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Application.TicketAttachments.Upload;
 using TickestPristine.Application.UnitTests.Abstractions;
@@ -139,7 +140,8 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
         Guid ticketId = await SeedTicketAsync(context);
-        var existingSector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = Guid.NewGuid(), IsActive = true };
+        var department = Department.Create("Suporte", "Departamento de teste", responsibleUser: null);
+        var existingSector = Sector.Create(department, "Helpdesk", description: null);
         context.Sectors.Add(existingSector);
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
@@ -154,13 +156,11 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
-                context.Sectors.Add(new Sector
-                {
-                    Id = existingSector.Id,
-                    Name = "Duplicated",
-                    DepartmentId = existingSector.DepartmentId,
-                    IsActive = true
-                });
+                var duplicated = Sector.Create(department, "Duplicated", description: null);
+
+                // O Id é privado na entidade: só o teste o repete, pelo EF, para provocar a chave duplicada.
+                context.Entry(duplicated).Property(s => s.Id).CurrentValue = existingSector.Id;
+                context.Sectors.Add(duplicated);
 
                 return Task.FromResult("generated-storage-key.pdf");
             });

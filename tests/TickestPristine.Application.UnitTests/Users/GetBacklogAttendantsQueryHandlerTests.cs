@@ -251,20 +251,8 @@ public sealed class GetBacklogAttendantsQueryHandlerTests : BaseHandlerTest
         string sectorName,
         string departmentName)
     {
-        var department = new Department
-        {
-            Id = Guid.NewGuid(),
-            Name = departmentName,
-            Description = departmentName,
-            IsActive = true
-        };
-        var sector = new Sector
-        {
-            Id = Guid.NewGuid(),
-            Name = sectorName,
-            IsActive = true,
-            DepartmentId = department.Id
-        };
+        var department = Department.Create(departmentName, departmentName, responsibleUser: null);
+        var sector = Sector.Create(department, sectorName, description: null);
 
         context.Departments.Add(department);
         context.Sectors.Add(sector);

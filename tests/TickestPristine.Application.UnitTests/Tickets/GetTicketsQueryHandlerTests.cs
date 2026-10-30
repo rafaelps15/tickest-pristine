@@ -2,6 +2,7 @@ using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Application.Tickets.GetAll;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Tickets;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
@@ -442,13 +443,7 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
     private static async Task<(User Requester, Sector Sector)> SeedRequesterAndSectorAsync(TestDbContext context)
     {
         User requester = CreateUser();
-        var sector = new Sector
-        {
-            Id = Guid.NewGuid(),
-            Name = $"Sector-{Guid.NewGuid():N}",
-            IsActive = true,
-            DepartmentId = Guid.NewGuid()
-        };
+        var sector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), $"Sector-{Guid.NewGuid():N}", description: null);
 
         context.Users.Add(requester);
         context.Sectors.Add(sector);

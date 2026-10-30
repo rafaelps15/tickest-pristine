@@ -279,13 +279,7 @@ public sealed class PaginationExtensionsTests : BaseHandlerTest
     {
         for (int i = 1; i <= count; i++)
         {
-            context.Departments.Add(new Department
-            {
-                Id = Guid.NewGuid(),
-                Name = $"Departamento {i}",
-                Description = "Descrição",
-                IsActive = true
-            });
+            context.Departments.Add(Department.Create($"Departamento {i}", "Descrição", responsibleUser: null));
         }
     }
 }

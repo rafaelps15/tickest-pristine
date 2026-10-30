@@ -18,19 +18,14 @@ internal sealed class UpdateSectorCommandHandler(IApplicationDbContext context)
             return Result.Failure(SectorErrors.NotFound(command.SectorId));
         }
 
-        bool nameInUse = await context.Sectors.AnyAsync(
+        if (await context.Sectors.AnyAsync(
             s => s.Id != sector.Id && s.DepartmentId == sector.DepartmentId && s.IsActive && s.Name == command.Name,
-            cancellationToken);
-
-        if (nameInUse)
+            cancellationToken))
         {
             return Result.Failure(SectorErrors.NameNotUnique(command.Name));
         }
 
-        sector.Name = command.Name;
-        sector.Description = command.Description;
-
-        sector.Raise(new SectorUpdatedDomainEvent(sector.Id));
+        sector.Update(command.Name, command.Description);
 
         await context.SaveChangesAsync(cancellationToken);
 

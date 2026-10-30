@@ -34,7 +34,7 @@ public sealed class UpdateDepartmentCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var department = new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Customer support department", IsActive = true };
+        var department = Department.Create("Support", "Customer support department", responsibleUser: null);
         context.Departments.Add(department);
         await context.SaveChangesAsync();
 
@@ -60,7 +60,7 @@ public sealed class UpdateDepartmentCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var department = new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Customer support department", IsActive = true };
+        var department = Department.Create("Support", "Customer support department", responsibleUser: null);
         context.Departments.Add(department);
         await context.SaveChangesAsync();
 
@@ -89,9 +89,9 @@ public sealed class UpdateDepartmentCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var department = new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Customer support department", IsActive = true };
+        var department = Department.Create("Support", "Customer support department", responsibleUser: null);
         context.Departments.Add(department);
-        context.Departments.Add(new Department { Id = Guid.NewGuid(), Name = "Finance", Description = "Finance department", IsActive = true });
+        context.Departments.Add(Department.Create("Finance", "Finance department", responsibleUser: null));
         await context.SaveChangesAsync();
 
         var handler = new UpdateDepartmentCommandHandler(context);

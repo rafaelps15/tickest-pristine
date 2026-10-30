@@ -1,5 +1,6 @@
 using TickestPristine.Application.Sectors.GetById;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 
 namespace TickestPristine.Application.UnitTests.Sectors;
@@ -27,8 +28,8 @@ public sealed class GetSectorByIdQueryHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var sector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = Guid.NewGuid(), IsActive = true };
-        sector.IsActive = false;
+        var sector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Helpdesk", description: null);
+        sector.Deactivate();
         context.Sectors.Add(sector);
         await context.SaveChangesAsync();
 
@@ -48,15 +49,8 @@ public sealed class GetSectorByIdQueryHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var departmentId = Guid.NewGuid();
-        var sector = new Sector
-        {
-            Id = Guid.NewGuid(),
-            Name = "Helpdesk",
-            DepartmentId = departmentId,
-            Description = "Support requests",
-            IsActive = true
-        };
+        var department = Department.Create("Suporte", "Departamento de teste", responsibleUser: null);
+        var sector = Sector.Create(department, "Helpdesk", "Support requests");
         context.Sectors.Add(sector);
         await context.SaveChangesAsync();
 
@@ -69,6 +63,6 @@ public sealed class GetSectorByIdQueryHandlerTests : BaseHandlerTest
         // Assert
         result.IsSuccess.ShouldBeTrue();
         result.Value.Name.ShouldBe("Helpdesk");
-        result.Value.DepartmentId.ShouldBe(departmentId);
+        result.Value.DepartmentId.ShouldBe(department.Id);
     }
 }

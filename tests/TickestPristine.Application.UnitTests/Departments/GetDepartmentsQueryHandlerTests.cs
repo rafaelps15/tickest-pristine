@@ -13,13 +13,13 @@ public sealed class GetDepartmentsQueryHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
 
-        var activeDepartment = new Department { Id = Guid.NewGuid(), Name = "IT", Description = "Information Technology", IsActive = true };
-        var inactiveDepartment = new Department { Id = Guid.NewGuid(), Name = "Retired", Description = "No longer used", IsActive = true };
-        inactiveDepartment.IsActive = false;
+        var activeDepartment = Department.Create("IT", "Information Technology", responsibleUser: null);
+        var inactiveDepartment = Department.Create("Retired", "No longer used", responsibleUser: null);
+        inactiveDepartment.Deactivate();
 
-        var activeSector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", Description = "Everyday support", DepartmentId = activeDepartment.Id, IsActive = true };
-        var inactiveSector = new Sector { Id = Guid.NewGuid(), Name = "Old Sector", DepartmentId = activeDepartment.Id, IsActive = true };
-        inactiveSector.IsActive = false;
+        var activeSector = Sector.Create(activeDepartment, "Helpdesk", "Everyday support");
+        var inactiveSector = Sector.Create(activeDepartment, "Old Sector", description: null);
+        inactiveSector.Deactivate();
 
         context.Departments.AddRange(activeDepartment, inactiveDepartment);
         context.Sectors.AddRange(activeSector, inactiveSector);

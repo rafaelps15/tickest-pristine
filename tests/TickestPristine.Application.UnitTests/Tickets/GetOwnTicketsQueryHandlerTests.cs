@@ -5,6 +5,7 @@ using TickestPristine.Application.Permissions;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Tickets.GetOwn;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
@@ -81,7 +82,7 @@ public sealed class GetOwnTicketsQueryHandlerTests : BaseHandlerTest
         User ana = CreateUser();
         ana.FirstName = "Ana";
         ana.LastName = "Souza";
-        var helpdesk = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", IsActive = true, DepartmentId = Guid.NewGuid() };
+        var helpdesk = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Helpdesk", description: null);
         context.Users.Add(ana);
         context.Sectors.Add(helpdesk);
         await context.SaveChangesAsync();
