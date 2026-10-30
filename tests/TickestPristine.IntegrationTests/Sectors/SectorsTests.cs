@@ -88,6 +88,24 @@ public sealed class SectorsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
+    public async Task Create_Should_BeRejectedByDatabase_WhenNameIsLongerThanColumnLimit()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid departmentId = await CreateDepartmentAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("sectors", new
+        {
+            name = new string('a', 101),
+            departmentId
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+    }
+
+    [Fact]
     public async Task Create_Should_ReturnForbidden_WhenCallerLacksSectorsManagePermission()
     {
         // Arrange

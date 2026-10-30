@@ -117,7 +117,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasIndex("ResponsibleUserId")
                         .HasDatabaseName("ix_departments_responsible_user_id");
 
-                    b.ToTable("departments", "public");
+                    b.ToTable("departments", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_departments_name_length", "char_length(name) <= 100");
+                        });
                 });
 
             modelBuilder.Entity("TickestPristine.Domain.Roles.Permission", b =>
@@ -603,7 +606,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasDatabaseName("ix_sectors_department_id_name")
                         .HasFilter("is_active");
 
-                    b.ToTable("sectors", "public");
+                    b.ToTable("sectors", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_sectors_name_length", "char_length(name) <= 100");
+                        });
                 });
 
             modelBuilder.Entity("TickestPristine.Domain.SlaCalendars.SlaCalendar", b =>

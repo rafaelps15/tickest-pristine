@@ -14,6 +14,9 @@ internal sealed class DepartmentConfiguration : IEntityTypeConfiguration<Departm
         // citext: "Suporte" e "suporte" contam como o mesmo nome no índice único.
         builder.Property(d => d.Name).HasMaxLength(100).HasColumnType("citext");
 
+        // O citext não guarda tamanho: o limite do nome vale no banco pela constraint.
+        builder.ToTable(t => t.HasCheckConstraint("ck_departments_name_length", "char_length(name) <= 100"));
+
         // Nome único só entre os ativos: um departamento desativado não impede recriar o mesmo nome.
         builder.HasIndex(d => d.Name).IsUnique().HasFilter("is_active");
 

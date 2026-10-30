@@ -152,6 +152,23 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
     }
 
     [Fact]
+    public async Task Create_Should_BeRejectedByDatabase_WhenNameIsLongerThanColumnLimit()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("departments", new
+        {
+            name = new string('a', 101),
+            description = "A department created by tests"
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+    }
+
+    [Fact]
     public async Task Deactivate_Should_DeactivateItsSectors()
     {
         // Arrange
