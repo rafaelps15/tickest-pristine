@@ -22,7 +22,7 @@ public sealed class SectorTests
         sector.Name.ShouldBe(name);
         sector.Description.ShouldBe("Primeiro atendimento");
         sector.IsActive.ShouldBeTrue();
-        sector.DomainEvents.ShouldContain(e => e is SectorCreatedDomainEvent && ((SectorCreatedDomainEvent)e).SectorId == sector.Id);
+        sector.DomainEvents.OfType<SectorCreatedDomainEvent>().ShouldContain(e => e.SectorId == sector.Id);
     }
 
     [Fact]
@@ -37,7 +37,7 @@ public sealed class SectorTests
         // Assert
         sector.Name.ShouldBe("Redes");
         sector.Description.ShouldBeNull();
-        sector.DomainEvents.ShouldContain(e => e is SectorUpdatedDomainEvent);
+        sector.DomainEvents.OfType<SectorUpdatedDomainEvent>().ShouldContain(e => e.SectorId == sector.Id);
     }
 
     [Fact]
@@ -50,7 +50,7 @@ public sealed class SectorTests
         sector.Update(sector.Name, sector.Description);
 
         // Assert
-        sector.DomainEvents.ShouldContain(e => e is SectorUpdatedDomainEvent);
+        sector.DomainEvents.OfType<SectorUpdatedDomainEvent>().ShouldContain(e => e.SectorId == sector.Id);
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public sealed class SectorTests
 
         // Assert
         sector.IsActive.ShouldBeFalse();
-        sector.DomainEvents.ShouldContain(e => e is SectorDeactivatedDomainEvent);
+        sector.DomainEvents.OfType<SectorDeactivatedDomainEvent>().ShouldContain(e => e.SectorId == sector.Id);
     }
 
     private static Sector CreateSector() =>

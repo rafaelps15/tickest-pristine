@@ -22,7 +22,7 @@ public sealed class DepartmentTests
         department.Description.ShouldBe("Atendimento ao cliente");
         department.ResponsibleUserId.ShouldBe(ResponsibleUser.Id);
         department.IsActive.ShouldBeTrue();
-        department.DomainEvents.ShouldContain(e => e is DepartmentCreatedDomainEvent && ((DepartmentCreatedDomainEvent)e).DepartmentId == department.Id);
+        department.DomainEvents.OfType<DepartmentCreatedDomainEvent>().ShouldContain(e => e.DepartmentId == department.Id);
     }
 
     [Fact]
@@ -39,7 +39,7 @@ public sealed class DepartmentTests
         department.Name.ShouldBe("Financeiro");
         department.Description.ShouldBe("Contas a pagar e a receber");
         department.ResponsibleUserId.ShouldBe(newResponsibleUser.Id);
-        department.DomainEvents.ShouldContain(e => e is DepartmentUpdatedDomainEvent);
+        department.DomainEvents.OfType<DepartmentUpdatedDomainEvent>().ShouldContain(e => e.DepartmentId == department.Id);
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public sealed class DepartmentTests
         department.Update(department.Name, department.Description, ResponsibleUser);
 
         // Assert
-        department.DomainEvents.ShouldContain(e => e is DepartmentUpdatedDomainEvent);
+        department.DomainEvents.OfType<DepartmentUpdatedDomainEvent>().ShouldContain(e => e.DepartmentId == department.Id);
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public sealed class DepartmentTests
 
         // Assert
         department.IsActive.ShouldBeFalse();
-        department.DomainEvents.ShouldContain(e => e is DepartmentDeactivatedDomainEvent);
+        department.DomainEvents.OfType<DepartmentDeactivatedDomainEvent>().ShouldContain(e => e.DepartmentId == department.Id);
     }
 
     private static Department CreateDepartment() =>

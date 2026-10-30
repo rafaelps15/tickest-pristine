@@ -1,5 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using TickestPristine.Infrastructure.Database;
 
 namespace TickestPristine.IntegrationTests.Departments;
 
@@ -156,16 +159,21 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
     {
         // Arrange
         await AuthenticateAsAdminAsync();
+        string name = Guid.NewGuid().ToString("N").PadRight(101, 'a');
 
         // Act
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync("departments", new
         {
-            name = new string('a', 101),
+            name,
             description = "A department created by tests"
         });
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await context.Departments.AnyAsync(d => d.Name == name)).ShouldBeFalse();
     }
 
     [Fact]

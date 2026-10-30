@@ -1,5 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using TickestPristine.Infrastructure.Database;
 
 namespace TickestPristine.IntegrationTests.Sectors;
 
@@ -93,16 +96,21 @@ public sealed class SectorsTests(IntegrationTestWebAppFactory factory) : BaseInt
         // Arrange
         await AuthenticateAsAdminAsync();
         Guid departmentId = await CreateDepartmentAsync();
+        string name = Guid.NewGuid().ToString("N").PadRight(101, 'a');
 
         // Act
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync("sectors", new
         {
-            name = new string('a', 101),
+            name,
             departmentId
         });
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await context.Sectors.AnyAsync(s => s.Name == name)).ShouldBeFalse();
     }
 
     [Fact]

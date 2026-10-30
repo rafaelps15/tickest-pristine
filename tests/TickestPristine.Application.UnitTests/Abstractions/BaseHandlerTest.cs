@@ -150,6 +150,7 @@ public abstract class BaseHandlerTest
     {
         var department = Department.Create(departmentName, departmentName, responsibleUser: null);
         var sector = Sector.Create(department, sectorName, description: null);
+
         if (!isActive)
         {
             sector.Deactivate();
