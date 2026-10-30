@@ -68,6 +68,11 @@ Crie pelo menos o evento `Created`; os métodos da entidade disparam os outros. 
 4. **Configuração do EF** — `src/Infrastructure/{Feature}/{Entity}Configuration.cs`
 
 ```csharp
+using Domain.Projects;
+using Domain.Users;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
 namespace Infrastructure.Projects;
 
 internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
@@ -81,7 +86,34 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
 }
 ```
 
-Os relacionamentos são configurados no estilo shadow (`HasOne<User>().WithMany()`): as entidades guardam ids de chave estrangeira, não propriedades de navegação. Uma coluna `string` simples recebe o tamanho aqui e só aqui (`builder.Property(u => u.FirstName).HasMaxLength(200);`); objetos de valor usam `OwnsOne` com o `MaxLength` deles; uma coleção é mapeada pelo campo (`references/persistence.md`). As configurações são encontradas pelo `ApplyConfigurationsFromAssembly`.
+O filho criado pelo agregado tem o `Id` gerado pelo código e um índice único para o par que não pode repetir:
+
+```csharp
+using Domain.Projects;
+using Domain.Users;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+namespace Infrastructure.Projects;
+
+internal sealed class ProjectMemberConfiguration : IEntityTypeConfiguration<ProjectMember>
+{
+    public void Configure(EntityTypeBuilder<ProjectMember> builder)
+    {
+        builder.HasKey(m => m.Id);
+
+        builder.Property(m => m.Id).ValueGeneratedNever();
+
+        builder.HasOne<Project>().WithMany().HasForeignKey(m => m.ProjectId);
+
+        builder.HasOne<User>().WithMany().HasForeignKey(m => m.UserId);
+
+        builder.HasIndex(m => new { m.ProjectId, m.UserId }).IsUnique();
+    }
+}
+```
+
+Os relacionamentos são configurados no estilo shadow (`HasOne<User>().WithMany()`): as entidades guardam ids de chave estrangeira, não propriedades de navegação. O `Id` que o código gera leva `ValueGeneratedNever()`; um valor que não pode repetir é um índice único (`HasIndex(...).IsUnique()`). Uma coluna `string` simples recebe o tamanho aqui e só aqui (`builder.Property(u => u.FirstName).HasMaxLength(200);`); objetos de valor usam `OwnsOne` com o `MaxLength` deles; uma coleção é mapeada pelo campo (`references/persistence.md`). As configurações são encontradas pelo `ApplyConfigurationsFromAssembly`.
 
 5. **Ligação no DbContext** — adicione `DbSet<{Entity}> {Plural}` **nos dois**:
    - `src/Application/Abstractions/Data/IApplicationDbContext.cs`

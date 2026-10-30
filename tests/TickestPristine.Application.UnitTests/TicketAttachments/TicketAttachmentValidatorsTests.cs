@@ -115,20 +115,6 @@ public sealed class TicketAttachmentValidatorsTests
     }
 
     [Fact]
-    public void UploadValidator_Should_HaveError_WhenFileNameExceedsMaxLength()
-    {
-        // Arrange
-        UploadTicketAttachmentCommand command = ValidUploadCommand;
-        command.FileName = new string('a', 261);
-
-        // Act
-        TestValidationResult<UploadTicketAttachmentCommand> result = _uploadValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.FileName);
-    }
-
-    [Fact]
     public void UploadValidator_Should_HaveError_WhenContentTypeIsEmpty()
     {
         // Arrange
@@ -140,64 +126,6 @@ public sealed class TicketAttachmentValidatorsTests
 
         // Assert
         result.ShouldHaveValidationErrorFor(c => c.ContentType);
-    }
-
-    [Fact]
-    public void UploadValidator_Should_HaveError_WhenContentTypeExceedsMaxLength()
-    {
-        // Arrange
-        UploadTicketAttachmentCommand command = ValidUploadCommand;
-        command.ContentType = new string('a', 101);
-
-        // Act
-        TestValidationResult<UploadTicketAttachmentCommand> result = _uploadValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.ContentType);
-    }
-
-    [Fact]
-    public void UploadValidator_Should_HaveError_WhenFileExceedsMaxSize()
-    {
-        // Arrange
-        UploadTicketAttachmentCommand command = ValidUploadCommand;
-        command.FileSizeBytes = TicketAttachmentLimits.MaxFileSizeBytes + 1;
-
-        // Act
-        TestValidationResult<UploadTicketAttachmentCommand> result = _uploadValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.FileSizeBytes)
-            .WithErrorMessage("O arquivo excede o tamanho máximo permitido de 10 MB.");
-    }
-
-    [Fact]
-    public void UploadValidator_Should_NotHaveErrors_WhenFileHasExactlyMaxSize()
-    {
-        // Arrange
-        UploadTicketAttachmentCommand command = ValidUploadCommand;
-        command.FileSizeBytes = TicketAttachmentLimits.MaxFileSizeBytes;
-
-        // Act
-        TestValidationResult<UploadTicketAttachmentCommand> result = _uploadValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldNotHaveAnyValidationErrors();
-    }
-
-    [Fact]
-    public void UploadValidator_Should_HaveError_WhenExtensionDoesNotMatchContentType()
-    {
-        // Arrange: executável declarado como PDF
-        UploadTicketAttachmentCommand command = ValidUploadCommand;
-        command.FileName = "nota.pdf.exe";
-
-        // Act
-        TestValidationResult<UploadTicketAttachmentCommand> result = _uploadValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.FileName)
-            .WithErrorMessage("A extensão do arquivo não corresponde ao tipo 'application/pdf'.");
     }
 
     [Theory]
@@ -219,50 +147,5 @@ public sealed class TicketAttachmentValidatorsTests
         // Assert
         result.ShouldHaveValidationErrorFor(c => c.FileName)
             .WithErrorMessage("O nome do arquivo contém caracteres inválidos.");
-    }
-
-    [Fact]
-    public void UploadValidator_Should_NotHaveErrors_WhenExtensionMatchesContentTypeIgnoringCase()
-    {
-        // Arrange
-        UploadTicketAttachmentCommand command = ValidUploadCommand;
-        command.FileName = "Foto.JPEG";
-        command.ContentType = "image/jpeg";
-
-        // Act
-        TestValidationResult<UploadTicketAttachmentCommand> result = _uploadValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldNotHaveAnyValidationErrors();
-    }
-
-    [Fact]
-    public void UploadValidator_Should_NotHaveErrors_WhenContentTypeHasParameters()
-    {
-        // Arrange: alguns clientes enviam o charset junto com o tipo
-        UploadTicketAttachmentCommand command = ValidUploadCommand;
-        command.FileName = "notas.txt";
-        command.ContentType = "text/plain; charset=utf-8";
-
-        // Act
-        TestValidationResult<UploadTicketAttachmentCommand> result = _uploadValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldNotHaveAnyValidationErrors();
-    }
-
-    [Fact]
-    public void UploadValidator_Should_HaveError_WhenContentTypeIsNotAllowed()
-    {
-        // Arrange
-        UploadTicketAttachmentCommand command = ValidUploadCommand;
-        command.ContentType = "application/x-msdownload";
-
-        // Act
-        TestValidationResult<UploadTicketAttachmentCommand> result = _uploadValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.ContentType)
-            .WithErrorMessage("O tipo de arquivo 'application/x-msdownload' não é suportado.");
     }
 }

@@ -11,6 +11,10 @@ internal sealed class UserRoleConfiguration : IEntityTypeConfiguration<UserRole>
     {
         builder.HasKey(userRole => userRole.Id);
 
+        builder.Property(userRole => userRole.Id).ValueGeneratedNever();
+
+        builder.Property(userRole => userRole.RoleName).HasMaxLength(50);
+
         builder.HasIndex(userRole => new { userRole.UserId, userRole.RoleName }).IsUnique();
 
         builder.HasOne<User>()

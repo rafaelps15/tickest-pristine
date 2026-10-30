@@ -7,6 +7,6 @@ internal sealed class EditTicketMessageCommandValidator : AbstractValidator<Edit
     public EditTicketMessageCommandValidator()
     {
         RuleFor(c => c.MessageId).NotEmpty();
-        RuleFor(c => c.Content).NotEmpty().MaximumLength(4000);
+        RuleFor(c => c.Content).NotEmpty();
     }
 }

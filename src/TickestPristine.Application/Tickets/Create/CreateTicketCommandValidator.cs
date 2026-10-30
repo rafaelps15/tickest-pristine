@@ -6,10 +6,8 @@ internal sealed class CreateTicketCommandValidator : AbstractValidator<CreateTic
 {
     public CreateTicketCommandValidator()
     {
-        RuleFor(c => c.Title).NotEmpty().MaximumLength(TicketValidationRules.TitleMaxLength);
-        RuleFor(c => c.Description)
-            .NotEmpty()
-            .Length(TicketValidationRules.DescriptionMinLength, TicketValidationRules.DescriptionMaxLength);
+        RuleFor(c => c.Title).NotEmpty();
+        RuleFor(c => c.Description).NotEmpty();
         RuleFor(c => c.Priority).IsInEnum();
         RuleFor(c => c.SectorId).NotEmpty();
     }

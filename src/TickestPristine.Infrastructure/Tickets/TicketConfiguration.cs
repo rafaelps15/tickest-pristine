@@ -22,6 +22,14 @@ internal sealed class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         // citext também: a busca de "Meus chamados" procura no título e na descrição sem diferenciar maiúsculas (spec 019).
         builder.Property(t => t.Description).HasMaxLength(500).HasColumnType("citext");
 
+        // O citext não guarda tamanho: os limites do título e da descrição (de 10 a 500 caracteres) valem no banco pelas
+        // constraints.
+        builder.ToTable(t =>
+        {
+            t.HasCheckConstraint("ck_tickets_title_length", "char_length(title) <= 200");
+            t.HasCheckConstraint("ck_tickets_description_length", "char_length(description) BETWEEN 10 AND 500");
+        });
+
         // Enums gravados pelo nome (ex.: "InProgress"), legíveis no banco; a API continua recebendo e devolvendo o número.
         builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(20);
 

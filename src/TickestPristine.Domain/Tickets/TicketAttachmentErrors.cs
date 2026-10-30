@@ -8,6 +8,18 @@ public static class TicketAttachmentErrors
         "TicketAttachments.NotFound",
         $"O anexo com o Id = '{attachmentId}' não foi encontrado");
 
+    public static Error UnsupportedContentType(string contentType) => Error.Problem(
+        "TicketAttachments.UnsupportedContentType",
+        $"O tipo de arquivo '{contentType}' não é suportado.");
+
+    public static Error ExtensionMismatch(string contentType) => Error.Problem(
+        "TicketAttachments.ExtensionMismatch",
+        $"A extensão do arquivo não corresponde ao tipo '{contentType}'.");
+
+    public static Error FileTooLarge(long maxMegabytes) => Error.Problem(
+        "TicketAttachments.FileTooLarge",
+        $"O arquivo excede o tamanho máximo permitido de {maxMegabytes} MB.");
+
     public static readonly Error ContentMismatch = Error.Problem(
         "TicketAttachments.ContentMismatch",
         "O conteúdo do arquivo não corresponde ao tipo informado.");

@@ -12,10 +12,10 @@ using TickestPristine.SharedKernel;
 namespace TickestPristine.Application.TicketAttachments.Upload;
 
 /// <summary>
-/// Grava o anexo de um participante do chamado. Antes de gravar, confere os limites do chamado
-/// (<see cref="TicketAttachmentLimits.MaxAttachmentsPerTicket"/> anexos e
-/// <see cref="TicketAttachmentLimits.MaxTotalBytesPerTicket"/> bytes somados, contando só os não excluídos) e se o
-/// conteúdo corresponde ao tipo declarado; uma recusa não grava arquivo nem linha.
+/// Grava o anexo de um participante do chamado. O conteúdo é conferido contra o tipo declarado antes de ir para o
+/// armazenamento; as regras do anexo (tipo, extensão, tamanho e os limites do chamado, contando só os anexos não
+/// excluídos) são do <see cref="TicketAttachment.Create"/>, e uma recusa dele apaga o arquivo gravado. Uma recusa não
+/// deixa arquivo nem linha.
 /// </summary>
 internal sealed class UploadTicketAttachmentCommandHandler(
     IApplicationDbContext context,
@@ -46,15 +46,6 @@ internal sealed class UploadTicketAttachmentCommandHandler(
             .Select(g => new { Count = g.Count(), TotalBytes = g.Sum(a => a.FileSizeBytes) })
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (usage is not null &&
-            (usage.Count >= TicketAttachmentLimits.MaxAttachmentsPerTicket ||
-             usage.TotalBytes + command.FileSizeBytes > TicketAttachmentLimits.MaxTotalBytesPerTicket))
-        {
-            return Result.Failure<Guid>(TicketAttachmentErrors.TicketLimitReached(
-                TicketAttachmentLimits.MaxAttachmentsPerTicket,
-                TicketAttachmentLimits.MaxTotalBytesPerTicket / (1024 * 1024)));
-        }
-
         if (!await TicketAttachmentContentInspector.MatchesAsync(command.Content, command.ContentType, cancellationToken))
         {
             return Result.Failure<Guid>(TicketAttachmentErrors.ContentMismatch);
@@ -64,23 +55,26 @@ internal sealed class UploadTicketAttachmentCommandHandler(
 
         DateTime nowUtc = dateTimeProvider.UtcNow;
 
-        var attachment = new TicketAttachment
-        {
-            Id = Guid.NewGuid(),
-            TicketId = command.TicketId,
-            UploadedByUserId = userContext.UserId,
-            FileName = command.FileName,
-            ContentType = command.ContentType,
-            FileSizeBytes = command.FileSizeBytes,
-            StorageKey = storageKey,
-            UploadedAtUtc = nowUtc
-        };
+        Result<TicketAttachment> created = TicketAttachment.Create(
+            command.TicketId,
+            userContext.UserId,
+            command.FileName,
+            command.ContentType,
+            command.FileSizeBytes,
+            storageKey,
+            usage?.Count ?? 0,
+            usage?.TotalBytes ?? 0,
+            nowUtc);
 
-        attachment.Raise(new TicketAttachmentUploadedDomainEvent(
-            attachment.Id,
-            attachment.TicketId,
-            attachment.UploadedByUserId,
-            attachment.FileName));
+        if (created.IsFailure)
+        {
+            // O arquivo já foi gravado para obter a chave: sem o anexo, ele ficaria órfão no disco.
+            await fileStorage.DeleteAsync(storageKey, CancellationToken.None);
+
+            return Result.Failure<Guid>(created.Error);
+        }
+
+        TicketAttachment attachment = created.Value;
 
         context.TicketAttachments.Add(attachment);
 

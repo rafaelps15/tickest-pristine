@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using TickestPristine.Domain.Tickets;
 
 namespace TickestPristine.Application.TicketAttachments;
 
@@ -48,7 +49,7 @@ internal static class TicketAttachmentContentInspector
             int read = await content.ReadAtLeastAsync(sample, SampleSize, throwOnEndOfStream: false, cancellationToken);
             ReadOnlyMemory<byte> header = sample.AsMemory(0, read);
 
-            string mediaType = TicketAttachmentLimits.GetMediaType(contentType);
+            string mediaType = TicketAttachment.GetMediaType(contentType);
 
             if (Is(mediaType, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
             {

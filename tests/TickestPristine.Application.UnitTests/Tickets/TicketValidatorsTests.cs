@@ -61,19 +61,6 @@ public sealed class TicketValidatorsTests
     }
 
     [Fact]
-    public void UpdateValidator_Should_HaveError_WhenDescriptionIsTooShort()
-    {
-        // Arrange
-        var command = new UpdateTicketCommand { TicketId = Guid.NewGuid(), Description = "short", Status = TicketStatus.Open };
-
-        // Act
-        TestValidationResult<UpdateTicketCommand> result = _updateValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Description);
-    }
-
-    [Fact]
     public void UpdateValidator_Should_NotHaveErrors_WhenCommandIsValid()
     {
         // Arrange
@@ -126,32 +113,6 @@ public sealed class TicketValidatorsTests
     }
 
     [Fact]
-    public void ReopenValidator_Should_HaveError_WhenReasonExceedsMaxLength()
-    {
-        // Arrange
-        var command = new ReopenTicketCommand(Guid.NewGuid(), new string('a', 501));
-
-        // Act
-        TestValidationResult<ReopenTicketCommand> result = _reopenValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Reason);
-    }
-
-    [Fact]
-    public void ReopenValidator_Should_NotHaveErrors_WhenReasonHasMaxLength()
-    {
-        // Arrange
-        var command = new ReopenTicketCommand(Guid.NewGuid(), new string('a', 500));
-
-        // Act
-        TestValidationResult<ReopenTicketCommand> result = _reopenValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldNotHaveAnyValidationErrors();
-    }
-
-    [Fact]
     public void ReopenValidator_Should_NotHaveErrors_WhenCommandIsValid()
     {
         // Arrange
@@ -165,25 +126,6 @@ public sealed class TicketValidatorsTests
     }
 
     [Fact]
-    public void CreateValidator_Should_HaveError_WhenTitleExceedsMaxLength()
-    {
-        // Arrange
-        var command = new CreateTicketCommand
-        {
-            Title = new string('a', 201),
-            Description = "Some description",
-            Priority = TicketPriority.Low,
-            SectorId = Guid.NewGuid()
-        };
-
-        // Act
-        TestValidationResult<CreateTicketCommand> result = _createValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Title);
-    }
-
-    [Fact]
     public void CreateValidator_Should_HaveError_WhenDescriptionIsEmpty()
     {
         // Arrange
@@ -191,44 +133,6 @@ public sealed class TicketValidatorsTests
         {
             Title = "Printer is broken",
             Description = string.Empty,
-            Priority = TicketPriority.Low,
-            SectorId = Guid.NewGuid()
-        };
-
-        // Act
-        TestValidationResult<CreateTicketCommand> result = _createValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Description);
-    }
-
-    [Fact]
-    public void CreateValidator_Should_HaveError_WhenDescriptionIsTooShort()
-    {
-        // Arrange
-        var command = new CreateTicketCommand
-        {
-            Title = "Printer is broken",
-            Description = "short",
-            Priority = TicketPriority.Low,
-            SectorId = Guid.NewGuid()
-        };
-
-        // Act
-        TestValidationResult<CreateTicketCommand> result = _createValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Description);
-    }
-
-    [Fact]
-    public void CreateValidator_Should_HaveError_WhenDescriptionExceedsMaxLength()
-    {
-        // Arrange
-        var command = new CreateTicketCommand
-        {
-            Title = "Printer is broken",
-            Description = new string('a', 501),
             Priority = TicketPriority.Low,
             SectorId = Guid.NewGuid()
         };
@@ -296,19 +200,6 @@ public sealed class TicketValidatorsTests
     {
         // Arrange
         var command = new UpdateTicketCommand { TicketId = Guid.NewGuid(), Description = string.Empty, Status = TicketStatus.InProgress };
-
-        // Act
-        TestValidationResult<UpdateTicketCommand> result = _updateValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Description);
-    }
-
-    [Fact]
-    public void UpdateValidator_Should_HaveError_WhenDescriptionIsTooLong()
-    {
-        // Arrange
-        var command = new UpdateTicketCommand { TicketId = Guid.NewGuid(), Description = new string('a', 501), Status = TicketStatus.InProgress };
 
         // Act
         TestValidationResult<UpdateTicketCommand> result = _updateValidator.TestValidate(command);

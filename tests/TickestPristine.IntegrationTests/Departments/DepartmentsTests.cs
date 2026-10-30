@@ -169,7 +169,7 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
         });
 
         // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
 
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
