@@ -5,7 +5,7 @@ status: Verificada # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implem
 responsavel: Rafael Santos
 aprovada-em: 2026-10-30
 branch: refactor/SPEC-042-validators-configuration-skill-model                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: 56                  # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 042 — Validators e configurações do EF no modelo da skill
@@ -132,7 +132,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 - **Revisão (2026-10-30):** a primeira `ca-review` reprovou (cadastro sem e-mail respondendo 500; `<summary>` perdidos no `TicketAttachment`); corrigidos pela DEC-23. A reverificação independente aprova, sem bloqueantes; ficaram como não bloqueantes a frase sobre maiúsculas no `<summary>` do `GetMediaType` e a justificativa "RFC 5321" do `HasMaxLength(254)`.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` (RN-09, RN-13, RN-33, C-07, `tickets.description`, mapeamento de exceções, mensagens e anexos); `CLAUDE.md` (desvio "Colunas `citext` com limite"); skill `add-entity` (passo 4) no Tickest e na biblioteca canônica `C:\dev\dotnet-universal-skills`.
 - **CI:**
-- **Entrega:**
+- **Entrega:** PR #56 (https://github.com/rafaelps15/tickest-pristine/pull/56), aberto em 2026-10-30 para a `main`.
 
 ## 10. Histórico
 | Data | Status | Observação |
