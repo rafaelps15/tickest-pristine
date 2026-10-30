@@ -54,7 +54,7 @@
 ### 1.3 Maturidade e arquitetura predominante
 
 - **[Fato]** A arquitetura é uma **Clean Architecture em 5 projetos** (SharedKernel, Domain, Application, Infrastructure, Web.Api), com a direção das dependências garantida por testes de arquitetura (`tests/TickestPristine.ArchitectureTests/Layers/LayerTests.cs`) e, desde a spec 003, também as regras permanentes de convenção (`tests/TickestPristine.ArchitectureTests/Conventions/`). A Application usa **CQRS leve sem MediatR**, com handlers próprios decorados (Validation → Logging → handler), além de **Result pattern**, **minimal APIs** e **EF Core + PostgreSQL**.
-- **[Fato]** O **domínio é anêmico**, exceto `Department` e `Sector` desde a spec 038: as demais entidades só têm propriedades (ex.: `src/TickestPristine.Domain/Tickets/Ticket.cs:5-20`), e as regras ficam nos handlers e em classes estáticas da Application (`TicketStatusTransitions`, `TicketSla`, `TicketAccessGuard`).
+- **[Fato]** O **domínio é anêmico**, exceto `Department` e `Sector` desde a spec 038 e `Ticket` desde a spec 039: as demais entidades só têm propriedades (ex.: `src/TickestPristine.Domain/Tickets/TicketSlaTimer.cs`), e as regras ficam nos handlers e em classes estáticas da Application (`TicketSla`, `TicketSlaClock`, `TicketAccessGuard`).
 - **[Fato, desde 29/10/2026 pela spec 012]** O padrão adotado para código novo é o **domínio rico** (seção "Regras permanentes" do `CLAUDE.md` e skill `domain-modeling`); o código anêmico atual continua valendo e está listado na seção "Em migração" do `CLAUDE.md` até a spec que migrar cada parte. **[Spec 038]** A primeira foi a de `Department` e `Sector`; a próxima é a do `Ticket`.
 - **[Fato]** O build compila sem avisos com `TreatWarningsAsErrors` e `AnalysisMode=All` (`Directory.Build.props:9-13`). A suíte completa passou: 674 testes na análise inicial e 699 depois da revisão de 22/10, sempre com 0 falhas (seção 6.1).
 - **[Inferência]** A maturidade é a de um **MVP funcional em evolução ativa**: 53 commits entre 01/10/2026 e 21/10/2026, com migrations e refatorações em curso no working tree. Não há evidência de implantação em produção, de pipeline de deploy nem de configuração para ambiente produtivo.
@@ -167,7 +167,7 @@ Fonte: `src/TickestPristine.Infrastructure/*/*Configuration.cs`. Pontos relevant
 
 ### 2.5 Estados e transições do chamado
 
-Regras em `src/TickestPristine.Application/Tickets/TicketStatusTransitions.cs:7-25`:
+Regras em `src/TickestPristine.Domain/Tickets/Ticket.cs:101-117` (`CanTransitionTo`; **[spec 039]** antes em `TicketStatusTransitions`, excluída):
 
 ```mermaid
 stateDiagram-v2
@@ -183,7 +183,7 @@ stateDiagram-v2
 ```
 
 - **[Fato, spec 016]** Quem pode mudar o status no `PUT tickets/{id}`: Em andamento e Resolvido, só quem tem `tickets:manage`; Cancelado, quem tem `tickets:cancel`, a qualquer momento, ou o dono com `tickets:update-own` até 15 minutos depois da abertura (RN-32). O dono continua editando a descrição.
-- **[Fato]** "Ativo" significa Aberto ou Em andamento (`TicketStatusTransitions.cs:7`). `Update` e `Delete` recusam chamados inativos (`UpdateTicketCommandHandler.cs:51-54`, `DeleteTicketCommandHandler.cs:41-44`), e `Reopen` recusa chamados ativos (`ReopenTicketCommandHandler.cs:46-49`).
+- **[Fato]** "Ativo" significa Aberto ou Em andamento (`Ticket.IsActive` e `Ticket.IsActiveStatus`, `Ticket.cs:53-55`). `Update` e `Delete` recusam chamados inativos (`UpdateTicketCommandHandler.cs:50-53`, `DeleteTicketCommandHandler.cs:41-44`), e `Reopen` recusa chamados ativos (`ReopenTicketCommandHandler.cs:45-48`).
 - **[Fato]** **[Resolvido]** O fechamento é feito por `POST tickets/{id}/close`, que exige `tickets:manage` e aceita só chamados Resolvidos (`Tickets/Close/CloseTicketCommandHandler.cs`). Antes da revisão de 22/10, nenhuma requisição levava a "Fechado".
 - **[Fato]** A reabertura volta para Aberto e **não** limpa `ResolvedAtUtc`. O `SlaStatus`, o `DueAtUtc` e o `SlaWarningAtUtc` do chamado ficam no primeiro ciclo de resolução (`TicketSlaStatus.cs:3-6`). **[Fato, spec 005]** A reabertura abre um novo ciclo de resolução, com a meta integral do plano, visível só no bloco `sla` (`ReopenTicketCommandHandler.cs`, `TicketSlaClock.StartResolutionCycle`).
 
@@ -268,8 +268,8 @@ Legenda de estado: **IE** = Implementada e evidenciada · **PI** = Parcialmente 
 - **[Fato]** O estilo é **Clean Architecture em camadas concêntricas**, com slices verticais por caso de uso dentro da Application. O `TickestPristine.slnx` declara 5 projetos de produção e 3 de teste.
 - **[Fato]** As referências de projeto são `Domain → SharedKernel`, `Application → Domain, SharedKernel`, `Infrastructure → Application` e `Web.Api → Infrastructure` (arquivos `.csproj`). Os testes NetArchTest garantem 10 regras de não dependência (`LayerTests.cs`).
 - **[Fato]** O CQRS é **lógico, não físico**: commands e queries usam o mesmo `ApplicationDbContext` e o mesmo banco. Uma única consulta usa SQL cru via Dapper (`GetTicketVolumeQueryHandler.cs`).
-- **[Fato]** O domínio é **anêmico** (propriedades públicas com `set`), exceto `Department` e `Sector` desde a spec 038. Nas entidades anêmicas, os eventos de domínio são disparados pelos handlers da Application (`Raise(...)`), e não pelas entidades.
-- **[Fato, desde 29/10/2026 pela spec 012]** Esse é o legado em migração: as skills de código e o `CLAUDE.md` passaram a ensinar o domínio rico (entidade com construtor privado, `private set`, `Create`, métodos que devolvem `Result` ou `bool` e disparam o próprio evento; handler que carrega, autoriza, chama a entidade e salva). **[Spec 038]** `Department` e `Sector` foram as primeiras convertidas: construtor privado, `private set`, `Create` que dispara o evento, `Update` e `Deactivate()` (`void`, com a conferência de "já desativado" no handler); os handlers carregam o usuário responsável e o departamento do setor e os passam à entidade.
+- **[Fato]** O domínio é **anêmico** (propriedades públicas com `set`), exceto `Department` e `Sector` desde a spec 038 e `Ticket` desde a spec 039. Nas entidades anêmicas, os eventos de domínio são disparados pelos handlers da Application (`Raise(...)`), e não pelas entidades.
+- **[Fato, desde 29/10/2026 pela spec 012]** Esse é o legado em migração: as skills de código e o `CLAUDE.md` passaram a ensinar o domínio rico (entidade com construtor privado, `private set`, `Create`, métodos que devolvem `Result` ou `bool` e disparam o próprio evento; handler que carrega, autoriza, chama a entidade e salva). **[Spec 039]** O `Ticket` também: construtor privado, `private set`, `Create`, `IsActive` e `CanTransitionTo`, e os métodos `Update`, `Assign`, `Unassign`, `Close`, `Reopen` e `Delete`, que disparam o próprio evento e devolvem a entrada do histórico; os handlers conferem na ordem de antes e adicionam a entrada. **[Spec 038]** `Department` e `Sector` foram as primeiras convertidas: construtor privado, `private set`, `Create` que dispara o evento, `Update` e `Deactivate()` (`void`, com a conferência de "já desativado" no handler); os handlers carregam o usuário responsável e o departamento do setor e os passam à entidade.
 
 ### 3.2 Projetos e responsabilidades
 
@@ -318,7 +318,7 @@ flowchart TB
         DEC["Decorators<br/>Validation → Logging"]
         H["Handlers de command/query"]
         G["Guards<br/>TicketAccessGuard · PrivilegeEscalationGuard · AdministratorGuard"]
-        R["Regras estáticas<br/>TicketStatusTransitions · TicketSla · TicketSlaFilters"]
+        R["Regras estáticas<br/>TicketSla · TicketSlaClock · TicketSlaFilters"]
         ABS["Abstrações<br/>IApplicationDbContext · IDbConnectionFactory · IFileStorage · ITokenProvider · IPermissionProvider · IUserContext"]
     end
     subgraph Infra["Infrastructure"]
@@ -360,7 +360,7 @@ flowchart LR
 ```
 
 - **[Fato]** A Web.Api depende transitivamente da Application. Os endpoints usam `ICommandHandler<,>`/`IQueryHandler<,>` e os commands diretamente.
-- **[Fato]** A Infrastructure usa tipos da Application que não são interfaces, como `PermissionCatalog`, `RoleNames`, `UserCodes`, `TicketSla`, `TicketHistoryEntries` e `TicketStatusTransitions` (ex.: `RolePermissionConfiguration.cs:1-2`, `SampleDataSeeder.cs:174-200`). A direção da dependência é permitida.
+- **[Fato]** A Infrastructure usa tipos da Application que não são interfaces, como `PermissionCatalog`, `RoleNames`, `UserCodes`, `TicketSla` e `TicketHistoryEntries` (ex.: `RolePermissionConfiguration.cs:1-2`, `SampleDataSeeder.cs`); **[spec 039]** o `SampleDataSeeder` monta os chamados pelos métodos do `Ticket`. A direção da dependência é permitida.
 
 ### 3.6 Fluxo de execução de um caso de uso representativo (abrir chamado)
 
@@ -665,7 +665,7 @@ Descrito no diagrama 3.6.
 
 1. **Objetivo**: avançar o atendimento.
 2. **Gatilho**: `PUT tickets/{id}` com `{ description, status }`.
-3. **Componentes**: endpoint → Validation → Logging → `UpdateTicketCommandHandler` (**[spec 016]** permissões de quem chama e `EnsureCanChangeStatus`, com `TicketCancellationPolicy`) → `TicketStatusTransitions`.
+3. **Componentes**: endpoint → Validation → Logging → `UpdateTicketCommandHandler` (**[spec 016]** permissões de quem chama e `EnsureCanChangeStatus`, com `TicketCancellationPolicy`) → `Ticket.CanTransitionTo` e `Ticket.Update` (**[spec 039]**).
 4. **Regras**: o chamado precisa estar ativo e a transição precisa ser válida. Na primeira ida a `Resolved`, grava `ResolvedAtUtc` (`UpdateTicketCommandHandler.cs`). **[Fato, spec 005]** Resolver conclui os cronômetros em aberto; cancelar os para (RN-26). **[Fato, spec 016]** O dono com `tickets:update-own` edita a descrição e cancela o próprio chamado só nos 15 minutos depois da abertura; Em andamento e Resolvido exigem `tickets:manage`; quem tem `tickets:cancel` cancela a qualquer momento (RN-06, RN-32).
 5. **Domínio**: `TicketUpdatedDomainEvent` e, se o status mudar, `TicketStatusChangedDomainEvent`.
 6. **Persistência**: `tickets` (com `xmin`), `ticket_histories` (`StatusChanged` com nomes dos enums, quando o status muda; `DescriptionChanged` com o texto anterior e o novo, quando a descrição muda pela comparação exata, ordinal; os dois quando ambos mudam; nenhum quando nada muda; spec 002), auditoria.
@@ -718,7 +718,7 @@ Descrito no diagrama 3.6.
 1. **Objetivo**: encerrar um chamado resolvido.
 2. **Gatilho**: `POST tickets/{id}/close`.
 3. **Componentes**: endpoint (`HasPermission(tickets:manage)`) → Validation → Logging → `CloseTicketCommandHandler`.
-4. **Regras**: RN-21. Usa `TicketStatusTransitions.CanTransition(status, Closed)`, que só aceita `Resolved`.
+4. **Regras**: RN-21. Usa `Ticket.CanTransitionTo(Closed)` (**[spec 039]**), que só aceita `Resolved`, e `Ticket.Close`.
 5. **Domínio**: `TicketStatusChangedDomainEvent` (sem handlers).
 6. **Persistência**: `tickets` (com `xmin`), `ticket_histories` (`StatusChanged`, `Resolved` → `Closed`), auditoria.
 7. **Resposta**: `204`.
@@ -747,7 +747,7 @@ Descrito no diagrama 3.6.
 6. **Persistência**: `tickets` (com `xmin`), `ticket_histories` (`Unassigned`, com o id do anterior em `oldValue` e `newValue` nulo), auditoria. Sem migration: a ação é gravada como texto.
 7. **Resposta**: `204`, inclusive quando o chamado já estava sem responsável (nada é gravado).
 8. **Erros**: 400 (id vazio, `Validation.General`; chamado inativo, `Tickets.NotActive`), 401, 403 (sem `tickets:manage`), 404 (inexistente ou excluído), 409 (concorrência).
-9. **Evidências**: `UnassignTicketCommandHandlerTests.cs`, `TicketValidatorsTests.cs` (UnassignValidator_*), `TicketHistoryEntriesTests.cs`, `TicketHistoryDescriptionsTests.cs`, `TicketsTests.cs` (Unassign_*); rastreabilidade completa na spec 001.
+9. **Evidências**: `UnassignTicketCommandHandlerTests.cs`, `TicketValidatorsTests.cs` (UnassignValidator_*), `TicketTests.cs` (**[spec 039]** as entradas do histórico do chamado, antes em `TicketHistoryEntriesTests.cs`), `TicketHistoryDescriptionsTests.cs`, `TicketsTests.cs` (Unassign_*); rastreabilidade completa na spec 001.
 10. **Lacunas**: o responsável removido não é notificado (C-21). Um chamado Em andamento pode ficar sem responsável (GAP-18). A reversão da migration `20261022023422_Store_Ticket_Enums_As_Names` falha se houver registros `Unassigned` (R-1 da spec 001).
 
 ---
@@ -933,7 +933,7 @@ As perguntas Q-01 a Q-12 estão na seção 9.5 (Q-01 e Q-02 foram respondidas e 
 | E-14 | Rotação e reuso do refresh token | `src/TickestPristine.Application/Users/Refresh/RefreshTokenCommandHandler.cs:15-104` | — | `RefreshTokenCommandHandlerTests.cs` |
 | E-15 | Cadastro exige `users:create` e atribui a role Colaborador | `src/TickestPristine.Web.Api/Endpoints/Users/Register.cs`; `RegisterUserCommandHandler.cs:39` | — | `UsersTests.cs` (Register_Should_ReturnUnauthorized_WhenNoTokenProvided, Register_Should_ReturnForbidden_WhenCallerLacksUsersCreatePermission) |
 | E-16 | `users:create` usada pelo cadastro | `src/TickestPristine.Web.Api/Endpoints/Users/Permissions.cs` (`UsersCreate`); `PermissionCatalog.cs:24` | `PermissionCatalog.UsersCreate` | `PermissionCatalogTests.cs`, `UsersTests.cs` |
-| E-17 | Transições de status | `src/TickestPristine.Application/Tickets/TicketStatusTransitions.cs:7-25` | `CanTransition` | `UpdateTicketCommandHandlerTests.cs`, `ReopenTicketCommandHandlerTests.cs` |
+| E-17 | Transições de status | `src/TickestPristine.Domain/Tickets/Ticket.cs:101-117` (**[spec 039]**) | `CanTransitionTo` | `TicketTests.cs`, `UpdateTicketCommandHandlerTests.cs`, `ReopenTicketCommandHandlerTests.cs` |
 | E-18 | Update só em chamados ativos | `src/TickestPristine.Application/Tickets/Update/UpdateTicketCommandHandler.cs:51-54` | — | `TicketsTests.cs` (`Update_Should_ReturnBadRequest_WhenTicketIsNotActive`) |
 | E-19 | SLA em horas corridas | `src/TickestPristine.Application/Tickets/TicketSla.cs:13-57` | `TicketSla` | `TicketSlaTests.cs` |
 | E-20 | SLA em SQL equivalente | `src/TickestPristine.Application/Tickets/TicketSlaFilters.cs:20-36` | `WhereSlaStatus` | `GetTicketsQueryHandlerTests.cs`, `TicketsTests.cs:308` |
@@ -954,12 +954,12 @@ As perguntas Q-01 a Q-12 estão na seção 9.5 (Q-01 e Q-02 foram respondidas e 
 | E-34 | Gatilhos do CI (push e pull request para a `main`, disparo manual) e `Publish` só fora de PR | `.github/workflows/build.yml:3-10`, `:39-41` | — | — (validado localmente; no GitHub, pendente) |
 | E-35 | Seq e enrichers em Development | `src/TickestPristine.Web.Api/appsettings.Development.json:16-23` | — | — |
 | E-36 | Fechamento de chamado | `src/TickestPristine.Application/Tickets/Close/CloseTicketCommandHandler.cs`; `src/TickestPristine.Web.Api/Endpoints/Tickets/Close.cs` | `CloseTicketCommandHandler` | `CloseTicketCommandHandlerTests.cs`, `TicketsTests.cs` |
-| E-37 | Atribuição de responsável | `src/TickestPristine.Application/Tickets/Assign/AssignTicketCommandHandler.cs`; `src/TickestPristine.Web.Api/Endpoints/Tickets/Assign.cs`; `TicketErrors.AssigneeCannotManageTickets`; `TicketReassignedDomainEvent`; `TicketHistoryEntries.Reassigned` | `AssignTicketCommandHandler` | `AssignTicketCommandHandlerTests.cs`, `TicketsTests.cs` |
+| E-37 | Atribuição de responsável | `src/TickestPristine.Application/Tickets/Assign/AssignTicketCommandHandler.cs`; `src/TickestPristine.Web.Api/Endpoints/Tickets/Assign.cs`; `TicketErrors.AssigneeCannotManageTickets`; `TicketReassignedDomainEvent`; `Ticket.Assign` (**[spec 039]**) | `AssignTicketCommandHandler` | `AssignTicketCommandHandlerTests.cs`, `TicketsTests.cs` |
 | E-38 | Modelo de PR alinhado ao fluxo SDD | `.github/pull_request_template.md` | — | — |
 | E-39 | Fluxo SDD, estados e skills (fluxo spec-first desde a spec 007) | `CLAUDE.md` ("Política de autonomia", "Fluxo de desenvolvimento (SDD)"); `.claude/skills/spec-new/SKILL.md`, `references/spec-template.md`, `references/spec-status.md`; `.claude/skills/spec-implement/SKILL.md` (`disable-model-invocation: true`); `.claude/skills/spec-verify/SKILL.md`; `.claude/commands/spec-status.md` | — | — (fluxo executado nas specs 001, 002, 003 e 007) |
 | E-40 | Primeira spec, implementada, verificada e entregue | `specs/001-remover-responsavel/spec.md` (aprovada no commit `8660490`; `Verificada` em 23/10/2026; entregue no commit `b0e78b0`) | — | Rastreabilidade AC → teste na seção 8 da spec |
 | E-43 | Remoção do responsável | `src/TickestPristine.Application/Tickets/Unassign/UnassignTicketCommandHandler.cs`; `src/TickestPristine.Web.Api/Endpoints/Tickets/Unassign.cs`; `src/TickestPristine.Domain/Tickets/TicketUnassignedDomainEvent.cs`; `TicketHistoryAction.cs` (`Unassigned = 11`) | `UnassignTicketCommandHandler` | `UnassignTicketCommandHandlerTests.cs`, `TicketsTests.cs` (Unassign_*) |
-| E-44 | Histórico da alteração da descrição (spec 002) | `src/TickestPristine.Application/Tickets/Update/UpdateTicketCommandHandler.cs` (comparação ordinal e registro `DescriptionChanged`); `TicketHistoryEntries.cs` (`DescriptionChanged`); `TicketHistoryAction.cs` (`DescriptionChanged = 12`) | `UpdateTicketCommandHandler` | `UpdateTicketCommandHandlerTests.cs`, `TicketsTests.cs` (Update_*) |
+| E-44 | Histórico da alteração da descrição (spec 002) | `src/TickestPristine.Application/Tickets/Update/UpdateTicketCommandHandler.cs` (comparação ordinal e registro `DescriptionChanged`); `Ticket.Update` (**[spec 039]**, entrada `DescriptionChanged`); `TicketHistoryAction.cs` (`DescriptionChanged = 12`) | `UpdateTicketCommandHandler` | `UpdateTicketCommandHandlerTests.cs`, `TicketsTests.cs` (Update_*) |
 | E-41 | Portão SDD por hook de projeto (testado na worktree `C:\dev\tickest-pristine-sdd-gate-test`; instalado neste repositório em 23/10/2026, com 33 testes aprovados no lugar) | `.claude/hooks/sdd_gate.py`; `.claude/settings.json` | — | v1: 27 testes e 4 cenários de ponta a ponta (Write em `src/` e `echo >` em `tests/` bloqueados com `acceptEdits`; `/spec-implement` registrado pelo `UserPromptSubmit`; escrita liberada com `[sdd:autorizo]`). v2: `.claude/hooks/test_sdd_gate.py` com 33 testes aprovados em Windows e em Linux (`python:3.12-slim`); 6 cenários de ponta a ponta numa worktree descartável, todos em 22/10/2026: Write em `src/`, `f=src/…; echo x > $f` no Bash e `Set-Content tests\…` no PowerShell bloqueados pelo hook; `git diff -- src tests > log` liberado; Write com `[sdd:autorizo]` liberado; com o interpretador inexistente, Write com `[sdd:autorizo]` bloqueado pelo `|| exit 2`. Também observado: o hook bloqueou um subagente e esta sessão; o build com 0 avisos e os 699 testes da solução aprovados na mesma data |
 | E-42 | Teste de contorno do portão (comportamento do modelo) | `claude -p` numa worktree descartável, antes do hook, em 22/10/2026 | — | Pedido com spec aprovada (1 execução): nenhuma escrita, encaminhado para `/spec-implement 001`. Pedido sem spec ("arquivar um chamado", 3 execuções): a `spec-new` acionada nas três, só escrita tentada em `specs/`, nenhuma skill `add-*`, nenhuma tentativa em `src/` ou `tests/` |
 | E-46 | Tempo útil sobre o calendário de expediente (spec 004) | `src/TickestPristine.Application/SlaCalendars/BusinessCalendar.cs` | `BusinessCalendar` | `BusinessCalendarTests.cs` |

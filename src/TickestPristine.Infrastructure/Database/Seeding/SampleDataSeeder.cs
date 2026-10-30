@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Tickets;
-using TickestPristine.Application.TicketHistories;
+using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
@@ -30,19 +30,15 @@ internal sealed class SampleDataSeeder(
 
     private const string SampleEmailDomain = "tickest.dev";
 
-    /// <summary>
-    /// Usuários fictícios por role, com o prefixo do e-mail e a quantidade. O Administrador fica de fora: o primeiro
-    /// administrador já vem do <see cref="AdminUserSeeder"/>.
-    /// </summary>
+    // Usuários fictícios por role, com o prefixo do e-mail e a quantidade. O Administrador fica de fora: o primeiro
+    // administrador já vem do AdminUserSeeder.
     private static readonly (string RoleName, string EmailPrefix, int Count)[] SampleUserGroups =
     [
         (RoleNames.Agent, "atendente", 3),
         (RoleNames.Collaborator, "colaborador", 6)
     ];
 
-    /// <summary>
-    /// Status que cada chamado percorre a partir de Aberto até o status final (cada passo é conferido em CreateHistory).
-    /// </summary>
+    // Status que cada chamado percorre a partir de Aberto até o status final; CreateTicket confere cada passo.
     private static readonly Dictionary<TicketStatus, TicketStatus[]> StatusPaths = new()
     {
         [TicketStatus.Open] = [],
@@ -59,29 +55,27 @@ internal sealed class SampleDataSeeder(
             return;
         }
 
-        Dictionary<string, Guid> sectorIdsByName = await context.Sectors
+        Dictionary<string, Sector> sectorsByName = await context.Sectors
             .Where(s => s.IsActive)
-            .ToDictionaryAsync(s => s.Name, s => s.Id, cancellationToken);
+            .ToDictionaryAsync(s => s.Name, cancellationToken);
 
         var faker = new Faker("pt_BR") { Random = new Randomizer(RandomSeed) };
         DateTime now = dateTimeProvider.UtcNow;
 
-        Dictionary<string, Guid[]> userIdsByRole = await EnsureSampleUsersAsync(context, faker, now, cancellationToken);
+        Dictionary<string, User[]> usersByRole = await EnsureSampleUsersAsync(context, faker, now, cancellationToken);
         // Colaboradores abrem os chamados; atendentes atendem e resolvem.
-        Guid[] requesterIds = userIdsByRole[RoleNames.Collaborator];
-        Guid[] agentIds = userIdsByRole[RoleNames.Agent];
+        User[] requesters = usersByRole[RoleNames.Collaborator];
+        User[] agents = usersByRole[RoleNames.Agent];
 
         // Setores renomeados ou desativados pelo administrador ficam sem chamados de exemplo.
         foreach (SampleTicket sampleTicket in SampleTicketCatalog.Tickets)
         {
-            if (!sectorIdsByName.TryGetValue(sampleTicket.SectorName, out Guid sectorId))
+            if (!sectorsByName.TryGetValue(sampleTicket.SectorName, out Sector? sector))
             {
                 continue;
             }
 
-            Ticket ticket = CreateTicket(faker, sampleTicket, sectorId, requesterIds, agentIds, now);
-
-            List<TicketHistory> history = [.. CreateHistory(faker, ticket, now)];
+            (Ticket ticket, List<TicketHistory> history) = CreateTicket(faker, sampleTicket, sector, requesters, agents, now);
 
             context.Tickets.Add(ticket);
             context.TicketHistories.AddRange(history);
@@ -92,11 +86,11 @@ internal sealed class SampleDataSeeder(
     }
 
     /// <summary>
-    /// Garante os usuários fictícios de cada grupo, com a role e a credencial, e devolve os ids por role. Quem já existe
+    /// Garante os usuários fictícios de cada grupo, com a role e a credencial, e devolve os usuários por role. Quem já existe
     /// com o mesmo e-mail é reaproveitado (o banco pode ter perdido só os chamados). O nome é sorteado mesmo para quem
     /// já existe, para a sequência da semente não depender do estado do banco.
     /// </summary>
-    private async Task<Dictionary<string, Guid[]>> EnsureSampleUsersAsync(
+    private async Task<Dictionary<string, User[]>> EnsureSampleUsersAsync(
         ApplicationDbContext context,
         Faker faker,
         DateTime now,
@@ -111,15 +105,15 @@ internal sealed class SampleDataSeeder(
         string[] emails = [.. SampleUserGroups.SelectMany(group =>
             Enumerable.Range(1, group.Count).Select(number => SampleEmail(group.EmailPrefix, number)))];
 
-        Dictionary<string, Guid> existingUserIds = await context.Users
+        Dictionary<string, User> existingUsers = await context.Users
             .Where(u => emails.Contains(u.Email))
-            .ToDictionaryAsync(u => u.Email, u => u.Id, cancellationToken);
+            .ToDictionaryAsync(u => u.Email, cancellationToken);
 
-        var userIdsByRole = new Dictionary<string, Guid[]>();
+        var usersByRole = new Dictionary<string, User[]>();
 
         foreach ((string roleName, string emailPrefix, int count) in SampleUserGroups)
         {
-            var userIds = new List<Guid>();
+            var users = new List<User>();
 
             for (int number = 1; number <= count; number++)
             {
@@ -127,9 +121,9 @@ internal sealed class SampleDataSeeder(
                 string firstName = faker.Name.FirstName();
                 string lastName = faker.Name.LastName();
 
-                if (existingUserIds.TryGetValue(email, out Guid existingUserId))
+                if (existingUsers.TryGetValue(email, out User? existingUser))
                 {
-                    userIds.Add(existingUserId);
+                    users.Add(existingUser);
                     continue;
                 }
 
@@ -154,23 +148,28 @@ internal sealed class SampleDataSeeder(
                 });
                 context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = roleName });
 
-                userIds.Add(user.Id);
+                users.Add(user);
             }
 
-            userIdsByRole[roleName] = [.. userIds];
+            usersByRole[roleName] = [.. users];
         }
 
-        return userIdsByRole;
+        return usersByRole;
     }
 
     private static string SampleEmail(string emailPrefix, int number) => $"{emailPrefix}{number}@{SampleEmailDomain}";
 
-    private static Ticket CreateTicket(
+    /// <summary>
+    /// Monta o chamado pelos métodos da entidade, com o histórico igual ao que os handlers gravam: a abertura e cada
+    /// mudança de status, em ordem e com datas no passado. Cada passo é conferido com <see cref="Ticket.CanTransitionTo"/>,
+    /// para o seed nunca gerar um histórico que a API recusaria.
+    /// </summary>
+    private static (Ticket Ticket, List<TicketHistory> History) CreateTicket(
         Faker faker,
         SampleTicket sampleTicket,
-        Guid sectorId,
-        Guid[] requesterIds,
-        Guid[] agentIds,
+        Sector sector,
+        User[] requesters,
+        User[] agents,
         DateTime now)
     {
         TicketStatus status = faker.PickRandom<TicketStatus>();
@@ -178,7 +177,7 @@ internal sealed class SampleDataSeeder(
 
         // Os ativos nascem dentro ou pouco além da janela do SLA, para o painel ter chamados no prazo, em risco e
         // atrasados. Os demais nascem no último ano, até uma semana atrás, para caberem a resolução e o fechamento.
-        DateTime createdAtUtc = TicketStatusTransitions.IsActive(status)
+        DateTime createdAtUtc = Ticket.IsActiveStatus(status)
             ? now - resolutionTime * faker.Random.Double(0.1, 1.5)
             : faker.Date.Past(1, now.AddDays(-7));
 
@@ -187,23 +186,46 @@ internal sealed class SampleDataSeeder(
             ? createdAtUtc + resolutionTime * faker.Random.Double(0.3, 1.4)
             : null;
 
-        return new Ticket
+        User requester = faker.PickRandom(requesters);
+        // Chamado que passou por "Em andamento" teve um atendente atendendo.
+        User? assignee = StatusPaths[status].Contains(TicketStatus.InProgress) ? faker.PickRandom(agents) : null;
+
+        var ticket = Ticket.Create(
+            sampleTicket.Title,
+            sampleTicket.Description,
+            sampleTicket.Priority,
+            sector,
+            requester,
+            assignee,
+            TicketSla.LegacyPlan(sampleTicket.Priority),
+            TicketSla.DueAt(createdAtUtc, sampleTicket.Priority),
+            TicketSla.WarningAt(createdAtUtc, sampleTicket.Priority),
+            requester.Id,
+            createdAtUtc);
+
+        List<TicketHistory> history = [ticket.RecordOpening(requester.Id)];
+        DateTime occurredAtUtc = createdAtUtc;
+
+        foreach (TicketStatus newStatus in StatusPaths[status])
         {
-            Id = Guid.NewGuid(),
-            Title = sampleTicket.Title,
-            Description = sampleTicket.Description,
-            Priority = sampleTicket.Priority,
-            Status = status,
-            CreatedByUserId = faker.PickRandom(requesterIds),
-            // Chamado que passou por "Em andamento" teve um atendente atendendo.
-            AssignedToUserId = StatusPaths[status].Contains(TicketStatus.InProgress) ? faker.PickRandom(agentIds) : null,
-            SectorId = sectorId,
-            CreatedAtUtc = createdAtUtc,
-            DueAtUtc = TicketSla.DueAt(createdAtUtc, sampleTicket.Priority),
-            SlaWarningAtUtc = TicketSla.WarningAt(createdAtUtc, sampleTicket.Priority),
-            ResolvedAtUtc = resolvedAtUtc,
-            SlaPlan = TicketSla.LegacyPlan(sampleTicket.Priority)
-        };
+            if (!ticket.CanTransitionTo(newStatus))
+            {
+                throw new InvalidOperationException(
+                    $"O caminho de status dos dados de exemplo não é permitido: {ticket.Status} -> {newStatus}.");
+            }
+
+            // A resolução cai na data sorteada acima; o que vem antes dela fica entre a abertura e a resolução.
+            occurredAtUtc = newStatus switch
+            {
+                TicketStatus.Resolved => resolvedAtUtc!.Value,
+                TicketStatus.Closed => faker.Date.Between(occurredAtUtc, occurredAtUtc.AddDays(2)),
+                _ => faker.Date.Between(occurredAtUtc, resolvedAtUtc ?? now)
+            };
+
+            history.AddRange(ticket.Update(ticket.Description, newStatus, assignee?.Id ?? requester.Id, occurredAtUtc));
+        }
+
+        return (ticket, history);
     }
 
     /// <summary>
@@ -226,43 +248,4 @@ internal sealed class SampleDataSeeder(
             ? history.Last().OccurredAtUtc
             : null
     };
-
-    /// <summary>
-    /// Histórico igual ao que os handlers de evento de domínio gravam: a criação e cada mudança de status, em ordem.
-    /// Cada passo é conferido com TicketStatusTransitions, para o seed nunca gerar um histórico que a API recusaria.
-    /// </summary>
-    private static IEnumerable<TicketHistory> CreateHistory(Faker faker, Ticket ticket, DateTime now)
-    {
-        DateTime occurredAtUtc = ticket.CreatedAtUtc;
-
-        yield return TicketHistoryEntries.Created(ticket.Id, ticket.CreatedByUserId, occurredAtUtc);
-
-        TicketStatus oldStatus = TicketStatus.Open;
-
-        foreach (TicketStatus newStatus in StatusPaths[ticket.Status])
-        {
-            if (!TicketStatusTransitions.CanTransition(oldStatus, newStatus))
-            {
-                throw new InvalidOperationException(
-                    $"O caminho de status dos dados de exemplo não é permitido por TicketStatusTransitions: {oldStatus} -> {newStatus}.");
-            }
-
-            // A resolução cai na data gravada no chamado; o que vem antes dela fica entre a abertura e a resolução.
-            occurredAtUtc = newStatus switch
-            {
-                TicketStatus.Resolved => ticket.ResolvedAtUtc!.Value,
-                TicketStatus.Closed => faker.Date.Between(occurredAtUtc, occurredAtUtc.AddDays(2)),
-                _ => faker.Date.Between(occurredAtUtc, ticket.ResolvedAtUtc ?? now)
-            };
-
-            yield return TicketHistoryEntries.StatusChanged(
-                ticket.Id,
-                ticket.AssignedToUserId ?? ticket.CreatedByUserId,
-                oldStatus,
-                newStatus,
-                occurredAtUtc);
-
-            oldStatus = newStatus;
-        }
-    }
 }

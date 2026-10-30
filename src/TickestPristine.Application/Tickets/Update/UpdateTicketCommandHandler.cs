@@ -2,7 +2,6 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.TicketHistories;
 using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
@@ -48,12 +47,12 @@ internal sealed class UpdateTicketCommandHandler(
             return Result.Failure(UserErrors.Unauthorized());
         }
 
-        if (!TicketStatusTransitions.IsActive(ticket.Status))
+        if (!ticket.IsActive)
         {
             return Result.Failure(TicketErrors.NotActive(ticket.Id));
         }
 
-        if (changesStatus && !TicketStatusTransitions.CanTransition(ticket.Status, command.Status))
+        if (changesStatus && !ticket.CanTransitionTo(command.Status))
         {
             return Result.Failure(TicketErrors.InvalidStatusTransition(ticket.Status, command.Status));
         }
@@ -70,46 +69,14 @@ internal sealed class UpdateTicketCommandHandler(
             }
         }
 
-        TicketStatus previousStatus = ticket.Status;
-        string previousDescription = ticket.Description;
-
-        ticket.Description = command.Description;
-        ticket.Status = command.Status;
-
-        // O SLA é medido até a primeira resolução; reaberturas não mudam o resultado.
-        if (command.Status == TicketStatus.Resolved && ticket.ResolvedAtUtc is null)
-        {
-            ticket.ResolvedAtUtc = nowUtc;
-        }
+        IReadOnlyList<TicketHistory> historyEntries = ticket.Update(command.Description, command.Status, callerId, nowUtc);
 
         if (changesStatus)
         {
             await UpdateSlaTimersAsync(ticket.Id, command.Status, nowUtc, cancellationToken);
         }
 
-        ticket.Raise(new TicketUpdatedDomainEvent(ticket.Id));
-
-        if (changesStatus)
-        {
-            ticket.Raise(new TicketStatusChangedDomainEvent(ticket.Id, previousStatus, command.Status, userContext.UserId));
-
-            context.TicketHistories.Add(TicketHistoryEntries.StatusChanged(
-                ticket.Id,
-                userContext.UserId,
-                previousStatus,
-                command.Status,
-                nowUtc));
-        }
-
-        if (changesDescription)
-        {
-            context.TicketHistories.Add(TicketHistoryEntries.DescriptionChanged(
-                ticket.Id,
-                userContext.UserId,
-                previousDescription,
-                command.Description,
-                nowUtc));
-        }
+        context.TicketHistories.AddRange(historyEntries);
 
         await context.SaveChangesAsync(cancellationToken);
 
@@ -119,7 +86,7 @@ internal sealed class UpdateTicketCommandHandler(
     /// <summary>
     /// Cancelar: quem tem <c>tickets:cancel</c>, sempre; o dono, só dentro da janela de
     /// <see cref="TicketCancellationPolicy"/>. As demais trocas de status (Em Andamento e Resolvido) exigem
-    /// <c>tickets:manage</c>: o dono só edita a descrição e cancela (spec 016).
+    /// <c>tickets:manage</c>: o dono só edita a descrição e cancela.
     /// </summary>
     private static Result EnsureCanChangeStatus(
         Ticket ticket,
@@ -173,7 +140,7 @@ internal sealed class UpdateTicketCommandHandler(
         }
 
         // Resolver sem ter respondido também conclui a primeira resposta, mas com a causa "resolução": a média de primeira
-        // resposta conta só as concluídas por mensagem (spec 027).
+        // resposta conta só as concluídas por mensagem.
         if (TicketSlaClock.CurrentCycle(timers, SlaMetric.FirstResponse) is { } firstResponse)
         {
             TicketSlaClock.Complete(firstResponse, nowUtc, SlaCompletionCause.Resolution);

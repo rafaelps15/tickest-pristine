@@ -82,7 +82,7 @@ public sealed class DeactivateDepartmentCommandHandlerTests : BaseHandlerTest
         var sector = Sector.Create(department, "Helpdesk", description: null);
         context.Departments.Add(department);
         context.Sectors.Add(sector);
-        context.Tickets.Add(CreateTicket(sector.Id, status));
+        context.Tickets.Add(CreateTicket(sector, status));
         await context.SaveChangesAsync();
 
         var handler = new DeactivateDepartmentCommandHandler(context);
@@ -108,7 +108,7 @@ public sealed class DeactivateDepartmentCommandHandlerTests : BaseHandlerTest
         var otherDepartmentSector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Payroll", description: null);
         context.Departments.Add(department);
         context.Sectors.AddRange(sector, otherDepartmentSector);
-        context.Tickets.Add(CreateTicket(sector.Id, TicketStatus.Closed));
+        context.Tickets.Add(CreateTicket(sector, TicketStatus.Closed));
         await context.SaveChangesAsync();
 
         var handler = new DeactivateDepartmentCommandHandler(context);
@@ -127,15 +127,6 @@ public sealed class DeactivateDepartmentCommandHandlerTests : BaseHandlerTest
         untouchedSector.IsActive.ShouldBeTrue();
     }
 
-    private static Ticket CreateTicket(Guid sectorId, TicketStatus status) => new()
-    {
-        Id = Guid.NewGuid(),
-        Title = "Printer is broken",
-        Description = "The printer on the second floor is not working",
-        Priority = TicketPriority.Medium,
-        Status = status,
-        CreatedByUserId = Guid.NewGuid(),
-        SectorId = sectorId,
-        CreatedAtUtc = DateTime.UtcNow
-    };
+    private static Ticket CreateTicket(Sector sector, TicketStatus status) =>
+        TicketTestData.Create(sector: sector, status: status, description: "The printer on the second floor is not working");
 }

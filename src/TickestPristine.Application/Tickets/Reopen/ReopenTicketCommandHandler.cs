@@ -4,7 +4,6 @@ using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Sla;
 using TickestPristine.Application.Authorization;
-using TickestPristine.Application.TicketHistories;
 using TickestPristine.Application.Permissions;
 using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Application.TicketMessages;
@@ -43,12 +42,12 @@ internal sealed class ReopenTicketCommandHandler(
             return access;
         }
 
-        if (TicketStatusTransitions.IsActive(ticket.Status))
+        if (ticket.IsActive)
         {
             return Result.Failure(TicketErrors.AlreadyActive(ticket.Id));
         }
 
-        if (!TicketStatusTransitions.CanTransition(ticket.Status, TicketStatus.Open))
+        if (!ticket.CanTransitionTo(TicketStatus.Open))
         {
             return Result.Failure(TicketErrors.InvalidStatusTransition(ticket.Status, TicketStatus.Open));
         }
@@ -60,13 +59,12 @@ internal sealed class ReopenTicketCommandHandler(
             return calendar;
         }
 
-        TicketStatus previousStatus = ticket.Status;
         DateTime nowUtc = dateTimeProvider.UtcNow;
 
-        ticket.Status = TicketStatus.Open;
+        context.TicketHistories.Add(ticket.Reopen(userContext.UserId, nowUtc));
 
-        // A reabertura abre um novo ciclo de resolução com a meta integral do plano; os ciclos anteriores, a primeira
-        // resposta e os prazos gravados no chamado (os do ciclo 1) não mudam.
+        // A reabertura abre um novo ciclo de resolução com a meta integral do plano; os ciclos anteriores e a primeira
+        // resposta não mudam.
         int lastResolutionCycle = await context.TicketSlaTimers
             .Where(t => t.TicketId == ticket.Id && t.Metric == SlaMetric.Resolution)
             .MaxAsync(t => (int?)t.Cycle, cancellationToken) ?? 0;
@@ -77,16 +75,6 @@ internal sealed class ReopenTicketCommandHandler(
             lastResolutionCycle + 1,
             calendar.Value,
             nowUtc));
-
-        ticket.Raise(new TicketReopenedDomainEvent(ticket.Id, userContext.UserId));
-
-        context.TicketHistories.Add(TicketHistoryEntries.Create(
-            ticket.Id,
-            userContext.UserId,
-            TicketHistoryAction.Reopened,
-            nowUtc,
-            oldValue: previousStatus.ToString(),
-            newValue: TicketStatus.Open.ToString()));
 
         // Com motivo, a mensagem de quem reabriu entra no mesmo SaveChanges da reabertura: as duas ou nenhuma.
         string? reason = command.Reason?.Trim();

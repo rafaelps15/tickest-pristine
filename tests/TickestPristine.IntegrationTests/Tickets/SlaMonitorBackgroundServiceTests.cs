@@ -7,6 +7,7 @@ using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Tickets.ProcessSlaBreaches;
+using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Infrastructure.Database;
 using TickestPristine.Infrastructure.Tickets.SlaMonitoring;
@@ -14,10 +15,8 @@ using TickestPristine.SharedKernel;
 
 namespace TickestPristine.IntegrationTests.Tickets;
 
-/// <summary>
-/// Laço do serviço em background do monitoramento do SLA: espera entre as voltas, falha isolada, desligamento,
-/// registros e configuração.
-/// </summary>
+// Laço do serviço em background do monitoramento do SLA: espera entre as voltas, falha isolada, desligamento,
+// registros e configuração.
 public sealed class SlaMonitorBackgroundServiceTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
     private readonly IntegrationTestWebAppFactory _factory = factory;
@@ -125,24 +124,22 @@ public sealed class SlaMonitorBackgroundServiceTests(IntegrationTestWebAppFactor
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         Guid requesterId = await context.Users.Where(u => u.Email == AdminEmail).Select(u => u.Id).SingleAsync();
-        Guid sectorId = await context.Sectors.Select(s => s.Id).FirstAsync();
+        Sector sector = await context.Sectors.FirstAsync();
         DateTime createdAtUtc = DateTime.UtcNow.AddHours(-5);
-        var ticketId = Guid.NewGuid();
 
-        context.Tickets.Add(new Ticket
-        {
-            Id = ticketId,
-            Title = "Overdue ticket",
-            Description = "Opened five hours ago",
-            Priority = TicketPriority.Urgent,
-            Status = TicketStatus.Open,
-            CreatedByUserId = requesterId,
-            SectorId = sectorId,
-            CreatedAtUtc = createdAtUtc,
-            DueAtUtc = createdAtUtc.AddHours(4),
-            SlaWarningAtUtc = createdAtUtc.AddHours(3),
-            SlaPlan = TicketSla.LegacyPlan(TicketPriority.Urgent)
-        });
+        Ticket ticket = TicketTestData.Create(
+            sector,
+            requesterId: requesterId,
+            createdAtUtc: createdAtUtc,
+            priority: TicketPriority.Urgent,
+            title: "Overdue ticket",
+            description: "Opened five hours ago",
+            slaPlan: TicketSla.LegacyPlan(TicketPriority.Urgent),
+            dueAtUtc: createdAtUtc.AddHours(4),
+            slaWarningAtUtc: createdAtUtc.AddHours(3));
+        Guid ticketId = ticket.Id;
+
+        context.Tickets.Add(ticket);
         context.TicketSlaTimers.Add(new TicketSlaTimer
         {
             Id = Guid.NewGuid(),
@@ -184,9 +181,7 @@ public sealed class SlaMonitorBackgroundServiceTests(IntegrationTestWebAppFactor
     }
 }
 
-/// <summary>
-/// Fábrica derivada com uma configuração a mais, para conferir a subida da API com um valor inválido.
-/// </summary>
+// Fábrica derivada com uma configuração a mais, para conferir a subida da API com um valor inválido.
 internal sealed class WebApplicationFactoryWithSetting(IntegrationTestWebAppFactory factory, string key, string value) : IDisposable
 {
     private readonly Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> _derived =
@@ -197,9 +192,7 @@ internal sealed class WebApplicationFactoryWithSetting(IntegrationTestWebAppFact
     public void Dispose() => _derived.Dispose();
 }
 
-/// <summary>
-/// Estado do handler de teste: quantas voltas o chamaram e quantas das primeiras devem falhar.
-/// </summary>
+// Estado do handler de teste: quantas voltas o chamaram e quantas das primeiras devem falhar.
 public sealed class ScriptedProcessSlaBreachesHandlerState(int failingCalls)
 {
     private int _calls;
@@ -211,9 +204,7 @@ public sealed class ScriptedProcessSlaBreachesHandlerState(int failingCalls)
     public bool ShouldFail(int call) => call <= failingCalls;
 }
 
-/// <summary>
-/// Handler de teste do <see cref="ProcessSlaBreachesCommand"/>, para exercitar o laço do serviço sem banco.
-/// </summary>
+// Handler de teste do ProcessSlaBreachesCommand, para exercitar o laço do serviço sem banco.
 internal sealed class ScriptedProcessSlaBreachesHandler(ScriptedProcessSlaBreachesHandlerState state)
     : ICommandHandler<ProcessSlaBreachesCommand, ProcessSlaBreachesResponse>
 {

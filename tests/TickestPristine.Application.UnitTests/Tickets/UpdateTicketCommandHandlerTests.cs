@@ -14,9 +14,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
 {
     private static readonly Guid OwnerId = Guid.NewGuid();
 
-    /// <summary>
-    /// Abertura dos chamados dos testes de cancelamento: 27/10/2026, 9h00 em São Paulo (12h00 UTC).
-    /// </summary>
+    // Abertura dos chamados dos testes de cancelamento: 27/10/2026, 9h00 em São Paulo (12h00 UTC).
     private static readonly DateTime NineAmUtc = new(2026, 10, 27, 12, 0, 0, DateTimeKind.Utc);
 
     [Fact]
@@ -430,8 +428,12 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.InProgress);
         var firstResolutionUtc = new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
 
+        // Resolvido pela primeira vez, reaberto e de volta a Em andamento.
         Ticket seeded = await context.Tickets.SingleAsync(t => t.Id == ticketId);
-        seeded.ResolvedAtUtc = firstResolutionUtc;
+        seeded.Update(seeded.Description, TicketStatus.Resolved, OwnerId, firstResolutionUtc);
+        seeded.Reopen(OwnerId, firstResolutionUtc.AddDays(1));
+        seeded.Update(seeded.Description, TicketStatus.InProgress, OwnerId, firstResolutionUtc.AddDays(1));
+        seeded.ClearDomainEvents();
         await context.SaveChangesAsync();
 
         UpdateTicketCommandHandler handler = CreateManagerHandler(context, firstResolutionUtc.AddDays(4));
@@ -571,9 +573,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         return new UpdateTicketCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
     }
 
-    /// <summary>
-    /// Quem tem só <c>tickets:cancel</c>: não é o dono nem atende a fila.
-    /// </summary>
+    // Quem tem só tickets:cancel: não é o dono nem atende a fila.
     private static UpdateTicketCommandHandler CreateCancelerHandler(TestDbContext context, DateTime nowUtc)
     {
         IUserContext userContext = Substitute.For<IUserContext>();
@@ -591,23 +591,11 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         TicketStatus status,
         DateTime? createdAtUtc = null)
     {
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Medium,
-            Status = TicketStatus.Open,
-            CreatedByUserId = openedByUserId,
-            AssignedToUserId = null,
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = createdAtUtc ?? DateTime.UtcNow
-        };
-
-        if (status != TicketStatus.Open)
-        {
-            ticket.Status = status;
-        }
+        Ticket ticket = TicketTestData.Create(
+            requesterId: openedByUserId,
+            status: status,
+            createdAtUtc: createdAtUtc ?? DateTime.UtcNow,
+            description: "Original description");
 
         context.Tickets.Add(ticket);
         await context.SaveChangesAsync();
@@ -629,9 +617,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         return new UpdateTicketCommandHandler(context, userContext, permissionProvider, CreateClock(nowUtc));
     }
 
-    /// <summary>
-    /// Cancela o chamado sem mudar a descrição gravada por <see cref="SeedTicketAsync"/>.
-    /// </summary>
+    // Cancela o chamado sem mudar a descrição gravada por SeedTicketAsync.
     private static UpdateTicketCommand CancelCommand(Guid ticketId) =>
         new() { TicketId = ticketId, Description = "Original description", Status = TicketStatus.Canceled };
 
@@ -657,7 +643,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         timers.Count.ShouldBe(2);
         timers.ShouldAllBe(t => t.CompletedOnUtc == resolvedAtUtc && t.StoppedOnUtc == null);
         timers.ShouldAllBe(t => t.CompletedOnUtc <= t.DueOnUtc);
-        // Resolver sem responder conclui a primeira resposta com a causa "resolução" (spec 027).
+        // Resolver sem responder conclui a primeira resposta com a causa "resolução".
         timers.ShouldAllBe(t => t.CompletionCause == SlaCompletionCause.Resolution);
     }
 

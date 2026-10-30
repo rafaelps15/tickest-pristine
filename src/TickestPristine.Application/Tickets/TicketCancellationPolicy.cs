@@ -3,7 +3,7 @@ using TickestPristine.Domain.Tickets;
 namespace TickestPristine.Application.Tickets;
 
 /// <summary>
-/// Quem pode cancelar um chamado (spec 016): o dono, com <c>tickets:update-own</c>, só até
+/// Quem pode cancelar um chamado: o dono, com <c>tickets:update-own</c>, só até
 /// <see cref="OwnerWindowMinutes"/> minutos depois da abertura, para desfazer um chamado aberto por engano; quem tem
 /// <c>tickets:cancel</c>, a qualquer momento. Nos dois casos, só chamado ativo. A janela conta da abertura, e reabrir
 /// não a reinicia. É o único lugar da regra, usado pela edição do chamado e pelas consultas que informam se o botão de
@@ -30,6 +30,6 @@ internal static class TicketCancellationPolicy
         DateTime nowUtc,
         bool canCancelAny,
         bool isOwnerWhoCanEdit) =>
-        TicketStatusTransitions.IsActive(status) &&
+        Ticket.IsActiveStatus(status) &&
         (canCancelAny || isOwnerWhoCanEdit && IsWithinOwnerWindow(createdAtUtc, nowUtc));
 }

@@ -72,16 +72,10 @@ public sealed class GetTicketStatusCountsQueryHandlerTests : BaseHandlerTest
     }
 
     private static void SeedTicket(TestDbContext context, Guid requesterId, TicketStatus status, DateTime? deletedAtUtc = null) =>
-        context.Tickets.Add(new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Medium,
-            Status = status,
-            CreatedByUserId = requesterId,
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = NowUtc,
-            DeletedAtUtc = deletedAtUtc
-        });
+        context.Tickets.Add(TicketTestData.Create(
+            requesterId: requesterId,
+            status: status,
+            createdAtUtc: NowUtc,
+            description: "Original description",
+            deletedAtUtc: deletedAtUtc));
 }

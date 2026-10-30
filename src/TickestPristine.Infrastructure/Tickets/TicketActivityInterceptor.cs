@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using TickestPristine.Domain.Tickets;
 
@@ -8,13 +9,12 @@ namespace TickestPristine.Infrastructure.Tickets;
 /// <summary>
 /// Mantém a última atividade do chamado: a cada registro novo de histórico, leva o <see cref="Ticket.LastActivityAtUtc"/>
 /// do chamado à data do registro, sem nunca diminuí-la. Fica num lugar só para que nenhum handler que grave histórico
-/// esqueça de atualizá-la (spec 015, DEC-6).
+/// esqueça de atualizá-la.
 /// </summary>
 /// <remarks>
 /// O chamado criado ou alterado no mesmo SaveChanges recebe a data na própria entidade. Os demais (mensagens, anexos,
 /// chamado só lido) são atualizados por um <c>UPDATE</c> depois do commit, sem checagem de versão: assim uma mensagem
-/// não altera a versão do chamado dentro da transação dela, e duas mensagens simultâneas não conflitam (spec 015,
-/// DEC-11).
+/// não altera a versão do chamado dentro da transação dela, e duas mensagens simultâneas não conflitam.
 /// </remarks>
 internal sealed class TicketActivityInterceptor : SaveChangesInterceptor
 {
@@ -109,18 +109,17 @@ internal sealed class TicketActivityInterceptor : SaveChangesInterceptor
 
         foreach ((Guid ticketId, DateTime occurredAtUtc) in latestByTicket)
         {
-            Ticket? changedTicket = context.ChangeTracker.Entries<Ticket>()
-                .Where(entry => entry.State is EntityState.Added or EntityState.Modified)
-                .Select(entry => entry.Entity)
-                .FirstOrDefault(ticket => ticket.Id == ticketId);
+            EntityEntry<Ticket>? changedTicket = context.ChangeTracker.Entries<Ticket>()
+                .FirstOrDefault(entry => entry.State is EntityState.Added or EntityState.Modified && entry.Entity.Id == ticketId);
 
             if (changedTicket is null)
             {
                 afterCommit.Add((ticketId, occurredAtUtc));
             }
-            else if (changedTicket.LastActivityAtUtc < occurredAtUtc)
+            else if (changedTicket.Entity.LastActivityAtUtc < occurredAtUtc)
             {
-                changedTicket.LastActivityAtUtc = occurredAtUtc;
+                // A data é da infraestrutura, e não de uma regra do chamado: entra pela API do EF.
+                changedTicket.Property(ticket => ticket.LastActivityAtUtc).CurrentValue = occurredAtUtc;
             }
         }
 

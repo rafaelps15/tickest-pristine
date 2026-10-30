@@ -92,9 +92,9 @@ public sealed class GetOwnTicketsQueryHandlerTests : BaseHandlerTest
             OwnerId,
             TicketStatus.InProgress,
             NowUtc.AddHours(-2),
-            sectorId: helpdesk.Id,
+            sector: helpdesk,
             assignedToUserId: ana.Id);
-        Ticket unassigned = await SeedTicketAsync(context, OwnerId, TicketStatus.Open, NowUtc.AddHours(-1), sectorId: helpdesk.Id);
+        Ticket unassigned = await SeedTicketAsync(context, OwnerId, TicketStatus.Open, NowUtc.AddHours(-1), sector: helpdesk);
 
         GetOwnTicketsQueryHandler handler = CreateHandler(context, OwnerId);
 
@@ -338,10 +338,8 @@ public sealed class GetOwnTicketsQueryHandlerTests : BaseHandlerTest
         result.Value.Items.ShouldHaveSingleItem().CanCancel.ShouldBeFalse();
     }
 
-    /// <summary>
-    /// Handler para quem consulta, por padrão um Colaborador: pode editar os próprios chamados (tickets:update-own) e
-    /// não tem tickets:cancel.
-    /// </summary>
+    // Handler para quem consulta, por padrão um Colaborador: pode editar os próprios chamados (tickets:update-own) e
+    // não tem tickets:cancel.
     private static GetOwnTicketsQueryHandler CreateHandler(
         TestDbContext context,
         Guid callerId,
@@ -364,11 +362,9 @@ public sealed class GetOwnTicketsQueryHandlerTests : BaseHandlerTest
     private static GetOwnTicketsQuery CreateQuery(OwnTicketStatusGroup? statusGroup = null, string? search = null) =>
         new(statusGroup, search, new PageRequest(1, 20));
 
-    /// <summary>
-    /// Chamados da spec 019: "Impressora não imprime" (Aberto), "Acesso ao e-mail" (Resolvido) e "Monitor piscando" (Em
-    /// Andamento, com "e" só na descrição), da última atividade mais recente para a mais antiga, e um chamado de outro
-    /// usuário com "SENHA" na descrição.
-    /// </summary>
+    // Chamados do cenário: "Impressora não imprime" (Aberto), "Acesso ao e-mail" (Resolvido) e "Monitor piscando" (Em
+    // Andamento, com "e" só na descrição), da última atividade mais recente para a mais antiga, e um chamado de outro
+    // usuário com "SENHA" na descrição.
     private static async Task<(Ticket Printer, Ticket Email, Ticket Monitor)> SeedSearchScenarioAsync(TestDbContext context)
     {
         Ticket printer = await SeedTicketAsync(
@@ -389,29 +385,30 @@ public sealed class GetOwnTicketsQueryHandlerTests : BaseHandlerTest
         TicketStatus status,
         DateTime createdAtUtc,
         string title = "Printer is broken",
-        Guid? sectorId = null,
+        Sector? sector = null,
         Guid? assignedToUserId = null,
         DateTime? lastActivityAtUtc = null,
         string description = "Original description")
     {
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = title,
-            Description = description,
-            Priority = TicketPriority.Medium,
-            Status = status,
-            CreatedByUserId = openedByUserId,
-            AssignedToUserId = assignedToUserId,
-            SectorId = sectorId ?? Guid.NewGuid(),
-            CreatedAtUtc = createdAtUtc,
-            DueAtUtc = createdAtUtc.AddHours(24),
-            SlaWarningAtUtc = createdAtUtc.AddHours(18),
-            // Como o interceptor faria na abertura: a última atividade começa na data de abertura.
-            LastActivityAtUtc = lastActivityAtUtc ?? createdAtUtc
-        };
+        Ticket ticket = TicketTestData.Create(
+            requesterId: openedByUserId,
+            sector: sector,
+            status: status,
+            createdAtUtc: createdAtUtc,
+            assignedToUserId: assignedToUserId,
+            title: title,
+            description: description,
+            dueAtUtc: createdAtUtc.AddHours(24),
+            slaWarningAtUtc: createdAtUtc.AddHours(18));
 
         context.Tickets.Add(ticket);
+
+        // O Create já começa a última atividade na data de abertura; outra data só entra pelo EF.
+        if (lastActivityAtUtc is { } lastActivity)
+        {
+            context.Entry(ticket).Property(t => t.LastActivityAtUtc).CurrentValue = lastActivity;
+        }
+
         await context.SaveChangesAsync();
 
         return ticket;

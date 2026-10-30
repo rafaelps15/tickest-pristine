@@ -8,15 +8,14 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Application.TicketHistories;
 using TickestPristine.Application.Tickets;
+using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Infrastructure.Database;
 
 namespace TickestPristine.IntegrationTests.Tickets;
 
-/// <summary>
-/// Última atividade do chamado em "Meus chamados" (spec 015): o interceptor que a mantém a cada registro de histórico e
-/// a migration que preenche os chamados existentes.
-/// </summary>
+// Última atividade do chamado em "Meus chamados": o interceptor que a mantém a cada registro de histórico e
+// a migration que preenche os chamados existentes.
 public sealed class TicketActivityTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
     private const string LastActivityMigration = "Add_Ticket_Last_Activity";
@@ -146,7 +145,7 @@ public sealed class TicketActivityTests(IntegrationTestWebAppFactory factory) : 
             finally
             {
                 // O banco é compartilhado pela coleção: volta à última migration, mesmo se o teste falhar no meio. Sem isso,
-                // os testes seguintes ficariam sem as colunas das migrations posteriores (spec 029).
+                // os testes seguintes ficariam sem as colunas das migrations posteriores.
                 await migrator.MigrateAsync();
             }
         });
@@ -201,9 +200,7 @@ public sealed class TicketActivityTests(IntegrationTestWebAppFactory factory) : 
         return (requesterId, sectorId);
     }
 
-    /// <summary>
-    /// Chamado aberto pela API por um Colaborador novo, que fica autenticado.
-    /// </summary>
+    // Chamado aberto pela API por um Colaborador novo, que fica autenticado.
     private async Task<(Guid TicketId, AccessTokens RequesterTokens)> CreateTicketAsRequesterAsync()
     {
         Guid sectorId = await CreateSectorAsAdminAsync();
@@ -255,29 +252,21 @@ public sealed class TicketActivityTests(IntegrationTestWebAppFactory factory) : 
             .MaxAsync(h => h.OccurredAtUtc);
     }
 
-    /// <summary>
-    /// Chamado gravado direto no banco, sem registro de histórico.
-    /// </summary>
+    // Chamado gravado direto no banco, sem registro de histórico.
     private async Task<Guid> InsertTicketAsync(Guid requesterId, Guid sectorId, DateTime createdAtUtc)
     {
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "The printer on the 3rd floor is not working",
-            Priority = TicketPriority.Medium,
-            Status = TicketStatus.Open,
-            CreatedByUserId = requesterId,
-            SectorId = sectorId,
-            CreatedAtUtc = createdAtUtc,
-            LastActivityAtUtc = createdAtUtc,
-            DueAtUtc = createdAtUtc.AddHours(8),
-            SlaWarningAtUtc = createdAtUtc.AddHours(6),
-            SlaPlan = TicketSla.LegacyPlan(TicketPriority.Medium)
-        };
+        Sector sector = await context.Sectors.SingleAsync(s => s.Id == sectorId);
+
+        Ticket ticket = TicketTestData.Create(
+            sector,
+            requesterId: requesterId,
+            createdAtUtc: createdAtUtc,
+            slaPlan: TicketSla.LegacyPlan(TicketPriority.Medium),
+            dueAtUtc: createdAtUtc.AddHours(8),
+            slaWarningAtUtc: createdAtUtc.AddHours(6));
 
         context.Tickets.Add(ticket);
         await context.SaveChangesAsync();

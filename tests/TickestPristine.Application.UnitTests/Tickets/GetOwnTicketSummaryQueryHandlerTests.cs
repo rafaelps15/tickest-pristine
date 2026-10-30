@@ -60,15 +60,10 @@ public sealed class GetOwnTicketSummaryQueryHandlerTests : BaseHandlerTest
     }
 
     private static void SeedTicket(TestDbContext context, Guid ownerId, TicketPriority priority, TicketStatus status) =>
-        context.Tickets.Add(new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = priority,
-            Status = status,
-            CreatedByUserId = ownerId,
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = NowUtc
-        });
+        context.Tickets.Add(TicketTestData.Create(
+            requesterId: ownerId,
+            status: status,
+            createdAtUtc: NowUtc,
+            priority: priority,
+            description: "Original description"));
 }

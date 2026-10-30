@@ -148,19 +148,10 @@ public sealed class DeleteTicketAttachmentCommandHandlerTests : BaseHandlerTest
 
     private static async Task<Guid> SeedAttachmentAsync(TestDbContext context, bool ticketDeleted = false)
     {
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Medium,
-            Status = TicketStatus.Open,
-            CreatedByUserId = UploaderId,
-            AssignedToUserId = null,
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow,
-            DeletedAtUtc = ticketDeleted ? DateTime.UtcNow : null
-        };
+        Ticket ticket = TicketTestData.Create(
+            requesterId: UploaderId,
+            description: "Original description",
+            deletedAtUtc: ticketDeleted ? DateTime.UtcNow : null);
         context.Tickets.Add(ticket);
 
         var attachment = new TicketAttachment
