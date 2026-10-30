@@ -10,6 +10,8 @@ internal sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refre
     {
         builder.HasKey(refreshToken => refreshToken.Id);
 
+        builder.Property(refreshToken => refreshToken.Id).ValueGeneratedNever();
+
         // SHA-256 em hexadecimal: 64 caracteres.
         builder.Property(refreshToken => refreshToken.TokenHash).HasMaxLength(64);
 

@@ -11,6 +11,8 @@ internal sealed class TicketMessageConfiguration : IEntityTypeConfiguration<Tick
     {
         builder.HasKey(m => m.Id);
 
+        builder.Property(m => m.Id).ValueGeneratedNever();
+
         builder.Property(m => m.Content).HasMaxLength(4000);
 
         builder.HasQueryFilter(m => m.DeletedAtUtc == null);

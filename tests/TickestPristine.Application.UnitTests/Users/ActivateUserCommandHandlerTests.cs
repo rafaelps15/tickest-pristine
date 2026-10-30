@@ -102,7 +102,7 @@ public sealed class ActivateUserCommandHandlerTests : BaseHandlerTest
     {
         string roleName = $"Role-{Guid.NewGuid():N}";
         context.Roles.Add(CreateRole(roleName));
-        context.RolePermissions.Add(new RolePermission { RoleName = roleName, PermissionCode = permissionCode });
+        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = roleName, PermissionCode = permissionCode });
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = userId, RoleName = roleName });
         await context.SaveChangesAsync();
     }

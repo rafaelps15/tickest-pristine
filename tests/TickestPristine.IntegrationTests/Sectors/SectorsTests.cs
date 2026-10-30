@@ -106,7 +106,7 @@ public sealed class SectorsTests(IntegrationTestWebAppFactory factory) : BaseInt
         });
 
         // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
 
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();

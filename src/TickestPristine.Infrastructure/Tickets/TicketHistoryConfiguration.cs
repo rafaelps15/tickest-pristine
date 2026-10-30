@@ -11,6 +11,8 @@ internal sealed class TicketHistoryConfiguration : IEntityTypeConfiguration<Tick
     {
         builder.HasKey(h => h.Id);
 
+        builder.Property(h => h.Id).ValueGeneratedNever();
+
         // Ação gravada pelo nome (ex.: "StatusChanged"), legível no banco; a API continua devolvendo o número.
         builder.Property(h => h.Action).HasConversion<string>().HasMaxLength(30);
 

@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Application.TicketHistories;
@@ -2241,14 +2242,15 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
         await ResolveTicketAsync(ticketId);
 
-        // Act: sem corpo, com motivo em branco e com 501 caracteres, resolvendo de novo entre as tentativas
+        // Act: sem corpo, com motivo em branco e acima do tamanho da mensagem (4001 caracteres), resolvendo de novo entre as
+        // tentativas
         HttpResponseMessage withoutBody = await HttpClient.PostAsync($"tickets/{ticketId}/reopen", null);
         await ResolveTicketAsync(ticketId);
         HttpResponseMessage blankReason = await HttpClient.PostAsJsonAsync($"tickets/{ticketId}/reopen", new { reason = "   " });
         await ResolveTicketAsync(ticketId);
         HttpResponseMessage longReason = await HttpClient.PostAsJsonAsync(
             $"tickets/{ticketId}/reopen",
-            new { reason = new string('a', 501) });
+            new { reason = new string('a', 4001) });
 
         // Assert
         withoutBody.StatusCode.ShouldBe(HttpStatusCode.NoContent);
@@ -2256,6 +2258,53 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         longReason.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         GetStoredStatus(ticketId).ShouldBe(TicketStatus.Resolved);
         GetMessages(ticketId).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task CreateAndUpdate_Should_ReturnBadRequestAndSaveNothing_WhenDescriptionIsShorterThanMinimum()
+    {
+        // Arrange: chamado aberto com descrição válida
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        int ticketsBefore = CountTickets();
+
+        // Act: 9 caracteres na abertura e na edição, recusados pela constraint do banco
+        HttpResponseMessage create = await HttpClient.PostAsJsonAsync("tickets", new
+        {
+            title = "Printer is broken",
+            description = "Curta 123",
+            priority = 2,
+            sectorId
+        });
+        HttpResponseMessage update = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = "Curta 123",
+            status = (int)TicketStatus.Open
+        });
+
+        // Assert
+        create.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        update.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await create.Content.ReadFromJsonAsync<ProblemDetails>())!.Title.ShouldBe("Texto fora do tamanho permitido");
+        (await update.Content.ReadFromJsonAsync<ProblemDetails>())!.Title.ShouldBe("Texto fora do tamanho permitido");
+        CountTickets().ShouldBe(ticketsBefore);
+        GetStoredDescription(ticketId).ShouldBe("The printer on the 3rd floor is not working");
+    }
+
+    private int CountTickets()
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return context.Tickets.Count();
+    }
+
+    private string GetStoredDescription(Guid ticketId)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return context.Tickets.AsNoTracking().Single(t => t.Id == ticketId).Description;
     }
 
     [Fact]

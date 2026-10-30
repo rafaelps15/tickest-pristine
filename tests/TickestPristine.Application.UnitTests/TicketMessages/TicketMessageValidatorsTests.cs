@@ -38,19 +38,6 @@ public sealed class TicketMessageValidatorsTests
     }
 
     [Fact]
-    public void PostValidator_Should_HaveError_WhenContentExceedsMaxLength()
-    {
-        // Arrange
-        var command = new PostTicketMessageCommand { TicketId = Guid.NewGuid(), Content = new string('a', 4001) };
-
-        // Act
-        TestValidationResult<PostTicketMessageCommand> result = _postValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Content);
-    }
-
-    [Fact]
     public void PostValidator_Should_NotHaveErrors_WhenCommandIsValid()
     {
         // Arrange
@@ -128,16 +115,4 @@ public sealed class TicketMessageValidatorsTests
         result.ShouldNotHaveAnyValidationErrors();
     }
 
-    [Fact]
-    public void EditValidator_Should_HaveError_WhenContentExceedsMaxLength()
-    {
-        // Arrange
-        var command = new EditTicketMessageCommand { MessageId = Guid.NewGuid(), Content = new string('a', 4001) };
-
-        // Act
-        TestValidationResult<EditTicketMessageCommand> result = _editValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Content);
-    }
 }
