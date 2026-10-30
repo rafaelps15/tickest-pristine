@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-29
 branch: refactor/SPEC-038-department-sector-rich-domain                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: 54
 ---
 
 # 038 — Departamento e setor no domínio rico (piloto da migração)
@@ -143,7 +143,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 - **Modelo do EF (2026-10-29):** `has-pending-model-changes`: "No changes have been made to the model since the last migration."; só a migration `Department_Sector_Name_Length` é nova.
 - **Revisão:** `ca-review` independente aprovou, sem bloqueantes; os não bloqueantes foram corrigidos, menos o teste do seeder (risco na seção 6).
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` — seções 1 (domínio anêmico, exceto `Department` e `Sector`), RN-10 (linhas do handler), C-07 (responsável carregado pelo handler, limite do nome no banco, `Update` sempre com evento, seed com eventos) e 3.1 (domínio rico nas duas entidades).
-- **Entrega:**
+- **Entrega:** PR #54 (https://github.com/rafaelps15/tickest-pristine/pull/54), aberto em 2026-10-29 da branch `refactor/SPEC-038-department-sector-rich-domain` para a `main`. Merge pelo responsável.
 
 ## 10. Histórico
 
