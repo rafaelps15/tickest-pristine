@@ -249,13 +249,25 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
     private static Task<TicketSlaTimer> GetFirstResponseAsync(TestDbContext context, Guid ticketId) =>
         context.TicketSlaTimers.AsNoTracking().SingleAsync(t => t.TicketId == ticketId && t.Metric == SlaMetric.FirstResponse);
 
+    // Atendente: usuário ativo com tickets:manage nas roles gravadas no banco.
+    private static async Task<Guid> CreateAgentAsync(TestDbContext context)
+    {
+        User agent = CreateUser();
+        context.Users.Add(agent);
+        await context.SaveChangesAsync();
+        await GrantPermissionsAsync(context, agent.Id, PermissionCodes.Tickets.Manage);
+
+        return agent.Id;
+    }
+
     [Fact]
     public async Task Handle_Should_NotCompleteFirstResponse_WhenAuthorIsRequester()
     {
-        // Arrange
+        // Arrange: o solicitante também atende chamados.
         await using TestDbContext context = CreateDbContext();
-        Ticket ticket = await SeedTicketWithSlaAsync(context, RequesterId, OpenedAtUtc);
-        PostTicketMessageCommandHandler handler = CreateSlaHandler(context, RequesterId, canManage: true, OpenedAtUtc.AddMinutes(5));
+        Guid requesterId = await CreateAgentAsync(context);
+        Ticket ticket = await SeedTicketWithSlaAsync(context, requesterId, OpenedAtUtc);
+        PostTicketMessageCommandHandler handler = CreateSlaHandler(context, requesterId, canManage: true, OpenedAtUtc.AddMinutes(5));
 
         // Act
         Result<Guid> result = await handler.Handle(
@@ -273,7 +285,7 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
         Ticket ticket = await SeedTicketWithSlaAsync(context, RequesterId, OpenedAtUtc);
-        var agentId = Guid.NewGuid();
+        Guid agentId = await CreateAgentAsync(context);
         DateTime answeredAtUtc = OpenedAtUtc.AddMinutes(15);
 
         // Act
@@ -300,12 +312,12 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         Ticket ticket = await SeedTicketWithSlaAsync(context, RequesterId, OpenedAtUtc);
         DateTime firstAnswerUtc = OpenedAtUtc.AddMinutes(15);
-        await CreateSlaHandler(context, Guid.NewGuid(), canManage: true, firstAnswerUtc).Handle(
+        await CreateSlaHandler(context, await CreateAgentAsync(context), canManage: true, firstAnswerUtc).Handle(
             new PostTicketMessageCommand { TicketId = ticket.Id, Content = "On my way." },
             CancellationToken.None);
 
         // Act
-        Result<Guid> result = await CreateSlaHandler(context, Guid.NewGuid(), canManage: true, OpenedAtUtc.AddMinutes(25)).Handle(
+        Result<Guid> result = await CreateSlaHandler(context, await CreateAgentAsync(context), canManage: true, OpenedAtUtc.AddMinutes(25)).Handle(
             new PostTicketMessageCommand { TicketId = ticket.Id, Content = "Me too." },
             CancellationToken.None);
 
@@ -333,6 +345,27 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
+        (await GetFirstResponseAsync(context, ticket.Id)).CompletedOnUtc.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Handle_Should_NotCompleteFirstResponse_WhenAuthorLostManagePermissionButCacheStillGrantsIt()
+    {
+        // Arrange: o cache de permissões ainda concede tickets:manage, mas as roles gravadas não têm mais a permissão.
+        await using TestDbContext context = CreateDbContext();
+        Ticket ticket = await SeedTicketWithSlaAsync(context, RequesterId, OpenedAtUtc);
+        User formerAgent = CreateUser();
+        context.Users.Add(formerAgent);
+        await context.SaveChangesAsync();
+
+        // Act
+        Result<Guid> result = await CreateSlaHandler(context, formerAgent.Id, canManage: true, OpenedAtUtc.AddMinutes(5)).Handle(
+            new PostTicketMessageCommand { TicketId = ticket.Id, Content = "Verificando." },
+            CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        (await context.TicketMessages.CountAsync(m => m.TicketId == ticket.Id)).ShouldBe(1);
         (await GetFirstResponseAsync(context, ticket.Id)).CompletedOnUtc.ShouldBeNull();
     }
 }

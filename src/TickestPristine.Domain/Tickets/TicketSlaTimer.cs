@@ -78,7 +78,7 @@ public sealed class TicketSlaTimer : Entity, IAuditable
     /// parado. Concluído até o prazo, sai da fila do monitoramento; depois do prazo, continua nela, para o monitoramento
     /// gravar a violação.
     /// </summary>
-    public bool Complete(DateTime completedAtUtc, SlaCompletionCause cause)
+    internal bool Complete(DateTime completedAtUtc, SlaCompletionCause cause)
     {
         if (!IsOpen)
         {
@@ -94,6 +94,24 @@ public sealed class TicketSlaTimer : Entity, IAuditable
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Conclui a primeira resposta do chamado com a mensagem de quem atende, no instante dela. Devolve <c>false</c>, sem
+    /// mudar nada, quando o cronômetro não é a primeira resposta deste chamado, já está concluído ou parado, o autor é o
+    /// solicitante ou não atende chamados.
+    /// </summary>
+    public bool CompleteFirstResponse(Ticket ticket, Guid authorUserId, bool authorIsAgent, DateTime utcNow)
+    {
+        if (Metric != SlaMetric.FirstResponse ||
+            TicketId != ticket.Id ||
+            authorUserId == ticket.CreatedByUserId ||
+            !authorIsAgent)
+        {
+            return false;
+        }
+
+        return Complete(utcNow, SlaCompletionCause.Message);
     }
 
     /// <summary>

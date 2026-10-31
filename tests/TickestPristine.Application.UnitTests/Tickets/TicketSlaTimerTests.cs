@@ -12,6 +12,9 @@ public sealed class TicketSlaTimerTests
     private static readonly TicketSlaPlan UrgentPlan =
         new(null, "Padrão", 1, SlaCalendarIds.Default, 30, 240, IsLegacy: false);
 
+    // Quem atende o chamado nos testes da primeira resposta; não é o solicitante.
+    private static readonly Guid AgentId = Guid.NewGuid();
+
     // Segunda-feira, 26/10/2026, em São Paulo (UTC-3).
     private static DateTime SaoPaulo(int hour, int minute, int second = 0) =>
         new(2026, 10, 26, hour + 3, minute, second, DateTimeKind.Utc);
@@ -43,6 +46,23 @@ public sealed class TicketSlaTimerTests
     private static TicketSlaTimer UrgentResolution() => OpenTicket().Timers.Single(t => t.Metric == SlaMetric.Resolution);
 
     private static TicketSlaTimer UrgentFirstResponse() => OpenTicket().Timers.Single(t => t.Metric == SlaMetric.FirstResponse);
+
+    private static (Ticket Ticket, TicketSlaTimer FirstResponse) OpenFirstResponse()
+    {
+        (Ticket ticket, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket();
+
+        return (ticket, timers.Single(t => t.Metric == SlaMetric.FirstResponse));
+    }
+
+    // Em aberto, na fila até o prazo e sem eventos, como na abertura.
+    private static void ShouldBeUnchangedOpenTimer(TicketSlaTimer timer)
+    {
+        timer.CompletedOnUtc.ShouldBeNull();
+        timer.CompletionCause.ShouldBeNull();
+        timer.StoppedOnUtc.ShouldBeNull();
+        timer.NextActionOnUtc.ShouldBe(timer.DueOnUtc);
+        timer.DomainEvents.ShouldBeEmpty();
+    }
 
     [Fact]
     public void RecordOpening_Should_CreateCycleOneTimersWithDeadlinesInBusinessTime()
@@ -138,11 +158,11 @@ public sealed class TicketSlaTimerTests
     public void GetState_Should_ReturnMet_WhenCompletedExactlyAtDue()
     {
         // Arrange
-        TicketSlaTimer resolution = UrgentResolution();
-        resolution.Complete(SaoPaulo(12, 10), SlaCompletionCause.Resolution);
+        (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
+        firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(8, 40));
 
         // Act
-        SlaObjectiveState state = resolution.GetState(SaoPaulo(13, 0));
+        SlaObjectiveState state = firstResponse.GetState(SaoPaulo(13, 0));
 
         // Assert
         state.ShouldBe(SlaObjectiveState.Met);
@@ -152,11 +172,11 @@ public sealed class TicketSlaTimerTests
     public void GetState_Should_ReturnMissed_WhenCompletedAfterDue()
     {
         // Arrange
-        TicketSlaTimer resolution = UrgentResolution();
-        resolution.Complete(SaoPaulo(12, 30), SlaCompletionCause.Resolution);
+        (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
+        firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(9, 0));
 
         // Act
-        SlaObjectiveState state = resolution.GetState(SaoPaulo(13, 0));
+        SlaObjectiveState state = firstResponse.GetState(SaoPaulo(13, 0));
 
         // Assert
         state.ShouldBe(SlaObjectiveState.Missed);
@@ -180,20 +200,77 @@ public sealed class TicketSlaTimerTests
     }
 
     [Fact]
-    public void Complete_Should_ReturnFalseAndKeepFirstCompletion_WhenCalledAgain()
+    public void CompleteFirstResponse_Should_ReturnFalseAndKeepFirstCompletion_WhenCalledAgain()
     {
         // Arrange
-        TicketSlaTimer resolution = UrgentResolution();
-        resolution.Complete(SaoPaulo(10, 0), SlaCompletionCause.Resolution);
+        (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
+        firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(8, 20));
 
         // Act
-        bool completedAgain = resolution.Complete(SaoPaulo(11, 0), SlaCompletionCause.Message);
+        bool completedAgain = firstResponse.CompleteFirstResponse(ticket, Guid.NewGuid(), authorIsAgent: true, SaoPaulo(8, 30));
 
         // Assert
         completedAgain.ShouldBeFalse();
-        resolution.CompletedOnUtc.ShouldBe(SaoPaulo(10, 0));
-        resolution.CompletionCause.ShouldBe(SlaCompletionCause.Resolution);
-        resolution.StoppedOnUtc.ShouldBeNull();
+        firstResponse.CompletedOnUtc.ShouldBe(SaoPaulo(8, 20));
+        firstResponse.CompletionCause.ShouldBe(SlaCompletionCause.Message);
+        firstResponse.StoppedOnUtc.ShouldBeNull();
+    }
+
+    [Fact]
+    public void CompleteFirstResponse_Should_CompleteWithMessageCause_WhenAgentAnswers()
+    {
+        // Arrange
+        (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
+
+        // Act
+        bool completed = firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(8, 20));
+
+        // Assert
+        completed.ShouldBeTrue();
+        firstResponse.CompletedOnUtc.ShouldBe(SaoPaulo(8, 20));
+        firstResponse.CompletionCause.ShouldBe(SlaCompletionCause.Message);
+    }
+
+    [Fact]
+    public void CompleteFirstResponse_Should_ReturnFalseAndChangeNothing_WhenAuthorIsRequesterOrNotAgent()
+    {
+        // Arrange
+        (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
+
+        // Act
+        bool byRequester = firstResponse.CompleteFirstResponse(ticket, ticket.CreatedByUserId, authorIsAgent: true, SaoPaulo(8, 20));
+        bool byNonAgent = firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: false, SaoPaulo(8, 25));
+
+        // Assert
+        byRequester.ShouldBeFalse();
+        byNonAgent.ShouldBeFalse();
+        ShouldBeUnchangedOpenTimer(firstResponse);
+    }
+
+    [Fact]
+    public void CompleteFirstResponse_Should_ReturnFalseAndChangeNothing_WhenTimerIsNotOpenFirstResponseOfTicket()
+    {
+        // Arrange: o cronômetro de resolução do chamado, a primeira resposta de outro chamado e uma já concluída.
+        (Ticket ticket, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket();
+        TicketSlaTimer resolution = timers.Single(t => t.Metric == SlaMetric.Resolution);
+        TicketSlaTimer otherTicketFirstResponse = UrgentFirstResponse();
+        (Ticket answeredTicket, TicketSlaTimer completed) = OpenFirstResponse();
+        completed.CompleteFirstResponse(answeredTicket, AgentId, authorIsAgent: true, SaoPaulo(8, 20));
+
+        // Act
+        bool resolutionCompleted = resolution.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(8, 30));
+        bool otherTicketCompleted = otherTicketFirstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(8, 30));
+        bool completedAgain = completed.CompleteFirstResponse(answeredTicket, AgentId, authorIsAgent: true, SaoPaulo(8, 30));
+
+        // Assert
+        resolutionCompleted.ShouldBeFalse();
+        otherTicketCompleted.ShouldBeFalse();
+        completedAgain.ShouldBeFalse();
+        ShouldBeUnchangedOpenTimer(resolution);
+        ShouldBeUnchangedOpenTimer(otherTicketFirstResponse);
+        completed.CompletedOnUtc.ShouldBe(SaoPaulo(8, 20));
+        completed.NextActionOnUtc.ShouldBeNull();
+        completed.DomainEvents.ShouldBeEmpty();
     }
 
     [Fact]
@@ -202,7 +279,7 @@ public sealed class TicketSlaTimerTests
         // Arrange
         (Ticket ticket, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket();
         TicketSlaTimer firstResponse = timers.Single(t => t.Metric == SlaMetric.FirstResponse);
-        firstResponse.Complete(SaoPaulo(8, 20), SlaCompletionCause.Message);
+        firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(8, 20));
 
         // Act
         ticket.Update(ticket.Description, TicketStatus.Canceled, timers, lastMessageIsFromAgent: false, ticket.CreatedByUserId, SaoPaulo(9, 0));
@@ -277,31 +354,31 @@ public sealed class TicketSlaTimerTests
     }
 
     [Fact]
-    public void Complete_Should_DequeueTimer_WhenCompletedUntilDeadline()
+    public void CompleteFirstResponse_Should_DequeueTimer_WhenCompletedUntilDeadline()
     {
         // Arrange
-        TicketSlaTimer resolution = UrgentResolution();
+        (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
 
         // Act
-        bool completed = resolution.Complete(SaoPaulo(12, 10), SlaCompletionCause.Resolution);
+        bool completed = firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(8, 40));
 
         // Assert
         completed.ShouldBeTrue();
-        resolution.NextActionOnUtc.ShouldBeNull();
+        firstResponse.NextActionOnUtc.ShouldBeNull();
     }
 
     [Fact]
-    public void Complete_Should_KeepTimerQueued_WhenCompletedAfterDeadline()
+    public void CompleteFirstResponse_Should_KeepTimerQueued_WhenCompletedAfterDeadline()
     {
         // Arrange
-        TicketSlaTimer resolution = UrgentResolution();
+        (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
 
         // Act
-        resolution.Complete(SaoPaulo(12, 30), SlaCompletionCause.Resolution);
+        firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(9, 0));
 
         // Assert
-        resolution.NextActionOnUtc.ShouldBe(resolution.DueOnUtc);
-        resolution.BreachedOnUtc.ShouldBeNull();
+        firstResponse.NextActionOnUtc.ShouldBe(firstResponse.DueOnUtc);
+        firstResponse.BreachedOnUtc.ShouldBeNull();
     }
 
     [Fact]
@@ -338,8 +415,8 @@ public sealed class TicketSlaTimerTests
     public void ProcessDue_Should_RecordBreach_WhenTimerWasCompletedAfterDeadline()
     {
         // Arrange
-        TicketSlaTimer firstResponse = UrgentFirstResponse();
-        firstResponse.Complete(SaoPaulo(8, 45), SlaCompletionCause.Message);
+        (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
+        firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(8, 45));
 
         // Act
         bool breached = firstResponse.ProcessDue();
@@ -355,8 +432,8 @@ public sealed class TicketSlaTimerTests
     public void ProcessDue_Should_OnlyDequeue_WhenTimerWasCompletedOnTimeOrStopped()
     {
         // Arrange: concluído no prazo, mas ainda na fila (lido antes da conclusão), e parado no cancelamento.
-        TicketSlaTimer completedOnTime = UrgentFirstResponse();
-        completedOnTime.Complete(SaoPaulo(8, 30), SlaCompletionCause.Message);
+        (Ticket answeredTicket, TicketSlaTimer completedOnTime) = OpenFirstResponse();
+        completedOnTime.CompleteFirstResponse(answeredTicket, AgentId, authorIsAgent: true, SaoPaulo(8, 30));
         completedOnTime.With(nameof(TicketSlaTimer.NextActionOnUtc), completedOnTime.DueOnUtc);
 
         (Ticket ticket, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket();

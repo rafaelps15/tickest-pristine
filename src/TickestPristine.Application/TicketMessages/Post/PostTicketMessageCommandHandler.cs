@@ -53,18 +53,15 @@ internal sealed class PostTicketMessageCommandHandler(
         context.TicketMessages.Add(message);
         context.TicketHistories.Add(posting);
 
-        // A primeira mensagem de quem não é o solicitante e tem tickets:manage conclui a primeira resposta em aberto, no
-        // instante da mensagem.
-        TicketSlaTimer? firstResponse = ticket.CreatedByUserId == userContext.UserId
-            ? null
-            : await context.TicketSlaTimers
-                .Where(t => t.TicketId == ticket.Id && t.Metric == SlaMetric.FirstResponse)
-                .OrderByDescending(t => t.Cycle)
-                .FirstOrDefaultAsync(cancellationToken);
+        // A primeira mensagem de quem atende (lido do banco pelo TicketAgentLookup) conclui a primeira resposta em aberto,
+        // no instante da mensagem.
+        TicketSlaTimer? firstResponse = await context.TicketSlaTimers
+            .Where(t => t.TicketId == ticket.Id && t.Metric == SlaMetric.FirstResponse)
+            .OrderByDescending(t => t.Cycle)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        bool completesFirstResponse = firstResponse is { IsOpen: true } &&
-            await permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, cancellationToken) &&
-            firstResponse.Complete(nowUtc, SlaCompletionCause.Message);
+        bool completesFirstResponse = firstResponse is not null &&
+            firstResponse.CompleteFirstResponse(ticket, userContext.UserId, authorIsAgent, nowUtc);
 
         try
         {

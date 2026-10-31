@@ -51,7 +51,8 @@ public abstract class BaseHandlerTest
         SeedTicketWithSlaAsync(context, requesterId, createdAtUtc, status, resolvedAtUtc: null);
 
     // Chamado de SeedTicketWithSlaAsync já resolvido em resolvedAtUtc, com os dois
-    // cronômetros concluídos nesse instante.
+    // cronômetros concluídos nesse instante pela resolução, como o banco guarda: concluído até o prazo, fora da fila;
+    // depois dele, na fila até o monitoramento gravar a violação.
     protected static async Task<Ticket> SeedResolvedTicketWithSlaAsync(
         TestDbContext context,
         Guid requesterId,
@@ -62,7 +63,10 @@ public abstract class BaseHandlerTest
 
         foreach (TicketSlaTimer timer in context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id))
         {
-            timer.Complete(resolvedAtUtc, SlaCompletionCause.Resolution);
+            timer
+                .With(nameof(TicketSlaTimer.CompletedOnUtc), resolvedAtUtc)
+                .With(nameof(TicketSlaTimer.CompletionCause), SlaCompletionCause.Resolution)
+                .With(nameof(TicketSlaTimer.NextActionOnUtc), resolvedAtUtc <= timer.DueOnUtc ? null : timer.DueOnUtc);
         }
 
         await context.SaveChangesAsync();
