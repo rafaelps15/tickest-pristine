@@ -1,7 +1,7 @@
 ---
 id: 045
 titulo: Chamado e SLA — agregados, ciclo do SLA e transições por intenção
-status: Aprovada             # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+status: Em implementação      # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
 aprovada-em: 2026-10-31
 branch: refactor/SPEC-045-ticket-sla-aggregates                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
@@ -110,8 +110,8 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 ## 7. Tarefas
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
-| T-1 | Linha de base: branch da `origin/main` com a 041 mergeada, build e testes | AC-16 | manual | [ ] |
-| T-2 | Fórmula única: `SlaDeadlines`, `TicketSlaPlan.GetDeadlines`, `TicketSlaTimer.Create` com os valores, `Ticket.Create` com o retrato | AC-2, AC-3 | domain-modeling, add-tests | [ ] |
+| T-1 | Linha de base: branch da `origin/main` com a 041 mergeada, build e testes | AC-16 | manual | [x] |
+| T-2 | Fórmula única: `SlaDeadlines`, `TicketSlaPlan.GetDeadlines`, `TicketSlaTimer.Create` com os valores, `Ticket.Create` com o retrato | AC-2, AC-3 | domain-modeling, add-tests | [x] |
 | T-3 | Cronômetro: visibilidade interna e `CompleteFirstResponse`; publicação com o `TicketAgentLookup` | AC-12, AC-13 | domain-modeling, add-tests | [ ] |
 | T-4 | `Ticket` por intenção e `TicketSlaCycleService` (`Start`, `Resolve`, `Cancel`, `Reopen`, `Delete`), `ResolutionCycleAlreadyOpen`, eventos novos | AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10 | domain-modeling, add-tests | [ ] |
 | T-5 | Handlers e seeder nas operações novas | AC-3, AC-11, AC-15 | add-feature, add-tests | [ ] |
@@ -123,7 +123,9 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 a AC-17 | a preencher na implementação | | |
+| AC-2 | `Application.UnitTests/Tickets/TicketSlaPlanTests.cs` › `GetDeadlines_Should_ReturnWarningAtThreeQuartersAndDueAtTarget_WhenPlanIsDefault`, `GetDeadlines_Should_CountContinuousTime_WhenCalendarIsContinuous`, `GetDeadlines_Should_ReturnResolutionHoursAndNoFirstResponse_WhenPlanIsLegacy`; os testes de prazo atuais (`TicketSlaTimerTests` › `RecordOpening_Should_CreateCycleOneTimersWithDeadlinesInBusinessTime`, `Reopen_Should_StartNewResolutionCycleWithFullTarget`; `TicketSlaPlanTests` › `Create_Should_SetDeadlinesInResolutionHoursOfPriority_WhenPlanIsLegacy`; `BusinessCalendarTests`) sem mudança nas asserções | Cada prioridade do plano Padrão no "Expediente" (22 min 30 s no alerta da Urgente, fim às 18:00 na borda da faixa), o "24 horas" e o plano Legado com `null` na primeira resposta | Aprovado (T-2) |
+| AC-3 | `TicketSlaPlanTests` › `Create_Should_SetResolutionDeadlinesInBusinessTime_WhenPlanIsDefault`, `Create_Should_SetDeadlinesInResolutionHoursOfPriority_WhenPlanIsLegacy`; `TicketSlaTimerTests` › `Create_Should_TakeDeadlinesFromCycleOneResolution`, `RecordOpening_Should_CreateCycleOneTimersWithDeadlinesInBusinessTime` | O retrato do chamado tem os valores esperados da resolução (Padrão no "Expediente" e Legado no "24 horas") e é igual ao cronômetro de resolução do ciclo 1, com a meta e o calendário do plano; o `Start` e o `RecordOpening` só com a entrada `Created` entram na T-4 e na T-5 | Parcial (T-2) |
+| AC-1, AC-4 a AC-17 | a preencher na implementação | | |
 
 ## 9. Evidências de verificação
 - **Build:**
@@ -141,3 +143,4 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | 2026-10-30 | Em descoberta | Esclarecimento de escopo de Rafael Santos: a skill de desenho de agregados fica fora desta spec e vem depois dela validada, antes da 043 (DEC-16). |
 | 2026-10-31 | Em descoberta | Ajustes antes da aprovação: a dependência passa a citar o merge da 041 (PR #57, `ef1c981`); DEC-17 registra a ampliação da autorização do `CLAUDE.md` para as três partes adiadas pela DEC-34 da 041, com o REQ-14, o AC-17 e a T-8 ajustados a ela. Os demais requisitos, critérios, decisões e tarefas não mudaram. |
 | 2026-10-31 | Aprovada | Aprovação formal de Rafael Santos no chat: "A SPEC-045 está formalmente aprovada em 31/10/2026." A autorização do `CLAUDE.md` continua limitada aos três pontos da DEC-17. |
+| 2026-10-31 | Em implementação | `/spec-implement 045` iniciado por Rafael Santos. T-1 aprovada: na branch criada da `origin/main` (`ef1c981`), build com 0 avisos e 1.404 testes aprovados (837 unitários, 57 de arquitetura, 510 de integração, incluído o `Model_Should_HaveNoPendingChanges`). |

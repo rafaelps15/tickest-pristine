@@ -50,9 +50,10 @@ public sealed class Ticket : Entity, IAuditable
     public bool IsActive => Status is TicketStatus.Open or TicketStatus.InProgress;
 
     /// <summary>
-    /// Abre o chamado com o plano de SLA e os cronômetros do ciclo 1 (primeira resposta, quando o plano tem essa meta, e
-    /// resolução), todos no tempo útil do calendário do plano; o prazo e o alerta do chamado são os do cronômetro de
-    /// resolução. Sem mensagens, o chamado aguarda quem atende.
+    /// Abre o chamado com o plano de SLA, o prazo e o alerta de resolução do ciclo 1 (pelo
+    /// <see cref="TicketSlaPlan.GetDeadlines"/>) e os cronômetros do ciclo 1 (primeira resposta, quando o plano tem essa
+    /// meta, e resolução, com os prazos gravados no chamado), todos no tempo útil do calendário do plano. Sem mensagens,
+    /// o chamado aguarda quem atende.
     /// </summary>
     public static Ticket Create(
         string title,
@@ -66,6 +67,8 @@ public sealed class Ticket : Entity, IAuditable
         Guid openedByUserId,
         DateTime utcNow)
     {
+        SlaDeadlines resolution = slaPlan.GetDeadlines(SlaMetric.Resolution, calendar, utcNow)!;
+
         var ticket = new Ticket
         {
             Id = Guid.NewGuid(),
@@ -79,19 +82,17 @@ public sealed class Ticket : Entity, IAuditable
             CreatedAtUtc = utcNow,
             LastActivityAtUtc = utcNow,
             WaitingOn = TicketWaitingOn.Agent,
+            DueAtUtc = resolution.DueOnUtc,
+            SlaWarningAtUtc = resolution.WarningOnUtc,
             SlaPlan = slaPlan
         };
 
-        if (slaPlan.FirstResponseMinutes is { } firstResponseMinutes)
+        if (slaPlan.GetDeadlines(SlaMetric.FirstResponse, calendar, utcNow) is { } firstResponse)
         {
-            ticket._openingSlaTimers.Add(TicketSlaTimer.Create(ticket.Id, SlaMetric.FirstResponse, 1, firstResponseMinutes, slaPlan.CalendarId, calendar, utcNow));
+            ticket._openingSlaTimers.Add(TicketSlaTimer.Create(ticket.Id, SlaMetric.FirstResponse, 1, slaPlan, utcNow, firstResponse));
         }
 
-        var resolutionTimer = TicketSlaTimer.Create(ticket.Id, SlaMetric.Resolution, 1, slaPlan.ResolutionMinutes, slaPlan.CalendarId, calendar, utcNow);
-
-        ticket._openingSlaTimers.Add(resolutionTimer);
-        ticket.DueAtUtc = resolutionTimer.DueOnUtc;
-        ticket.SlaWarningAtUtc = resolutionTimer.WarningOnUtc;
+        ticket._openingSlaTimers.Add(TicketSlaTimer.Create(ticket.Id, SlaMetric.Resolution, 1, slaPlan, utcNow, resolution));
 
         ticket.Raise(new TicketCreatedDomainEvent(ticket.Id, openedByUserId));
 
@@ -350,10 +351,9 @@ public sealed class Ticket : Entity, IAuditable
             Id,
             SlaMetric.Resolution,
             lastResolutionCycle + 1,
-            SlaPlan.ResolutionMinutes,
-            SlaPlan.CalendarId,
-            calendar,
-            utcNow);
+            SlaPlan,
+            utcNow,
+            SlaPlan.GetDeadlines(SlaMetric.Resolution, calendar, utcNow)!);
 
         Raise(new TicketReopenedDomainEvent(Id, changedByUserId));
 

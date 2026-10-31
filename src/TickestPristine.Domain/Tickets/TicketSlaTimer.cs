@@ -11,9 +11,6 @@ namespace TickestPristine.Domain.Tickets;
 /// </summary>
 public sealed class TicketSlaTimer : Entity, IAuditable
 {
-    // O cronômetro entra em risco ao consumir 75% da meta em tempo útil.
-    private const double WarningRatio = 0.75;
-
     private TicketSlaTimer()
     {
     }
@@ -49,38 +46,32 @@ public sealed class TicketSlaTimer : Entity, IAuditable
     public bool IsOpen => CompletedOnUtc is null && StoppedOnUtc is null;
 
     /// <summary>
-    /// Cria o cronômetro com o prazo e o alerta no tempo útil do calendário, na fila do monitoramento até o prazo;
-    /// chamado só pelo <see cref="Ticket"/>, na abertura e na reabertura.
+    /// Cria o cronômetro com a meta e o calendário do plano e o prazo e o alerta já calculados pelo
+    /// <see cref="TicketSlaPlan.GetDeadlines"/>, na fila do monitoramento até o prazo; chamado só pelo
+    /// <see cref="Ticket"/>, na abertura e na reabertura. Lança <see cref="InvalidOperationException"/> quando o plano não
+    /// tem meta para o objetivo.
     /// </summary>
     internal static TicketSlaTimer Create(
         Guid ticketId,
         SlaMetric metric,
         int cycle,
-        int targetMinutes,
-        Guid calendarId,
-        BusinessCalendar calendar,
-        DateTime startedAtUtc)
-    {
-        // Em ticks, para o alerta cair no segundo exato (ex.: 75% de 30 minutos = 22 minutos e 30 segundos).
-        var target = TimeSpan.FromTicks(TimeSpan.TicksPerMinute * targetMinutes);
-        var warning = TimeSpan.FromTicks((long)(target.Ticks * WarningRatio));
-
-        DateTime dueOnUtc = calendar.AddBusinessTime(startedAtUtc, target);
-
-        return new TicketSlaTimer
+        TicketSlaPlan plan,
+        DateTime startedAtUtc,
+        SlaDeadlines deadlines) =>
+        new()
         {
             Id = Guid.NewGuid(),
             TicketId = ticketId,
             Metric = metric,
             Cycle = cycle,
-            TargetMinutes = targetMinutes,
-            CalendarId = calendarId,
+            TargetMinutes = plan.GetTargetMinutes(metric) ??
+                throw new InvalidOperationException($"O plano de SLA não tem meta para {metric}."),
+            CalendarId = plan.CalendarId,
             StartedAtUtc = startedAtUtc,
-            WarningOnUtc = calendar.AddBusinessTime(startedAtUtc, warning),
-            DueOnUtc = dueOnUtc,
-            NextActionOnUtc = dueOnUtc
+            WarningOnUtc = deadlines.WarningOnUtc,
+            DueOnUtc = deadlines.DueOnUtc,
+            NextActionOnUtc = deadlines.DueOnUtc
         };
-    }
 
     /// <summary>
     /// Conclui o cronômetro em aberto, gravando o que o concluiu; devolve <c>false</c> quando ele já estava concluído ou
