@@ -1,6 +1,4 @@
-using TickestPristine.Domain.SlaCalendars;
-
-namespace TickestPristine.Application.SlaCalendars;
+namespace TickestPristine.Domain.SlaCalendars;
 
 /// <summary>
 /// Cálculo de tempo útil sobre um calendário de expediente: as faixas de cada dia da semana valem em hora local do

@@ -1,7 +1,6 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Permissions;
-using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Application.Tickets.GetSla;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Tickets;
@@ -120,22 +119,11 @@ public sealed class GetTicketSlaQueryHandlerTests : BaseHandlerTest
             priority: TicketPriority.Urgent,
             title: "Legacy ticket",
             description: "Opened before the SLA plan",
-            slaPlan: TicketSla.LegacyPlan(TicketPriority.Urgent),
+            slaPlan: TicketSlaPlan.Legacy(TicketPriority.Urgent),
             dueAtUtc: OpenedAtUtc.AddHours(4),
             slaWarningAtUtc: OpenedAtUtc.AddHours(3));
         context.Tickets.Add(ticket);
-        context.TicketSlaTimers.Add(new TicketSlaTimer
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            Metric = SlaMetric.Resolution,
-            Cycle = 1,
-            TargetMinutes = 240,
-            CalendarId = SlaCalendarIds.Continuous,
-            StartedAtUtc = ticket.CreatedAtUtc,
-            WarningOnUtc = ticket.SlaWarningAtUtc,
-            DueOnUtc = ticket.DueAtUtc
-        });
+        context.TicketSlaTimers.AddRange(ticket.RecordOpening(RequesterId).SlaTimers);
         await context.SaveChangesAsync();
 
         // Act
@@ -169,18 +157,19 @@ public sealed class GetTicketSlaQueryHandlerTests : BaseHandlerTest
         // Arrange: chamado aberto quando a política tinha outras metas (versão anterior, 10 e 60 minutos).
         await using TestDbContext context = CreateDbContext();
         var olderPlan = new TicketSlaPlan(null, "Padrão", 0, SlaCalendarIds.Default, 10, 60, IsLegacy: false);
-        List<TicketSlaTimer> timers = TicketSlaClock.Start(Guid.Empty, olderPlan, DefaultSlaCalendar.Create(), OpenedAtUtc);
-        TicketSlaTimer recordedResolution = timers.Single(t => t.Metric == SlaMetric.Resolution);
 
         Ticket ticket = TicketTestData.Create(
             requesterId: RequesterId,
             createdAtUtc: OpenedAtUtc,
             priority: TicketPriority.Urgent,
             slaPlan: olderPlan,
-            dueAtUtc: recordedResolution.DueOnUtc,
-            slaWarningAtUtc: recordedResolution.WarningOnUtc);
+            calendar: DefaultSlaCalendar.Create());
         Guid ticketId = ticket.Id;
-        timers.ForEach(timer => timer.TicketId = ticketId);
+        (_, IReadOnlyList<TicketSlaTimer> timers) = ticket.RecordOpening(RequesterId);
+        TicketSlaTimer recordedResolution = timers.Single(t => t.Metric == SlaMetric.Resolution);
+        ticket
+            .With(nameof(Ticket.DueAtUtc), recordedResolution.DueOnUtc)
+            .With(nameof(Ticket.SlaWarningAtUtc), recordedResolution.WarningOnUtc);
 
         context.Tickets.Add(ticket);
         context.TicketSlaTimers.AddRange(timers);

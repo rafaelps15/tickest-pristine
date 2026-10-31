@@ -2,14 +2,15 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Infrastructure.Database;
+using Npgsql;
 using TickestPristine.Infrastructure.DomainEvents;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.IntegrationTests.Database;
 
 /// <summary>
-/// Valida a publicação dos eventos de domínio pelo <see cref="ApplicationDbContext"/> em todos os caminhos de gravação,
-/// contra o PostgreSQL de verdade: os eventos só saem das entidades depois de um commit bem-sucedido.
+/// Valida a publicação dos eventos de domínio pelo <see cref="PublishDomainEventsInterceptor"/> nos caminhos assíncronos de
+/// gravação, contra o PostgreSQL de verdade: os eventos só saem das entidades depois de um commit bem-sucedido.
 /// </summary>
 public sealed class DomainEventsPublishingTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
@@ -47,23 +48,6 @@ public sealed class DomainEventsPublishingTests(IntegrationTestWebAppFactory fac
     }
 
     [Fact]
-    public void SaveChanges_Should_PublishDomainEvents_WhenSavedSynchronously()
-    {
-        // Arrange
-        // Teste síncrono de propósito: confere o caminho do SaveChanges sem async.
-        var dispatcher = new RecordingDomainEventsDispatcher();
-        using IServiceScope scope = Services.CreateScope();
-        using ApplicationDbContext context = CreateContext(scope, dispatcher);
-        Department department = AddDepartment(context);
-
-        // Act
-        context.SaveChanges();
-
-        // Assert
-        dispatcher.Published.ShouldHaveSingleItem().ShouldBe(new DepartmentCreatedDomainEvent(department.Id));
-    }
-
-    [Fact]
     public async Task SaveChangesAsync_Should_KeepDomainEventsAndPublishNothing_WhenSaveFails()
     {
         // Arrange
@@ -91,8 +75,21 @@ public sealed class DomainEventsPublishingTests(IntegrationTestWebAppFactory fac
         duplicate.DomainEvents.ShouldHaveSingleItem().ShouldBe(new DepartmentCreatedDomainEvent(duplicate.Id));
     }
 
-    private static ApplicationDbContext CreateContext(IServiceScope scope, IDomainEventsDispatcher dispatcher) =>
-        new(scope.ServiceProvider.GetRequiredService<DbContextOptions<ApplicationDbContext>>(), dispatcher);
+    // Contexto só com o interceptor de eventos, que resolve o dispatcher que grava o que foi publicado.
+    private static ApplicationDbContext CreateContext(IServiceScope scope, IDomainEventsDispatcher dispatcher)
+    {
+        ServiceProvider dispatcherProvider = new ServiceCollection()
+            .AddSingleton(dispatcher)
+            .BuildServiceProvider();
+
+        DbContextOptions<ApplicationDbContext> options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseNpgsql(scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>())
+            .UseSnakeCaseNamingConvention()
+            .AddInterceptors(new PublishDomainEventsInterceptor(dispatcherProvider.GetRequiredService<IServiceScopeFactory>()))
+            .Options;
+
+        return new ApplicationDbContext(options);
+    }
 
     private static Department AddDepartment(ApplicationDbContext context, string? name = null)
     {

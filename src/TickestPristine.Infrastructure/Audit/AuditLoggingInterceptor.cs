@@ -33,14 +33,6 @@ internal sealed class AuditLoggingInterceptor(IUserContext currentUser, IDateTim
         return base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 
-    // Cobre quem chama o SaveChanges síncrono; o seed, mesmo disparado pelo Migrate síncrono, salva pelo assíncrono.
-    public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
-    {
-        AddAuditEntries(eventData.Context);
-
-        return base.SavingChanges(eventData, result);
-    }
-
     private void AddAuditEntries(DbContext? context)
     {
         if (context is null)

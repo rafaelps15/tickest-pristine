@@ -10,6 +10,7 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.Application.TicketAttachments;
+using TickestPristine.Application.Abstractions.Data;
 
 namespace TickestPristine.Application.UnitTests.TicketAttachments;
 
@@ -28,7 +29,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
 
-        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage);
+        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage, CreateContentInspector(), Substitute.For<ITicketActivityWriter>());
         UploadTicketAttachmentCommand command = ValidCommand(Guid.NewGuid());
 
         // Act
@@ -55,7 +56,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
 
-        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage);
+        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage, CreateContentInspector(), Substitute.For<ITicketActivityWriter>());
         UploadTicketAttachmentCommand command = ValidCommand(ticketId);
 
         // Act
@@ -82,7 +83,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns("generated-storage-key.pdf");
 
-        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage);
+        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage, CreateContentInspector(), Substitute.For<ITicketActivityWriter>());
         UploadTicketAttachmentCommand command = ValidCommand(ticketId);
 
         // Act
@@ -121,7 +122,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns("generated-storage-key.pdf");
 
-        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage);
+        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage, CreateContentInspector(), Substitute.For<ITicketActivityWriter>());
 
         // Act
         Result<Guid> result = await handler.Handle(ValidCommand(ticketId), CancellationToken.None);
@@ -165,7 +166,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
                 return Task.FromResult("generated-storage-key.pdf");
             });
 
-        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage);
+        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage, CreateContentInspector(), Substitute.For<ITicketActivityWriter>());
 
         // Act
         Exception? exception = await Record.ExceptionAsync(() => handler.Handle(ValidCommand(ticketId), CancellationToken.None));
@@ -182,7 +183,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         Guid ticketId = await SeedTicketAsync(context);
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
-        UploadTicketAttachmentCommandHandler handler = CreateHandler(context, fileStorage);
+        UploadTicketAttachmentCommandHandler handler = CreateHandler(context, fileStorage, contentMatches: false);
         UploadTicketAttachmentCommand command = ValidCommand(ticketId);
         command.Content = new MemoryStream([0x4D, 0x5A, 0x90, 0x00]);
 
@@ -283,7 +284,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         Guid ticketId = await SeedTicketAsync(context);
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
-        UploadTicketAttachmentCommandHandler handler = CreateHandler(context, fileStorage);
+        UploadTicketAttachmentCommandHandler handler = CreateHandler(context, fileStorage, contentMatches: false);
         UploadTicketAttachmentCommand command = ValidCommand(ticketId);
         command.ContentType = "application/x-msdownload";
 
@@ -371,7 +372,10 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         result.IsSuccess.ShouldBeTrue();
     }
 
-    private static UploadTicketAttachmentCommandHandler CreateHandler(TestDbContext context, IFileStorage fileStorage)
+    private static UploadTicketAttachmentCommandHandler CreateHandler(
+        TestDbContext context,
+        IFileStorage fileStorage,
+        bool contentMatches = true)
     {
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(CreatorId);
@@ -383,7 +387,18 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
             userContext,
             Substitute.For<IPermissionProvider>(),
             dateTimeProvider,
-            fileStorage);
+            fileStorage,
+            CreateContentInspector(contentMatches),
+            Substitute.For<ITicketActivityWriter>());
+    }
+
+    // A inspeção do conteúdo tem os próprios testes; aqui ela só responde se o conteúdo corresponde ao tipo.
+    private static IAttachmentContentInspector CreateContentInspector(bool matches = true)
+    {
+        IAttachmentContentInspector inspector = Substitute.For<IAttachmentContentInspector>();
+        inspector.MatchesAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(matches);
+
+        return inspector;
     }
 
     private static async Task SeedAttachmentsAsync(
@@ -395,18 +410,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
     {
         for (int i = 0; i < count; i++)
         {
-            context.TicketAttachments.Add(new TicketAttachment
-            {
-                Id = Guid.NewGuid(),
-                TicketId = ticketId,
-                UploadedByUserId = CreatorId,
-                FileName = $"anexo-{i}.pdf",
-                ContentType = "application/pdf",
-                FileSizeBytes = sizeBytes,
-                StorageKey = $"{Guid.NewGuid():N}.pdf",
-                UploadedAtUtc = DateTime.UtcNow,
-                DeletedAtUtc = deleted ? DateTime.UtcNow : null
-            });
+            context.TicketAttachments.Add(TicketTestData.CreateAttachment(ticketId, CreatorId, DateTime.UtcNow, fileName: $"anexo-{i}.pdf", fileSizeBytes: sizeBytes, storageKey: $"{Guid.NewGuid():N}.pdf", deletedAtUtc: deleted ? DateTime.UtcNow : null));
         }
 
         await context.SaveChangesAsync();

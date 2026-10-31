@@ -1,4 +1,4 @@
-namespace TickestPristine.Application.SlaCalendars;
+namespace TickestPristine.Domain.SlaCalendars;
 
 /// <summary>
 /// Calendário "24 horas", definido em código e sem linha no banco: todo instante conta, sem feriados. É o calendário

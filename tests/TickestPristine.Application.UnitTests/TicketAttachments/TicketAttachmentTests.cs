@@ -1,10 +1,13 @@
+using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 
 namespace TickestPristine.Application.UnitTests.TicketAttachments;
 
 public sealed class TicketAttachmentTests
 {
-    private static readonly Guid TicketId = Guid.NewGuid();
+    private static readonly Ticket Ticket = TicketTestData.Create();
+    private static readonly Guid TicketId = Ticket.Id;
     private static readonly Guid UploaderId = Guid.NewGuid();
     private static readonly DateTime UploadedAtUtc = new(2026, 10, 30, 12, 0, 0, DateTimeKind.Utc);
 
@@ -96,7 +99,7 @@ public sealed class TicketAttachmentTests
     {
         // Act: o anexo novo tem 1.024 bytes
         Result<TicketAttachment> result = TicketAttachment.Create(
-            TicketId,
+            Ticket,
             UploaderId,
             "report.pdf",
             "application/pdf",
@@ -115,6 +118,87 @@ public sealed class TicketAttachmentTests
         }
     }
 
+    [Fact]
+    public void RecordUpload_Should_RecordAttachmentAddedByUploaderWithFileName()
+    {
+        // Arrange
+        TicketAttachment attachment = Create("report.pdf", "application/pdf", 1024).Value;
+
+        // Act
+        TicketHistory history = attachment.RecordUpload();
+
+        // Assert
+        history.TicketId.ShouldBe(TicketId);
+        history.ChangedByUserId.ShouldBe(UploaderId);
+        history.Action.ShouldBe(TicketHistoryAction.AttachmentAdded);
+        history.NewValue.ShouldBe("report.pdf");
+        history.OccurredAtUtc.ShouldBe(UploadedAtUtc);
+    }
+
+    [Fact]
+    public void Delete_Should_MarkDeletedRaiseEventAndRecordRemovalByWhoDeleted()
+    {
+        // Arrange
+        TicketAttachment attachment = Create("report.pdf", "application/pdf", 1024).Value;
+        attachment.ClearDomainEvents();
+        var managerId = Guid.NewGuid();
+        DateTime deletedAtUtc = UploadedAtUtc.AddHours(1);
+
+        // Act
+        TicketHistory history = attachment.Delete(managerId, canDeleteAny: true, deletedAtUtc).Value;
+
+        // Assert
+        attachment.DeletedAtUtc.ShouldBe(deletedAtUtc);
+        attachment.DomainEvents.ShouldHaveSingleItem().ShouldBe(new TicketAttachmentDeletedDomainEvent(attachment.Id, TicketId));
+        history.TicketId.ShouldBe(TicketId);
+        history.ChangedByUserId.ShouldBe(managerId);
+        history.Action.ShouldBe(TicketHistoryAction.AttachmentRemoved);
+        history.OccurredAtUtc.ShouldBe(deletedAtUtc);
+    }
+
+    [Fact]
+    public void Delete_Should_AllowUploader_WhenUploaderCannotDeleteAny()
+    {
+        // Arrange
+        TicketAttachment attachment = Create("report.pdf", "application/pdf", 1024).Value;
+
+        // Act
+        Result<TicketHistory> result = attachment.Delete(UploaderId, canDeleteAny: false, UploadedAtUtc.AddHours(1));
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        attachment.DeletedAtUtc.ShouldBe(UploadedAtUtc.AddHours(1));
+    }
+
+    [Fact]
+    public void Delete_Should_ReturnUnauthorizedAndChangeNothing_WhenCallerIsNotUploaderAndCannotDeleteAny()
+    {
+        // Arrange
+        TicketAttachment attachment = Create("report.pdf", "application/pdf", 1024).Value;
+        attachment.ClearDomainEvents();
+
+        // Act
+        Result<TicketHistory> result = attachment.Delete(Guid.NewGuid(), canDeleteAny: false, UploadedAtUtc.AddHours(1));
+
+        // Assert
+        result.Error.ShouldBe(UserErrors.Unauthorized());
+        attachment.DeletedAtUtc.ShouldBeNull();
+        attachment.DomainEvents.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void MarkPurged_Should_RecordWhenFileWasRemovedFromStorage()
+    {
+        // Arrange
+        TicketAttachment attachment = Create("report.pdf", "application/pdf", 1024).Value;
+
+        // Act
+        attachment.MarkPurged(UploadedAtUtc.AddDays(1));
+
+        // Assert
+        attachment.PurgedAtUtc.ShouldBe(UploadedAtUtc.AddDays(1));
+    }
+
     private static Result<TicketAttachment> Create(string fileName, string contentType, long fileSizeBytes) =>
-        TicketAttachment.Create(TicketId, UploaderId, fileName, contentType, fileSizeBytes, "chave", 0, 0, UploadedAtUtc);
+        TicketAttachment.Create(Ticket, UploaderId, fileName, contentType, fileSizeBytes, "chave", 0, 0, UploadedAtUtc);
 }

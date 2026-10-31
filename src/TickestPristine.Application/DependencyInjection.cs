@@ -1,6 +1,7 @@
 ﻿using System.Globalization;
 using TickestPristine.Application.Abstractions.Behaviors;
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Tickets;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.SharedKernel;
@@ -39,6 +40,8 @@ public static class DependencyInjection
             .WithScopedLifetime());
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly, includeInternalTypes: true);
+
+        services.AddScoped<TicketAgentLookup>();
 
         return services;
     }

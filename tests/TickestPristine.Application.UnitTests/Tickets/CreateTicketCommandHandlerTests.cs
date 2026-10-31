@@ -1,7 +1,6 @@
 ﻿using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Permissions;
-using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Application.Tickets.Create;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Departments;

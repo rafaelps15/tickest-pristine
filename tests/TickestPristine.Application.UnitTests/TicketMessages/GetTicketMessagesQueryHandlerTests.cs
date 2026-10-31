@@ -90,15 +90,7 @@ public sealed class GetTicketMessagesQueryHandlerTests : BaseHandlerTest
         Ticket ticket = TicketTestData.Create(requesterId: CreatorId, description: "Original description");
         context.Tickets.Add(ticket);
 
-        var message = new TicketMessage
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            AuthorUserId = CreatorId,
-            Content = "Deleted message",
-            CreatedAtUtc = DateTime.UtcNow,
-            DeletedAtUtc = DateTime.UtcNow
-        };
+        TicketMessage message = TicketTestData.CreateMessage(ticket.Id, CreatorId, "Deleted message", DateTime.UtcNow, deletedAtUtc: DateTime.UtcNow);
         context.TicketMessages.Add(message);
 
         await context.SaveChangesAsync();
@@ -126,9 +118,9 @@ public sealed class GetTicketMessagesQueryHandlerTests : BaseHandlerTest
         Guid ticketId = await SeedTicketWithMessagesAsync(context);
         var sameDate = new DateTime(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc);
         context.TicketMessages.AddRange(
-            new TicketMessage { Id = Guid.NewGuid(), TicketId = ticketId, AuthorUserId = CreatorId, Content = "Tie A", CreatedAtUtc = sameDate },
-            new TicketMessage { Id = Guid.NewGuid(), TicketId = ticketId, AuthorUserId = CreatorId, Content = "Tie B", CreatedAtUtc = sameDate },
-            new TicketMessage { Id = Guid.NewGuid(), TicketId = ticketId, AuthorUserId = CreatorId, Content = "Tie C", CreatedAtUtc = sameDate });
+            TicketTestData.CreateMessage(ticketId, CreatorId, "Tie A", sameDate),
+            TicketTestData.CreateMessage(ticketId, CreatorId, "Tie B", sameDate),
+            TicketTestData.CreateMessage(ticketId, CreatorId, "Tie C", sameDate));
         await context.SaveChangesAsync();
 
         IUserContext userContext = Substitute.For<IUserContext>();
@@ -214,22 +206,8 @@ public sealed class GetTicketMessagesQueryHandlerTests : BaseHandlerTest
         Ticket ticket = TicketTestData.Create(requesterId: CreatorId, description: "Original description");
         context.Tickets.Add(ticket);
 
-        var first = new TicketMessage
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            AuthorUserId = CreatorId,
-            Content = "First message",
-            CreatedAtUtc = DateTime.UtcNow
-        };
-        var second = new TicketMessage
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            AuthorUserId = CreatorId,
-            Content = "Second message",
-            CreatedAtUtc = DateTime.UtcNow.AddMinutes(1)
-        };
+        TicketMessage first = TicketTestData.CreateMessage(ticket.Id, CreatorId, "First message", DateTime.UtcNow);
+        TicketMessage second = TicketTestData.CreateMessage(ticket.Id, CreatorId, "Second message", DateTime.UtcNow.AddMinutes(1));
         context.TicketMessages.AddRange(first, second);
 
         await context.SaveChangesAsync();

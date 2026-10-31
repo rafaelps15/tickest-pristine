@@ -1,6 +1,7 @@
 using TickestPristine.Application.TicketAttachments;
 using TickestPristine.Application.TicketAttachments.GetPolicy;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Application.UnitTests.Abstractions;
 
 namespace TickestPristine.Application.UnitTests.TicketAttachments;
 
@@ -28,7 +29,7 @@ public sealed class GetTicketAttachmentPolicyQueryHandlerTests
         // Todo tipo informado é aceito pelo anexo, com cada uma das extensões informadas.
         result.Value.AllowedTypes.ShouldAllBe(type => type.Extensions.All(extension =>
             TicketAttachment.Create(
-                Guid.NewGuid(),
+                TicketTestData.Create(),
                 Guid.NewGuid(),
                 $"arquivo{extension}",
                 type.ContentType,

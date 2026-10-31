@@ -35,7 +35,7 @@ internal sealed class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 
         builder.Property(t => t.Priority).HasConversion<string>().HasMaxLength(20);
 
-        // Situação de espera pelo nome (ex.: "Requester"), mantida pelo TicketWaitingInterceptor (spec 029).
+        // Situação de espera pelo nome (ex.: "Requester"), calculada pelo chamado (spec 029).
         builder.Property(t => t.WaitingOn).HasConversion<string>().HasMaxLength(20);
 
         // Propriedade comum convertida para jsonb, e não ToJson, como a grade do calendário de SLA: o plano entra no

@@ -704,17 +704,15 @@ public sealed class TicketAttachmentsTests(IntegrationTestWebAppFactory factory)
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         var attachments = Enumerable.Range(0, count)
-            .Select(i => new TicketAttachment
-            {
-                Id = Guid.NewGuid(),
-                TicketId = ticketId,
-                UploadedByUserId = userId,
-                FileName = $"anexo-{i}.pdf",
-                ContentType = "application/pdf",
-                FileSizeBytes = sizeBytes,
-                StorageKey = $"{Guid.NewGuid():N}.pdf",
-                UploadedAtUtc = DateTime.UtcNow
-            })
+            .Select(i => EntityTestState.New<TicketAttachment>()
+                .With(nameof(TicketAttachment.Id), Guid.NewGuid())
+                .With(nameof(TicketAttachment.TicketId), ticketId)
+                .With(nameof(TicketAttachment.UploadedByUserId), userId)
+                .With(nameof(TicketAttachment.FileName), $"anexo-{i}.pdf")
+                .With(nameof(TicketAttachment.ContentType), "application/pdf")
+                .With(nameof(TicketAttachment.FileSizeBytes), sizeBytes)
+                .With(nameof(TicketAttachment.StorageKey), $"{Guid.NewGuid():N}.pdf")
+                .With(nameof(TicketAttachment.UploadedAtUtc), DateTime.UtcNow))
             .ToList();
 
         context.TicketAttachments.AddRange(attachments);

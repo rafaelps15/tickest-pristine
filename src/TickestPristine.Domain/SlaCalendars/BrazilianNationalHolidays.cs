@@ -1,4 +1,4 @@
-namespace TickestPristine.Application.SlaCalendars;
+namespace TickestPristine.Domain.SlaCalendars;
 
 /// <summary>
 /// Feriados nacionais do Brasil de um ano: os fixos e os móveis calculados a partir da Páscoa. Carnaval e Corpus

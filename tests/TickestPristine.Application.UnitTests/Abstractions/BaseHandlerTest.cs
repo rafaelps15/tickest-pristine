@@ -9,7 +9,6 @@ using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Application.Users;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Abstractions.Sla;
-using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.SlaCalendars;
 
@@ -40,7 +39,7 @@ public abstract class BaseHandlerTest
     protected static ISlaCalendarProvider CreateSlaCalendarProvider() => new TestSlaCalendarProvider();
 
     // Plano "Padrão" de um chamado Urgente, no calendário "Expediente".
-    protected static TicketSlaPlan CreateSlaPlan() => TicketSla.DefaultPlan(TicketPriority.Urgent);
+    protected static TicketSlaPlan CreateSlaPlan() => TicketSlaPlan.Default(TicketPriority.Urgent);
 
     // Chamado Urgente aberto em createdAtUtc com o plano de CreateSlaPlan e os
     // cronômetros do ciclo 1, como a abertura pela API grava.
@@ -63,7 +62,7 @@ public abstract class BaseHandlerTest
 
         foreach (TicketSlaTimer timer in context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id))
         {
-            TicketSlaClock.Complete(timer, resolvedAtUtc, SlaCompletionCause.Resolution);
+            timer.Complete(resolvedAtUtc, SlaCompletionCause.Resolution);
         }
 
         await context.SaveChangesAsync();
@@ -80,21 +79,23 @@ public abstract class BaseHandlerTest
     {
         TicketSlaPlan plan = CreateSlaPlan();
 
-        // Os prazos do chamado vêm do cronômetro de resolução; o id do chamado entra depois, como na abertura pela API.
-        List<TicketSlaTimer> timers = TicketSlaClock.Start(Guid.Empty, plan, DefaultSlaCalendar.Create(), createdAtUtc);
-        TicketSlaTimer resolution = timers.Single(t => t.Metric == SlaMetric.Resolution);
-
         Ticket ticket = TicketTestData.Create(
             requesterId: requesterId,
             status: status,
             createdAtUtc: createdAtUtc,
             priority: TicketPriority.Urgent,
             slaPlan: plan,
-            dueAtUtc: resolution.DueOnUtc,
-            slaWarningAtUtc: resolution.WarningOnUtc,
-            resolvedAtUtc: resolvedAtUtc);
+            resolvedAtUtc: resolvedAtUtc,
+            calendar: DefaultSlaCalendar.Create());
 
-        timers.ForEach(timer => timer.TicketId = ticket.Id);
+        // Os cronômetros do ciclo 1 nascem na abertura, e os prazos do chamado são os do cronômetro de resolução, como na
+        // abertura pela API.
+        (_, IReadOnlyList<TicketSlaTimer> timers) = ticket.RecordOpening(requesterId);
+        TicketSlaTimer resolution = timers.Single(t => t.Metric == SlaMetric.Resolution);
+
+        ticket
+            .With(nameof(Ticket.DueAtUtc), resolution.DueOnUtc)
+            .With(nameof(Ticket.SlaWarningAtUtc), resolution.WarningOnUtc);
 
         context.Tickets.Add(ticket);
         context.TicketSlaTimers.AddRange(timers);

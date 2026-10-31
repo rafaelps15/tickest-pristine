@@ -6,6 +6,7 @@ using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
+using TickestPristine.Domain.SlaCalendars;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -466,7 +467,7 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
         TicketPriority priority = TicketPriority.Urgent)
     {
         // Ativo com data de resolução: resolvido nessa data e reaberto depois.
-        bool reopened = Ticket.IsActiveStatus(status) && resolvedAtUtc is not null;
+        bool reopened = status is TicketStatus.Open or TicketStatus.InProgress && resolvedAtUtc is not null;
 
         Ticket ticket = TicketTestData.Create(
             requesterId: requester.Id,
@@ -477,13 +478,13 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
             priority: priority,
             title: title,
             description: "Original description",
-            dueAtUtc: TicketSla.DueAt(createdAtUtc, priority),
-            slaWarningAtUtc: TicketSla.WarningAt(createdAtUtc, priority),
+            dueAtUtc: createdAtUtc.AddMinutes(ResolutionMinutes(priority)),
+            slaWarningAtUtc: createdAtUtc.AddMinutes(ResolutionMinutes(priority) * 0.75),
             resolvedAtUtc: resolvedAtUtc);
 
         if (reopened)
         {
-            ticket.Reopen(requester.Id, resolvedAtUtc!.Value);
+            ticket.Reopen([], ContinuousSlaCalendar.Create(), lastMessageIsFromAgent: false, requester.Id, resolvedAtUtc!.Value);
             ticket.ClearDomainEvents();
         }
 
@@ -492,4 +493,8 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
 
         return ticket;
     }
+
+    // Meta de resolução do plano legado da prioridade, em horas corridas.
+    private static int ResolutionMinutes(TicketPriority priority) =>
+        TicketSlaPlan.Legacy(priority).ResolutionMinutes;
 }

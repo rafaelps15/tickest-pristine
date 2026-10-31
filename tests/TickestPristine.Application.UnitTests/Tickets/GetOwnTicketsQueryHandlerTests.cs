@@ -108,12 +108,7 @@ public sealed class GetOwnTicketsQueryHandlerTests : BaseHandlerTest
         withAssignee.SectorId.ShouldBe(helpdesk.Id);
         withAssignee.SectorName.ShouldBe("Helpdesk");
         withAssignee.DueAtUtc.ShouldBe(assigned.DueAtUtc);
-        withAssignee.SlaStatus.ShouldBe(TicketSla.GetStatus(
-            assigned.Status,
-            assigned.DueAtUtc,
-            assigned.SlaWarningAtUtc,
-            assigned.ResolvedAtUtc,
-            NowUtc));
+        withAssignee.SlaStatus.ShouldBe(TicketSlaStatus.OnTime);
         withAssignee.LastActivityAtUtc.ShouldBe(assigned.LastActivityAtUtc);
 
         result.Value.Items.Single(t => t.Id == unassigned.Id).AssignedToName.ShouldBeNull();

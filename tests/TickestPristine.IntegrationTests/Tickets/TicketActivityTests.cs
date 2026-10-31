@@ -11,6 +11,7 @@ using TickestPristine.Application.Tickets;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Infrastructure.Database;
+using TickestPristine.Domain.SlaCalendars;
 
 namespace TickestPristine.IntegrationTests.Tickets;
 
@@ -94,11 +95,10 @@ public sealed class TicketActivityTests(IntegrationTestWebAppFactory factory) : 
         using (IServiceScope scope = Services.CreateScope())
         {
             ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            context.TicketHistories.Add(TicketHistoryEntries.Create(
-                ticketId,
-                GetUserId(requesterTokens),
-                TicketHistoryAction.MessageAdded,
-                before.AddHours(-1)));
+            Ticket ticket = await context.Tickets.AsNoTracking().SingleAsync(t => t.Id == ticketId);
+            context.TicketHistories.Add(ticket
+                .PostMessage(GetUserId(requesterTokens), "Mensagem antiga", authorIsAgent: false, before.AddHours(-1))
+                .History);
             await context.SaveChangesAsync();
         }
 
@@ -264,7 +264,7 @@ public sealed class TicketActivityTests(IntegrationTestWebAppFactory factory) : 
             sector,
             requesterId: requesterId,
             createdAtUtc: createdAtUtc,
-            slaPlan: TicketSla.LegacyPlan(TicketPriority.Medium),
+            slaPlan: TicketSlaPlan.Legacy(TicketPriority.Medium),
             dueAtUtc: createdAtUtc.AddHours(8),
             slaWarningAtUtc: createdAtUtc.AddHours(6));
 

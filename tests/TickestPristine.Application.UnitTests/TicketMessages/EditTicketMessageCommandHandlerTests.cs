@@ -4,6 +4,8 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
+using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Application.Tickets;
 
 namespace TickestPristine.Application.UnitTests.TicketMessages;
 
@@ -20,7 +22,7 @@ public sealed class EditTicketMessageCommandHandlerTests : BaseHandlerTest
         userContext.UserId.Returns(AuthorId);
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
 
-        var handler = new EditTicketMessageCommandHandler(context, userContext, dateTimeProvider);
+        var handler = new EditTicketMessageCommandHandler(context, userContext, new TicketAgentLookup(context), Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
         var command = new EditTicketMessageCommand { MessageId = Guid.NewGuid(), Content = "Updated" };
 
         // Act
@@ -43,7 +45,7 @@ public sealed class EditTicketMessageCommandHandlerTests : BaseHandlerTest
         userContext.UserId.Returns(AuthorId);
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
 
-        var handler = new EditTicketMessageCommandHandler(context, userContext, dateTimeProvider);
+        var handler = new EditTicketMessageCommandHandler(context, userContext, new TicketAgentLookup(context), Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
         var command = new EditTicketMessageCommand { MessageId = messageId, Content = "Updated" };
 
         // Act
@@ -65,7 +67,7 @@ public sealed class EditTicketMessageCommandHandlerTests : BaseHandlerTest
         userContext.UserId.Returns(Guid.NewGuid());
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
 
-        var handler = new EditTicketMessageCommandHandler(context, userContext, dateTimeProvider);
+        var handler = new EditTicketMessageCommandHandler(context, userContext, new TicketAgentLookup(context), Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
         var command = new EditTicketMessageCommand { MessageId = messageId, Content = "Updated" };
 
         // Act
@@ -88,7 +90,7 @@ public sealed class EditTicketMessageCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
 
-        var handler = new EditTicketMessageCommandHandler(context, userContext, dateTimeProvider);
+        var handler = new EditTicketMessageCommandHandler(context, userContext, new TicketAgentLookup(context), Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
         var command = new EditTicketMessageCommand { MessageId = messageId, Content = "Updated content" };
 
         // Act
@@ -104,6 +106,50 @@ public sealed class EditTicketMessageCommandHandlerTests : BaseHandlerTest
         (await context.TicketHistories.SingleAsync(h => h.TicketId == message.TicketId)).Action.ShouldBe(TicketHistoryAction.MessageEdited);
     }
 
+    [Fact]
+    public async Task Handle_Should_WriteLastActivityAndWaitingOnAfterSaving_WhenCallerIsAuthor()
+    {
+        // Arrange: a mensagem editada é do solicitante, a última válida; o chamado aguarda quem atende.
+        // Depois da abertura dos chamados do arranjo, que usam a hora real.
+        DateTime nowUtc = DateTime.UtcNow.AddHours(1);
+        await using TestDbContext context = CreateDbContext();
+        Guid messageId = await SeedMessageAsync(context);
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(AuthorId);
+        ITicketActivityWriter activityWriter = Substitute.For<ITicketActivityWriter>();
+        var handler = new EditTicketMessageCommandHandler(context, userContext, new TicketAgentLookup(context), activityWriter, CreateClock(nowUtc));
+
+        // Act
+        Result result = await handler.Handle(
+            new EditTicketMessageCommand { MessageId = messageId, Content = "Updated" },
+            CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        await activityWriter.Received(1).WriteLastActivityAndWaitingOnAsync(
+            Arg.Is<Ticket>(t => t.LastActivityAtUtc == nowUtc && t.WaitingOn == TicketWaitingOn.Agent),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Should_NotWriteActivity_WhenCallerIsNotAuthor()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid messageId = await SeedMessageAsync(context);
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(Guid.NewGuid());
+        ITicketActivityWriter activityWriter = Substitute.For<ITicketActivityWriter>();
+        var handler = new EditTicketMessageCommandHandler(context, userContext, new TicketAgentLookup(context), activityWriter, CreateClock());
+
+        // Act
+        await handler.Handle(new EditTicketMessageCommand { MessageId = messageId, Content = "Updated" }, CancellationToken.None);
+
+        // Assert
+        await activityWriter.DidNotReceiveWithAnyArgs().WriteLastActivityAndWaitingOnAsync(default!, default);
+        (await context.TicketHistories.AnyAsync()).ShouldBeFalse();
+    }
+
     private static async Task<Guid> SeedMessageAsync(TestDbContext context, bool ticketDeleted = false)
     {
         Ticket ticket = TicketTestData.Create(
@@ -112,14 +158,7 @@ public sealed class EditTicketMessageCommandHandlerTests : BaseHandlerTest
             deletedAtUtc: ticketDeleted ? DateTime.UtcNow : null);
         context.Tickets.Add(ticket);
 
-        var message = new TicketMessage
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            AuthorUserId = AuthorId,
-            Content = "Original message",
-            CreatedAtUtc = DateTime.UtcNow
-        };
+        TicketMessage message = TicketTestData.CreateMessage(ticket.Id, AuthorId, "Original message", DateTime.UtcNow);
         context.TicketMessages.Add(message);
 
         await context.SaveChangesAsync();

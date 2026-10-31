@@ -1,3 +1,4 @@
+using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Domain.Tickets;
@@ -36,21 +37,33 @@ public sealed class TicketAttachment : Entity, IAuditable
         ("application/zip", [".zip"])
     ];
 
-    public Guid Id { get; set; }
-    public Guid TicketId { get; set; }
-    public Guid UploadedByUserId { get; set; }
-    public string FileName { get; set; }
-    public string ContentType { get; set; }
-    public long FileSizeBytes { get; set; }
-    public string StorageKey { get; set; }
-    public DateTime UploadedAtUtc { get; set; }
-    public DateTime? DeletedAtUtc { get; set; }
+    private TicketAttachment()
+    {
+    }
+
+    public Guid Id { get; private set; }
+
+    public Guid TicketId { get; private set; }
+
+    public Guid UploadedByUserId { get; private set; }
+
+    public string FileName { get; private set; }
+
+    public string ContentType { get; private set; }
+
+    public long FileSizeBytes { get; private set; }
+
+    public string StorageKey { get; private set; }
+
+    public DateTime UploadedAtUtc { get; private set; }
+
+    public DateTime? DeletedAtUtc { get; private set; }
 
     /// <summary>
     /// Quando o arquivo foi apagado do armazenamento, depois da exclusão lógica. Nulo enquanto o arquivo existir ou se a
     /// remoção falhou.
     /// </summary>
-    public DateTime? PurgedAtUtc { get; set; }
+    public DateTime? PurgedAtUtc { get; private set; }
 
     /// <summary>
     /// Cria o anexo, ou devolve o erro quando o tipo não é aceito (os parâmetros do tipo, como o charset, são ignorados),
@@ -58,7 +71,7 @@ public sealed class TicketAttachment : Entity, IAuditable
     /// já tem, nos anexos não excluídos, o máximo de anexos ou de bytes somados.
     /// </summary>
     public static Result<TicketAttachment> Create(
-        Guid ticketId,
+        Ticket ticket,
         Guid uploadedByUserId,
         string fileName,
         string contentType,
@@ -97,7 +110,7 @@ public sealed class TicketAttachment : Entity, IAuditable
         var attachment = new TicketAttachment
         {
             Id = Guid.NewGuid(),
-            TicketId = ticketId,
+            TicketId = ticket.Id,
             UploadedByUserId = uploadedByUserId,
             FileName = fileName,
             ContentType = contentType,
@@ -114,6 +127,33 @@ public sealed class TicketAttachment : Entity, IAuditable
 
         return attachment;
     }
+
+    /// <summary>
+    /// Entrada do histórico do envio, em nome de quem enviou, com o nome do arquivo e a data do envio.
+    /// </summary>
+    public TicketHistory RecordUpload() =>
+        TicketHistory.Create(TicketId, UploadedByUserId, TicketHistoryAction.AttachmentAdded, UploadedAtUtc, newValue: FileName);
+
+    /// <summary>
+    /// Exclui o anexo logicamente e devolve a entrada do histórico, em nome de quem excluiu; o arquivo é apagado do
+    /// armazenamento depois, pelo handler do evento. Quem enviou sempre pode; os demais, só com
+    /// <paramref name="canDeleteAny"/> (quem atende a fila). Em falha, nada muda e nenhum evento é disparado.
+    /// </summary>
+    public Result<TicketHistory> Delete(Guid deletedByUserId, bool canDeleteAny, DateTime utcNow)
+    {
+        if (deletedByUserId != UploadedByUserId && !canDeleteAny)
+        {
+            return Result.Failure<TicketHistory>(UserErrors.Unauthorized());
+        }
+
+        DeletedAtUtc = utcNow;
+
+        Raise(new TicketAttachmentDeletedDomainEvent(Id, TicketId));
+
+        return TicketHistory.Create(TicketId, deletedByUserId, TicketHistoryAction.AttachmentRemoved, utcNow);
+    }
+
+    public void MarkPurged(DateTime utcNow) => PurgedAtUtc = utcNow;
 
     /// <summary>
     /// Tipo sem os parâmetros: "text/plain; charset=utf-8" é o mesmo formato que "text/plain".

@@ -3,9 +3,9 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Storage;
-using TickestPristine.Application.Authorization;
-using TickestPristine.Application.TicketHistories;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -22,21 +22,28 @@ internal sealed class UploadTicketAttachmentCommandHandler(
     IUserContext userContext,
     IPermissionProvider permissionProvider,
     IDateTimeProvider dateTimeProvider,
-    IFileStorage fileStorage)
+    IFileStorage fileStorage,
+    IAttachmentContentInspector contentInspector,
+    ITicketActivityWriter activityWriter)
     : ICommandHandler<UploadTicketAttachmentCommand, Guid>
 {
     public async Task<Result<Guid>> Handle(UploadTicketAttachmentCommand command, CancellationToken cancellationToken)
     {
-        Result access = await TicketAccessGuard.EnsureCanViewAsync(
-            context,
-            permissionProvider,
-            userContext.UserId,
-            command.TicketId,
-            cancellationToken);
+        // Sem rastreio: a última atividade é gravada depois do commit, sem a versão do chamado.
+        Ticket? ticket = await context.Tickets
+            .AsNoTracking()
+            .SingleOrDefaultAsync(t => t.Id == command.TicketId, cancellationToken);
 
-        if (access.IsFailure)
+        if (ticket is null)
         {
-            return Result.Failure<Guid>(access.Error);
+            return Result.Failure<Guid>(TicketErrors.NotFound(command.TicketId));
+        }
+
+        // Participantes (solicitante e responsável) sempre podem; os demais precisam de tickets:manage.
+        if (!ticket.IsParticipant(userContext.UserId) &&
+            !await permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, cancellationToken))
+        {
+            return Result.Failure<Guid>(UserErrors.Unauthorized());
         }
 
         // O filtro global exclui os anexos excluídos: só os que continuam no chamado contam para o limite.
@@ -46,7 +53,7 @@ internal sealed class UploadTicketAttachmentCommandHandler(
             .Select(g => new { Count = g.Count(), TotalBytes = g.Sum(a => a.FileSizeBytes) })
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (!await TicketAttachmentContentInspector.MatchesAsync(command.Content, command.ContentType, cancellationToken))
+        if (!await contentInspector.MatchesAsync(command.Content, command.ContentType, cancellationToken))
         {
             return Result.Failure<Guid>(TicketAttachmentErrors.ContentMismatch);
         }
@@ -56,7 +63,7 @@ internal sealed class UploadTicketAttachmentCommandHandler(
         DateTime nowUtc = dateTimeProvider.UtcNow;
 
         Result<TicketAttachment> created = TicketAttachment.Create(
-            command.TicketId,
+            ticket,
             userContext.UserId,
             command.FileName,
             command.ContentType,
@@ -75,15 +82,10 @@ internal sealed class UploadTicketAttachmentCommandHandler(
         }
 
         TicketAttachment attachment = created.Value;
+        TicketHistory upload = attachment.RecordUpload();
 
         context.TicketAttachments.Add(attachment);
-
-        context.TicketHistories.Add(TicketHistoryEntries.Create(
-            attachment.TicketId,
-            attachment.UploadedByUserId,
-            TicketHistoryAction.AttachmentAdded,
-            nowUtc,
-            newValue: attachment.FileName));
+        context.TicketHistories.Add(upload);
 
         try
         {
@@ -95,6 +97,10 @@ internal sealed class UploadTicketAttachmentCommandHandler(
             await fileStorage.DeleteAsync(storageKey, CancellationToken.None);
             throw;
         }
+
+        ticket.RecordActivity(upload);
+
+        await activityWriter.WriteLastActivityAsync(ticket, cancellationToken);
 
         return attachment.Id;
     }

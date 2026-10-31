@@ -6,6 +6,8 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
+using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Application.Tickets;
 
 namespace TickestPristine.Application.UnitTests.TicketMessages;
 
@@ -24,7 +26,7 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
 
-        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context), Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
         var command = new PostTicketMessageCommand { TicketId = Guid.NewGuid(), Content = "Hello" };
 
         // Act
@@ -50,7 +52,7 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
             .Returns(false);
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
 
-        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context), Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
         var command = new PostTicketMessageCommand { TicketId = ticketId, Content = "Hello" };
 
         // Act
@@ -74,7 +76,7 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
 
-        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context), Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
         var command = new PostTicketMessageCommand { TicketId = ticketId, Content = "Hello there" };
 
         // Act
@@ -104,7 +106,7 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
 
-        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context), Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
         var command = new PostTicketMessageCommand { TicketId = ticketId, Content = "On it" };
 
         // Act
@@ -135,7 +137,7 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
 
-        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context), Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
         var command = new PostTicketMessageCommand { TicketId = ticketId, Content = "Escalating this" };
 
         // Act
@@ -163,6 +165,71 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
         return ticket.Id;
     }
 
+    [Fact]
+    public async Task Handle_Should_WriteLastActivityAndWaitOnRequesterAfterSaving_WhenAgentAnswers()
+    {
+        // Arrange: quem responde atende chamados (tickets:manage nas roles gravadas).
+        // Depois da abertura dos chamados do arranjo, que usam a hora real.
+        DateTime nowUtc = DateTime.UtcNow.AddHours(1);
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context);
+        User agent = CreateUser();
+        context.Users.Add(agent);
+        await context.SaveChangesAsync();
+        await GrantPermissionsAsync(context, agent.Id, PermissionCodes.Tickets.Manage);
+
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(agent.Id);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(agent.Id, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+            .Returns(true);
+        ITicketActivityWriter activityWriter = Substitute.For<ITicketActivityWriter>();
+        var handler = new PostTicketMessageCommandHandler(
+            context,
+            userContext,
+            permissionProvider,
+            new TicketAgentLookup(context),
+            activityWriter,
+            CreateClock(nowUtc));
+
+        // Act
+        Result<Guid> result = await handler.Handle(
+            new PostTicketMessageCommand { TicketId = ticketId, Content = "Verificando" },
+            CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        await activityWriter.Received(1).WriteLastActivityAndWaitingOnAsync(
+            Arg.Is<Ticket>(t => t.Id == ticketId && t.LastActivityAtUtc == nowUtc && t.WaitingOn == TicketWaitingOn.Requester),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Should_WaitOnAgent_WhenRequesterAnswers()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context);
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(CreatorId);
+        ITicketActivityWriter activityWriter = Substitute.For<ITicketActivityWriter>();
+        var handler = new PostTicketMessageCommandHandler(
+            context,
+            userContext,
+            Substitute.For<IPermissionProvider>(),
+            new TicketAgentLookup(context),
+            activityWriter,
+            CreateClock());
+
+        // Act
+        await handler.Handle(new PostTicketMessageCommand { TicketId = ticketId, Content = "Alguma novidade?" }, CancellationToken.None);
+
+        // Assert
+        await activityWriter.Received(1).WriteLastActivityAndWaitingOnAsync(
+            Arg.Is<Ticket>(t => t.WaitingOn == TicketWaitingOn.Agent),
+            Arg.Any<CancellationToken>());
+    }
+
     private static readonly Guid RequesterId = Guid.NewGuid();
 
     // Abertura dos chamados dos testes da primeira resposta: segunda-feira, 26/10/2026, 08:10 em São Paulo.
@@ -176,7 +243,7 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(authorId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(canManage);
 
-        return new PostTicketMessageCommandHandler(context, userContext, permissionProvider, CreateClock(nowUtc));
+        return new PostTicketMessageCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context), Substitute.For<ITicketActivityWriter>(), CreateClock(nowUtc));
     }
 
     private static Task<TicketSlaTimer> GetFirstResponseAsync(TestDbContext context, Guid ticketId) =>

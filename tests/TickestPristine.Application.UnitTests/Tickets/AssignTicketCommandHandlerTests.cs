@@ -6,6 +6,7 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
+using TickestPristine.Application.Tickets;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -244,7 +245,7 @@ public sealed class AssignTicketCommandHandlerTests : BaseHandlerTest
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(AgentId);
 
-        return new AssignTicketCommandHandler(context, userContext, permissionProvider, CreateClock());
+        return new AssignTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context), CreateClock());
     }
 
     private static async Task<User> SeedUserAsync(TestDbContext context, bool isActive = true, Guid? id = null)

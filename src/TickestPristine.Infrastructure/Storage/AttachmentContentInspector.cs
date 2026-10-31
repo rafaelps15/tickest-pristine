@@ -1,14 +1,15 @@
 using System.IO.Compression;
+using TickestPristine.Application.Abstractions.Storage;
 using TickestPristine.Domain.Tickets;
 
-namespace TickestPristine.Application.TicketAttachments;
+namespace TickestPristine.Infrastructure.Storage;
 
 /// <summary>
 /// Confere se o conteúdo do anexo corresponde ao tipo declarado pelo cliente, pelos primeiros bytes do arquivo. DOCX e
 /// XLSX são pacotes ZIP: além da assinatura, o índice do pacote precisa ter a pasta do Word (<c>word/</c>) ou do Excel
 /// (<c>xl/</c>). TXT não tem assinatura: basta não haver byte nulo no começo do arquivo, o que recusa binários.
 /// </summary>
-internal static class TicketAttachmentContentInspector
+internal sealed class AttachmentContentInspector : IAttachmentContentInspector
 {
     /// <summary>
     /// Trecho inicial lido do arquivo: cobre todas as assinaturas e a amostra do texto.
@@ -39,7 +40,7 @@ internal static class TicketAttachmentContentInspector
     /// Indica se o conteúdo corresponde ao tipo informado. Lê o começo do arquivo (e, para DOCX e XLSX, o índice do
     /// pacote) e devolve o fluxo à posição em que estava. Exige um fluxo posicionável.
     /// </summary>
-    public static async Task<bool> MatchesAsync(Stream content, string contentType, CancellationToken cancellationToken)
+    public async Task<bool> MatchesAsync(Stream content, string contentType, CancellationToken cancellationToken)
     {
         long start = content.Position;
 

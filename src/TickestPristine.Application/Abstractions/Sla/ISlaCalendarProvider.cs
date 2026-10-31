@@ -1,5 +1,5 @@
-using TickestPristine.Application.SlaCalendars;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.SlaCalendars;
 
 namespace TickestPristine.Application.Abstractions.Sla;
 

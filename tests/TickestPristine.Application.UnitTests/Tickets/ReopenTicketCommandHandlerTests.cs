@@ -25,7 +25,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         userContext.UserId.Returns(OwnerId);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), CreateClock());
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), new TicketAgentLookup(context), CreateClock());
         var command = new ReopenTicketCommand(Guid.NewGuid());
 
         // Act
@@ -49,7 +49,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.ReopenOwn, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), CreateClock());
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), new TicketAgentLookup(context), CreateClock());
         var command = new ReopenTicketCommand(ticketId);
 
         // Act
@@ -74,7 +74,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.ReopenOwn, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), CreateClock());
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), new TicketAgentLookup(context), CreateClock());
         var command = new ReopenTicketCommand(ticketId);
 
         // Act
@@ -99,7 +99,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(outsiderId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), CreateClock());
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), new TicketAgentLookup(context), CreateClock());
         var command = new ReopenTicketCommand(ticketId);
 
         // Act
@@ -123,7 +123,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.ReopenOwn, Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), CreateClock());
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), new TicketAgentLookup(context), CreateClock());
         var command = new ReopenTicketCommand(ticketId);
 
         // Act
@@ -148,7 +148,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), CreateClock());
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), new TicketAgentLookup(context), CreateClock());
         var command = new ReopenTicketCommand(ticketId);
 
         // Act
@@ -175,7 +175,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.ReopenOwn, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), CreateClock());
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), new TicketAgentLookup(context), CreateClock());
         var command = new ReopenTicketCommand(ticketId);
 
         // Act
@@ -208,7 +208,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), CreateClock());
+        var handler = new ReopenTicketCommandHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), new TicketAgentLookup(context), CreateClock());
         var command = new ReopenTicketCommand(ticketId);
 
         // Act
@@ -331,6 +331,56 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         (await reader.TicketHistories.AnyAsync()).ShouldBeFalse();
     }
 
+    [Fact]
+    public async Task Handle_Should_WaitOnRequesterAndMoveLastActivity_WhenAgentReopensWithReason()
+    {
+        // Arrange: quem reabre atende chamados; o motivo vira a última mensagem do chamado.
+        // Depois da abertura dos chamados do arranjo, que usam a hora real.
+        DateTime nowUtc = DateTime.UtcNow.AddHours(1);
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Resolved);
+        User agent = CreateUser();
+        context.Users.Add(agent);
+        await context.SaveChangesAsync();
+        await GrantPermissionsAsync(context, agent.Id, PermissionCodes.Tickets.Manage);
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(agent.Id);
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.HasPermissionAsync(agent.Id, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
+            .Returns(true);
+        var handler = new ReopenTicketCommandHandler(
+            context,
+            userContext,
+            permissionProvider,
+            CreateSlaCalendarProvider(),
+            new TicketAgentLookup(context),
+            CreateClock(nowUtc));
+
+        // Act
+        Result result = await handler.Handle(new ReopenTicketCommand(ticketId, "Voltou a falhar"), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        Ticket saved = await context.Tickets.AsNoTracking().SingleAsync(t => t.Id == ticketId);
+        saved.WaitingOn.ShouldBe(TicketWaitingOn.Requester);
+        saved.LastActivityAtUtc.ShouldBe(nowUtc);
+    }
+
+    [Fact]
+    public async Task Handle_Should_WaitOnAgent_WhenOwnerReopensWithoutMessages()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Guid ticketId = await SeedTicketAsync(context, OwnerId, TicketStatus.Resolved);
+
+        // Act
+        Result result = await CreateOwnerHandler(context).Handle(new ReopenTicketCommand(ticketId), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        (await context.Tickets.AsNoTracking().SingleAsync(t => t.Id == ticketId)).WaitingOn.ShouldBe(TicketWaitingOn.Agent);
+    }
+
     private static ReopenTicketCommandHandler CreateOwnerHandler(TestDbContext context)
     {
         IUserContext userContext = Substitute.For<IUserContext>();
@@ -339,7 +389,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.ReopenOwn, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        return new ReopenTicketCommandHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), CreateClock());
+        return new ReopenTicketCommandHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), new TicketAgentLookup(context), CreateClock());
     }
 
     private static TestDbContext CreateDbContext(string databaseName, SaveChangesProbe probe) =>
@@ -432,6 +482,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
             userContext,
             permissionProvider,
             CreateSlaCalendarProvider(),
+            new TicketAgentLookup(context),
             CreateClock(reopenedAtUtc));
 
         // Act
@@ -456,8 +507,8 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         Ticket saved = await context.Tickets.SingleAsync(t => t.Id == ticket.Id);
         saved.DueAtUtc.ShouldBe(dueAtUtc);
         saved.ResolvedAtUtc.ShouldBe(SlaResolvedAtUtc);
-        TicketSla.GetStatus(saved.Status, saved.DueAtUtc, saved.SlaWarningAtUtc, saved.ResolvedAtUtc, reopenedAtUtc)
-            .ShouldBe(TicketSlaStatus.Met);
+        // A primeira resolução, dentro do prazo, continua decidindo o SLA.
+        saved.ResolvedAtUtc.ShouldNotBeNull().ShouldBeLessThanOrEqualTo(saved.DueAtUtc);
     }
 
     [Fact]
@@ -478,6 +529,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
             userContext,
             permissionProvider,
             CreateMissingSlaCalendarProvider(),
+            new TicketAgentLookup(context),
             CreateClock(SlaResolvedAtUtc.AddHours(1)));
 
         // Act
