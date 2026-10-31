@@ -1,10 +1,11 @@
 using System.IO.Compression;
 using System.Text;
-using TickestPristine.Application.TicketAttachments;
+using TickestPristine.Infrastructure.Storage;
+using TickestPristine.Domain.Tickets;
 
-namespace TickestPristine.Application.UnitTests.TicketAttachments;
+namespace TickestPristine.IntegrationTests.Storage;
 
-public sealed class TicketAttachmentContentInspectorTests
+public sealed class AttachmentContentInspectorTests
 {
     private const string Docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     private const string Xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -45,6 +46,30 @@ public sealed class TicketAttachmentContentInspectorTests
         { "application/zip", Executable }
     };
 
+    [Fact]
+    public async Task MatchesAsync_Should_RecognizeExactlyTheTypesAcceptedByTicketAttachment()
+    {
+        // Arrange: uma amostra válida de cada tipo conhecido pelo inspetor.
+        var inspector = new AttachmentContentInspector();
+        var recognized = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (object[] sample in ValidSamples)
+        {
+            using var stream = new MemoryStream((byte[])sample[1]);
+
+            if (await inspector.MatchesAsync(stream, (string)sample[0], CancellationToken.None))
+            {
+                recognized.Add((string)sample[0]);
+            }
+        }
+
+        // Act
+        string[] acceptedByEntity = [.. TicketAttachment.AllowedTypes.Select(t => t.ContentType)];
+
+        // Assert
+        recognized.ShouldBe(acceptedByEntity, ignoreOrder: true);
+    }
+
     [Theory]
     [MemberData(nameof(ValidSamples))]
     public async Task MatchesAsync_Should_ReturnTrue_WhenContentMatchesContentType(string contentType, byte[] content)
@@ -53,7 +78,7 @@ public sealed class TicketAttachmentContentInspectorTests
         using var stream = new MemoryStream(content);
 
         // Act
-        bool matches = await TicketAttachmentContentInspector.MatchesAsync(stream, contentType, CancellationToken.None);
+        bool matches = await new AttachmentContentInspector().MatchesAsync(stream, contentType, CancellationToken.None);
 
         // Assert
         matches.ShouldBeTrue();
@@ -67,7 +92,7 @@ public sealed class TicketAttachmentContentInspectorTests
         using var stream = new MemoryStream(content);
 
         // Act
-        bool matches = await TicketAttachmentContentInspector.MatchesAsync(stream, contentType, CancellationToken.None);
+        bool matches = await new AttachmentContentInspector().MatchesAsync(stream, contentType, CancellationToken.None);
 
         // Assert
         matches.ShouldBeFalse();
@@ -80,7 +105,7 @@ public sealed class TicketAttachmentContentInspectorTests
         using var stream = new MemoryStream([0x50, 0x4B, 0x03, 0x04, 0x01, 0x02, 0x03]);
 
         // Act
-        bool matches = await TicketAttachmentContentInspector.MatchesAsync(stream, Xlsx, CancellationToken.None);
+        bool matches = await new AttachmentContentInspector().MatchesAsync(stream, Xlsx, CancellationToken.None);
 
         // Assert
         matches.ShouldBeFalse();
@@ -93,7 +118,7 @@ public sealed class TicketAttachmentContentInspectorTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes("texto"));
 
         // Act
-        bool matches = await TicketAttachmentContentInspector.MatchesAsync(
+        bool matches = await new AttachmentContentInspector().MatchesAsync(
             stream,
             "Text/Plain; charset=utf-8",
             CancellationToken.None);
@@ -109,7 +134,7 @@ public sealed class TicketAttachmentContentInspectorTests
         using var stream = new MemoryStream();
 
         // Act
-        bool matches = await TicketAttachmentContentInspector.MatchesAsync(stream, "text/plain", CancellationToken.None);
+        bool matches = await new AttachmentContentInspector().MatchesAsync(stream, "text/plain", CancellationToken.None);
 
         // Assert
         matches.ShouldBeFalse();
@@ -125,7 +150,7 @@ public sealed class TicketAttachmentContentInspectorTests
         using var stream = new MemoryStream(content);
 
         // Act
-        await TicketAttachmentContentInspector.MatchesAsync(stream, contentType, CancellationToken.None);
+        await new AttachmentContentInspector().MatchesAsync(stream, contentType, CancellationToken.None);
 
         // Assert
         stream.Position.ShouldBe(0);

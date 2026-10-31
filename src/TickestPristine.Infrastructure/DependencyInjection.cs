@@ -22,6 +22,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using TickestPristine.SharedKernel;
@@ -82,6 +83,10 @@ public static class DependencyInjection
 
         services.AddSingleton<IFileStorage, LocalFileStorage>();
 
+        services.AddSingleton<IAttachmentContentInspector, AttachmentContentInspector>();
+
+        services.AddScoped<ITicketActivityWriter, TicketActivityWriter>();
+
         services.AddScoped<ISlaCalendarProvider, SlaCalendarProvider>();
 
         services.AddOptions<SlaMonitorSettings>()
@@ -134,16 +139,15 @@ public static class DependencyInjection
                 .UseNpgsql(serviceProvider.GetRequiredService<NpgsqlDataSource>(), npgsqlOptions =>
                     npgsqlOptions.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schemas.Default))
                 .UseSnakeCaseNamingConvention()
-                // A última atividade do chamado é atualizada antes da auditoria, para entrar no registro de alteração dele.
-                // A situação de espera é recalculada depois do commit (spec 029).
                 .AddInterceptors(
-                    new TicketActivityInterceptor(),
-                    new TicketWaitingInterceptor(),
+                    serviceProvider.GetRequiredService<PublishDomainEventsInterceptor>(),
                     serviceProvider.GetRequiredService<AuditLoggingInterceptor>())
                 .UseSeeding((context, _) =>
                     serviceProvider.GetRequiredService<DatabaseSeeder>().Seed(context))
                 .UseAsyncSeeding((context, _, cancellationToken) =>
                     serviceProvider.GetRequiredService<DatabaseSeeder>().SeedAsync(context, cancellationToken)));
+
+        services.TryAddSingleton<PublishDomainEventsInterceptor>();
 
         services.AddScoped<AuditLoggingInterceptor>();
 

@@ -3,6 +3,7 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.SlaCalendars;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -98,7 +99,7 @@ public sealed class GetTicketSlaSummaryQueryHandlerTests : BaseHandlerTest
         DateTime? resolvedAtUtc = null)
     {
         // Ativo com data de resolução: resolvido nessa data e reaberto depois.
-        bool reopened = Ticket.IsActiveStatus(status) && resolvedAtUtc is not null;
+        bool reopened = status is TicketStatus.Open or TicketStatus.InProgress && resolvedAtUtc is not null;
 
         Ticket ticket = TicketTestData.Create(
             sector: sector,
@@ -106,13 +107,13 @@ public sealed class GetTicketSlaSummaryQueryHandlerTests : BaseHandlerTest
             createdAtUtc: createdAtUtc,
             priority: TicketPriority.Urgent,
             description: "Original description",
-            dueAtUtc: TicketSla.DueAt(createdAtUtc, TicketPriority.Urgent),
-            slaWarningAtUtc: TicketSla.WarningAt(createdAtUtc, TicketPriority.Urgent),
+            dueAtUtc: createdAtUtc.AddHours(4),
+            slaWarningAtUtc: createdAtUtc.AddHours(3),
             resolvedAtUtc: resolvedAtUtc);
 
         if (reopened)
         {
-            ticket.Reopen(ticket.CreatedByUserId, resolvedAtUtc!.Value);
+            ticket.Reopen([], ContinuousSlaCalendar.Create(), lastMessageIsFromAgent: false, ticket.CreatedByUserId, resolvedAtUtc!.Value);
             ticket.ClearDomainEvents();
         }
 

@@ -1,6 +1,5 @@
 using System.Globalization;
 using TickestPristine.Application.Abstractions.Sla;
-using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Domain.Audit;
 using TickestPristine.Domain.SlaCalendars;
 using Microsoft.EntityFrameworkCore;

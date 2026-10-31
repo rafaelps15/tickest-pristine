@@ -1,4 +1,4 @@
-namespace TickestPristine.Application.SlaCalendars;
+namespace TickestPristine.Domain.SlaCalendars;
 
 /// <summary>
 /// Ids reservados dos calendários definidos em código. Nenhum calendário do banco pode usar estes Ids (DEC-5 da spec

@@ -3,13 +3,13 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Sla;
-using TickestPristine.Application.Authorization;
-using TickestPristine.Application.SlaCalendars;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.SlaCalendars;
 
 namespace TickestPristine.Application.Tickets.Create;
 
@@ -26,16 +26,10 @@ internal sealed class CreateTicketCommandHandler(
         Guid requesterId = command.RequesterId ?? userContext.UserId;
 
         // Abrir em nome de outra pessoa exige gerenciar chamados.
-        Result access = await TicketAccessGuard.EnsureOwnerOrManagerAsync(
-            permissionProvider,
-            userContext.UserId,
-            requesterId,
-            ownPermission: null,
-            cancellationToken);
-
-        if (access.IsFailure)
+        if (requesterId != userContext.UserId &&
+            !await permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, cancellationToken))
         {
-            return Result.Failure<Guid>(access.Error);
+            return Result.Failure<Guid>(UserErrors.Unauthorized());
         }
 
         // Solicitante e responsável são carregados numa única consulta, com o usuário logado, que já é válido mesmo
@@ -65,7 +59,7 @@ internal sealed class CreateTicketCommandHandler(
         }
 
         // O plano fica gravado no chamado: mudar a política depois não altera os prazos deste chamado.
-        TicketSlaPlan slaPlan = TicketSla.DefaultPlan(command.Priority);
+        var slaPlan = TicketSlaPlan.Default(command.Priority);
 
         Result<BusinessCalendar> calendar = await slaCalendarProvider.GetAsync(slaPlan.CalendarId, cancellationToken);
 
@@ -76,11 +70,6 @@ internal sealed class CreateTicketCommandHandler(
 
         DateTime createdAtUtc = dateTimeProvider.UtcNow;
 
-        // Os prazos do chamado seguem o primeiro ciclo de resolução, como o SLA que o resumo e os filtros já usam. Os
-        // cronômetros são calculados antes do chamado, que recebe esses prazos, e passam a apontar para ele em seguida.
-        List<TicketSlaTimer> slaTimers = TicketSlaClock.Start(Guid.Empty, slaPlan, calendar.Value, createdAtUtc);
-        TicketSlaTimer resolution = slaTimers.Single(t => t.Metric == SlaMetric.Resolution);
-
         var ticket = Ticket.Create(
             command.Title,
             command.Description,
@@ -89,16 +78,15 @@ internal sealed class CreateTicketCommandHandler(
             users.Single(u => u.Id == requesterId),
             users.SingleOrDefault(u => u.Id == command.AssignedToUserId),
             slaPlan,
-            resolution.DueOnUtc,
-            resolution.WarningOnUtc,
+            calendar.Value,
             userContext.UserId,
             createdAtUtc);
 
-        slaTimers.ForEach(timer => timer.TicketId = ticket.Id);
+        (TicketHistory opening, IReadOnlyList<TicketSlaTimer> slaTimers) = ticket.RecordOpening(userContext.UserId);
 
         context.Tickets.Add(ticket);
         context.TicketSlaTimers.AddRange(slaTimers);
-        context.TicketHistories.Add(ticket.RecordOpening(userContext.UserId));
+        context.TicketHistories.Add(opening);
 
         await context.SaveChangesAsync(cancellationToken);
 

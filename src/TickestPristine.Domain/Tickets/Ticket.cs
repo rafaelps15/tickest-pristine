@@ -1,4 +1,5 @@
 using TickestPristine.Domain.Sectors;
+using TickestPristine.Domain.SlaCalendars;
 using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
 
@@ -6,6 +7,10 @@ namespace TickestPristine.Domain.Tickets;
 
 public sealed class Ticket : Entity, IAuditable
 {
+    public const int OwnerCancelWindowMinutes = 15;
+
+    private readonly List<TicketSlaTimer> _openingSlaTimers = [];
+
     private Ticket()
     {
     }
@@ -28,11 +33,9 @@ public sealed class Ticket : Entity, IAuditable
 
     public DateTime CreatedAtUtc { get; private set; }
 
-    // Data da ação mais recente do histórico (na abertura, a própria abertura); nunca volta para uma data anterior.
     public DateTime LastActivityAtUtc { get; private set; }
 
-    // Calculado no banco a cada mensagem e troca de status; nulo enquanto o chamado está inativo.
-    public TicketWaitingOn? WaitingOn { get; }
+    public TicketWaitingOn? WaitingOn { get; private set; }
 
     public DateTime DueAtUtc { get; private set; }
 
@@ -44,10 +47,13 @@ public sealed class Ticket : Entity, IAuditable
 
     public DateTime? DeletedAtUtc { get; private set; }
 
-    public bool IsActive => IsActiveStatus(Status);
+    public bool IsActive => Status is TicketStatus.Open or TicketStatus.InProgress;
 
-    public static bool IsActiveStatus(TicketStatus status) => status is TicketStatus.Open or TicketStatus.InProgress;
-
+    /// <summary>
+    /// Abre o chamado com o plano de SLA e os cronômetros do ciclo 1 (primeira resposta, quando o plano tem essa meta, e
+    /// resolução), todos no tempo útil do calendário do plano; o prazo e o alerta do chamado são os do cronômetro de
+    /// resolução. Sem mensagens, o chamado aguarda quem atende.
+    /// </summary>
     public static Ticket Create(
         string title,
         string description,
@@ -56,8 +62,7 @@ public sealed class Ticket : Entity, IAuditable
         User requester,
         User? assignee,
         TicketSlaPlan slaPlan,
-        DateTime dueAtUtc,
-        DateTime slaWarningAtUtc,
+        BusinessCalendar calendar,
         Guid openedByUserId,
         DateTime utcNow)
     {
@@ -73,10 +78,20 @@ public sealed class Ticket : Entity, IAuditable
             SectorId = sector.Id,
             CreatedAtUtc = utcNow,
             LastActivityAtUtc = utcNow,
-            DueAtUtc = dueAtUtc,
-            SlaWarningAtUtc = slaWarningAtUtc,
+            WaitingOn = TicketWaitingOn.Agent,
             SlaPlan = slaPlan
         };
+
+        if (slaPlan.FirstResponseMinutes is { } firstResponseMinutes)
+        {
+            ticket._openingSlaTimers.Add(TicketSlaTimer.Create(ticket.Id, SlaMetric.FirstResponse, 1, firstResponseMinutes, slaPlan.CalendarId, calendar, utcNow));
+        }
+
+        var resolutionTimer = TicketSlaTimer.Create(ticket.Id, SlaMetric.Resolution, 1, slaPlan.ResolutionMinutes, slaPlan.CalendarId, calendar, utcNow);
+
+        ticket._openingSlaTimers.Add(resolutionTimer);
+        ticket.DueAtUtc = resolutionTimer.DueOnUtc;
+        ticket.SlaWarningAtUtc = resolutionTimer.WarningOnUtc;
 
         ticket.Raise(new TicketCreatedDomainEvent(ticket.Id, openedByUserId));
 
@@ -84,10 +99,20 @@ public sealed class Ticket : Entity, IAuditable
     }
 
     /// <summary>
-    /// Entrada de abertura do histórico, com a data de abertura; o chamado sempre nasce com o status Aberto.
+    /// Entrada de abertura do histórico, com a data de abertura, e os cronômetros do ciclo 1 criados pelo
+    /// <see cref="Create"/>; o handler adiciona os dois junto com o chamado. Um chamado lido do banco não tem
+    /// cronômetros de abertura a entregar.
     /// </summary>
-    public TicketHistory RecordOpening(Guid openedByUserId) =>
-        CreateHistory(openedByUserId, TicketHistoryAction.Created, CreatedAtUtc, newValue: TicketStatus.Open.ToString());
+    public (TicketHistory History, IReadOnlyList<TicketSlaTimer> SlaTimers) RecordOpening(Guid openedByUserId)
+    {
+        TicketHistory history = CreateHistory(
+            openedByUserId,
+            TicketHistoryAction.Created,
+            CreatedAtUtc,
+            newValue: TicketStatus.Open.ToString());
+
+        return (history, _openingSlaTimers);
+    }
 
     /// <summary>
     /// Indica se o status pode ir para <paramref name="status"/>; o mesmo status não é uma transição.
@@ -113,11 +138,88 @@ public sealed class Ticket : Entity, IAuditable
     public bool IsAssignedTo(Guid userId) => AssignedToUserId == userId;
 
     /// <summary>
-    /// Troca a descrição e o status e dispara o evento de alteração, mesmo quando nada mudou; a troca de status também
-    /// dispara o próprio evento. Devolve as entradas do histórico só do que mudou, o status antes da descrição. O
-    /// handler já conferiu que o chamado está ativo e que a transição é permitida.
+    /// Situação do SLA de resolução no instante informado, sobre as colunas do chamado, para as consultas que não
+    /// carregam a entidade. A primeira resolução decide o resultado (cumprido ou violado), mesmo depois de uma
+    /// reabertura; chamado cancelado sem ter sido resolvido fica fora do SLA.
     /// </summary>
-    public IReadOnlyList<TicketHistory> Update(string description, TicketStatus status, Guid changedByUserId, DateTime utcNow)
+    public static TicketSlaStatus GetSlaStatus(
+        TicketStatus status,
+        DateTime dueAtUtc,
+        DateTime slaWarningAtUtc,
+        DateTime? resolvedAtUtc,
+        DateTime utcNow)
+    {
+        if (resolvedAtUtc is { } resolvedAt)
+        {
+            return resolvedAt <= dueAtUtc ? TicketSlaStatus.Met : TicketSlaStatus.Missed;
+        }
+
+        if (status == TicketStatus.Canceled)
+        {
+            return TicketSlaStatus.NotApplicable;
+        }
+
+        if (utcNow >= dueAtUtc)
+        {
+            return TicketSlaStatus.Breached;
+        }
+
+        return utcNow >= slaWarningAtUtc ? TicketSlaStatus.AtRisk : TicketSlaStatus.OnTime;
+    }
+
+    /// <summary>
+    /// Último instante em que o dono ainda pode cancelar o chamado aberto em <paramref name="createdAtUtc"/>; reabrir
+    /// não reinicia o prazo.
+    /// </summary>
+    public static DateTime OwnerCancelDeadline(DateTime createdAtUtc) => createdAtUtc.AddMinutes(OwnerCancelWindowMinutes);
+
+    /// <summary>
+    /// Indica se o chamado pode ser cancelado agora, sobre as colunas dele: ativo, e por quem pode cancelar qualquer
+    /// chamado ou pelo dono que pode editar o próprio, até o <see cref="OwnerCancelDeadline"/>.
+    /// </summary>
+    public static bool CanBeCanceled(
+        TicketStatus status,
+        DateTime createdAtUtc,
+        bool canCancelAny,
+        bool isOwnerWhoCanEdit,
+        DateTime utcNow) =>
+        status is TicketStatus.Open or TicketStatus.InProgress &&
+        (canCancelAny || isOwnerWhoCanEdit && utcNow <= OwnerCancelDeadline(createdAtUtc));
+
+    public bool IsParticipant(Guid userId) => CreatedByUserId == userId || IsAssignedTo(userId);
+
+    /// <summary>
+    /// Confere se o chamado pode ser cancelado agora (<see cref="CanBeCanceled"/>): por quem pode cancelar qualquer
+    /// chamado, enquanto ele estiver ativo; pelo dono que pode editar o próprio chamado, só até o prazo dele, para
+    /// desfazer um chamado aberto por engano. Falha com <see cref="TicketErrors.CancelWindowExpired"/> para o dono e com
+    /// <see cref="TicketErrors.CancelForbidden"/> para os demais.
+    /// </summary>
+    public Result EnsureCanBeCanceled(bool canCancelAny, bool isOwnerWhoCanEdit, DateTime utcNow)
+    {
+        if (CanBeCanceled(Status, CreatedAtUtc, canCancelAny, isOwnerWhoCanEdit, utcNow))
+        {
+            return Result.Success();
+        }
+
+        return isOwnerWhoCanEdit
+            ? Result.Failure(TicketErrors.CancelWindowExpired(OwnerCancelWindowMinutes))
+            : Result.Failure(TicketErrors.CancelForbidden);
+    }
+
+    /// <summary>
+    /// Troca a descrição e o status e dispara o evento de alteração, mesmo quando nada mudou. A troca de status também
+    /// dispara o próprio evento, recalcula quem o chamado aguarda e atualiza os cronômetros recebidos deste chamado:
+    /// resolver conclui o ciclo corrente de resolução e, se ainda estiver em aberto, a primeira resposta; cancelar para
+    /// os em aberto. Devolve as entradas do histórico só do que mudou, o status antes da descrição. O handler já
+    /// conferiu que o chamado está ativo e que a transição é permitida.
+    /// </summary>
+    public IReadOnlyList<TicketHistory> Update(
+        string description,
+        TicketStatus status,
+        IReadOnlyCollection<TicketSlaTimer> slaTimers,
+        bool lastMessageIsFromAgent,
+        Guid changedByUserId,
+        DateTime utcNow)
     {
         TicketStatus previousStatus = Status;
         string previousDescription = Description;
@@ -136,6 +238,9 @@ public sealed class Ticket : Entity, IAuditable
 
         if (status != previousStatus)
         {
+            UpdateSlaTimers(status, slaTimers, utcNow);
+            UpdateWaitingOn(lastMessageIsFromAgent);
+
             Raise(new TicketStatusChangedDomainEvent(Id, previousStatus, status, changedByUserId));
 
             entries.Add(CreateHistory(
@@ -196,13 +301,15 @@ public sealed class Ticket : Entity, IAuditable
     }
 
     /// <summary>
-    /// Fecha o chamado; o handler já conferiu que a transição para Fechado é permitida.
+    /// Fecha o chamado, que deixa de aguardar alguém; o handler já conferiu que a transição para Fechado é permitida.
     /// </summary>
     public TicketHistory Close(Guid changedByUserId, DateTime utcNow)
     {
         TicketStatus previousStatus = Status;
 
         Status = TicketStatus.Closed;
+
+        UpdateWaitingOn(lastMessageIsFromAgent: false);
 
         Raise(new TicketStatusChangedDomainEvent(Id, previousStatus, TicketStatus.Closed, changedByUserId));
 
@@ -215,35 +322,154 @@ public sealed class Ticket : Entity, IAuditable
     }
 
     /// <summary>
-    /// Volta o chamado para Aberto; os prazos gravados (os do primeiro ciclo) e a data de resolução não mudam. O handler
-    /// já conferiu que o chamado está inativo e que a transição para Aberto é permitida.
+    /// Volta o chamado para Aberto, recalcula quem ele aguarda e abre um novo ciclo de resolução depois do último dos
+    /// cronômetros recebidos deste chamado, com a meta integral do plano. Os ciclos anteriores, a primeira resposta, os
+    /// prazos gravados no chamado (os do primeiro ciclo) e a data de resolução não mudam. Devolve a entrada do histórico
+    /// e o cronômetro novo. O handler já conferiu que o chamado está inativo e que a transição para Aberto é permitida.
     /// </summary>
-    public TicketHistory Reopen(Guid changedByUserId, DateTime utcNow)
+    public (TicketHistory History, TicketSlaTimer ResolutionTimer) Reopen(
+        IReadOnlyCollection<TicketSlaTimer> slaTimers,
+        BusinessCalendar calendar,
+        bool lastMessageIsFromAgent,
+        Guid changedByUserId,
+        DateTime utcNow)
     {
         TicketStatus previousStatus = Status;
 
         Status = TicketStatus.Open;
 
+        UpdateWaitingOn(lastMessageIsFromAgent);
+
+        int lastResolutionCycle = slaTimers
+            .Where(t => t.TicketId == Id && t.Metric == SlaMetric.Resolution)
+            .Select(t => t.Cycle)
+            .DefaultIfEmpty(0)
+            .Max();
+
+        var resolutionTimer = TicketSlaTimer.Create(
+            Id,
+            SlaMetric.Resolution,
+            lastResolutionCycle + 1,
+            SlaPlan.ResolutionMinutes,
+            SlaPlan.CalendarId,
+            calendar,
+            utcNow);
+
         Raise(new TicketReopenedDomainEvent(Id, changedByUserId));
 
-        return CreateHistory(
+        TicketHistory history = CreateHistory(
             changedByUserId,
             TicketHistoryAction.Reopened,
             utcNow,
             previousStatus.ToString(),
             TicketStatus.Open.ToString());
+
+        return (history, resolutionTimer);
     }
 
     /// <summary>
-    /// Exclui o chamado logicamente; o handler já conferiu que ele está ativo.
+    /// Exclui o chamado logicamente e tira os cronômetros recebidos deste chamado da fila do monitoramento, sem violação
+    /// nem evento; o handler já conferiu que ele está ativo.
     /// </summary>
-    public TicketHistory Delete(Guid changedByUserId, DateTime utcNow)
+    public TicketHistory Delete(IReadOnlyCollection<TicketSlaTimer> slaTimers, Guid changedByUserId, DateTime utcNow)
     {
         DeletedAtUtc = utcNow;
+
+        foreach (TicketSlaTimer timer in slaTimers.Where(t => t.TicketId == Id))
+        {
+            timer.Dequeue();
+        }
 
         Raise(new TicketDeletedDomainEvent(Id));
 
         return CreateHistory(changedByUserId, TicketHistoryAction.Deleted, utcNow);
+    }
+
+    /// <summary>
+    /// Publica uma mensagem no chamado e devolve a mensagem e a entrada do histórico, que o handler adiciona antes de
+    /// salvar. Leva a última atividade à data da mensagem e, com o chamado ativo, passa a aguardar o solicitante quando
+    /// quem escreve atende a fila e não é o solicitante, ou quem atende nos demais casos.
+    /// </summary>
+    public (TicketMessage Message, TicketHistory History) PostMessage(
+        Guid authorUserId,
+        string content,
+        bool authorIsAgent,
+        DateTime utcNow)
+    {
+        var message = TicketMessage.Create(Id, authorUserId, content, utcNow);
+
+        UpdateWaitingOn(authorIsAgent && authorUserId != CreatedByUserId);
+
+        TicketHistory history = CreateHistory(authorUserId, TicketHistoryAction.MessageAdded, utcNow);
+
+        return (message, history);
+    }
+
+    /// <summary>
+    /// Leva a última atividade à data de uma entrada do histórico de anexo, sem nunca diminuí-la.
+    /// </summary>
+    public void RecordActivity(TicketHistory entry) => MoveLastActivity(entry.OccurredAtUtc);
+
+    /// <summary>
+    /// Leva a última atividade à data de uma entrada do histórico de mensagem editada ou excluída, sem nunca
+    /// diminuí-la, e recalcula quem o chamado ativo aguarda: o solicitante quando a última mensagem válida é de quem
+    /// atende, quem atende nos demais casos.
+    /// </summary>
+    public void RecordMessageActivity(TicketHistory entry, bool lastMessageIsFromAgent)
+    {
+        MoveLastActivity(entry.OccurredAtUtc);
+
+        UpdateWaitingOn(lastMessageIsFromAgent);
+    }
+
+    // Só os cronômetros deste chamado mudam; o ciclo corrente de cada objetivo é o maior.
+    private void UpdateSlaTimers(TicketStatus status, IReadOnlyCollection<TicketSlaTimer> slaTimers, DateTime utcNow)
+    {
+        TicketSlaTimer[] ownTimers = [.. slaTimers.Where(t => t.TicketId == Id)];
+
+        if (status == TicketStatus.Canceled)
+        {
+            foreach (TicketSlaTimer timer in ownTimers)
+            {
+                timer.Stop(utcNow);
+            }
+
+            return;
+        }
+
+        if (status != TicketStatus.Resolved)
+        {
+            return;
+        }
+
+        ownTimers.Where(t => t.Metric == SlaMetric.Resolution).MaxBy(t => t.Cycle)
+            ?.Complete(utcNow, SlaCompletionCause.Resolution);
+
+        // Resolver sem ter respondido também conclui a primeira resposta, mas com a causa "resolução": a média de primeira
+        // resposta conta só as concluídas por mensagem.
+        ownTimers.Where(t => t.Metric == SlaMetric.FirstResponse).MaxBy(t => t.Cycle)
+            ?.Complete(utcNow, SlaCompletionCause.Resolution);
+    }
+
+    // Só o chamado ativo aguarda alguém.
+    private void UpdateWaitingOn(bool lastMessageIsFromAgent)
+    {
+        if (!IsActive)
+        {
+            WaitingOn = null;
+
+            return;
+        }
+
+        WaitingOn = lastMessageIsFromAgent ? TicketWaitingOn.Requester : TicketWaitingOn.Agent;
+    }
+
+    private void MoveLastActivity(DateTime occurredAtUtc)
+    {
+        if (occurredAtUtc > LastActivityAtUtc)
+        {
+            LastActivityAtUtc = occurredAtUtc;
+        }
     }
 
     private TicketHistory CreateHistory(
@@ -251,14 +477,10 @@ public sealed class Ticket : Entity, IAuditable
         TicketHistoryAction action,
         DateTime occurredAtUtc,
         string? oldValue = null,
-        string? newValue = null) => new()
+        string? newValue = null)
     {
-        Id = Guid.NewGuid(),
-        TicketId = Id,
-        ChangedByUserId = changedByUserId,
-        Action = action,
-        OldValue = oldValue,
-        NewValue = newValue,
-        OccurredAtUtc = occurredAtUtc
-    };
+        MoveLastActivity(occurredAtUtc);
+
+        return TicketHistory.Create(Id, changedByUserId, action, occurredAtUtc, oldValue, newValue);
+    }
 }

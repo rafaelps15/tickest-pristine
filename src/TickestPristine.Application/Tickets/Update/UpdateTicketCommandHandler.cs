@@ -14,6 +14,7 @@ internal sealed class UpdateTicketCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IPermissionProvider permissionProvider,
+    TicketAgentLookup agentLookup,
     IDateTimeProvider dateTimeProvider)
     : ICommandHandler<UpdateTicketCommand>
 {
@@ -59,91 +60,41 @@ internal sealed class UpdateTicketCommandHandler(
 
         DateTime nowUtc = dateTimeProvider.UtcNow;
 
-        if (changesStatus)
+        // Cancelar segue o Ticket.EnsureCanBeCanceled. As demais trocas de status (Em Andamento e Resolvido) exigem
+        // tickets:manage: o dono só edita a descrição e cancela.
+        if (cancels)
         {
-            Result statusChange = EnsureCanChangeStatus(ticket, command.Status, nowUtc, isOwnerWhoCanEdit, canManage, canCancelAny);
+            Result cancellation = ticket.EnsureCanBeCanceled(canCancelAny, isOwnerWhoCanEdit, nowUtc);
 
-            if (statusChange.IsFailure)
+            if (cancellation.IsFailure)
             {
-                return statusChange;
+                return cancellation;
             }
         }
-
-        IReadOnlyList<TicketHistory> historyEntries = ticket.Update(command.Description, command.Status, callerId, nowUtc);
-
-        if (changesStatus)
+        else if (changesStatus && !canManage)
         {
-            await UpdateSlaTimersAsync(ticket.Id, command.Status, nowUtc, cancellationToken);
+            return Result.Failure(TicketErrors.StatusChangeForbidden);
         }
+
+        // Os cronômetros só mudam com o status; quem o chamado aguarda é recalculado na troca de status.
+        List<TicketSlaTimer> slaTimers = changesStatus
+            ? await context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id).ToListAsync(cancellationToken)
+            : [];
+
+        bool lastMessageIsFromAgent = changesStatus && await agentLookup.IsLastMessageFromAgentAsync(ticket, cancellationToken);
+
+        IReadOnlyList<TicketHistory> historyEntries = ticket.Update(
+            command.Description,
+            command.Status,
+            slaTimers,
+            lastMessageIsFromAgent,
+            callerId,
+            nowUtc);
 
         context.TicketHistories.AddRange(historyEntries);
 
         await context.SaveChangesAsync(cancellationToken);
 
         return Result.Success();
-    }
-
-    /// <summary>
-    /// Cancelar: quem tem <c>tickets:cancel</c>, sempre; o dono, só dentro da janela de
-    /// <see cref="TicketCancellationPolicy"/>. As demais trocas de status (Em Andamento e Resolvido) exigem
-    /// <c>tickets:manage</c>: o dono só edita a descrição e cancela.
-    /// </summary>
-    private static Result EnsureCanChangeStatus(
-        Ticket ticket,
-        TicketStatus newStatus,
-        DateTime nowUtc,
-        bool isOwnerWhoCanEdit,
-        bool canManage,
-        bool canCancelAny)
-    {
-        if (newStatus != TicketStatus.Canceled)
-        {
-            return canManage ? Result.Success() : Result.Failure(TicketErrors.StatusChangeForbidden);
-        }
-
-        if (TicketCancellationPolicy.CanCancel(ticket.Status, ticket.CreatedAtUtc, nowUtc, canCancelAny, isOwnerWhoCanEdit))
-        {
-            return Result.Success();
-        }
-
-        return isOwnerWhoCanEdit
-            ? Result.Failure(TicketErrors.CancelWindowExpired(TicketCancellationPolicy.OwnerWindowMinutes))
-            : Result.Failure(TicketErrors.CancelForbidden);
-    }
-
-    /// <summary>
-    /// Resolver conclui o ciclo corrente de resolução e, se ainda estiver em aberto, a primeira resposta, no mesmo
-    /// instante; cancelar para os cronômetros em aberto. Os demais status não mexem nos cronômetros. As mudanças são
-    /// gravadas no mesmo SaveChanges do chamado, sob o token de concorrência dele.
-    /// </summary>
-    private async Task UpdateSlaTimersAsync(Guid ticketId, TicketStatus newStatus, DateTime nowUtc, CancellationToken cancellationToken)
-    {
-        if (newStatus is not (TicketStatus.Resolved or TicketStatus.Canceled))
-        {
-            return;
-        }
-
-        List<TicketSlaTimer> timers = await context.TicketSlaTimers
-            .Where(t => t.TicketId == ticketId)
-            .ToListAsync(cancellationToken);
-
-        if (newStatus == TicketStatus.Canceled)
-        {
-            timers.ForEach(timer => TicketSlaClock.Stop(timer, nowUtc));
-
-            return;
-        }
-
-        if (TicketSlaClock.CurrentCycle(timers, SlaMetric.Resolution) is { } resolution)
-        {
-            TicketSlaClock.Complete(resolution, nowUtc, SlaCompletionCause.Resolution);
-        }
-
-        // Resolver sem ter respondido também conclui a primeira resposta, mas com a causa "resolução": a média de primeira
-        // resposta conta só as concluídas por mensagem.
-        if (TicketSlaClock.CurrentCycle(timers, SlaMetric.FirstResponse) is { } firstResponse)
-        {
-            TicketSlaClock.Complete(firstResponse, nowUtc, SlaCompletionCause.Resolution);
-        }
     }
 }

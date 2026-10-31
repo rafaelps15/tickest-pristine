@@ -3,12 +3,12 @@ using TickestPristine.Application.Roles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TickestPristine.Application.Abstractions.Authentication;
-using TickestPristine.Application.Tickets;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
 using TickestPristine.Application.Users;
+using TickestPristine.Domain.SlaCalendars;
 
 namespace TickestPristine.Infrastructure.Database.Seeding;
 
@@ -75,11 +75,12 @@ internal sealed class SampleDataSeeder(
                 continue;
             }
 
-            (Ticket ticket, List<TicketHistory> history) = CreateTicket(faker, sampleTicket, sector, requesters, agents, now);
+            (Ticket ticket, List<TicketHistory> history, IReadOnlyList<TicketSlaTimer> slaTimers) =
+                CreateTicket(faker, sampleTicket, sector, requesters, agents, now);
 
             context.Tickets.Add(ticket);
             context.TicketHistories.AddRange(history);
-            context.TicketSlaTimers.Add(CreateResolutionTimer(ticket, history));
+            context.TicketSlaTimers.AddRange(slaTimers);
         }
 
         await context.SaveChangesAsync(cancellationToken);
@@ -160,11 +161,12 @@ internal sealed class SampleDataSeeder(
     private static string SampleEmail(string emailPrefix, int number) => $"{emailPrefix}{number}@{SampleEmailDomain}";
 
     /// <summary>
-    /// Monta o chamado pelos métodos da entidade, com o histórico igual ao que os handlers gravam: a abertura e cada
-    /// mudança de status, em ordem e com datas no passado. Cada passo é conferido com <see cref="Ticket.CanTransitionTo"/>,
-    /// para o seed nunca gerar um histórico que a API recusaria.
+    /// Monta o chamado pelos métodos da entidade, com o histórico e os cronômetros iguais aos que os handlers gravam: a
+    /// abertura e cada mudança de status, em ordem e com datas no passado, no plano legado (horas corridas, sem primeira
+    /// resposta). Cada passo é conferido com <see cref="Ticket.CanTransitionTo"/>, para o seed nunca gerar um histórico
+    /// que a API recusaria.
     /// </summary>
-    private static (Ticket Ticket, List<TicketHistory> History) CreateTicket(
+    private static (Ticket Ticket, List<TicketHistory> History, IReadOnlyList<TicketSlaTimer> SlaTimers) CreateTicket(
         Faker faker,
         SampleTicket sampleTicket,
         Sector sector,
@@ -173,11 +175,13 @@ internal sealed class SampleDataSeeder(
         DateTime now)
     {
         TicketStatus status = faker.PickRandom<TicketStatus>();
-        TimeSpan resolutionTime = TicketSla.ResolutionTime(sampleTicket.Priority);
+        var slaPlan = TicketSlaPlan.Legacy(sampleTicket.Priority);
+        var resolutionTime = TimeSpan.FromMinutes(slaPlan.ResolutionMinutes);
+        BusinessCalendar calendar = ContinuousSlaCalendar.Create();
 
         // Os ativos nascem dentro ou pouco além da janela do SLA, para o painel ter chamados no prazo, em risco e
         // atrasados. Os demais nascem no último ano, até uma semana atrás, para caberem a resolução e o fechamento.
-        DateTime createdAtUtc = Ticket.IsActiveStatus(status)
+        DateTime createdAtUtc = status is TicketStatus.Open or TicketStatus.InProgress
             ? now - resolutionTime * faker.Random.Double(0.1, 1.5)
             : faker.Date.Past(1, now.AddDays(-7));
 
@@ -197,13 +201,13 @@ internal sealed class SampleDataSeeder(
             sector,
             requester,
             assignee,
-            TicketSla.LegacyPlan(sampleTicket.Priority),
-            TicketSla.DueAt(createdAtUtc, sampleTicket.Priority),
-            TicketSla.WarningAt(createdAtUtc, sampleTicket.Priority),
+            slaPlan,
+            calendar,
             requester.Id,
             createdAtUtc);
 
-        List<TicketHistory> history = [ticket.RecordOpening(requester.Id)];
+        (TicketHistory opening, IReadOnlyList<TicketSlaTimer> slaTimers) = ticket.RecordOpening(requester.Id);
+        List<TicketHistory> history = [opening];
         DateTime occurredAtUtc = createdAtUtc;
 
         foreach (TicketStatus newStatus in StatusPaths[status])
@@ -222,30 +226,16 @@ internal sealed class SampleDataSeeder(
                 _ => faker.Date.Between(occurredAtUtc, resolvedAtUtc ?? now)
             };
 
-            history.AddRange(ticket.Update(ticket.Description, newStatus, assignee?.Id ?? requester.Id, occurredAtUtc));
+            // Sem mensagens, quem o chamado aguarda segue só o status.
+            history.AddRange(ticket.Update(
+                ticket.Description,
+                newStatus,
+                slaTimers,
+                lastMessageIsFromAgent: false,
+                assignee?.Id ?? requester.Id,
+                occurredAtUtc));
         }
 
-        return (ticket, history);
+        return (ticket, history, slaTimers);
     }
-
-    /// <summary>
-    /// Cronômetro de resolução do ciclo 1 nas horas corridas do plano legado, como a migration grava nos chamados
-    /// existentes: concluído na resolução e parado no cancelamento sem resolução.
-    /// </summary>
-    private static TicketSlaTimer CreateResolutionTimer(Ticket ticket, IEnumerable<TicketHistory> history) => new()
-    {
-        Id = Guid.NewGuid(),
-        TicketId = ticket.Id,
-        Metric = SlaMetric.Resolution,
-        Cycle = 1,
-        TargetMinutes = ticket.SlaPlan.ResolutionMinutes,
-        CalendarId = ticket.SlaPlan.CalendarId,
-        StartedAtUtc = ticket.CreatedAtUtc,
-        WarningOnUtc = ticket.SlaWarningAtUtc,
-        DueOnUtc = ticket.DueAtUtc,
-        CompletedOnUtc = ticket.ResolvedAtUtc,
-        StoppedOnUtc = ticket.ResolvedAtUtc is null && ticket.Status == TicketStatus.Canceled
-            ? history.Last().OccurredAtUtc
-            : null
-    };
 }

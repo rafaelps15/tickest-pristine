@@ -1,4 +1,4 @@
-namespace TickestPristine.Application.SlaCalendars;
+namespace TickestPristine.Domain.SlaCalendars;
 
 /// <summary>
 /// Uma data de <see cref="BrazilianNationalHolidays"/>, com o nome em pt-BR e a classificação.

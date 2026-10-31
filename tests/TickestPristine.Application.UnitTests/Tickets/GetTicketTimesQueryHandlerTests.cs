@@ -1,9 +1,9 @@
-using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Tickets.GetTimes;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.SlaCalendars;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -92,7 +92,7 @@ public sealed class GetTicketTimesQueryHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         await SeedTimerAsync(context, SlaMetric.Resolution, 1, 60, SlaCompletionCause.Resolution);
         Guid canceledId = await SeedTimerAsync(context, SlaMetric.Resolution, 1, 60, null);
-        context.TicketSlaTimers.Single(t => t.TicketId == canceledId).StoppedOnUtc = StartUtc.AddMinutes(60);
+        context.TicketSlaTimers.Single(t => t.TicketId == canceledId).With(nameof(TicketSlaTimer.StoppedOnUtc), StartUtc.AddMinutes(60));
         await context.SaveChangesAsync();
 
         GetTicketTimesQueryHandler handler = CreateHandler(context);
@@ -173,20 +173,19 @@ public sealed class GetTicketTimesQueryHandlerTests : BaseHandlerTest
             ticketId = ticket.Id;
         }
 
-        context.TicketSlaTimers.Add(new TicketSlaTimer
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticketId.Value,
-            Metric = metric,
-            Cycle = cycle,
-            TargetMinutes = 480,
-            CalendarId = SlaCalendarIds.Continuous,
-            StartedAtUtc = startedAtUtc,
-            WarningOnUtc = startedAtUtc.AddHours(6),
-            DueOnUtc = startedAtUtc.AddHours(8),
-            CompletedOnUtc = cause is null ? null : startedAtUtc.AddMinutes(minutes),
-            CompletionCause = cause
-        });
+        // Ciclo e causa em qualquer combinação, gravados direto como a consulta os lê.
+        context.TicketSlaTimers.Add(EntityTestState.New<TicketSlaTimer>()
+            .With(nameof(TicketSlaTimer.Id), Guid.NewGuid())
+            .With(nameof(TicketSlaTimer.TicketId), ticketId.Value)
+            .With(nameof(TicketSlaTimer.Metric), metric)
+            .With(nameof(TicketSlaTimer.Cycle), cycle)
+            .With(nameof(TicketSlaTimer.TargetMinutes), 480)
+            .With(nameof(TicketSlaTimer.CalendarId), SlaCalendarIds.Continuous)
+            .With(nameof(TicketSlaTimer.StartedAtUtc), startedAtUtc)
+            .With(nameof(TicketSlaTimer.WarningOnUtc), startedAtUtc.AddHours(6))
+            .With(nameof(TicketSlaTimer.DueOnUtc), startedAtUtc.AddHours(8))
+            .With(nameof(TicketSlaTimer.CompletedOnUtc), cause is null ? null : startedAtUtc.AddMinutes(minutes))
+            .With(nameof(TicketSlaTimer.CompletionCause), cause));
         await context.SaveChangesAsync();
 
         return ticketId.Value;

@@ -1,6 +1,4 @@
-using TickestPristine.Domain.SlaCalendars;
-
-namespace TickestPristine.Application.SlaCalendars;
+namespace TickestPristine.Domain.SlaCalendars;
 
 /// <summary>
 /// Calendário padrão "Expediente", definido em código e sem linha no banco (DEC-5 e DEC-7 da spec 004): segunda a

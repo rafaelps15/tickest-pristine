@@ -7,6 +7,7 @@ using TickestPristine.Application.TicketHistories.GetAll;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
+using TickestPristine.Domain.SlaCalendars;
 
 namespace TickestPristine.Application.UnitTests.TicketHistories;
 
@@ -162,26 +163,8 @@ public sealed class GetTicketHistoryQueryHandlerTests : BaseHandlerTest
         Ticket ticket = TicketTestData.Create(requesterId: CreatorId, description: "Original description");
         context.Tickets.Add(ticket);
 
-        var created = new TicketHistory
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            ChangedByUserId = CreatorId,
-            Action = TicketHistoryAction.Created,
-            OldValue = null,
-            NewValue = null,
-            OccurredAtUtc = DateTime.UtcNow
-        };
-        var messageAdded = new TicketHistory
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            ChangedByUserId = CreatorId,
-            Action = TicketHistoryAction.MessageAdded,
-            OldValue = null,
-            NewValue = null,
-            OccurredAtUtc = DateTime.UtcNow.AddMinutes(1)
-        };
+        (TicketHistory created, _) = ticket.RecordOpening(CreatorId);
+        (_, TicketHistory messageAdded) = ticket.PostMessage(CreatorId, "Mensagem", authorIsAgent: false, ticket.CreatedAtUtc.AddMinutes(1));
         context.TicketHistories.AddRange(created, messageAdded);
 
         await context.SaveChangesAsync();

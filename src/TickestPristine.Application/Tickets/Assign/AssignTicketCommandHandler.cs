@@ -13,12 +13,13 @@ namespace TickestPristine.Application.Tickets.Assign;
 /// <summary>
 /// Define o responsável por um chamado ativo. Quem atende a fila (o endpoint exige <c>tickets:manage</c>) pode assumir
 /// o chamado; passá-lo para outra pessoa exige também <c>tickets:assign</c>. O responsável precisa ser um atendente
-/// elegível (<see cref="TicketAssigneeEligibility"/>). Atribuir ao responsável atual não muda nada.
+/// elegível (<see cref="TicketAgentLookup"/>). Atribuir ao responsável atual não muda nada.
 /// </summary>
 internal sealed class AssignTicketCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IPermissionProvider permissionProvider,
+    TicketAgentLookup agentLookup,
     IDateTimeProvider dateTimeProvider)
     : ICommandHandler<AssignTicketCommand>
 {
@@ -59,10 +60,7 @@ internal sealed class AssignTicketCommandHandler(
         }
 
         // Elegibilidade lida do banco, e não do cache de permissões: a lista de atendentes usa a mesma regra e não pode discordar.
-        if (!await context.Users
-            .Where(u => u.Id == command.AssignedToUserId)
-            .WhereEligibleAssignee(context)
-            .AnyAsync(cancellationToken))
+        if (!await agentLookup.IsAgentAsync(command.AssignedToUserId, cancellationToken))
         {
             return Result.Failure(TicketErrors.AssigneeNotAttendant(command.AssignedToUserId));
         }

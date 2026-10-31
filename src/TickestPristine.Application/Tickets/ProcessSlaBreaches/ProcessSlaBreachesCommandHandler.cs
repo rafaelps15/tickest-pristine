@@ -34,7 +34,7 @@ internal sealed class ProcessSlaBreachesCommandHandler(
             return new ProcessSlaBreachesResponse(0, 0);
         }
 
-        int breached = timers.Count(TicketSlaClock.ProcessDue);
+        int breached = timers.Count(timer => timer.ProcessDue());
 
         await context.SaveChangesAsync(cancellationToken);
 

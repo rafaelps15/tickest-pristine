@@ -9,7 +9,16 @@ namespace TickestPristine.ArchitectureTests.Conventions;
 public class RichEntityTests : BaseTest
 {
     // Entidades já migradas para o domínio rico; cada migração acrescenta as suas.
-    private static readonly Type[] RichEntities = [typeof(Department), typeof(Sector), typeof(Ticket)];
+    private static readonly Type[] RichEntities =
+    [
+        typeof(Department),
+        typeof(Sector),
+        typeof(Ticket),
+        typeof(TicketSlaTimer),
+        typeof(TicketHistory),
+        typeof(TicketMessage),
+        typeof(TicketAttachment)
+    ];
 
     [Fact]
     public void RichEntities_Should_NotHaveNonPrivateSetters()

@@ -201,11 +201,11 @@ public sealed class PaginationExtensionsTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         var ticketId = Guid.NewGuid();
         Guid[] tiedIds = [.. Enumerable.Range(0, 3).Select(_ => Guid.NewGuid()).Order()];
-        var older = new TicketMessage { Id = Guid.NewGuid(), TicketId = ticketId, AuthorUserId = Guid.NewGuid(), Content = "older", CreatedAtUtc = CreatedAt.AddMinutes(-1) };
+        TicketMessage older = TicketTestData.CreateMessage(ticketId, Guid.NewGuid(), "older", CreatedAt.AddMinutes(-1));
         context.TicketMessages.Add(older);
         foreach (Guid id in tiedIds)
         {
-            context.TicketMessages.Add(new TicketMessage { Id = id, TicketId = ticketId, AuthorUserId = Guid.NewGuid(), Content = "tie", CreatedAtUtc = CreatedAt });
+            context.TicketMessages.Add(TicketTestData.CreateMessage(ticketId, Guid.NewGuid(), "tie", CreatedAt, id: id));
         }
         await context.SaveChangesAsync();
 
@@ -227,8 +227,8 @@ public sealed class PaginationExtensionsTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var newer = new TicketMessage { Id = Guid.NewGuid(), TicketId = Guid.NewGuid(), AuthorUserId = Guid.NewGuid(), Content = "newer", CreatedAtUtc = CreatedAt };
-        var older = new TicketMessage { Id = Guid.NewGuid(), TicketId = Guid.NewGuid(), AuthorUserId = Guid.NewGuid(), Content = "older", CreatedAtUtc = CreatedAt.AddMinutes(-1) };
+        TicketMessage newer = TicketTestData.CreateMessage(Guid.NewGuid(), Guid.NewGuid(), "newer", CreatedAt);
+        TicketMessage older = TicketTestData.CreateMessage(Guid.NewGuid(), Guid.NewGuid(), "older", CreatedAt.AddMinutes(-1));
         context.TicketMessages.AddRange(older, newer);
         await context.SaveChangesAsync();
 

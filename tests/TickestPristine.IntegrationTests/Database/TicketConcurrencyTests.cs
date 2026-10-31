@@ -24,8 +24,8 @@ public sealed class TicketConcurrencyTests(IntegrationTestWebAppFactory factory)
         Ticket firstCopy = await firstContext.Tickets.SingleAsync(t => t.Id == ticketId);
         Ticket secondCopy = await secondContext.Tickets.SingleAsync(t => t.Id == ticketId);
 
-        firstCopy.Update(firstCopy.Description, TicketStatus.InProgress, firstCopy.CreatedByUserId, DateTime.UtcNow);
-        secondCopy.Update(secondCopy.Description, TicketStatus.Canceled, secondCopy.CreatedByUserId, DateTime.UtcNow);
+        firstCopy.Update(firstCopy.Description, TicketStatus.InProgress, [], lastMessageIsFromAgent: false, firstCopy.CreatedByUserId, DateTime.UtcNow);
+        secondCopy.Update(secondCopy.Description, TicketStatus.Canceled, [], lastMessageIsFromAgent: false, secondCopy.CreatedByUserId, DateTime.UtcNow);
         firstCopy.ClearDomainEvents();
         secondCopy.ClearDomainEvents();
 

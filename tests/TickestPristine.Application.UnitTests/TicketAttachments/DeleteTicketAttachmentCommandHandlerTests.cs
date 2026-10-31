@@ -6,6 +6,7 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
+using TickestPristine.Application.Abstractions.Data;
 
 namespace TickestPristine.Application.UnitTests.TicketAttachments;
 
@@ -23,7 +24,7 @@ public sealed class DeleteTicketAttachmentCommandHandlerTests : BaseHandlerTest
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
 
-        var handler = new DeleteTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        var handler = new DeleteTicketAttachmentCommandHandler(context, userContext, permissionProvider, Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
         var command = new DeleteTicketAttachmentCommand(Guid.NewGuid());
 
         // Act
@@ -47,7 +48,7 @@ public sealed class DeleteTicketAttachmentCommandHandlerTests : BaseHandlerTest
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
 
-        var handler = new DeleteTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        var handler = new DeleteTicketAttachmentCommandHandler(context, userContext, permissionProvider, Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
         var command = new DeleteTicketAttachmentCommand(attachmentId);
 
         // Act
@@ -73,7 +74,7 @@ public sealed class DeleteTicketAttachmentCommandHandlerTests : BaseHandlerTest
             .Returns(false);
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
 
-        var handler = new DeleteTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        var handler = new DeleteTicketAttachmentCommandHandler(context, userContext, permissionProvider, Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
         var command = new DeleteTicketAttachmentCommand(attachmentId);
 
         // Act
@@ -97,7 +98,7 @@ public sealed class DeleteTicketAttachmentCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
 
-        var handler = new DeleteTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        var handler = new DeleteTicketAttachmentCommandHandler(context, userContext, permissionProvider, Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
         var command = new DeleteTicketAttachmentCommand(attachmentId);
 
         // Act
@@ -130,7 +131,7 @@ public sealed class DeleteTicketAttachmentCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
 
-        var handler = new DeleteTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
+        var handler = new DeleteTicketAttachmentCommandHandler(context, userContext, permissionProvider, Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
         var command = new DeleteTicketAttachmentCommand(attachmentId);
 
         // Act
@@ -146,6 +147,37 @@ public sealed class DeleteTicketAttachmentCommandHandlerTests : BaseHandlerTest
         attachment.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketAttachmentDeletedDomainEvent);
     }
 
+    [Fact]
+    public async Task Handle_Should_WriteLastActivityAfterSaving_WhenAttachmentIsDeleted()
+    {
+        // Arrange
+        // Depois da abertura dos chamados do arranjo, que usam a hora real.
+        DateTime nowUtc = DateTime.UtcNow.AddHours(1);
+        await using TestDbContext context = CreateDbContext();
+        Guid attachmentId = await SeedAttachmentAsync(context);
+        IUserContext userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(UploaderId);
+        ITicketActivityWriter activityWriter = Substitute.For<ITicketActivityWriter>();
+        var handler = new DeleteTicketAttachmentCommandHandler(
+            context,
+            userContext,
+            Substitute.For<IPermissionProvider>(),
+            activityWriter,
+            CreateClock(nowUtc));
+
+        // Act
+        Result result = await handler.Handle(new DeleteTicketAttachmentCommand(attachmentId), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        await activityWriter.Received(1).WriteLastActivityAsync(
+            Arg.Is<Ticket>(t => t.LastActivityAtUtc == nowUtc),
+            Arg.Any<CancellationToken>());
+        TicketHistory removal = await context.TicketHistories.SingleAsync();
+        removal.Action.ShouldBe(TicketHistoryAction.AttachmentRemoved);
+        removal.ChangedByUserId.ShouldBe(UploaderId);
+    }
+
     private static async Task<Guid> SeedAttachmentAsync(TestDbContext context, bool ticketDeleted = false)
     {
         Ticket ticket = TicketTestData.Create(
@@ -154,17 +186,7 @@ public sealed class DeleteTicketAttachmentCommandHandlerTests : BaseHandlerTest
             deletedAtUtc: ticketDeleted ? DateTime.UtcNow : null);
         context.Tickets.Add(ticket);
 
-        var attachment = new TicketAttachment
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            UploadedByUserId = UploaderId,
-            FileName = "report.pdf",
-            ContentType = "application/pdf",
-            FileSizeBytes = 1024,
-            StorageKey = "storage-key.pdf",
-            UploadedAtUtc = DateTime.UtcNow
-        };
+        TicketAttachment attachment = TicketTestData.CreateAttachment(ticket.Id, UploaderId, DateTime.UtcNow);
         context.TicketAttachments.Add(attachment);
 
         await context.SaveChangesAsync();

@@ -2,7 +2,6 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.TicketHistories;
 using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
@@ -43,14 +42,12 @@ internal sealed class DeleteTicketCommandHandler(
             return Result.Failure(TicketErrors.NotActive(ticket.Id));
         }
 
-        context.TicketHistories.Add(ticket.Delete(userContext.UserId, dateTimeProvider.UtcNow));
-
         // Os cronômetros do chamado excluído saem da fila do monitoramento, sem violação nem evento.
-        List<TicketSlaTimer> slaTimers = await context.TicketSlaTimers
+        List<TicketSlaTimer> queuedSlaTimers = await context.TicketSlaTimers
             .Where(t => t.TicketId == ticket.Id && t.NextActionOnUtc != null)
             .ToListAsync(cancellationToken);
 
-        slaTimers.ForEach(TicketSlaClock.Dequeue);
+        context.TicketHistories.Add(ticket.Delete(queuedSlaTimers, userContext.UserId, dateTimeProvider.UtcNow));
 
         await context.SaveChangesAsync(cancellationToken);
 

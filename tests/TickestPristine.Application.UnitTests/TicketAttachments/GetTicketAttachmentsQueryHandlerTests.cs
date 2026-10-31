@@ -111,17 +111,7 @@ public sealed class GetTicketAttachmentsQueryHandlerTests : BaseHandlerTest
         Ticket ticket = TicketTestData.Create(requesterId: CreatorId, description: "Original description");
         context.Tickets.Add(ticket);
 
-        var attachment = new TicketAttachment
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            UploadedByUserId = CreatorId,
-            FileName = "report.pdf",
-            ContentType = "application/pdf",
-            FileSizeBytes = 1024,
-            StorageKey = "storage-key.pdf",
-            UploadedAtUtc = DateTime.UtcNow
-        };
+        TicketAttachment attachment = TicketTestData.CreateAttachment(ticket.Id, CreatorId, DateTime.UtcNow);
         context.TicketAttachments.Add(attachment);
 
         await context.SaveChangesAsync();

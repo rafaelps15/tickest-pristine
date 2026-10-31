@@ -3,13 +3,13 @@ using TickestPristine.Domain.Tickets;
 namespace TickestPristine.Application.Tickets;
 
 /// <summary>
-/// As mesmas regras de <see cref="TicketSla.GetStatus"/>, escritas como filtros que o EF traduz para SQL, para a
+/// As mesmas regras da situação do SLA das consultas de chamado, escritas como filtros que o EF traduz para SQL, para a
 /// listagem filtrar e o resumo contar no banco. Os testes do painel conferem que as duas versões concordam.
 /// </summary>
 internal static class TicketSlaFilters
 {
     /// <summary>
-    /// Chamados ativos (Aberto e Em andamento), a mesma regra de <see cref="Ticket.IsActiveStatus"/>.
+    /// Chamados ativos (Aberto e Em andamento), a mesma regra de <see cref="Ticket.IsActive"/>.
     /// </summary>
     internal static IQueryable<Ticket> WhereActive(this IQueryable<Ticket> tickets) =>
         tickets.Where(t => t.Status == TicketStatus.Open || t.Status == TicketStatus.InProgress);

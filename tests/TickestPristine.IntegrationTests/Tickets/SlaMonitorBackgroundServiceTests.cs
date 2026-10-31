@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Tickets.ProcessSlaBreaches;
 using TickestPristine.Domain.Sectors;
@@ -12,6 +11,7 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Infrastructure.Database;
 using TickestPristine.Infrastructure.Tickets.SlaMonitoring;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.SlaCalendars;
 
 namespace TickestPristine.IntegrationTests.Tickets;
 
@@ -134,25 +134,13 @@ public sealed class SlaMonitorBackgroundServiceTests(IntegrationTestWebAppFactor
             priority: TicketPriority.Urgent,
             title: "Overdue ticket",
             description: "Opened five hours ago",
-            slaPlan: TicketSla.LegacyPlan(TicketPriority.Urgent),
+            slaPlan: TicketSlaPlan.Legacy(TicketPriority.Urgent),
             dueAtUtc: createdAtUtc.AddHours(4),
             slaWarningAtUtc: createdAtUtc.AddHours(3));
         Guid ticketId = ticket.Id;
 
         context.Tickets.Add(ticket);
-        context.TicketSlaTimers.Add(new TicketSlaTimer
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticketId,
-            Metric = SlaMetric.Resolution,
-            Cycle = 1,
-            TargetMinutes = 240,
-            CalendarId = SlaCalendarIds.Continuous,
-            StartedAtUtc = createdAtUtc,
-            WarningOnUtc = createdAtUtc.AddHours(3),
-            DueOnUtc = createdAtUtc.AddHours(4),
-            NextActionOnUtc = createdAtUtc.AddHours(4)
-        });
+        context.TicketSlaTimers.AddRange(ticket.RecordOpening(requesterId).SlaTimers);
         await context.SaveChangesAsync();
 
         var logger = new TestLogger<SlaMonitorBackgroundService>();

@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
-using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Application.TicketHistories;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Domain.Sectors;
@@ -22,6 +21,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using TickestPristine.Infrastructure.Tickets.SlaMonitoring;
+using TickestPristine.Domain.SlaCalendars;
 
 namespace TickestPristine.IntegrationTests.Tickets;
 
@@ -2554,7 +2554,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             sector,
             requesterId: requesterId,
             createdAtUtc: createdAtUtc,
-            slaPlan: TicketSla.LegacyPlan(TicketPriority.Medium),
+            slaPlan: TicketSlaPlan.Legacy(TicketPriority.Medium),
             dueAtUtc: createdAtUtc.AddHours(8),
             slaWarningAtUtc: createdAtUtc.AddHours(6),
             deletedAtUtc: deletedAtUtc));
@@ -2584,7 +2584,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             createdAtUtc: createdAtUtc,
             title: title,
             description: description,
-            slaPlan: TicketSla.LegacyPlan(TicketPriority.Medium),
+            slaPlan: TicketSlaPlan.Legacy(TicketPriority.Medium),
             dueAtUtc: createdAtUtc.AddHours(8),
             slaWarningAtUtc: createdAtUtc.AddHours(6));
 
@@ -3115,7 +3115,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             priority: priority,
             title: "Chamado do resumo",
             description: "Chamado gravado direto no banco para o resumo da operação",
-            slaPlan: TicketSla.LegacyPlan(priority),
+            slaPlan: TicketSlaPlan.Legacy(priority),
             dueAtUtc: dueAtUtc,
             slaWarningAtUtc: slaWarningAtUtc,
             resolvedAtUtc: resolvedAtUtc));
@@ -3379,24 +3379,23 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             createdAtUtc: startUtc,
             title: "Chamado dos tempos médios",
             description: "Chamado gravado direto no banco para os tempos médios",
-            slaPlan: TicketSla.LegacyPlan(TicketPriority.Medium),
+            slaPlan: TicketSlaPlan.Legacy(TicketPriority.Medium),
             dueAtUtc: startUtc.AddHours(8),
             slaWarningAtUtc: startUtc.AddHours(6));
         context.Tickets.Add(ticket);
-        context.TicketSlaTimers.AddRange(timers.Select(t => new TicketSlaTimer
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            Metric = t.Metric,
-            Cycle = t.Cycle,
-            TargetMinutes = 480,
-            CalendarId = SlaCalendarIds.Continuous,
-            StartedAtUtc = startUtc,
-            WarningOnUtc = startUtc.AddHours(6),
-            DueOnUtc = startUtc.AddHours(8),
-            CompletedOnUtc = startUtc.AddMinutes(t.Minutes),
-            CompletionCause = t.Cause
-        }));
+        // Ciclo e causa em qualquer combinação, gravados direto como a consulta os lê.
+        context.TicketSlaTimers.AddRange(timers.Select(t => EntityTestState.New<TicketSlaTimer>()
+            .With(nameof(TicketSlaTimer.Id), Guid.NewGuid())
+            .With(nameof(TicketSlaTimer.TicketId), ticket.Id)
+            .With(nameof(TicketSlaTimer.Metric), t.Metric)
+            .With(nameof(TicketSlaTimer.Cycle), t.Cycle)
+            .With(nameof(TicketSlaTimer.TargetMinutes), 480)
+            .With(nameof(TicketSlaTimer.CalendarId), SlaCalendarIds.Continuous)
+            .With(nameof(TicketSlaTimer.StartedAtUtc), startUtc)
+            .With(nameof(TicketSlaTimer.WarningOnUtc), startUtc.AddHours(6))
+            .With(nameof(TicketSlaTimer.DueOnUtc), startUtc.AddHours(8))
+            .With(nameof(TicketSlaTimer.CompletedOnUtc), startUtc.AddMinutes(t.Minutes))
+            .With(nameof(TicketSlaTimer.CompletionCause), t.Cause)));
         await context.SaveChangesAsync();
     }
 
@@ -3521,7 +3520,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             createdAtUtc: createdAtUtc,
             title: "Chamado do volume",
             description: "Chamado gravado direto no banco para o volume",
-            slaPlan: TicketSla.LegacyPlan(TicketPriority.Medium),
+            slaPlan: TicketSlaPlan.Legacy(TicketPriority.Medium),
             dueAtUtc: createdAtUtc.AddHours(8),
             slaWarningAtUtc: createdAtUtc.AddHours(6),
             deletedAtUtc: deletedAtUtc);
@@ -3537,13 +3536,14 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        context.TicketHistories.Add(TicketHistoryEntries.Create(
-            ticketId,
-            null,
-            TicketHistoryAction.StatusChanged,
-            occurredAtUtc,
-            nameof(TicketStatus.InProgress),
-            nameof(TicketStatus.Resolved)));
+        // Sem autor, como um registro antigo: montado direto, fora do caminho do chamado.
+        context.TicketHistories.Add(EntityTestState.New<TicketHistory>()
+            .With(nameof(TicketHistory.Id), Guid.NewGuid())
+            .With(nameof(TicketHistory.TicketId), ticketId)
+            .With(nameof(TicketHistory.Action), TicketHistoryAction.StatusChanged)
+            .With(nameof(TicketHistory.OldValue), nameof(TicketStatus.InProgress))
+            .With(nameof(TicketHistory.NewValue), nameof(TicketStatus.Resolved))
+            .With(nameof(TicketHistory.OccurredAtUtc), occurredAtUtc));
         await context.SaveChangesAsync();
     }
 
@@ -4192,15 +4192,13 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         Ticket ticketToCancel = await second.Tickets.SingleAsync(t => t.Id == ticketId);
         List<TicketSlaTimer> timersToStop = await second.TicketSlaTimers.Where(t => t.TicketId == ticketId).ToListAsync();
 
-        ticketToCancel.Update(ticketToCancel.Description, TicketStatus.Canceled, ticketToCancel.CreatedByUserId, nowUtc);
+        ticketToCancel.Update(ticketToCancel.Description, TicketStatus.Canceled, timersToStop, lastMessageIsFromAgent: false, ticketToCancel.CreatedByUserId, nowUtc);
         ticketToCancel.ClearDomainEvents();
-        timersToStop.ForEach(t => t.StoppedOnUtc = nowUtc);
         await second.SaveChangesAsync();
 
-        // O Update grava a data de resolução na primeira resolução.
-        ticketToResolve.Update(ticketToResolve.Description, TicketStatus.Resolved, ticketToResolve.CreatedByUserId, nowUtc);
+        // O Update grava a data de resolução na primeira resolução e conclui os cronômetros.
+        ticketToResolve.Update(ticketToResolve.Description, TicketStatus.Resolved, timersToComplete, lastMessageIsFromAgent: false, ticketToResolve.CreatedByUserId, nowUtc);
         ticketToResolve.ClearDomainEvents();
-        timersToComplete.ForEach(t => t.CompletedOnUtc = nowUtc);
 
         // Act
         Func<Task> losingSave = () => first.SaveChangesAsync();
@@ -4476,9 +4474,10 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         DateTime createdAtUtc,
         DateTime? resolvedAtUtc)
     {
-        TimeSpan resolutionTime = TicketSla.ResolutionTime(Enum.Parse<TicketPriority>(priority));
+        var resolutionTime = TimeSpan.FromMinutes(
+            TicketSlaPlan.Legacy(Enum.Parse<TicketPriority>(priority)).ResolutionMinutes);
         DateTime dueAtUtc = createdAtUtc + resolutionTime;
-        DateTime warningAtUtc = createdAtUtc + resolutionTime * TicketSla.WarningRatio;
+        DateTime warningAtUtc = createdAtUtc + resolutionTime * 0.75;
 
         await context.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO public.tickets (id, title, description, priority, status, created_by_user_id, sector_id,
@@ -5073,7 +5072,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             priority: TicketPriority.Urgent,
             title: "Legacy ticket",
             description: "Opened before the SLA monitoring",
-            slaPlan: TicketSla.LegacyPlan(TicketPriority.Urgent),
+            slaPlan: TicketSlaPlan.Legacy(TicketPriority.Urgent),
             dueAtUtc: dueAtUtc,
             slaWarningAtUtc: warningAtUtc,
             resolvedAtUtc: completedAtUtc,
@@ -5082,20 +5081,19 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         context.Tickets.Add(ticket);
 
-        context.TicketSlaTimers.Add(new TicketSlaTimer
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticketId,
-            Metric = SlaMetric.Resolution,
-            Cycle = 1,
-            TargetMinutes = 240,
-            CalendarId = SlaCalendarIds.Continuous,
-            StartedAtUtc = createdAtUtc,
-            WarningOnUtc = warningAtUtc,
-            DueOnUtc = dueAtUtc,
-            CompletedOnUtc = completedAtUtc,
-            StoppedOnUtc = createdAtUtc + stoppedAfter
-        });
+        // Cronômetro legado como a migration o grava: concluído ou parado, mas sem causa nem fila.
+        context.TicketSlaTimers.Add(EntityTestState.New<TicketSlaTimer>()
+            .With(nameof(TicketSlaTimer.Id), Guid.NewGuid())
+            .With(nameof(TicketSlaTimer.TicketId), ticketId)
+            .With(nameof(TicketSlaTimer.Metric), SlaMetric.Resolution)
+            .With(nameof(TicketSlaTimer.Cycle), 1)
+            .With(nameof(TicketSlaTimer.TargetMinutes), 240)
+            .With(nameof(TicketSlaTimer.CalendarId), SlaCalendarIds.Continuous)
+            .With(nameof(TicketSlaTimer.StartedAtUtc), createdAtUtc)
+            .With(nameof(TicketSlaTimer.WarningOnUtc), warningAtUtc)
+            .With(nameof(TicketSlaTimer.DueOnUtc), dueAtUtc)
+            .With(nameof(TicketSlaTimer.CompletedOnUtc), completedAtUtc)
+            .With(nameof(TicketSlaTimer.StoppedOnUtc), createdAtUtc + stoppedAfter));
 
         return ticketId;
     }

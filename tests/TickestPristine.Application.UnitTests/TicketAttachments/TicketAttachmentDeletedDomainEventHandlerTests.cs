@@ -81,19 +81,7 @@ public sealed class TicketAttachmentDeletedDomainEventHandlerTests : BaseHandler
 
     private static async Task<TicketAttachment> SeedDeletedAttachmentAsync(TestDbContext context, DateTime? purgedAtUtc = null)
     {
-        var attachment = new TicketAttachment
-        {
-            Id = Guid.NewGuid(),
-            TicketId = Guid.NewGuid(),
-            UploadedByUserId = Guid.NewGuid(),
-            FileName = "report.pdf",
-            ContentType = "application/pdf",
-            FileSizeBytes = 1024,
-            StorageKey = "storage-key.pdf",
-            UploadedAtUtc = NowUtc.AddDays(-1),
-            DeletedAtUtc = NowUtc,
-            PurgedAtUtc = purgedAtUtc
-        };
+        TicketAttachment attachment = TicketTestData.CreateAttachment(Guid.NewGuid(), Guid.NewGuid(), NowUtc.AddDays(-1), deletedAtUtc: NowUtc, purgedAtUtc: purgedAtUtc);
 
         context.TicketAttachments.Add(attachment);
         await context.SaveChangesAsync();
