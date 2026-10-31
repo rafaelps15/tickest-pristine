@@ -5,7 +5,7 @@ status: Verificada # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implem
 responsavel: Rafael Santos
 aprovada-em: 2026-10-30
 branch: refactor/SPEC-041-ticket-rich-domain-static-rules                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: #57                 # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 041 — Ticket no domínio rico — parte 3 (regras estáticas, filtros, cancelamento, SLA e interceptors)
@@ -317,8 +317,8 @@ Pedido de Rafael Santos, depois da implementação: investigar, contra as refer�
 - **Testes:** `dotnet test TickestPristine.slnx` (relatório TRX por teste) em 2026-10-30, 23:30: 57 de arquitetura, 837 unitários e 510 de integração aprovados, 0 falhas; os testes da rastreabilidade aparecem como aprovados. Depois dessa execução só mudaram a spec e o `SYSTEM_SPECIFICATION.md`. AC-10 verificado manualmente, sem teste automatizado. Auditoria `python scripts/auditoria_sdd.py .`: 100%, CONFORME, código de saída 0; `scripts/test_instructions.py`: OK.
 - **Revisão:** `ca-review` independente sobre as mudanças de `src/` e `tests/`: aprovar, sem bloqueantes e sem regressão comprovada. Achados resolvidos nesta verificação: DEC-27 e DEC-28 aprovadas; o `CLAUDE.md` foi para a spec 045 (DEC-34); o texto do REQ-3 foi corrigido. Achado menor fora deste ciclo: os comentários que citam spec ou DEC (DEC-36).
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` (RN-01, RN-02, RN-26, RN-27, RN-32, C-14, Q-06, mapa da Application, fontes e a linha dos tempos médios, que citava o `TicketSlaClock.GetConsumed`). O `CLAUDE.md` não mudou (DEC-34).
-- **CI:**
-- **Entrega:**
+- **CI:** workflow `Build` do PR #57 (execução 41163828101, commit `b1e2590`) com sucesso em 2026-10-31: teste do portão SDD, testes das instruções, auditoria SDD, restore, build em Release e testes; o passo `Publish` é condicional e foi pulado.
+- **Entrega:** PR #57 (https://github.com/rafaelps15/tickest-pristine/pull/57), mergeado na `main` por Rafael Santos em 2026-10-31 (merge `ef1c981`).
 
 ## 11. Histórico
 | Data | Status | Observação |
@@ -349,3 +349,4 @@ Pedido de Rafael Santos, depois da implementação: investigar, contra as refer�
 | 2026-10-30 | Em implementação | Primeira verificação reprovada: DEC-27 e DEC-28 sem aprovação registrada, AC-18 dependente da DEC-29 e AC-13 parcial (`CLAUDE.md`); textos de REQ-2, REQ-3, REQ-9, plano e rastreabilidade desatualizados. Build e testes verdes. |
 | 2026-10-30 | Em implementação | Decisões de Rafael Santos na revisão da verificação: DEC-27 e DEC-28 aprovadas (a); AC-18 removido e DEC-29 atribuída à spec 045 (DEC-35); `CLAUDE.md` adiado para a T-8 da spec 045, sem ampliar a autorização (DEC-34); correções de texto aprovadas; comentários do código fora deste ciclo (DEC-36). Só a spec e o `SYSTEM_SPECIFICATION.md` mudaram. |
 | 2026-10-30 | Verificada | Segunda verificação: build com 0 avisos; 1.404 testes aprovados (57 + 837 + 510); auditoria 100%; AC-1 a AC-17 cobertos (AC-10 por verificação manual); `ca-review` sem bloqueantes. Próximo passo: commit autorizado por Rafael Santos e PR. |
+| 2026-10-31 | Verificada | PR #57 aberto e mergeado na `main` (merge `ef1c981`), com o CI verde; o `/spec-status` passa a mostrar a spec como Entregue. |
