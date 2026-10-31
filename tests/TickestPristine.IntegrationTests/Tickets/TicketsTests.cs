@@ -4621,6 +4621,30 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
+    public async Task Create_Should_RecordDeadlinesOfCycleOneResolutionAndOnlyTheOpeningEntry()
+    {
+        // Arrange & Act
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+
+        // Assert
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Ticket ticket = await context.Tickets.AsNoTracking().SingleAsync(t => t.Id == ticketId);
+        List<TicketHistory> history = await context.TicketHistories.AsNoTracking().Where(h => h.TicketId == ticketId).ToListAsync();
+
+        List<TicketSlaTimer> timers = GetTimers(ticketId);
+        TicketSlaTimer resolution = timers.Single(t => t.Metric == SlaMetric.Resolution && t.Cycle == 1);
+        ticket.DueAtUtc.ShouldBe(resolution.DueOnUtc);
+        ticket.SlaWarningAtUtc.ShouldBe(resolution.WarningOnUtc);
+
+        // O plano "Padrão" da API tem meta de primeira resposta.
+        ticket.SlaPlan.FirstResponseMinutes.ShouldNotBeNull();
+        timers.Single(t => t.Metric == SlaMetric.FirstResponse).Cycle.ShouldBe(1);
+
+        history.ShouldHaveSingleItem().Action.ShouldBe(TicketHistoryAction.Created);
+    }
+
+    [Fact]
     public async Task Create_Should_QueueSlaTimersAtDeadline_WithFilteredIndex()
     {
         // Arrange
