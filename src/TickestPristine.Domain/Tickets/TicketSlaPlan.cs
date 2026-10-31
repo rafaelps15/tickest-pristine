@@ -26,29 +26,31 @@ public sealed record TicketSlaPlan(
     /// </summary>
     public SlaDeadlines? GetDeadlines(SlaMetric metric, BusinessCalendar calendar, DateTime startedAtUtc)
     {
-        if (GetTargetMinutes(metric) is not { } minutes)
+        int? targetMinutes = metric switch
         {
-            return null;
-        }
+            SlaMetric.FirstResponse => FirstResponseMinutes,
+            SlaMetric.Resolution => ResolutionMinutes,
+            _ => null
+        };
 
+        return targetMinutes is { } minutes ? CalculateDeadlines(minutes, calendar, startedAtUtc) : null;
+    }
+
+    /// <summary>
+    /// A fórmula única de prazo: o prazo ao fim da meta e o alerta aos 75% dela, os dois em tempo útil do calendário a
+    /// partir de <paramref name="startedAtUtc"/>. Lança <see cref="InvalidOperationException"/> quando o calendário não
+    /// tem tempo útil suficiente.
+    /// </summary>
+    internal static SlaDeadlines CalculateDeadlines(int targetMinutes, BusinessCalendar calendar, DateTime startedAtUtc)
+    {
         // Em ticks, para o alerta cair no segundo exato (ex.: 75% de 30 minutos = 22 minutos e 30 segundos).
-        var target = TimeSpan.FromTicks(TimeSpan.TicksPerMinute * minutes);
+        var target = TimeSpan.FromTicks(TimeSpan.TicksPerMinute * targetMinutes);
         var warning = TimeSpan.FromTicks((long)(target.Ticks * WarningRatio));
 
         return new SlaDeadlines(
             calendar.AddBusinessTime(startedAtUtc, warning),
             calendar.AddBusinessTime(startedAtUtc, target));
     }
-
-    /// <summary>
-    /// Meta do objetivo em minutos úteis; nula quando o plano não tem meta para ele (primeira resposta do plano legado).
-    /// </summary>
-    internal int? GetTargetMinutes(SlaMetric metric) => metric switch
-    {
-        SlaMetric.FirstResponse => FirstResponseMinutes,
-        SlaMetric.Resolution => ResolutionMinutes,
-        _ => throw new ArgumentOutOfRangeException(nameof(metric), metric, null)
-    };
 
     /// <summary>
     /// Plano que o chamado recebe na abertura, da política "Padrão" (única e definida em código): metas de primeira

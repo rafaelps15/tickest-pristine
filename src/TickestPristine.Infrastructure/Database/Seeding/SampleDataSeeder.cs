@@ -206,8 +206,9 @@ internal sealed class SampleDataSeeder(
             requester.Id,
             createdAtUtc);
 
-        (TicketHistory opening, IReadOnlyList<TicketSlaTimer> slaTimers) = ticket.RecordOpening(requester.Id);
-        List<TicketHistory> history = [opening];
+        var slaCycle = new TicketSlaCycleService();
+        IReadOnlyList<TicketSlaTimer> slaTimers = slaCycle.Start(ticket, calendar);
+        List<TicketHistory> history = [ticket.RecordOpening(requester.Id)];
         DateTime occurredAtUtc = createdAtUtc;
 
         foreach (TicketStatus newStatus in StatusPaths[status])
@@ -227,13 +228,18 @@ internal sealed class SampleDataSeeder(
             };
 
             // Sem mensagens, quem o chamado aguarda segue só o status.
-            history.AddRange(ticket.Update(
-                ticket.Description,
-                newStatus,
-                slaTimers,
-                lastMessageIsFromAgent: false,
-                assignee?.Id ?? requester.Id,
-                occurredAtUtc));
+            Guid changedByUserId = assignee?.Id ?? requester.Id;
+
+            Result<TicketHistory> statusChange = newStatus switch
+            {
+                TicketStatus.InProgress => ticket.StartProgress(lastMessageIsFromAgent: false, changedByUserId, occurredAtUtc),
+                TicketStatus.Resolved => slaCycle.Resolve(ticket, slaTimers, changedByUserId, occurredAtUtc),
+                TicketStatus.Closed => ticket.Close(changedByUserId, occurredAtUtc),
+                TicketStatus.Canceled => slaCycle.Cancel(ticket, slaTimers, canCancelAny: true, isOwnerWhoCanEdit: false, changedByUserId, occurredAtUtc),
+                _ => throw new InvalidOperationException($"Status sem transição nos dados de exemplo: {newStatus}.")
+            };
+
+            history.Add(statusChange.Value);
         }
 
         return (ticket, history, slaTimers);

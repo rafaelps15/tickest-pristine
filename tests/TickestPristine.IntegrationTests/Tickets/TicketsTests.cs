@@ -4192,12 +4192,14 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         Ticket ticketToCancel = await second.Tickets.SingleAsync(t => t.Id == ticketId);
         List<TicketSlaTimer> timersToStop = await second.TicketSlaTimers.Where(t => t.TicketId == ticketId).ToListAsync();
 
-        ticketToCancel.Update(ticketToCancel.Description, TicketStatus.Canceled, timersToStop, lastMessageIsFromAgent: false, ticketToCancel.CreatedByUserId, nowUtc);
+        new TicketSlaCycleService().Cancel(ticketToCancel, timersToStop, canCancelAny: true, isOwnerWhoCanEdit: false, ticketToCancel.CreatedByUserId, nowUtc);
         ticketToCancel.ClearDomainEvents();
         await second.SaveChangesAsync();
 
-        // O Update grava a data de resolução na primeira resolução e conclui os cronômetros.
-        ticketToResolve.Update(ticketToResolve.Description, TicketStatus.Resolved, timersToComplete, lastMessageIsFromAgent: false, ticketToResolve.CreatedByUserId, nowUtc);
+        // O Resolve grava a data de resolução na primeira resolução e conclui os cronômetros; o chamado aberto passa antes
+        // por Em andamento, a transição que o Resolve exige.
+        ticketToResolve.StartProgress(lastMessageIsFromAgent: false, ticketToResolve.CreatedByUserId, nowUtc);
+        new TicketSlaCycleService().Resolve(ticketToResolve, timersToComplete, ticketToResolve.CreatedByUserId, nowUtc);
         ticketToResolve.ClearDomainEvents();
 
         // Act

@@ -16,6 +16,10 @@ public static class TicketErrors
         "Tickets.AlreadyActive",
         $"O chamado com o Id = '{ticketId}' já está ativo");
 
+    public static Error ResolutionCycleAlreadyOpen(Guid ticketId) => Error.Conflict(
+        "Tickets.ResolutionCycleAlreadyOpen",
+        $"O chamado com o Id = '{ticketId}' já tem um ciclo de resolução em aberto");
+
     public static Error InvalidStatusTransition(TicketStatus from, TicketStatus to) => Error.Problem(
         "Tickets.InvalidStatusTransition",
         $"Não é possível alterar o status do chamado de '{TicketStatusNames.GetDisplayName(from)}' para '{TicketStatusNames.GetDisplayName(to)}'");

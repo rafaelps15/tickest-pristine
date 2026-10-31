@@ -70,7 +70,14 @@ internal sealed class AssignTicketCommandHandler(
             return Result.Success();
         }
 
-        context.TicketHistories.Add(ticket.Assign(assignee, userContext.UserId, dateTimeProvider.UtcNow));
+        Result<TicketHistory> assignment = ticket.Assign(assignee, userContext.UserId, dateTimeProvider.UtcNow);
+
+        if (assignment.IsFailure)
+        {
+            return assignment;
+        }
+
+        context.TicketHistories.Add(assignment.Value);
 
         await context.SaveChangesAsync(cancellationToken);
 

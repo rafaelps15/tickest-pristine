@@ -60,18 +60,10 @@ internal sealed class UpdateTicketCommandHandler(
 
         DateTime nowUtc = dateTimeProvider.UtcNow;
 
-        // Cancelar segue o Ticket.EnsureCanBeCanceled. As demais trocas de status (Em Andamento e Resolvido) exigem
-        // tickets:manage: o dono só edita a descrição e cancela.
-        if (cancels)
-        {
-            Result cancellation = ticket.EnsureCanBeCanceled(canCancelAny, isOwnerWhoCanEdit, nowUtc);
-
-            if (cancellation.IsFailure)
-            {
-                return cancellation;
-            }
-        }
-        else if (changesStatus && !canManage)
+        // Cancelar segue as regras do Ticket (janela do dono e tickets:cancel), conferidas pelo TicketSlaCycleService.Cancel
+        // antes de qualquer mudança. As demais trocas de status (Em Andamento e Resolvido) exigem tickets:manage: o dono
+        // só edita a descrição e cancela.
+        if (!cancels && changesStatus && !canManage)
         {
             return Result.Failure(TicketErrors.StatusChangeForbidden);
         }
@@ -83,13 +75,33 @@ internal sealed class UpdateTicketCommandHandler(
 
         bool lastMessageIsFromAgent = changesStatus && await agentLookup.IsLastMessageFromAgentAsync(ticket, cancellationToken);
 
-        IReadOnlyList<TicketHistory> historyEntries = ticket.Update(
-            command.Description,
-            command.Status,
-            slaTimers,
-            lastMessageIsFromAgent,
-            callerId,
-            nowUtc);
+        var historyEntries = new List<TicketHistory>();
+
+        // O status antes da descrição, como no histórico de antes; uma falha não muda nada.
+        if (changesStatus)
+        {
+            var slaCycle = new TicketSlaCycleService();
+
+            Result<TicketHistory> statusChange = command.Status switch
+            {
+                TicketStatus.InProgress => ticket.StartProgress(lastMessageIsFromAgent, callerId, nowUtc),
+                TicketStatus.Resolved => slaCycle.Resolve(ticket, slaTimers, callerId, nowUtc),
+                TicketStatus.Canceled => slaCycle.Cancel(ticket, slaTimers, canCancelAny, isOwnerWhoCanEdit, callerId, nowUtc),
+                _ => Result.Failure<TicketHistory>(TicketErrors.InvalidStatusTransition(ticket.Status, command.Status))
+            };
+
+            if (statusChange.IsFailure)
+            {
+                return statusChange;
+            }
+
+            historyEntries.Add(statusChange.Value);
+        }
+
+        if (ticket.ChangeDescription(command.Description, callerId, nowUtc) is { } descriptionChange)
+        {
+            historyEntries.Add(descriptionChange);
+        }
 
         context.TicketHistories.AddRange(historyEntries);
 

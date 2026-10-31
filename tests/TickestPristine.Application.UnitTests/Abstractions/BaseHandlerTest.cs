@@ -82,6 +82,7 @@ public abstract class BaseHandlerTest
         DateTime? resolvedAtUtc)
     {
         TicketSlaPlan plan = CreateSlaPlan();
+        BusinessCalendar calendar = DefaultSlaCalendar.Create();
 
         Ticket ticket = TicketTestData.Create(
             requesterId: requesterId,
@@ -90,16 +91,17 @@ public abstract class BaseHandlerTest
             priority: TicketPriority.Urgent,
             slaPlan: plan,
             resolvedAtUtc: resolvedAtUtc,
-            calendar: DefaultSlaCalendar.Create());
+            calendar: calendar);
 
         // Os cronômetros do ciclo 1 nascem na abertura, e os prazos do chamado são os do cronômetro de resolução, como na
         // abertura pela API.
-        (_, IReadOnlyList<TicketSlaTimer> timers) = ticket.RecordOpening(requesterId);
-        TicketSlaTimer resolution = timers.Single(t => t.Metric == SlaMetric.Resolution);
+        SlaDeadlines resolution = plan.GetDeadlines(SlaMetric.Resolution, calendar, createdAtUtc)!;
 
         ticket
             .With(nameof(Ticket.DueAtUtc), resolution.DueOnUtc)
             .With(nameof(Ticket.SlaWarningAtUtc), resolution.WarningOnUtc);
+
+        IReadOnlyList<TicketSlaTimer> timers = new TicketSlaCycleService().Start(ticket, calendar);
 
         context.Tickets.Add(ticket);
         context.TicketSlaTimers.AddRange(timers);

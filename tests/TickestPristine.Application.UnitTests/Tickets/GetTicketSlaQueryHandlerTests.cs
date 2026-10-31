@@ -123,7 +123,7 @@ public sealed class GetTicketSlaQueryHandlerTests : BaseHandlerTest
             dueAtUtc: OpenedAtUtc.AddHours(4),
             slaWarningAtUtc: OpenedAtUtc.AddHours(3));
         context.Tickets.Add(ticket);
-        context.TicketSlaTimers.AddRange(ticket.RecordOpening(RequesterId).SlaTimers);
+        context.TicketSlaTimers.AddRange(new TicketSlaCycleService().Start(ticket, ContinuousSlaCalendar.Create()));
         await context.SaveChangesAsync();
 
         // Act
@@ -165,11 +165,11 @@ public sealed class GetTicketSlaQueryHandlerTests : BaseHandlerTest
             slaPlan: olderPlan,
             calendar: DefaultSlaCalendar.Create());
         Guid ticketId = ticket.Id;
-        (_, IReadOnlyList<TicketSlaTimer> timers) = ticket.RecordOpening(RequesterId);
-        TicketSlaTimer recordedResolution = timers.Single(t => t.Metric == SlaMetric.Resolution);
+        SlaDeadlines recordedResolution = olderPlan.GetDeadlines(SlaMetric.Resolution, DefaultSlaCalendar.Create(), OpenedAtUtc)!;
         ticket
             .With(nameof(Ticket.DueAtUtc), recordedResolution.DueOnUtc)
             .With(nameof(Ticket.SlaWarningAtUtc), recordedResolution.WarningOnUtc);
+        IReadOnlyList<TicketSlaTimer> timers = new TicketSlaCycleService().Start(ticket, DefaultSlaCalendar.Create());
 
         context.Tickets.Add(ticket);
         context.TicketSlaTimers.AddRange(timers);

@@ -179,7 +179,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == ticketId);
         ticket.Description.ShouldBe("Updated description");
         ticket.Status.ShouldBe(TicketStatus.Open);
-        ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketUpdatedDomainEvent);
+        ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketDescriptionChangedDomainEvent);
         (await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id)).Action
             .ShouldBe(TicketHistoryAction.DescriptionChanged);
     }
@@ -396,7 +396,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         result.IsSuccess.ShouldBeTrue();
 
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == ticketId);
-        ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketUpdatedDomainEvent);
+        ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketDescriptionChangedDomainEvent);
         ticket.DomainEvents.ShouldNotContain(domainEvent => domainEvent is TicketStatusChangedDomainEvent);
     }
 
@@ -431,9 +431,10 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
 
         // Resolvido pela primeira vez, reaberto e de volta a Em andamento.
         Ticket seeded = await context.Tickets.SingleAsync(t => t.Id == ticketId);
-        seeded.Update(seeded.Description, TicketStatus.Resolved, [], lastMessageIsFromAgent: false, OwnerId, firstResolutionUtc);
-        seeded.Reopen([], ContinuousSlaCalendar.Create(), lastMessageIsFromAgent: false, OwnerId, firstResolutionUtc.AddDays(1));
-        seeded.Update(seeded.Description, TicketStatus.InProgress, [], lastMessageIsFromAgent: false, OwnerId, firstResolutionUtc.AddDays(1));
+        var slaCycle = new TicketSlaCycleService();
+        slaCycle.Resolve(seeded, [], OwnerId, firstResolutionUtc);
+        slaCycle.Reopen(seeded, [], ContinuousSlaCalendar.Create(), lastMessageIsFromAgent: false, OwnerId, firstResolutionUtc.AddDays(1));
+        seeded.StartProgress(lastMessageIsFromAgent: false, OwnerId, firstResolutionUtc.AddDays(1));
         seeded.ClearDomainEvents();
         await context.SaveChangesAsync();
 

@@ -72,15 +72,21 @@ internal sealed class ReopenTicketCommandHandler(
 
         // A reabertura abre um novo ciclo de resolução com a meta integral do plano; os ciclos anteriores e a primeira
         // resposta não mudam.
-        (TicketHistory reopening, TicketSlaTimer resolutionTimer) = ticket.Reopen(
+        Result<TicketReopening> reopening = new TicketSlaCycleService().Reopen(
+            ticket,
             slaTimers,
             calendar.Value,
             lastMessageIsFromAgent,
             callerId,
             nowUtc);
 
-        context.TicketHistories.Add(reopening);
-        context.TicketSlaTimers.Add(resolutionTimer);
+        if (reopening.IsFailure)
+        {
+            return reopening;
+        }
+
+        context.TicketHistories.Add(reopening.Value.History);
+        context.TicketSlaTimers.Add(reopening.Value.ResolutionCycle);
 
         // Com motivo, a mensagem de quem reabriu entra no mesmo SaveChanges da reabertura: as duas ou nenhuma.
         if (hasReason)

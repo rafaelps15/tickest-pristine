@@ -95,7 +95,7 @@ public sealed class TicketTests
         var openedByUserId = Guid.NewGuid();
 
         // Act
-        (TicketHistory history, _) = ticket.RecordOpening(openedByUserId);
+        TicketHistory history = ticket.RecordOpening(openedByUserId);
 
         // Assert
         history.Id.ShouldNotBe(Guid.Empty);
@@ -183,26 +183,24 @@ public sealed class TicketTests
     }
 
     [Fact]
-    public void Update_Should_RecordOnlyStatusChange_WhenOnlyStatusChanges()
+    public void StartProgress_Should_RecordOnlyStatusChange_WhenTicketIsOpen()
     {
         // Arrange
         Ticket ticket = CreateTicket();
         string description = ticket.Description;
 
         // Act
-        IReadOnlyList<TicketHistory> entries = ticket.Update(description, TicketStatus.InProgress, [], lastMessageIsFromAgent: false, AgentId, OccurredAtUtc);
+        TicketHistory history = ticket.StartProgress(lastMessageIsFromAgent: false, AgentId, OccurredAtUtc).Value;
 
         // Assert
         ticket.Status.ShouldBe(TicketStatus.InProgress);
         ticket.Description.ShouldBe(description);
-        TicketHistory history = entries.ShouldHaveSingleItem();
         history.TicketId.ShouldBe(ticket.Id);
         history.ChangedByUserId.ShouldBe(AgentId);
         history.Action.ShouldBe(TicketHistoryAction.StatusChanged);
         history.OldValue.ShouldBe(nameof(TicketStatus.Open));
         history.NewValue.ShouldBe(nameof(TicketStatus.InProgress));
         history.OccurredAtUtc.ShouldBe(OccurredAtUtc);
-        ticket.DomainEvents.OfType<TicketUpdatedDomainEvent>().ShouldContain(e => e.TicketId == ticket.Id);
         ticket.DomainEvents.OfType<TicketStatusChangedDomainEvent>().ShouldContain(e =>
             e.TicketId == ticket.Id &&
             e.OldStatus == TicketStatus.Open &&
@@ -210,37 +208,81 @@ public sealed class TicketTests
             e.ChangedByUserId == AgentId);
     }
 
+    [Theory]
+    [InlineData(TicketStatus.InProgress, "Tickets.InvalidStatusTransition")]
+    [InlineData(TicketStatus.Resolved, "Tickets.NotActive")]
+    [InlineData(TicketStatus.Closed, "Tickets.NotActive")]
+    [InlineData(TicketStatus.Canceled, "Tickets.NotActive")]
+    public void StartProgress_Should_FailWithoutChange_WhenTransitionIsNotAllowed(TicketStatus status, string expectedErrorCode)
+    {
+        // Arrange
+        Ticket ticket = CreateTicketIn(status);
+        DateTime lastActivityAtUtc = ticket.LastActivityAtUtc;
+
+        // Act
+        Result<TicketHistory> result = ticket.StartProgress(lastMessageIsFromAgent: false, AgentId, OccurredAtUtc);
+
+        // Assert
+        result.Error.Code.ShouldBe(expectedErrorCode);
+        ticket.Status.ShouldBe(status);
+        ticket.LastActivityAtUtc.ShouldBe(lastActivityAtUtc);
+        ticket.DomainEvents.ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData(TicketStatus.Open)]
+    [InlineData(TicketStatus.InProgress)]
+    [InlineData(TicketStatus.Closed)]
+    [InlineData(TicketStatus.Canceled)]
+    public void Close_Should_FailWithoutChange_WhenTicketIsNotResolved(TicketStatus status)
+    {
+        // Arrange
+        Ticket ticket = CreateTicketIn(status);
+        DateTime lastActivityAtUtc = ticket.LastActivityAtUtc;
+
+        // Act
+        Result<TicketHistory> result = ticket.Close(AgentId, OccurredAtUtc);
+
+        // Assert
+        result.Error.ShouldBe(TicketErrors.InvalidStatusTransition(status, TicketStatus.Closed));
+        ticket.Status.ShouldBe(status);
+        ticket.LastActivityAtUtc.ShouldBe(lastActivityAtUtc);
+        ticket.DomainEvents.ShouldBeEmpty();
+    }
+
     [Fact]
-    public void Update_Should_RecordOnlyDescriptionChange_WhenOnlyDescriptionChanges()
+    public void ChangeDescription_Should_RecordOnlyDescriptionChange_WhenDescriptionChanges()
     {
         // Arrange
         Ticket ticket = CreateTicket(description: "Original description");
 
         // Act
-        IReadOnlyList<TicketHistory> entries = ticket.Update("Updated description", TicketStatus.Open, [], lastMessageIsFromAgent: false, AgentId, OccurredAtUtc);
+        TicketHistory? history = ticket.ChangeDescription("Updated description", AgentId, OccurredAtUtc);
 
         // Assert
         ticket.Description.ShouldBe("Updated description");
         ticket.Status.ShouldBe(TicketStatus.Open);
-        TicketHistory history = entries.ShouldHaveSingleItem();
+        history.ShouldNotBeNull();
         history.TicketId.ShouldBe(ticket.Id);
         history.ChangedByUserId.ShouldBe(AgentId);
         history.Action.ShouldBe(TicketHistoryAction.DescriptionChanged);
         history.OldValue.ShouldBe("Original description");
         history.NewValue.ShouldBe("Updated description");
         history.OccurredAtUtc.ShouldBe(OccurredAtUtc);
-        ticket.DomainEvents.OfType<TicketUpdatedDomainEvent>().ShouldContain(e => e.TicketId == ticket.Id);
-        ticket.DomainEvents.OfType<TicketStatusChangedDomainEvent>().ShouldBeEmpty();
+        ticket.DomainEvents.ShouldHaveSingleItem()
+            .ShouldBe(new TicketDescriptionChangedDomainEvent(ticket.Id, "Original description"));
     }
 
     [Fact]
-    public void Update_Should_RecordStatusBeforeDescription_WhenBothChange()
+    public void StartProgressAndChangeDescription_Should_RecordStatusBeforeDescription_WhenBothChange()
     {
         // Arrange
         Ticket ticket = CreateTicket(description: "Original description");
 
-        // Act
-        IReadOnlyList<TicketHistory> entries = ticket.Update("Updated description", TicketStatus.InProgress, [], lastMessageIsFromAgent: false, AgentId, OccurredAtUtc);
+        // Act: na ordem do PUT do chamado, o status antes da descrição.
+        TicketHistory statusChange = ticket.StartProgress(lastMessageIsFromAgent: false, AgentId, OccurredAtUtc).Value;
+        TicketHistory descriptionChange = ticket.ChangeDescription("Updated description", AgentId, OccurredAtUtc)!;
+        TicketHistory[] entries = [statusChange, descriptionChange];
 
         // Assert
         entries.Select(e => e.Action).ShouldBe([TicketHistoryAction.StatusChanged, TicketHistoryAction.DescriptionChanged]);
@@ -250,32 +292,31 @@ public sealed class TicketTests
         entries[1].NewValue.ShouldBe("Updated description");
         entries.ShouldAllBe(e => e.TicketId == ticket.Id && e.ChangedByUserId == AgentId && e.OccurredAtUtc == OccurredAtUtc);
         ticket.DomainEvents.Select(e => e.GetType()).ShouldBe(
-            [typeof(TicketUpdatedDomainEvent), typeof(TicketStatusChangedDomainEvent)]);
+            [typeof(TicketStatusChangedDomainEvent), typeof(TicketDescriptionChangedDomainEvent)]);
     }
 
     [Fact]
-    public void Update_Should_RecordNothingAndStillRaiseUpdatedEvent_WhenNothingChanges()
+    public void ChangeDescription_Should_ReturnNullWithoutEvent_WhenDescriptionDoesNotChange()
     {
         // Arrange
         Ticket ticket = CreateTicket();
 
         // Act
-        IReadOnlyList<TicketHistory> entries = ticket.Update(ticket.Description, ticket.Status, [], lastMessageIsFromAgent: false, AgentId, OccurredAtUtc);
+        TicketHistory? history = ticket.ChangeDescription(ticket.Description, AgentId, OccurredAtUtc);
 
         // Assert
-        entries.ShouldBeEmpty();
-        ticket.DomainEvents.OfType<TicketUpdatedDomainEvent>().ShouldContain(e => e.TicketId == ticket.Id);
-        ticket.DomainEvents.OfType<TicketStatusChangedDomainEvent>().ShouldBeEmpty();
+        history.ShouldBeNull();
+        ticket.DomainEvents.ShouldBeEmpty();
     }
 
     [Fact]
-    public void Update_Should_RecordResolutionTime_WhenTicketIsResolvedForTheFirstTime()
+    public void Resolve_Should_RecordResolutionTime_WhenTicketIsResolvedForTheFirstTime()
     {
         // Arrange
         Ticket ticket = CreateTicketIn(TicketStatus.InProgress);
 
         // Act
-        ticket.Update(ticket.Description, TicketStatus.Resolved, [], lastMessageIsFromAgent: false, AgentId, OccurredAtUtc);
+        new TicketSlaCycleService().Resolve(ticket, [], AgentId, OccurredAtUtc);
 
         // Assert
         ticket.Status.ShouldBe(TicketStatus.Resolved);
@@ -283,16 +324,17 @@ public sealed class TicketTests
     }
 
     [Fact]
-    public void Update_Should_KeepFirstResolutionTime_WhenReopenedTicketIsResolvedAgain()
+    public void Resolve_Should_KeepFirstResolutionTime_WhenReopenedTicketIsResolvedAgain()
     {
         // Arrange
+        var slaCycle = new TicketSlaCycleService();
         Ticket ticket = CreateTicketIn(TicketStatus.Resolved);
         DateTime firstResolutionUtc = ticket.ResolvedAtUtc!.Value;
-        ticket.Reopen([], Calendar, lastMessageIsFromAgent: false, AgentId, OccurredAtUtc);
-        ticket.Update(ticket.Description, TicketStatus.InProgress, [], lastMessageIsFromAgent: false, AgentId, OccurredAtUtc);
+        slaCycle.Reopen(ticket, [], Calendar, lastMessageIsFromAgent: false, AgentId, OccurredAtUtc);
+        ticket.StartProgress(lastMessageIsFromAgent: false, AgentId, OccurredAtUtc);
 
         // Act
-        ticket.Update(ticket.Description, TicketStatus.Resolved, [], lastMessageIsFromAgent: false, AgentId, OccurredAtUtc.AddHours(1));
+        slaCycle.Resolve(ticket, [], AgentId, OccurredAtUtc.AddHours(1));
 
         // Assert
         ticket.ResolvedAtUtc.ShouldBe(firstResolutionUtc);
@@ -306,7 +348,7 @@ public sealed class TicketTests
         var assignee = new User { Id = Guid.NewGuid() };
 
         // Act
-        TicketHistory history = ticket.Assign(assignee, AgentId, OccurredAtUtc);
+        TicketHistory history = ticket.Assign(assignee, AgentId, OccurredAtUtc).Value;
 
         // Assert
         ticket.AssignedToUserId.ShouldBe(assignee.Id);
@@ -332,7 +374,7 @@ public sealed class TicketTests
         var assignee = new User { Id = Guid.NewGuid() };
 
         // Act
-        TicketHistory history = ticket.Assign(assignee, AgentId, OccurredAtUtc);
+        TicketHistory history = ticket.Assign(assignee, AgentId, OccurredAtUtc).Value;
 
         // Assert
         ticket.AssignedToUserId.ShouldBe(assignee.Id);
@@ -357,7 +399,7 @@ public sealed class TicketTests
         Ticket ticket = CreateTicket(previous);
 
         // Act
-        TicketHistory history = ticket.Unassign(AgentId, OccurredAtUtc);
+        TicketHistory history = ticket.Unassign(AgentId, OccurredAtUtc).Value;
 
         // Assert
         ticket.AssignedToUserId.ShouldBeNull();
@@ -373,6 +415,47 @@ public sealed class TicketTests
             e.ChangedByUserId == AgentId);
     }
 
+    [Theory]
+    [InlineData(TicketStatus.Resolved)]
+    [InlineData(TicketStatus.Closed)]
+    [InlineData(TicketStatus.Canceled)]
+    public void Assign_Should_FailWithoutChange_WhenTicketIsInactive(TicketStatus status)
+    {
+        // Arrange
+        Ticket ticket = CreateTicketIn(status);
+        DateTime lastActivityAtUtc = ticket.LastActivityAtUtc;
+
+        // Act
+        Result<TicketHistory> result = ticket.Assign(new User { Id = Guid.NewGuid() }, AgentId, OccurredAtUtc);
+
+        // Assert
+        result.Error.ShouldBe(TicketErrors.NotActive(ticket.Id));
+        ticket.AssignedToUserId.ShouldBeNull();
+        ticket.LastActivityAtUtc.ShouldBe(lastActivityAtUtc);
+        ticket.DomainEvents.ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData(TicketStatus.Resolved)]
+    [InlineData(TicketStatus.Closed)]
+    [InlineData(TicketStatus.Canceled)]
+    public void Unassign_Should_FailWithoutChange_WhenTicketIsInactive(TicketStatus status)
+    {
+        // Arrange
+        var assignee = new User { Id = Guid.NewGuid() };
+        Ticket ticket = CreateTicketIn(status, assignee);
+        DateTime lastActivityAtUtc = ticket.LastActivityAtUtc;
+
+        // Act
+        Result<TicketHistory> result = ticket.Unassign(AgentId, OccurredAtUtc);
+
+        // Assert
+        result.Error.ShouldBe(TicketErrors.NotActive(ticket.Id));
+        ticket.AssignedToUserId.ShouldBe(assignee.Id);
+        ticket.LastActivityAtUtc.ShouldBe(lastActivityAtUtc);
+        ticket.DomainEvents.ShouldBeEmpty();
+    }
+
     [Fact]
     public void Close_Should_CloseAndRecordStatusChange_WhenTicketIsResolved()
     {
@@ -380,7 +463,7 @@ public sealed class TicketTests
         Ticket ticket = CreateTicketIn(TicketStatus.Resolved);
 
         // Act
-        TicketHistory history = ticket.Close(AgentId, OccurredAtUtc);
+        TicketHistory history = ticket.Close(AgentId, OccurredAtUtc).Value;
 
         // Assert
         ticket.Status.ShouldBe(TicketStatus.Closed);
@@ -408,7 +491,8 @@ public sealed class TicketTests
         DateTime? resolvedAtUtc = ticket.ResolvedAtUtc;
 
         // Act
-        (TicketHistory history, _) = ticket.Reopen([], Calendar, lastMessageIsFromAgent: false, AgentId, OccurredAtUtc);
+        TicketHistory history = new TicketSlaCycleService()
+            .Reopen(ticket, [], Calendar, lastMessageIsFromAgent: false, AgentId, OccurredAtUtc).Value.History;
 
         // Assert
         ticket.Status.ShouldBe(TicketStatus.Open);
@@ -432,7 +516,7 @@ public sealed class TicketTests
         Ticket ticket = CreateTicket();
 
         // Act
-        TicketHistory history = ticket.Delete([], AgentId, OccurredAtUtc);
+        TicketHistory history = new TicketSlaCycleService().Delete(ticket, [], AgentId, OccurredAtUtc).Value;
 
         // Assert
         ticket.DeletedAtUtc.ShouldBe(OccurredAtUtc);
@@ -476,10 +560,10 @@ public sealed class TicketTests
     [InlineData(TicketStatus.Open, 16, false, true, "Tickets.CancelWindowExpired")]
     [InlineData(TicketStatus.Open, 20, true, false, null)]
     [InlineData(TicketStatus.Open, 10, false, false, "Tickets.CancelForbidden")]
-    [InlineData(TicketStatus.Resolved, 10, true, true, "Tickets.CancelWindowExpired")]
-    [InlineData(TicketStatus.Closed, 10, true, false, "Tickets.CancelForbidden")]
-    [InlineData(TicketStatus.Canceled, 10, true, false, "Tickets.CancelForbidden")]
-    public void EnsureCanBeCanceled_Should_RequireActiveTicketAndPermissionOrOwnerWindow_WhenEvaluated(
+    [InlineData(TicketStatus.Resolved, 10, true, true, "Tickets.NotActive")]
+    [InlineData(TicketStatus.Closed, 10, true, false, "Tickets.NotActive")]
+    [InlineData(TicketStatus.Canceled, 10, true, false, "Tickets.NotActive")]
+    public void Cancel_Should_RequireActiveTicketAndPermissionOrOwnerWindow_WhenEvaluated(
         TicketStatus status,
         int minutesAfterOpening,
         bool canCancelAny,
@@ -490,7 +574,8 @@ public sealed class TicketTests
         Ticket ticket = CreateTicketIn(status);
 
         // Act
-        Result result = ticket.EnsureCanBeCanceled(canCancelAny, isOwnerWhoCanEdit, OpenedAtUtc.AddMinutes(minutesAfterOpening));
+        Result result = new TicketSlaCycleService()
+            .Cancel(ticket, [], canCancelAny, isOwnerWhoCanEdit, AgentId, OpenedAtUtc.AddMinutes(minutesAfterOpening));
 
         // Assert
         if (expectedErrorCode is null)
@@ -504,13 +589,14 @@ public sealed class TicketTests
     }
 
     [Fact]
-    public void EnsureCanBeCanceled_Should_ReturnWindowInError_WhenOwnerWindowHasPassed()
+    public void Cancel_Should_ReturnWindowInError_WhenOwnerWindowHasPassed()
     {
         // Arrange
         Ticket ticket = CreateTicket();
 
         // Act
-        Result result = ticket.EnsureCanBeCanceled(canCancelAny: false, isOwnerWhoCanEdit: true, OpenedAtUtc.AddMinutes(16));
+        Result result = new TicketSlaCycleService()
+            .Cancel(ticket, [], canCancelAny: false, isOwnerWhoCanEdit: true, AgentId, OpenedAtUtc.AddMinutes(16));
 
         // Assert
         result.Error.ShouldBe(TicketErrors.CancelWindowExpired(Ticket.OwnerCancelWindowMinutes));
@@ -520,13 +606,13 @@ public sealed class TicketTests
     [Theory]
     [InlineData(true, TicketWaitingOn.Requester)]
     [InlineData(false, TicketWaitingOn.Agent)]
-    public void Update_Should_RecalculateWaitingOn_WhenStatusChangesToActive(bool lastMessageIsFromAgent, TicketWaitingOn expected)
+    public void StartProgress_Should_RecalculateWaitingOn_WhenStatusChangesToActive(bool lastMessageIsFromAgent, TicketWaitingOn expected)
     {
         // Arrange
         Ticket ticket = CreateTicket();
 
         // Act
-        ticket.Update(ticket.Description, TicketStatus.InProgress, [], lastMessageIsFromAgent, AgentId, OccurredAtUtc);
+        ticket.StartProgress(lastMessageIsFromAgent, AgentId, OccurredAtUtc);
 
         // Assert
         ticket.WaitingOn.ShouldBe(expected);
@@ -535,26 +621,29 @@ public sealed class TicketTests
     [Theory]
     [InlineData(TicketStatus.Resolved)]
     [InlineData(TicketStatus.Canceled)]
-    public void Update_Should_ClearWaitingOn_WhenTicketBecomesInactive(TicketStatus status)
+    public void ResolveAndCancel_Should_ClearWaitingOn_WhenTicketBecomesInactive(TicketStatus status)
     {
         // Arrange
         Ticket ticket = CreateTicketIn(TicketStatus.InProgress);
 
         // Act
-        ticket.Update(ticket.Description, status, [], lastMessageIsFromAgent: true, AgentId, OccurredAtUtc);
+        var slaCycle = new TicketSlaCycleService();
+        _ = status == TicketStatus.Resolved
+            ? slaCycle.Resolve(ticket, [], AgentId, OccurredAtUtc)
+            : slaCycle.Cancel(ticket, [], canCancelAny: true, isOwnerWhoCanEdit: false, AgentId, OccurredAtUtc);
 
         // Assert
         ticket.WaitingOn.ShouldBeNull();
     }
 
     [Fact]
-    public void Update_Should_KeepWaitingOn_WhenOnlyDescriptionChanges()
+    public void ChangeDescription_Should_KeepWaitingOn_WhenOnlyDescriptionChanges()
     {
         // Arrange
         Ticket ticket = CreateTicket();
 
         // Act
-        ticket.Update("Updated description", TicketStatus.Open, [], lastMessageIsFromAgent: true, AgentId, OccurredAtUtc);
+        ticket.ChangeDescription("Updated description", AgentId, OccurredAtUtc);
 
         // Assert
         ticket.WaitingOn.ShouldBe(TicketWaitingOn.Agent);
@@ -582,40 +671,40 @@ public sealed class TicketTests
         Ticket ticket = CreateTicketIn(TicketStatus.Resolved);
 
         // Act
-        ticket.Reopen([], Calendar, lastMessageIsFromAgent, AgentId, OccurredAtUtc);
+        new TicketSlaCycleService().Reopen(ticket, [], Calendar, lastMessageIsFromAgent, AgentId, OccurredAtUtc);
 
         // Assert
         ticket.WaitingOn.ShouldBe(expected);
     }
 
     [Fact]
-    public void Update_Should_MoveLastActivityToTheHistoryEntry_WhenSomethingChanges()
+    public void ChangeDescription_Should_MoveLastActivityToTheHistoryEntry_WhenDescriptionChanges()
     {
         // Arrange
         Ticket ticket = CreateTicket();
 
         // Act
-        ticket.Update("Updated description", TicketStatus.Open, [], lastMessageIsFromAgent: false, AgentId, OccurredAtUtc);
+        ticket.ChangeDescription("Updated description", AgentId, OccurredAtUtc);
 
         // Assert
         ticket.LastActivityAtUtc.ShouldBe(OccurredAtUtc);
     }
 
     [Fact]
-    public void Update_Should_KeepLastActivity_WhenNothingChanges()
+    public void ChangeDescription_Should_KeepLastActivity_WhenNothingChanges()
     {
         // Arrange
         Ticket ticket = CreateTicket();
 
         // Act
-        ticket.Update(ticket.Description, ticket.Status, [], lastMessageIsFromAgent: false, AgentId, OccurredAtUtc);
+        ticket.ChangeDescription(ticket.Description, AgentId, OccurredAtUtc);
 
         // Assert
         ticket.LastActivityAtUtc.ShouldBe(OpenedAtUtc);
     }
 
     [Fact]
-    public void RecordActivity_Should_NeverMoveLastActivityBack_WhenEntryIsOlder()
+    public void RecordAttachmentActivity_Should_NeverMoveLastActivityBack_WhenEntryIsOlder()
     {
         // Arrange
         Ticket ticket = CreateTicket();
@@ -623,7 +712,7 @@ public sealed class TicketTests
         TicketHistory olderEntry = TicketTestData.CreateAttachment(ticket.Id, AgentId, OpenedAtUtc.AddMinutes(5)).RecordUpload();
 
         // Act
-        ticket.RecordActivity(olderEntry);
+        ticket.RecordAttachmentActivity(olderEntry);
 
         // Assert
         ticket.LastActivityAtUtc.ShouldBe(OccurredAtUtc);
@@ -746,8 +835,9 @@ public sealed class TicketTests
     {
         // Arrange
         Ticket ticket = CreateTicketIn(TicketStatus.InProgress);
-        ticket.Update(ticket.Description, TicketStatus.Resolved, [], lastMessageIsFromAgent: false, AgentId, OpenedAtUtc.AddMinutes(resolvedMinutesAfterOpening));
-        ticket.Reopen([], Calendar, lastMessageIsFromAgent: false, AgentId, OpenedAtUtc.AddDays(1));
+        var slaCycle = new TicketSlaCycleService();
+        slaCycle.Resolve(ticket, [], AgentId, OpenedAtUtc.AddMinutes(resolvedMinutesAfterOpening));
+        slaCycle.Reopen(ticket, [], Calendar, lastMessageIsFromAgent: false, AgentId, OpenedAtUtc.AddDays(1));
 
         // Act
         TicketSlaStatus status = GetSlaStatus(ticket, OpenedAtUtc.AddDays(10));
@@ -776,7 +866,7 @@ public sealed class TicketTests
     [InlineData(TicketStatus.InProgress, 20, true, false, true)]
     [InlineData(TicketStatus.Open, 10, false, false, false)]
     [InlineData(TicketStatus.Resolved, 10, true, true, false)]
-    public void CanBeCanceled_Should_MatchEnsureCanBeCanceled_WhenEvaluatedOnColumns(
+    public void CanBeCanceled_Should_MatchCancel_WhenEvaluatedOnColumns(
         TicketStatus status,
         int minutesAfterOpening,
         bool canCancelAny,
@@ -792,7 +882,7 @@ public sealed class TicketTests
 
         // Assert
         canBeCanceled.ShouldBe(expected);
-        ticket.EnsureCanBeCanceled(canCancelAny, isOwnerWhoCanEdit, utcNow).IsSuccess.ShouldBe(expected);
+        new TicketSlaCycleService().Cancel(ticket, [], canCancelAny, isOwnerWhoCanEdit, AgentId, utcNow).IsSuccess.ShouldBe(expected);
     }
 
     private static TicketSlaStatus GetSlaStatus(Ticket ticket, DateTime utcNow) =>
@@ -820,18 +910,19 @@ public sealed class TicketTests
     }
 
     // Leva o chamado ao status pelo caminho permitido e descarta os eventos do arranjo.
-    private static Ticket CreateTicketIn(TicketStatus status)
+    private static Ticket CreateTicketIn(TicketStatus status, User? assignee = null)
     {
-        Ticket ticket = CreateTicket();
+        Ticket ticket = CreateTicket(assignee);
+        var slaCycle = new TicketSlaCycleService();
 
         if (status is TicketStatus.InProgress or TicketStatus.Resolved or TicketStatus.Closed)
         {
-            ticket.Update(ticket.Description, TicketStatus.InProgress, [], lastMessageIsFromAgent: false, AgentId, OpenedAtUtc);
+            ticket.StartProgress(lastMessageIsFromAgent: false, AgentId, OpenedAtUtc);
         }
 
         if (status is TicketStatus.Resolved or TicketStatus.Closed)
         {
-            ticket.Update(ticket.Description, TicketStatus.Resolved, [], lastMessageIsFromAgent: false, AgentId, OpenedAtUtc.AddMinutes(30));
+            slaCycle.Resolve(ticket, [], AgentId, OpenedAtUtc.AddMinutes(30));
         }
 
         if (status == TicketStatus.Closed)
@@ -841,7 +932,7 @@ public sealed class TicketTests
 
         if (status == TicketStatus.Canceled)
         {
-            ticket.Update(ticket.Description, TicketStatus.Canceled, [], lastMessageIsFromAgent: false, AgentId, OpenedAtUtc);
+            slaCycle.Cancel(ticket, [], canCancelAny: true, isOwnerWhoCanEdit: false, AgentId, OpenedAtUtc);
         }
 
         ticket.ClearDomainEvents();

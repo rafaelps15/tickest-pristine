@@ -42,12 +42,23 @@ internal sealed class DeleteTicketCommandHandler(
             return Result.Failure(TicketErrors.NotActive(ticket.Id));
         }
 
-        // Os cronômetros do chamado excluído saem da fila do monitoramento, sem violação nem evento.
-        List<TicketSlaTimer> queuedSlaTimers = await context.TicketSlaTimers
-            .Where(t => t.TicketId == ticket.Id && t.NextActionOnUtc != null)
+        // Os cronômetros do chamado excluído que ainda estão na fila do monitoramento saem dela, sem violação nem evento.
+        List<TicketSlaTimer> slaTimers = await context.TicketSlaTimers
+            .Where(t => t.TicketId == ticket.Id)
             .ToListAsync(cancellationToken);
 
-        context.TicketHistories.Add(ticket.Delete(queuedSlaTimers, userContext.UserId, dateTimeProvider.UtcNow));
+        Result<TicketHistory> deletion = new TicketSlaCycleService().Delete(
+            ticket,
+            slaTimers,
+            userContext.UserId,
+            dateTimeProvider.UtcNow);
+
+        if (deletion.IsFailure)
+        {
+            return deletion;
+        }
+
+        context.TicketHistories.Add(deletion.Value);
 
         await context.SaveChangesAsync(cancellationToken);
 

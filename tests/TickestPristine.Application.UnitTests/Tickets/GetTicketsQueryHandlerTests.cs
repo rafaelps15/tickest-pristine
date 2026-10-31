@@ -484,7 +484,7 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
 
         if (reopened)
         {
-            ticket.Reopen([], ContinuousSlaCalendar.Create(), lastMessageIsFromAgent: false, requester.Id, resolvedAtUtc!.Value);
+            new TicketSlaCycleService().Reopen(ticket, [], ContinuousSlaCalendar.Create(), lastMessageIsFromAgent: false, requester.Id, resolvedAtUtc!.Value);
             ticket.ClearDomainEvents();
         }
 

@@ -7,7 +7,7 @@ namespace TickestPristine.Domain.Tickets;
 /// Cronômetro de um objetivo do SLA num ciclo do chamado. A reabertura cria um novo ciclo de resolução; início,
 /// conclusão, parada e violação, uma vez gravados, não mudam. O <see cref="NextActionOnUtc"/> é o próximo instante em
 /// que o monitoramento precisa agir sobre o cronômetro; nulo quando não há mais nada a fazer. A
-/// <see cref="CompletionCause"/> diz o que concluiu o cronômetro e só existe quando ele foi concluído (spec 027).
+/// <see cref="CompletionCause"/> diz o que concluiu o cronômetro e só existe quando ele foi concluído.
 /// </summary>
 public sealed class TicketSlaTimer : Entity, IAuditable
 {
@@ -45,17 +45,19 @@ public sealed class TicketSlaTimer : Entity, IAuditable
 
     public bool IsOpen => CompletedOnUtc is null && StoppedOnUtc is null;
 
+    internal bool IsQueued => NextActionOnUtc is not null;
+
     /// <summary>
-    /// Cria o cronômetro com a meta e o calendário do plano e o prazo e o alerta já calculados pelo
-    /// <see cref="TicketSlaPlan.GetDeadlines"/>, na fila do monitoramento até o prazo; chamado só pelo
-    /// <see cref="Ticket"/>, na abertura e na reabertura. Lança <see cref="InvalidOperationException"/> quando o plano não
-    /// tem meta para o objetivo.
+    /// Cria o cronômetro com a meta, o calendário e o prazo e o alerta já calculados pelo
+    /// <see cref="TicketSlaPlan.CalculateDeadlines"/>, na fila do monitoramento até o prazo; chamado só pelo
+    /// <see cref="TicketSlaCycleService"/>, na abertura e na reabertura.
     /// </summary>
     internal static TicketSlaTimer Create(
         Guid ticketId,
         SlaMetric metric,
         int cycle,
-        TicketSlaPlan plan,
+        int targetMinutes,
+        Guid calendarId,
         DateTime startedAtUtc,
         SlaDeadlines deadlines) =>
         new()
@@ -64,9 +66,8 @@ public sealed class TicketSlaTimer : Entity, IAuditable
             TicketId = ticketId,
             Metric = metric,
             Cycle = cycle,
-            TargetMinutes = plan.GetTargetMinutes(metric) ??
-                throw new InvalidOperationException($"O plano de SLA não tem meta para {metric}."),
-            CalendarId = plan.CalendarId,
+            TargetMinutes = targetMinutes,
+            CalendarId = calendarId,
             StartedAtUtc = startedAtUtc,
             WarningOnUtc = deadlines.WarningOnUtc,
             DueOnUtc = deadlines.DueOnUtc,
@@ -104,7 +105,7 @@ public sealed class TicketSlaTimer : Entity, IAuditable
     public bool CompleteFirstResponse(Ticket ticket, Guid authorUserId, bool authorIsAgent, DateTime utcNow)
     {
         if (Metric != SlaMetric.FirstResponse ||
-            TicketId != ticket.Id ||
+            !BelongsTo(ticket) ||
             authorUserId == ticket.CreatedByUserId ||
             !authorIsAgent)
         {
@@ -182,6 +183,8 @@ public sealed class TicketSlaTimer : Entity, IAuditable
 
         return utcNow >= WarningOnUtc ? SlaObjectiveState.AtRisk : SlaObjectiveState.Running;
     }
+
+    internal bool BelongsTo(Ticket ticket) => TicketId == ticket.Id;
 
     /// <summary>
     /// Tempo útil consumido entre o início e o menor instante entre agora, a conclusão e a parada.
