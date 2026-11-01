@@ -43,14 +43,16 @@ internal static class TicketTestData
             requester.Id,
             openedAtUtc);
 
+        var slaCycle = new TicketSlaCycleService();
+
         if (status is TicketStatus.InProgress or TicketStatus.Resolved or TicketStatus.Closed)
         {
-            ticket.Update(description, TicketStatus.InProgress, [], lastMessageIsFromAgent: false, requester.Id, openedAtUtc);
+            ticket.StartProgress(lastMessageIsFromAgent: false, requester.Id, openedAtUtc);
         }
 
         if (status is TicketStatus.Resolved or TicketStatus.Closed)
         {
-            ticket.Update(description, TicketStatus.Resolved, [], lastMessageIsFromAgent: false, requester.Id, resolvedAtUtc ?? openedAtUtc);
+            slaCycle.Resolve(ticket, [], requester.Id, resolvedAtUtc ?? openedAtUtc);
         }
 
         if (status == TicketStatus.Closed)
@@ -60,12 +62,12 @@ internal static class TicketTestData
 
         if (status == TicketStatus.Canceled)
         {
-            ticket.Update(description, TicketStatus.Canceled, [], lastMessageIsFromAgent: false, requester.Id, openedAtUtc);
+            slaCycle.Cancel(ticket, [], canCancelAny: true, isOwnerWhoCanEdit: false, requester.Id, openedAtUtc);
         }
 
         if (deletedAtUtc is { } deletedAt)
         {
-            ticket.Delete([], requester.Id, deletedAt);
+            slaCycle.Delete(ticket, [], requester.Id, deletedAt);
         }
 
         ticket

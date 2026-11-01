@@ -7,13 +7,10 @@ namespace TickestPristine.Domain.Tickets;
 /// Cronômetro de um objetivo do SLA num ciclo do chamado. A reabertura cria um novo ciclo de resolução; início,
 /// conclusão, parada e violação, uma vez gravados, não mudam. O <see cref="NextActionOnUtc"/> é o próximo instante em
 /// que o monitoramento precisa agir sobre o cronômetro; nulo quando não há mais nada a fazer. A
-/// <see cref="CompletionCause"/> diz o que concluiu o cronômetro e só existe quando ele foi concluído (spec 027).
+/// <see cref="CompletionCause"/> diz o que concluiu o cronômetro e só existe quando ele foi concluído.
 /// </summary>
 public sealed class TicketSlaTimer : Entity, IAuditable
 {
-    // O cronômetro entra em risco ao consumir 75% da meta em tempo útil.
-    private const double WarningRatio = 0.75;
-
     private TicketSlaTimer()
     {
     }
@@ -48,9 +45,12 @@ public sealed class TicketSlaTimer : Entity, IAuditable
 
     public bool IsOpen => CompletedOnUtc is null && StoppedOnUtc is null;
 
+    internal bool IsQueued => NextActionOnUtc is not null;
+
     /// <summary>
-    /// Cria o cronômetro com o prazo e o alerta no tempo útil do calendário, na fila do monitoramento até o prazo;
-    /// chamado só pelo <see cref="Ticket"/>, na abertura e na reabertura.
+    /// Cria o cronômetro com a meta, o calendário e o prazo e o alerta já calculados pelo
+    /// <see cref="TicketSlaPlan.CalculateDeadlines"/>, na fila do monitoramento até o prazo; chamado só pelo
+    /// <see cref="TicketSlaCycleService"/>, na abertura e na reabertura.
     /// </summary>
     internal static TicketSlaTimer Create(
         Guid ticketId,
@@ -58,16 +58,9 @@ public sealed class TicketSlaTimer : Entity, IAuditable
         int cycle,
         int targetMinutes,
         Guid calendarId,
-        BusinessCalendar calendar,
-        DateTime startedAtUtc)
-    {
-        // Em ticks, para o alerta cair no segundo exato (ex.: 75% de 30 minutos = 22 minutos e 30 segundos).
-        var target = TimeSpan.FromTicks(TimeSpan.TicksPerMinute * targetMinutes);
-        var warning = TimeSpan.FromTicks((long)(target.Ticks * WarningRatio));
-
-        DateTime dueOnUtc = calendar.AddBusinessTime(startedAtUtc, target);
-
-        return new TicketSlaTimer
+        DateTime startedAtUtc,
+        SlaDeadlines deadlines) =>
+        new()
         {
             Id = Guid.NewGuid(),
             TicketId = ticketId,
@@ -76,18 +69,17 @@ public sealed class TicketSlaTimer : Entity, IAuditable
             TargetMinutes = targetMinutes,
             CalendarId = calendarId,
             StartedAtUtc = startedAtUtc,
-            WarningOnUtc = calendar.AddBusinessTime(startedAtUtc, warning),
-            DueOnUtc = dueOnUtc,
-            NextActionOnUtc = dueOnUtc
+            WarningOnUtc = deadlines.WarningOnUtc,
+            DueOnUtc = deadlines.DueOnUtc,
+            NextActionOnUtc = deadlines.DueOnUtc
         };
-    }
 
     /// <summary>
     /// Conclui o cronômetro em aberto, gravando o que o concluiu; devolve <c>false</c> quando ele já estava concluído ou
     /// parado. Concluído até o prazo, sai da fila do monitoramento; depois do prazo, continua nela, para o monitoramento
     /// gravar a violação.
     /// </summary>
-    public bool Complete(DateTime completedAtUtc, SlaCompletionCause cause)
+    internal bool Complete(DateTime completedAtUtc, SlaCompletionCause cause)
     {
         if (!IsOpen)
         {
@@ -103,6 +95,24 @@ public sealed class TicketSlaTimer : Entity, IAuditable
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Conclui a primeira resposta do chamado com a mensagem de quem atende, no instante dela. Devolve <c>false</c>, sem
+    /// mudar nada, quando o cronômetro não é a primeira resposta deste chamado, já está concluído ou parado, o autor é o
+    /// solicitante ou não atende chamados.
+    /// </summary>
+    public bool CompleteFirstResponse(Ticket ticket, Guid authorUserId, bool authorIsAgent, DateTime utcNow)
+    {
+        if (Metric != SlaMetric.FirstResponse ||
+            !BelongsTo(ticket) ||
+            authorUserId == ticket.CreatedByUserId ||
+            !authorIsAgent)
+        {
+            return false;
+        }
+
+        return Complete(utcNow, SlaCompletionCause.Message);
     }
 
     /// <summary>
@@ -173,6 +183,8 @@ public sealed class TicketSlaTimer : Entity, IAuditable
 
         return utcNow >= WarningOnUtc ? SlaObjectiveState.AtRisk : SlaObjectiveState.Running;
     }
+
+    internal bool BelongsTo(Ticket ticket) => TicketId == ticket.Id;
 
     /// <summary>
     /// Tempo útil consumido entre o início e o menor instante entre agora, a conclusão e a parada.

@@ -49,7 +49,7 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests : BaseHandlerTes
         await using TestDbContext context = CreateDbContext();
         Guid attachmentId = await SeedAttachmentAsync(context);
         Ticket ticket = await context.Tickets.SingleAsync();
-        ticket.Delete([], CreatorId, DateTime.UtcNow);
+        new TicketSlaCycleService().Delete(ticket, [], CreatorId, DateTime.UtcNow);
         ticket.ClearDomainEvents();
         await context.SaveChangesAsync();
 

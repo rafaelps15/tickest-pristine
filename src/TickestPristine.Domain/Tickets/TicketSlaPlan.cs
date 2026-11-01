@@ -16,6 +16,42 @@ public sealed record TicketSlaPlan(
     int ResolutionMinutes,
     bool IsLegacy)
 {
+    // O objetivo entra em risco ao consumir 75% da meta em tempo útil.
+    private const double WarningRatio = 0.75;
+
+    /// <summary>
+    /// Prazo e alerta do objetivo para um ciclo iniciado em <paramref name="startedAtUtc"/>, no tempo útil do
+    /// calendário; devolve <c>null</c> quando o plano não tem meta para o objetivo. Lança
+    /// <see cref="InvalidOperationException"/> quando o calendário não tem tempo útil suficiente.
+    /// </summary>
+    public SlaDeadlines? GetDeadlines(SlaMetric metric, BusinessCalendar calendar, DateTime startedAtUtc)
+    {
+        int? targetMinutes = metric switch
+        {
+            SlaMetric.FirstResponse => FirstResponseMinutes,
+            SlaMetric.Resolution => ResolutionMinutes,
+            _ => null
+        };
+
+        return targetMinutes is { } minutes ? CalculateDeadlines(minutes, calendar, startedAtUtc) : null;
+    }
+
+    /// <summary>
+    /// A fórmula única de prazo: o prazo ao fim da meta e o alerta aos 75% dela, os dois em tempo útil do calendário a
+    /// partir de <paramref name="startedAtUtc"/>. Lança <see cref="InvalidOperationException"/> quando o calendário não
+    /// tem tempo útil suficiente.
+    /// </summary>
+    internal static SlaDeadlines CalculateDeadlines(int targetMinutes, BusinessCalendar calendar, DateTime startedAtUtc)
+    {
+        // Em ticks, para o alerta cair no segundo exato (ex.: 75% de 30 minutos = 22 minutos e 30 segundos).
+        var target = TimeSpan.FromTicks(TimeSpan.TicksPerMinute * targetMinutes);
+        var warning = TimeSpan.FromTicks((long)(target.Ticks * WarningRatio));
+
+        return new SlaDeadlines(
+            calendar.AddBusinessTime(startedAtUtc, warning),
+            calendar.AddBusinessTime(startedAtUtc, target));
+    }
+
     /// <summary>
     /// Plano que o chamado recebe na abertura, da política "Padrão" (única e definida em código): metas de primeira
     /// resposta e de resolução em minutos úteis do calendário "Expediente". O plano fica gravado no chamado, então mudar

@@ -43,41 +43,14 @@ public abstract class BaseHandlerTest
 
     // Chamado Urgente aberto em createdAtUtc com o plano de CreateSlaPlan e os
     // cronômetros do ciclo 1, como a abertura pela API grava.
-    protected static Task<Ticket> SeedTicketWithSlaAsync(
+    protected static async Task<Ticket> SeedTicketWithSlaAsync(
         TestDbContext context,
         Guid requesterId,
         DateTime createdAtUtc,
-        TicketStatus status = TicketStatus.Open) =>
-        SeedTicketWithSlaAsync(context, requesterId, createdAtUtc, status, resolvedAtUtc: null);
-
-    // Chamado de SeedTicketWithSlaAsync já resolvido em resolvedAtUtc, com os dois
-    // cronômetros concluídos nesse instante.
-    protected static async Task<Ticket> SeedResolvedTicketWithSlaAsync(
-        TestDbContext context,
-        Guid requesterId,
-        DateTime createdAtUtc,
-        DateTime resolvedAtUtc)
-    {
-        Ticket ticket = await SeedTicketWithSlaAsync(context, requesterId, createdAtUtc, TicketStatus.Resolved, resolvedAtUtc);
-
-        foreach (TicketSlaTimer timer in context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id))
-        {
-            timer.Complete(resolvedAtUtc, SlaCompletionCause.Resolution);
-        }
-
-        await context.SaveChangesAsync();
-
-        return ticket;
-    }
-
-    private static async Task<Ticket> SeedTicketWithSlaAsync(
-        TestDbContext context,
-        Guid requesterId,
-        DateTime createdAtUtc,
-        TicketStatus status,
-        DateTime? resolvedAtUtc)
+        TicketStatus status = TicketStatus.Open)
     {
         TicketSlaPlan plan = CreateSlaPlan();
+        BusinessCalendar calendar = DefaultSlaCalendar.Create();
 
         Ticket ticket = TicketTestData.Create(
             requesterId: requesterId,
@@ -85,20 +58,39 @@ public abstract class BaseHandlerTest
             createdAtUtc: createdAtUtc,
             priority: TicketPriority.Urgent,
             slaPlan: plan,
-            resolvedAtUtc: resolvedAtUtc,
-            calendar: DefaultSlaCalendar.Create());
+            calendar: calendar);
 
         // Os cronômetros do ciclo 1 nascem na abertura, e os prazos do chamado são os do cronômetro de resolução, como na
         // abertura pela API.
-        (_, IReadOnlyList<TicketSlaTimer> timers) = ticket.RecordOpening(requesterId);
-        TicketSlaTimer resolution = timers.Single(t => t.Metric == SlaMetric.Resolution);
+        SlaDeadlines resolution = plan.GetDeadlines(SlaMetric.Resolution, calendar, createdAtUtc)!;
 
         ticket
             .With(nameof(Ticket.DueAtUtc), resolution.DueOnUtc)
             .With(nameof(Ticket.SlaWarningAtUtc), resolution.WarningOnUtc);
 
+        IReadOnlyList<TicketSlaTimer> timers = new TicketSlaCycleService().Start(ticket, calendar);
+
         context.Tickets.Add(ticket);
         context.TicketSlaTimers.AddRange(timers);
+        await context.SaveChangesAsync();
+
+        return ticket;
+    }
+
+    // Chamado de SeedTicketWithSlaAsync levado a Em andamento e resolvido em resolvedAtUtc pelo
+    // TicketSlaCycleService, que conclui os dois cronômetros nesse instante, como a API.
+    protected static async Task<Ticket> SeedResolvedTicketWithSlaAsync(
+        TestDbContext context,
+        Guid requesterId,
+        DateTime createdAtUtc,
+        DateTime resolvedAtUtc)
+    {
+        Ticket ticket = await SeedTicketWithSlaAsync(context, requesterId, createdAtUtc, TicketStatus.InProgress);
+        List<TicketSlaTimer> timers = await context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id).ToListAsync();
+
+        new TicketSlaCycleService().Resolve(ticket, timers, requesterId, resolvedAtUtc);
+        ticket.ClearDomainEvents();
+
         await context.SaveChangesAsync();
 
         return ticket;

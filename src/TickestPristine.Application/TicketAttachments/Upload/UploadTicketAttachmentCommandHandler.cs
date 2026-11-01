@@ -98,7 +98,7 @@ internal sealed class UploadTicketAttachmentCommandHandler(
             throw;
         }
 
-        ticket.RecordActivity(upload);
+        ticket.RecordAttachmentActivity(upload);
 
         await activityWriter.WriteLastActivityAsync(ticket, cancellationToken);
 

@@ -17,7 +17,9 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
     {
         ProblemDetails problemDetails;
 
-        if (exception is DbUpdateConcurrencyException)
+        if (exception is DbUpdateConcurrencyException ||
+            exception is DbUpdateException { InnerException: PostgresException resolutionCycleConflict } &&
+            IsResolutionCycleConflict(resolutionCycleConflict))
         {
             // Os dados foram alterados por outra requisição ao mesmo tempo; nada foi salvo e a operação pode ser repetida.
             logger.LogWarning(exception, "Conflito de concorrência ao salvar as mudanças");
@@ -117,6 +119,15 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
 
         return true;
     }
+
+    /// <summary>
+    /// Indica se o índice único de ciclo dos cronômetros recusou um novo ciclo de resolução: duas reaberturas simultâneas
+    /// do mesmo chamado calculam o mesmo ciclo, e a segunda é um conflito de concorrência, não um registro duplicado. As
+    /// demais violações de unicidade seguem o tratamento de registro duplicado.
+    /// </summary>
+    private static bool IsResolutionCycleConflict(PostgresException exception) =>
+        exception.SqlState == PostgresErrorCodes.UniqueViolation &&
+        exception.ConstraintName == "ix_ticket_sla_timers_ticket_id_metric_cycle";
 
     /// <summary>
     /// Indica se o banco recusou um texto fora do tamanho: acima do tamanho da coluna (<c>22001</c>) ou fora de uma check

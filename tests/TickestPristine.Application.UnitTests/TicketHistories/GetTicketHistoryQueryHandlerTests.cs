@@ -129,12 +129,12 @@ public sealed class GetTicketHistoryQueryHandlerTests : BaseHandlerTest
         var removedUser = new User { Id = Guid.NewGuid() };
         DateTime occurredAtUtc = DateTime.UtcNow.AddMinutes(5);
         Ticket ticket = (await context.Tickets.FindAsync(ticketId))!;
-        TicketHistory assigned = ticket.Assign(ana, CreatorId, occurredAtUtc);
-        TicketHistory reassigned = ticket.Assign(beto, CreatorId, occurredAtUtc.AddMinutes(1));
+        TicketHistory assigned = ticket.Assign(ana, CreatorId, occurredAtUtc).Value;
+        TicketHistory reassigned = ticket.Assign(beto, CreatorId, occurredAtUtc.AddMinutes(1)).Value;
 
         // O usuário removido só passa a ser o responsável para a remoção registrá-lo; essa troca não entra no histórico.
         ticket.Assign(removedUser, CreatorId, occurredAtUtc.AddMinutes(2));
-        TicketHistory unassigned = ticket.Unassign(CreatorId, occurredAtUtc.AddMinutes(2));
+        TicketHistory unassigned = ticket.Unassign(CreatorId, occurredAtUtc.AddMinutes(2)).Value;
         ticket.ClearDomainEvents();
 
         context.TicketHistories.AddRange(assigned, reassigned, unassigned);
@@ -163,7 +163,7 @@ public sealed class GetTicketHistoryQueryHandlerTests : BaseHandlerTest
         Ticket ticket = TicketTestData.Create(requesterId: CreatorId, description: "Original description");
         context.Tickets.Add(ticket);
 
-        (TicketHistory created, _) = ticket.RecordOpening(CreatorId);
+        TicketHistory created = ticket.RecordOpening(CreatorId);
         (_, TicketHistory messageAdded) = ticket.PostMessage(CreatorId, "Mensagem", authorIsAgent: false, ticket.CreatedAtUtc.AddMinutes(1));
         context.TicketHistories.AddRange(created, messageAdded);
 

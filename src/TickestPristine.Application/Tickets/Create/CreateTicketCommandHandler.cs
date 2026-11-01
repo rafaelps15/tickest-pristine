@@ -82,7 +82,8 @@ internal sealed class CreateTicketCommandHandler(
             userContext.UserId,
             createdAtUtc);
 
-        (TicketHistory opening, IReadOnlyList<TicketSlaTimer> slaTimers) = ticket.RecordOpening(userContext.UserId);
+        TicketHistory opening = ticket.RecordOpening(userContext.UserId);
+        IReadOnlyList<TicketSlaTimer> slaTimers = new TicketSlaCycleService().Start(ticket, calendar.Value);
 
         context.Tickets.Add(ticket);
         context.TicketSlaTimers.AddRange(slaTimers);

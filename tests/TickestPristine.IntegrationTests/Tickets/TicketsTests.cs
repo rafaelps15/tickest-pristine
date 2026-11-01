@@ -4192,12 +4192,14 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         Ticket ticketToCancel = await second.Tickets.SingleAsync(t => t.Id == ticketId);
         List<TicketSlaTimer> timersToStop = await second.TicketSlaTimers.Where(t => t.TicketId == ticketId).ToListAsync();
 
-        ticketToCancel.Update(ticketToCancel.Description, TicketStatus.Canceled, timersToStop, lastMessageIsFromAgent: false, ticketToCancel.CreatedByUserId, nowUtc);
+        new TicketSlaCycleService().Cancel(ticketToCancel, timersToStop, canCancelAny: true, isOwnerWhoCanEdit: false, ticketToCancel.CreatedByUserId, nowUtc);
         ticketToCancel.ClearDomainEvents();
         await second.SaveChangesAsync();
 
-        // O Update grava a data de resolução na primeira resolução e conclui os cronômetros.
-        ticketToResolve.Update(ticketToResolve.Description, TicketStatus.Resolved, timersToComplete, lastMessageIsFromAgent: false, ticketToResolve.CreatedByUserId, nowUtc);
+        // O Resolve grava a data de resolução na primeira resolução e conclui os cronômetros; o chamado aberto passa antes
+        // por Em andamento, a transição que o Resolve exige.
+        ticketToResolve.StartProgress(lastMessageIsFromAgent: false, ticketToResolve.CreatedByUserId, nowUtc);
+        new TicketSlaCycleService().Resolve(ticketToResolve, timersToComplete, ticketToResolve.CreatedByUserId, nowUtc);
         ticketToResolve.ClearDomainEvents();
 
         // Act
@@ -4289,6 +4291,163 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         """
         DROP TRIGGER IF EXISTS test_delay_ticket_status_change ON public.tickets;
         DROP FUNCTION IF EXISTS public.test_delay_ticket_status_change();
+        """;
+
+    [Fact]
+    public async Task Reopen_Should_ReturnNoContentAndConcurrencyConflict_WhenTwoReopensRunAtOnce()
+    {
+        // Arrange
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        await UpdateStatusAsync(ticketId, 2); // InProgress
+        await UpdateStatusAsync(ticketId, 3); // Resolved
+        AccessTokens administratorTokens = await LoginAsync(AdminEmail, AdminPassword);
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // O mesmo gatilho da mudança de status: a primeira reabertura segura a linha do chamado por um segundo, e a
+        // segunda lê o chamado ainda resolvido nesse intervalo.
+        await context.Database.ExecuteSqlRawAsync(DelayTicketStatusChangeSql);
+
+        HttpResponseMessage[] responses;
+
+        try
+        {
+            // Act
+            responses = await Task.WhenAll(
+                SendReopenAsAsync(administratorTokens, ticketId),
+                SendReopenAsAsync(administratorTokens, ticketId));
+        }
+        finally
+        {
+            await context.Database.ExecuteSqlRawAsync(DropDelayTicketStatusChangeSql);
+        }
+
+        // Assert
+        responses.Select(r => r.StatusCode).Order().ShouldBe([HttpStatusCode.NoContent, HttpStatusCode.Conflict]);
+
+        HttpResponseMessage conflict = responses.Single(r => r.StatusCode == HttpStatusCode.Conflict);
+        (await conflict.Content.ReadFromJsonAsync<ProblemDetails>())!.Title.ShouldBe("Conflito de concorrência");
+
+        (await context.Tickets.AsNoTracking().SingleAsync(t => t.Id == ticketId)).Status.ShouldBe(TicketStatus.Open);
+        GetTimers(ticketId).Where(t => t.Metric == SlaMetric.Resolution).Select(t => t.Cycle).ShouldBe([1, 2]);
+    }
+
+    [Fact]
+    public async Task Reopen_Should_ReturnConcurrencyConflict_WhenResolutionCycleIndexIsViolated()
+    {
+        // Arrange
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        await UpdateStatusAsync(ticketId, 2); // InProgress
+        await UpdateStatusAsync(ticketId, 3); // Resolved
+        AccessTokens administratorTokens = await LoginAsync(AdminEmail, AdminPassword);
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // Gatilho temporário que recusa o novo ciclo como o índice único de ciclo recusaria.
+        await context.Database.ExecuteSqlRawAsync(RaiseResolutionCycleViolationSql);
+
+        HttpResponseMessage response;
+
+        try
+        {
+            // Act
+            response = await SendReopenAsAsync(administratorTokens, ticketId);
+        }
+        finally
+        {
+            await context.Database.ExecuteSqlRawAsync(DropRaiseUniqueViolationSql);
+        }
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await response.Content.ReadFromJsonAsync<ProblemDetails>())!.Title.ShouldBe("Conflito de concorrência");
+
+        (await context.Tickets.AsNoTracking().SingleAsync(t => t.Id == ticketId)).Status.ShouldBe(TicketStatus.Resolved);
+        GetTimers(ticketId).Where(t => t.Metric == SlaMetric.Resolution).Select(t => t.Cycle).ShouldBe([1]);
+    }
+
+    [Fact]
+    public async Task Reopen_Should_ReturnDuplicateRecord_WhenAnotherUniqueIndexIsViolated()
+    {
+        // Arrange
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        await UpdateStatusAsync(ticketId, 2); // InProgress
+        await UpdateStatusAsync(ticketId, 3); // Resolved
+        AccessTokens administratorTokens = await LoginAsync(AdminEmail, AdminPassword);
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // A mesma recusa, mas por outra constraint de unicidade: continua com a resposta genérica de registro duplicado.
+        await context.Database.ExecuteSqlRawAsync(RaiseOtherUniqueViolationSql);
+
+        HttpResponseMessage response;
+
+        try
+        {
+            // Act
+            response = await SendReopenAsAsync(administratorTokens, ticketId);
+        }
+        finally
+        {
+            await context.Database.ExecuteSqlRawAsync(DropRaiseUniqueViolationSql);
+        }
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await response.Content.ReadFromJsonAsync<ProblemDetails>())!.Title.ShouldBe("Registro duplicado");
+    }
+
+    private async Task<HttpResponseMessage> SendReopenAsAsync(AccessTokens tokens, Guid ticketId)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"tickets/{ticketId}/reopen");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
+
+        return await HttpClient.SendAsync(request);
+    }
+
+    private const string RaiseResolutionCycleViolationSql =
+        """
+        CREATE OR REPLACE FUNCTION public.test_raise_unique_violation() RETURNS trigger AS $$
+        BEGIN
+            RAISE EXCEPTION USING
+                ERRCODE = 'unique_violation',
+                CONSTRAINT = 'ix_ticket_sla_timers_ticket_id_metric_cycle',
+                MESSAGE = 'Ciclo de resolução duplicado (teste)';
+        END;
+        $$ LANGUAGE plpgsql;
+
+        CREATE TRIGGER test_raise_unique_violation
+            BEFORE INSERT ON public.ticket_sla_timers
+            FOR EACH ROW
+            WHEN (NEW.cycle > 1)
+            EXECUTE FUNCTION public.test_raise_unique_violation();
+        """;
+
+    private const string RaiseOtherUniqueViolationSql =
+        """
+        CREATE OR REPLACE FUNCTION public.test_raise_unique_violation() RETURNS trigger AS $$
+        BEGIN
+            RAISE EXCEPTION USING
+                ERRCODE = 'unique_violation',
+                CONSTRAINT = 'ix_test_other_unique_index',
+                MESSAGE = 'Outro registro duplicado (teste)';
+        END;
+        $$ LANGUAGE plpgsql;
+
+        CREATE TRIGGER test_raise_unique_violation
+            BEFORE INSERT ON public.ticket_sla_timers
+            FOR EACH ROW
+            WHEN (NEW.cycle > 1)
+            EXECUTE FUNCTION public.test_raise_unique_violation();
+        """;
+
+    private const string DropRaiseUniqueViolationSql =
+        """
+        DROP TRIGGER IF EXISTS test_raise_unique_violation ON public.ticket_sla_timers;
+        DROP FUNCTION IF EXISTS public.test_raise_unique_violation();
         """;
 
     [Fact]
@@ -4616,6 +4775,30 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
             await RunSlaMonitorAsync(batchSize: 1000);
         }
+    }
+
+    [Fact]
+    public async Task Create_Should_RecordDeadlinesOfCycleOneResolutionAndOnlyTheOpeningEntry()
+    {
+        // Arrange & Act
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+
+        // Assert
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Ticket ticket = await context.Tickets.AsNoTracking().SingleAsync(t => t.Id == ticketId);
+        List<TicketHistory> history = await context.TicketHistories.AsNoTracking().Where(h => h.TicketId == ticketId).ToListAsync();
+
+        List<TicketSlaTimer> timers = GetTimers(ticketId);
+        TicketSlaTimer resolution = timers.Single(t => t.Metric == SlaMetric.Resolution && t.Cycle == 1);
+        ticket.DueAtUtc.ShouldBe(resolution.DueOnUtc);
+        ticket.SlaWarningAtUtc.ShouldBe(resolution.WarningOnUtc);
+
+        // O plano "Padrão" da API tem meta de primeira resposta.
+        ticket.SlaPlan.FirstResponseMinutes.ShouldNotBeNull();
+        timers.Single(t => t.Metric == SlaMetric.FirstResponse).Cycle.ShouldBe(1);
+
+        history.ShouldHaveSingleItem().Action.ShouldBe(TicketHistoryAction.Created);
     }
 
     [Fact]

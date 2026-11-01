@@ -31,7 +31,14 @@ internal sealed class CloseTicketCommandHandler(
             return Result.Failure(TicketErrors.InvalidStatusTransition(ticket.Status, TicketStatus.Closed));
         }
 
-        context.TicketHistories.Add(ticket.Close(userContext.UserId, dateTimeProvider.UtcNow));
+        Result<TicketHistory> closing = ticket.Close(userContext.UserId, dateTimeProvider.UtcNow);
+
+        if (closing.IsFailure)
+        {
+            return closing;
+        }
+
+        context.TicketHistories.Add(closing.Value);
 
         await context.SaveChangesAsync(cancellationToken);
 

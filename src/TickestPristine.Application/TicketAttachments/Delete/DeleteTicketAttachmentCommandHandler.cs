@@ -50,7 +50,7 @@ internal sealed class DeleteTicketAttachmentCommandHandler(
 
         await context.SaveChangesAsync(cancellationToken);
 
-        ticket.RecordActivity(removal.Value);
+        ticket.RecordAttachmentActivity(removal.Value);
 
         await activityWriter.WriteLastActivityAsync(ticket, cancellationToken);
 

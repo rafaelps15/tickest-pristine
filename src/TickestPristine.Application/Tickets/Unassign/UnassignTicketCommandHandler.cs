@@ -36,7 +36,14 @@ internal sealed class UnassignTicketCommandHandler(
             return Result.Success();
         }
 
-        context.TicketHistories.Add(ticket.Unassign(userContext.UserId, dateTimeProvider.UtcNow));
+        Result<TicketHistory> unassignment = ticket.Unassign(userContext.UserId, dateTimeProvider.UtcNow);
+
+        if (unassignment.IsFailure)
+        {
+            return unassignment;
+        }
+
+        context.TicketHistories.Add(unassignment.Value);
 
         await context.SaveChangesAsync(cancellationToken);
 
