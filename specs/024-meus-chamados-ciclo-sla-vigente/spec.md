@@ -1,7 +1,7 @@
 ---
 id: 024
 titulo: "Meus Chamados" com o prazo e a situação do ciclo de SLA vigente
-status: Aprovada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-024-own-tickets-current-sla-cycle                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
@@ -88,7 +88,7 @@ Dados comuns: Maria (solicitante, com `tickets:view-own`); o relógio controlado
 - **Análise:**
   - **Concorrência:** só leitura; chamado e cronômetro saem do mesmo comando SQL, então o item é consistente mesmo com uma reabertura acontecendo ao mesmo tempo.
   - **Quebra de contrato:** nenhuma; dois campos novos.
-  - **Desempenho:** uma subconsulta por linha em `ticket_sla_timers`, pelo índice único `(ticket_id, metric, cycle)` (`TicketSlaTimerConfiguration.cs:23`), sobre no máximo 100 linhas por página. A situação sai na própria consulta (DEC-8), sem afetar o `Count`.
+  - **Desempenho:** duas subconsultas escalares por linha em `ticket_sla_timers` (o prazo e a situação do ciclo vigente), pelo índice único `(ticket_id, metric, cycle)` (`TicketSlaTimerConfiguration.cs:28`; era a linha 23 quando o plano foi escrito), sobre no máximo 100 linhas por página. A situação sai na própria consulta (DEC-8), sem afetar o `Count`.
   - **Segurança:** os campos novos seguem a autorização da rota; o usuário continua vindo do token.
 - **Árvore de arquivos:**
 
@@ -119,28 +119,45 @@ Dados comuns: Maria (solicitante, com `tickets:view-own`); o relógio controlado
 ## 7. Tarefas
 | ID | Tarefa | ACs | Skill | Feita |
 |---|---|---|---|---|
-| T-1 | Campos `CurrentDueAtUtc`/`CurrentSlaStatus` na resposta, subconsulta do cronômetro de resolução vigente, tradução do estado e o caso legado | AC-1 a AC-6 | `add-feature` | [ ] |
-| T-2 | Testes unitários e de integração da seção 6 | AC-1 a AC-7 | `add-tests` | [ ] |
-| T-3 | Atualizar o `SYSTEM_SPECIFICATION.md` (4.3 e a nota do congelamento de `Met`/`Missed`) | AC-8 | — | [ ] |
-| T-4 | Revisão de convenções, build sem avisos e suíte inteira | AC-8 | `ca-review` | [ ] |
+| T-1 | Campos `CurrentDueAtUtc`/`CurrentSlaStatus` na resposta, subconsulta do cronômetro de resolução vigente, tradução do estado e o caso legado | AC-1 a AC-6 | `add-feature` | [x] |
+| T-2 | Testes unitários e de integração da seção 6 | AC-1 a AC-7 | `add-tests` | [x] |
+| T-3 | Atualizar o `SYSTEM_SPECIFICATION.md` (4.3 e a nota do congelamento de `Met`/`Missed`) | AC-8 | — | [x] |
+| T-4 | Revisão de convenções, build sem avisos e suíte inteira | AC-8 | `ca-review` | [x] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
 |---|---|---|---|
-| AC-1 | | | |
-| AC-2 | | | |
-| AC-3 | | | |
-| AC-4 | | | |
-| AC-5 | | | |
-| AC-6 | | | |
-| AC-7 | | | |
-| AC-8 | | | |
+| AC-1 | `Application.UnitTests/Tickets/GetOwnTicketsQueryHandlerTests.cs` › `Handle_Should_ReturnSameCurrentCycle_WhenNeverReopened`; `IntegrationTests/Tickets/TicketsTests.cs` › `GetOwn_Should_ReturnCurrentCycleEqualToTicket_WhenNeverReopened` | Chamado aberto e nunca resolvido, com os cronômetros do ciclo 1: `currentDueAtUtc` igual a `dueAtUtc` e `currentSlaStatus` igual a `slaStatus` (`OnTime`), no handler e pela API | Aprovado em 2026-11-01 (execução da segunda verificação, das 19:57 às 20:04) |
+| AC-2 | `GetOwnTicketsQueryHandlerTests.cs` › `Handle_Should_ReturnCurrentResolutionCycle_WhenReopened`; `TicketsTests.cs` › `GetOwn_Should_ReturnNewCycleDueAndStatus_AfterReopen` | Resolvido dentro do prazo e reaberto: `slaStatus` `Met` e `dueAtUtc` do ciclo 1; `currentDueAtUtc` igual ao `DueOnUtc` do cronômetro de resolução do ciclo 2 (pela API, o do ciclo vigente em `GET tickets/{id}/sla`) e `currentSlaStatus` `OnTime` | Aprovado em 2026-11-01 (execução da segunda verificação, das 19:57 às 20:04) |
+| AC-3 | `GetOwnTicketsQueryHandlerTests.cs` › `Handle_Should_FollowStateOfCurrentCycle_WhenTimePassesAfterReopen` (dois casos); `TicketsTests.cs` › `GetOwn_Should_FollowStateOfCurrentCycleInSla_WhenWarningOrDuePasses` (dois casos) | No alerta e depois no prazo do ciclo 2, `currentSlaStatus` `AtRisk` e depois `Breached`, iguais ao estado do ciclo vigente dado pelo `TicketSlaTimer.GetState` (handler) e mostrado pelo `GET tickets/{id}/sla` (API, com os cronômetros levados para o passado), e o `slaStatus` continua `Met` | Aprovado em 2026-11-01 (execução da segunda verificação, das 19:57 às 20:04) |
+| AC-4 | `GetOwnTicketsQueryHandlerTests.cs` › `Handle_Should_ReturnNotApplicable_WhenResolutionTimerIsStopped` e `Handle_Should_ReturnNotApplicable_WhenStoppedCycleIsPastItsDue`; `TicketsTests.cs` › `GetOwn_Should_ReturnNotApplicable_WhenCanceled` | Cronômetro de resolução vigente parado pelo cancelamento: `currentSlaStatus` `NotApplicable`; no handler, o ciclo parado é o 2, com o `slaStatus` ainda `Met`, e continua `NotApplicable` consultado depois do prazo dele (parado vale antes de violado, como o `TicketSlaTimer.GetState` dá `Stopped` no mesmo instante); pela API, o `GET tickets/{id}/sla` mostra o ciclo vigente `Stopped` | Aprovado em 2026-11-01 (execução da segunda verificação, das 19:57 às 20:04) |
+| AC-5 | `GetOwnTicketsQueryHandlerTests.cs` › `Handle_Should_ReturnMissed_WhenResolvedAfterDue` e, no limite do prazo, `Handle_Should_ReturnMet_WhenCurrentCycleIsResolvedExactlyAtItsDue`; `TicketsTests.cs` › `GetOwn_Should_ReturnMissed_WhenCurrentCycleWasResolvedAfterItsDue` | O ciclo 2 resolvido depois do prazo dele: `currentSlaStatus` `Missed`, com o `slaStatus` ainda `Met` (a primeira resolução foi no prazo). No limite, o ciclo resolvido exatamente no prazo dá `Met`, mesmo consultado depois dele e com o `slaStatus` `Missed`, como o `TicketSlaTimer.GetState` (a regra `<=` do REQ-2). Pela API, com o ciclo 1 concluído depois do próprio prazo (cronômetros levados para o passado), o SQL dá `Missed`, igual ao estado do ciclo vigente em `GET tickets/{id}/sla`, e o `slaStatus` continua `Met` | Aprovado em 2026-11-01 (execução da segunda verificação, das 19:57 às 20:04) |
+| AC-6 | `GetOwnTicketsQueryHandlerTests.cs` › `Handle_Should_FallBackToTicketSla_WhenNoResolutionTimer`; `TicketsTests.cs` › `GetOwn_Should_RepeatTicketDueAndStatus_WhenThereIsNoResolutionTimer` | Chamado do plano legado, sem cronômetro (gravado direto no banco, na integração): `currentDueAtUtc` e `currentSlaStatus` repetem `dueAtUtc` e `slaStatus` (`AtRisk`), no handler e pela API, onde a subconsulta não acha cronômetro | Aprovado em 2026-11-01 (execução da segunda verificação, das 19:57 às 20:04) |
+| AC-7 | Os testes existentes de `GET tickets/mine` (`GetOwnTicketsQueryHandlerTests.cs` e `TicketsTests.cs` › `GetOwn_*`), de `GET tickets` (`GetTicketsQueryHandlerTests.cs` e `TicketsTests.cs` › `GetAll_*`) e de `GET tickets/{id}/sla` (`GetTicketSlaQueryHandlerTests.cs` e `TicketsTests.cs` › `GetSla_*`) | Nenhum desses testes mudou; só o `OwnTicketItemDto` dos testes de integração ganhou os dois campos novos, para os testes da spec lê-los | Aprovado em 2026-11-01 (execução da segunda verificação, das 19:57 às 20:04) |
+| AC-8 | `dotnet build TickestPristine.slnx --no-incremental` e `dotnet test TickestPristine.slnx --no-build --logger trx` (relatório por teste) | Build com 0 avisos e 0 erros e a suíte inteira aprovada, com os testes da spec e os existentes | Aprovado em 2026-11-01 (build às 19:56 com 0 avisos e 0 erros; suíte inteira das 19:57 às 20:04 com 1.495 aprovados e 0 falhas) |
 
 ## 9. Evidências de verificação
-- **Build:**
-- **Testes:**
+- **Build:** 2026-11-01, 19:56, `dotnet build TickestPristine.slnx --no-incremental`: 0 avisos, 0 erros.
+- **Testes:** 2026-11-01, das 19:57 às 20:04, `dotnet test TickestPristine.slnx --no-build --logger trx`: 1.495 aprovados, 0 com falha (60 de arquitetura, 905 unitários, 530 de integração); os 16 casos de teste da rastreabilidade conferidos um a um no relatório por teste (todos aprovados). Auditoria `python scripts/auditoria_sdd.py .` às 19:57: score 100%, CONFORME, código de saída 0. A primeira verificação (19:37 às 19:43: 1.492 aprovados, 0 falhas) foi refeita depois de fechar as lacunas de teste. O SQL gerado para `GET tickets/mine`, conferido no log da integração, calcula as duas situações numa única consulta, com as subconsultas do cronômetro de maior ciclo.
 - **Revisão:**
-- **Documentação atualizada:**
+  - **Revisões feitas:** a `ca-review` da T-4 e duas revisões independentes, que só leram o código, sem build nem testes: uma na primeira verificação e outra nesta, depois de fechar as lacunas. Nenhuma encontrou bloqueante ou violação de convenção.
+  - **Conferido nas revisões independentes, linha a linha:**
+    - a regra escrita na consulta é a do `TicketSlaTimer.GetState`, com a mesma ordem e os mesmos limites e com a tradução do REQ-2;
+    - o ciclo vigente é o mesmo do `TicketSlaCycleService` e do `GET tickets/{id}/sla`;
+    - o caso sem cronômetro repete exatamente a chamada do `SlaStatus` (DEC-7);
+    - na segunda revisão, regra por regra, que algum teste falha se a regra da cadeia for removida, trocada de ordem com a vizinha ou tiver o limite trocado.
+  - **Lacunas da primeira revisão:**
+    - 1 a 3 fechadas com testes, a pedido de Rafael Santos: o `Met` no limite do prazo (`Handle_Should_ReturnMet_WhenCurrentCycleIsResolvedExactlyAtItsDue`), `Stopped` antes de `Breached` (`Handle_Should_ReturnNotApplicable_WhenStoppedCycleIsPastItsDue`) e o `Missed` pelo SQL (`GetOwn_Should_ReturnMissed_WhenCurrentCycleWasResolvedAfterItsDue`);
+    - a 4, o teste de integração do cancelamento, que não separa o cronômetro parado do caso sem cronômetro, ficou como melhoria futura, por decisão de Rafael Santos.
+  - **Lacunas não bloqueantes da segunda revisão, opcionais:**
+    - o resultado `Met` e a precedência de `Stopped` sobre `Breached` são fixados só em memória; pelo SQL, só o caso falso do `Met` e o `Stopped` antes do prazo;
+    - os limites exatos (`<=`/`>=`) também só em memória, porque pela API não dá para reproduzir o instante exato.
+  - **Ajustes de texto feitos nas verificações:**
+    - no `SYSTEM_SPECIFICATION.md`: o fato da reabertura (com a marca no texto antigo "visível só no bloco `sla`"), a RN-26 ("expressão LINQ que o EF traduz para SQL") e a RN-31 (os campos novos de `GET tickets/mine`);
+    - nesta spec, a análise de desempenho (duas subconsultas, índice na linha 28).
+- **Documentação atualizada:** `SYSTEM_SPECIFICATION.md`:
+  - na T-3: o fato da reabertura (seção 2.6), a RN-26, a C-13 e a rota `GET tickets/mine` (4.3.1);
+  - na verificação: os ajustes de texto acima e a tabela 6.1.
 - **CI:**
 - **Entrega:** <PR #n (o mesmo do campo `pr:`); a spec fica `Entregue` quando o responsável mergear o PR na `main`>
 
@@ -154,3 +171,9 @@ Dados comuns: Maria (solicitante, com `tickets:view-own`); o relógio controlado
 | 2026-10-28 | Aprovada | Aprovada por Rafael Santos no chat ("Aprovo a 023 e a 024."). |
 | 2026-11-01 | Aprovada | Revisão antes da implementação, a pedido de Rafael Santos ("vamos para a 24 tem como ?"): o texto aprovado citava `TicketSla.GetStatus` e `TicketSlaClock.GetState`, que a spec 041 removeu, e a spec 045 mudou a reabertura. Descoberta refeita no código da `main` com as specs 041 e 045 (atualização no Contexto): as regras de negócio continuam valendo. DEC-8 (a situação do ciclo vigente pela regra do `TicketSlaTimer.GetState`, escrita como expressão traduzível na própria consulta) e DEC-9 (branch reaproveitada) decididas por Rafael Santos, que delegou a escolha ("veja qual deles se encaixa melhor para esse caso e faça identico ok"); REQ-2 e plano técnico ajustados para citar o código atual, com o mesmo comportamento. Sem REQ novo nem removido e sem arquivo fora do plano: o status não muda. |
 | 2026-11-01 | Aprovada | Revisão aprovada por Rafael Santos no chat ("aprovo a revisão da 024"). |
+| 2026-11-01 | Em implementação | `/spec-implement 024` iniciado por Rafael Santos na branch `feat/SPEC-024-own-tickets-current-sla-cycle`, já com a `main` das specs 022, 023 e 045 (merge `ca8113b`), com a instrução de implementar a spec inteira com autonomia técnica, sem commits nem outras operações de git, e apresentar um relatório final antes de qualquer commit. |
+| 2026-11-01 | Em implementação | T-1 a T-4 concluídas na árvore de trabalho, sem commits, como pedido. `GET tickets/mine` ganhou `currentDueAtUtc` e `currentSlaStatus`, calculados no SQL por duas subconsultas escalares do cronômetro de resolução de maior ciclo, no mesmo SELECT (conferido no SQL gerado). A regra do `TicketSlaTimer.GetState` foi escrita como uma cadeia de `??`, uma regra por linha, porque o analisador recusa ternários aninhados e a árvore de expressão não aceita `switch`; sem cronômetro, valem o prazo e a situação do chamado. Entraram 7 testes unitários e 6 de integração, incluído um de integração do AC-6 além dos previstos, para o caminho sem cronômetro no SQL. O `SYSTEM_SPECIFICATION.md` foi atualizado no fato da reabertura, na RN-26, na C-13 e na rota `GET tickets/mine`. `ca-review` sem bloqueantes nem violações. Build com 0 avisos; suíte inteira com 1.492 testes aprovados (60 de arquitetura, 903 unitários e 529 de integração), das 19:28 às 19:35. A auditoria SDD local falha só no SDD-03, pela `specs/049-reavaliacao-arquitetural-dominio-chamados`, que está fora do git e é de outra sessão. Próximo passo: `spec-verify`. |
+| 2026-11-01 | Verificada | `spec-verify`: build com 0 avisos; suíte inteira verde (1.492 testes: 60 de arquitetura, 903 unitários e 529 de integração), com os 13 casos de teste da rastreabilidade aprovados no relatório por teste; auditoria SDD 100% (saída 0; a spec 049 da outra sessão já estava completa). AC-1 a AC-8 cobertos por testes lidos e aprovados nesta execução. Revisão independente sem bloqueantes nem violações, com quatro lacunas de teste não bloqueantes registradas nas evidências. A verificação corrigiu textos da documentação (fato da reabertura e RN-26 no `SYSTEM_SPECIFICATION.md`, análise de desempenho nesta spec) e acrescentou a tabela 6.1. Próximo passo: decisão de Rafael Santos entre fechar as lacunas de teste antes do commit ou commitar como está. |
+| 2026-11-01 | Em implementação | Rafael Santos decidiu fechar antes do commit as lacunas de teste 1 a 3 da revisão independente ("Fechar as lacunas. Retorne a SPEC-024 para Em implementação"): o `Met` do ciclo vigente, a precedência de `Stopped` sobre `Breached` e o `Missed` pelo SQL; a do teste de integração do cancelamento fica como melhoria futura. Só testes mudam, sem alterar a implementação funcional; a verificação anterior deixa de valer e a spec passa de novo pela `spec-verify`, com nova revisão independente. |
+| 2026-11-01 | Em implementação | Lacunas 1 a 3 fechadas na T-2, só com testes; o código de produção ficou igual ao da implementação. Entraram três testes: `Handle_Should_ReturnMet_WhenCurrentCycleIsResolvedExactlyAtItsDue` (o `Met` no limite `<=` do prazo, consultado depois dele), `Handle_Should_ReturnNotApplicable_WhenStoppedCycleIsPastItsDue` (`Stopped` antes de `Breached`) e `GetOwn_Should_ReturnMissed_WhenCurrentCycleWasResolvedAfterItsDue` (`Missed` pelo SQL). Build com 0 avisos; os testes de `GET tickets/mine` aprovados (23 unitários e 23 de integração). |
+| 2026-11-01 | Verificada | Segunda `spec-verify`, depois de fechar as lacunas 1 a 3. Build com 0 avisos; suíte inteira verde (1.495 testes: 60 de arquitetura, 905 unitários e 530 de integração), com os 16 casos da rastreabilidade aprovados no relatório por teste; auditoria SDD 100% (saída 0). AC-1 a AC-8 cobertos por testes lidos e aprovados nesta execução. A nova revisão independente não encontrou bloqueantes nem violações; as lacunas opcionais ficaram registradas nas evidências (`Met` e precedência de `Stopped` só em memória; o teste do cancelamento como melhoria futura). Documentação: a RN-31, a marca no fato da reabertura e a linha da tabela 6.1 com esta execução. Próximo passo: aprovação de Rafael Santos e commit autorizado por ele. |

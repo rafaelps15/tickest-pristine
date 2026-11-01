@@ -17,6 +17,8 @@ public sealed class OwnTicketResponse
     public DateTime CreatedAtUtc { get; set; }
     public DateTime DueAtUtc { get; set; }
     public TicketSlaStatus SlaStatus { get; set; }
+    public DateTime CurrentDueAtUtc { get; set; }
+    public TicketSlaStatus CurrentSlaStatus { get; set; }
     public DateTime LastActivityAtUtc { get; set; }
 
     /// <summary>
