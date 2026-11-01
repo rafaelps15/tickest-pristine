@@ -11,9 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace TickestPristine.Application.UnitTests.Abstractions;
 
-/// <summary>
-/// DbContext em memória que implementa IApplicationDbContext para os testes de handlers.
-/// </summary>
+// DbContext em memória que implementa IApplicationDbContext para os testes de handlers.
 public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
     : DbContext(options), IApplicationDbContext
 {
@@ -53,9 +51,7 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
 
     public DbSet<SlaCalendarHoliday> SlaCalendarHolidays { get; set; }
 
-    /// <summary>
-    /// Aplica as chaves e os filtros de exclusão lógica do banco real.
-    /// </summary>
+    // Aplica as chaves e os filtros de exclusão lógica do banco real.
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -73,6 +69,10 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
         modelBuilder.Entity<RolePermission>().HasKey(p => new { p.RoleName, p.PermissionCode });
 
         modelBuilder.Entity<Ticket>().HasQueryFilter(t => t.DeletedAtUtc == null);
+
+        // A situação de espera só tem leitura na entidade (o banco a calcula); sem o mapeamento explícito da
+        // Infrastructure, o EF não a incluiria no modelo.
+        modelBuilder.Entity<Ticket>().Property(t => t.WaitingOn);
 
         // O plano é jsonb no banco real; aqui vira texto, opcional para os testes que montam chamados sem plano.
         modelBuilder.Entity<Ticket>().Property(t => t.SlaPlan)

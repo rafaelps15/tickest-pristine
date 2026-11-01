@@ -198,18 +198,10 @@ public sealed class DeleteTicketCommandHandlerTests : BaseHandlerTest
 
     private static async Task<Guid> SeedTicketAsync(TestDbContext context, Guid createdByUserId, TicketStatus status)
     {
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Medium,
-            Status = status,
-            CreatedByUserId = createdByUserId,
-            AssignedToUserId = null,
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow
-        };
+        Ticket ticket = TicketTestData.Create(
+            requesterId: createdByUserId,
+            status: status,
+            description: "Original description");
 
         context.Tickets.Add(ticket);
         await context.SaveChangesAsync();

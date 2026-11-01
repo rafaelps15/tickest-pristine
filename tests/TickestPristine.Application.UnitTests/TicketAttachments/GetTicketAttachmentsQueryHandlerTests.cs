@@ -108,31 +108,10 @@ public sealed class GetTicketAttachmentsQueryHandlerTests : BaseHandlerTest
 
     private static async Task<Guid> SeedTicketWithAttachmentAsync(TestDbContext context)
     {
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Medium,
-            Status = TicketStatus.Open,
-            CreatedByUserId = CreatorId,
-            AssignedToUserId = null,
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow
-        };
+        Ticket ticket = TicketTestData.Create(requesterId: CreatorId, description: "Original description");
         context.Tickets.Add(ticket);
 
-        var attachment = new TicketAttachment
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            UploadedByUserId = CreatorId,
-            FileName = "report.pdf",
-            ContentType = "application/pdf",
-            FileSizeBytes = 1024,
-            StorageKey = "storage-key.pdf",
-            UploadedAtUtc = DateTime.UtcNow
-        };
+        TicketAttachment attachment = TicketTestData.CreateAttachment(ticket.Id, CreatorId, DateTime.UtcNow);
         context.TicketAttachments.Add(attachment);
 
         await context.SaveChangesAsync();

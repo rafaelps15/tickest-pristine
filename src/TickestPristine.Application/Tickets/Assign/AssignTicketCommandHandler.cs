@@ -3,7 +3,6 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Permissions;
-using TickestPristine.Application.TicketHistories;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -14,12 +13,13 @@ namespace TickestPristine.Application.Tickets.Assign;
 /// <summary>
 /// Define o responsável por um chamado ativo. Quem atende a fila (o endpoint exige <c>tickets:manage</c>) pode assumir
 /// o chamado; passá-lo para outra pessoa exige também <c>tickets:assign</c>. O responsável precisa ser um atendente
-/// elegível (<see cref="TicketAssigneeEligibility"/>). Atribuir ao responsável atual não muda nada.
+/// elegível (<see cref="TicketAgentLookup"/>). Atribuir ao responsável atual não muda nada.
 /// </summary>
 internal sealed class AssignTicketCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IPermissionProvider permissionProvider,
+    TicketAgentLookup agentLookup,
     IDateTimeProvider dateTimeProvider)
     : ICommandHandler<AssignTicketCommand>
 {
@@ -45,58 +45,39 @@ internal sealed class AssignTicketCommandHandler(
             return Result.Failure(TicketErrors.NotFound(command.TicketId));
         }
 
-        if (!TicketStatusTransitions.IsActive(ticket.Status))
+        if (!ticket.IsActive)
         {
             return Result.Failure(TicketErrors.NotActive(ticket.Id));
         }
 
-        bool assigneeExists = await context.Users.AnyAsync(
-            u => u.Id == command.AssignedToUserId && u.IsActive,
-            cancellationToken);
+        User? assignee = await context.Users
+            .AsNoTracking()
+            .SingleOrDefaultAsync(u => u.Id == command.AssignedToUserId && u.IsActive, cancellationToken);
 
-        if (!assigneeExists)
+        if (assignee is null)
         {
             return Result.Failure(UserErrors.NotFound(command.AssignedToUserId));
         }
 
-        // Lida do banco, e não do cache de permissões: a lista de atendentes usa a mesma regra e não pode discordar.
-        bool assigneeIsAttendant = await context.Users
-            .Where(u => u.Id == command.AssignedToUserId)
-            .WhereEligibleAssignee(context)
-            .AnyAsync(cancellationToken);
-
-        if (!assigneeIsAttendant)
+        // Elegibilidade lida do banco, e não do cache de permissões: a lista de atendentes usa a mesma regra e não pode discordar.
+        if (!await agentLookup.IsAgentAsync(command.AssignedToUserId, cancellationToken))
         {
             return Result.Failure(TicketErrors.AssigneeNotAttendant(command.AssignedToUserId));
         }
 
-        if (ticket.AssignedToUserId == command.AssignedToUserId)
+        if (ticket.IsAssignedTo(command.AssignedToUserId))
         {
             return Result.Success();
         }
 
-        Guid? previousAssignedToUserId = ticket.AssignedToUserId;
+        Result<TicketHistory> assignment = ticket.Assign(assignee, userContext.UserId, dateTimeProvider.UtcNow);
 
-        ticket.AssignedToUserId = command.AssignedToUserId;
+        if (assignment.IsFailure)
+        {
+            return assignment;
+        }
 
-        ticket.Raise(new TicketReassignedDomainEvent(
-            ticket.Id,
-            previousAssignedToUserId,
-            command.AssignedToUserId,
-            userContext.UserId));
-
-        context.TicketHistories.Add(previousAssignedToUserId is null
-            ? TicketHistoryEntries.Assigned(
-                ticket.Id,
-                userContext.UserId,
-                command.AssignedToUserId,
-                dateTimeProvider.UtcNow)
-            : TicketHistoryEntries.Reassigned(
-                ticket.Id,
-                userContext.UserId,
-                previousAssignedToUserId,
-                command.AssignedToUserId,
-                dateTimeProvider.UtcNow));
+        context.TicketHistories.Add(assignment.Value);
 
         await context.SaveChangesAsync(cancellationToken);
 

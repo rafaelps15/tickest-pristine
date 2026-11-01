@@ -10,6 +10,8 @@ internal sealed class UserCredentialConfiguration : IEntityTypeConfiguration<Use
     {
         builder.HasKey(credential => credential.Id);
 
+        builder.Property(credential => credential.Id).ValueGeneratedNever();
+
         builder.Property(credential => credential.PasswordHash).HasMaxLength(500);
 
         // Credencial nova sem carimbo informado recebe um gerado pelo banco.

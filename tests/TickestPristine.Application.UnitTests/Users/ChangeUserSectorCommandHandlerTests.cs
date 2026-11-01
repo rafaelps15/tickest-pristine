@@ -3,6 +3,7 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Permissions;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Users.ChangeSector;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -172,13 +173,11 @@ public sealed class ChangeUserSectorCommandHandlerTests : BaseHandlerTest
 
     private static async Task<Sector> SeedSectorAsync(TestDbContext context, bool isActive = true)
     {
-        var sector = new Sector
+        var sector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), $"Sector-{Guid.NewGuid():N}", description: null);
+        if (!isActive)
         {
-            Id = Guid.NewGuid(),
-            Name = $"Sector-{Guid.NewGuid():N}",
-            IsActive = isActive,
-            DepartmentId = Guid.NewGuid()
-        };
+            sector.Deactivate();
+        }
 
         context.Sectors.Add(sector);
         await context.SaveChangesAsync();

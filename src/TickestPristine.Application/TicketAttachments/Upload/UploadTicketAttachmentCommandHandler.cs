@@ -3,40 +3,47 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Storage;
-using TickestPristine.Application.Authorization;
-using TickestPristine.Application.TicketHistories;
+using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.TicketAttachments.Upload;
 
 /// <summary>
-/// Grava o anexo de um participante do chamado. Antes de gravar, confere os limites do chamado
-/// (<see cref="TicketAttachmentLimits.MaxAttachmentsPerTicket"/> anexos e
-/// <see cref="TicketAttachmentLimits.MaxTotalBytesPerTicket"/> bytes somados, contando só os não excluídos) e se o
-/// conteúdo corresponde ao tipo declarado; uma recusa não grava arquivo nem linha.
+/// Grava o anexo de um participante do chamado. O conteúdo é conferido contra o tipo declarado antes de ir para o
+/// armazenamento; as regras do anexo (tipo, extensão, tamanho e os limites do chamado, contando só os anexos não
+/// excluídos) são do <see cref="TicketAttachment.Create"/>, e uma recusa dele apaga o arquivo gravado. Uma recusa não
+/// deixa arquivo nem linha.
 /// </summary>
 internal sealed class UploadTicketAttachmentCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IPermissionProvider permissionProvider,
     IDateTimeProvider dateTimeProvider,
-    IFileStorage fileStorage)
+    IFileStorage fileStorage,
+    IAttachmentContentInspector contentInspector,
+    ITicketActivityWriter activityWriter)
     : ICommandHandler<UploadTicketAttachmentCommand, Guid>
 {
     public async Task<Result<Guid>> Handle(UploadTicketAttachmentCommand command, CancellationToken cancellationToken)
     {
-        Result access = await TicketAccessGuard.EnsureCanViewAsync(
-            context,
-            permissionProvider,
-            userContext.UserId,
-            command.TicketId,
-            cancellationToken);
+        // Sem rastreio: a última atividade é gravada depois do commit, sem a versão do chamado.
+        Ticket? ticket = await context.Tickets
+            .AsNoTracking()
+            .SingleOrDefaultAsync(t => t.Id == command.TicketId, cancellationToken);
 
-        if (access.IsFailure)
+        if (ticket is null)
         {
-            return Result.Failure<Guid>(access.Error);
+            return Result.Failure<Guid>(TicketErrors.NotFound(command.TicketId));
+        }
+
+        // Participantes (solicitante e responsável) sempre podem; os demais precisam de tickets:manage.
+        if (!ticket.IsParticipant(userContext.UserId) &&
+            !await permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, cancellationToken))
+        {
+            return Result.Failure<Guid>(UserErrors.Unauthorized());
         }
 
         // O filtro global exclui os anexos excluídos: só os que continuam no chamado contam para o limite.
@@ -46,16 +53,7 @@ internal sealed class UploadTicketAttachmentCommandHandler(
             .Select(g => new { Count = g.Count(), TotalBytes = g.Sum(a => a.FileSizeBytes) })
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (usage is not null &&
-            (usage.Count >= TicketAttachmentLimits.MaxAttachmentsPerTicket ||
-             usage.TotalBytes + command.FileSizeBytes > TicketAttachmentLimits.MaxTotalBytesPerTicket))
-        {
-            return Result.Failure<Guid>(TicketAttachmentErrors.TicketLimitReached(
-                TicketAttachmentLimits.MaxAttachmentsPerTicket,
-                TicketAttachmentLimits.MaxTotalBytesPerTicket / (1024 * 1024)));
-        }
-
-        if (!await TicketAttachmentContentInspector.MatchesAsync(command.Content, command.ContentType, cancellationToken))
+        if (!await contentInspector.MatchesAsync(command.Content, command.ContentType, cancellationToken))
         {
             return Result.Failure<Guid>(TicketAttachmentErrors.ContentMismatch);
         }
@@ -64,32 +62,30 @@ internal sealed class UploadTicketAttachmentCommandHandler(
 
         DateTime nowUtc = dateTimeProvider.UtcNow;
 
-        var attachment = new TicketAttachment
-        {
-            Id = Guid.NewGuid(),
-            TicketId = command.TicketId,
-            UploadedByUserId = userContext.UserId,
-            FileName = command.FileName,
-            ContentType = command.ContentType,
-            FileSizeBytes = command.FileSizeBytes,
-            StorageKey = storageKey,
-            UploadedAtUtc = nowUtc
-        };
+        Result<TicketAttachment> created = TicketAttachment.Create(
+            ticket,
+            userContext.UserId,
+            command.FileName,
+            command.ContentType,
+            command.FileSizeBytes,
+            storageKey,
+            usage?.Count ?? 0,
+            usage?.TotalBytes ?? 0,
+            nowUtc);
 
-        attachment.Raise(new TicketAttachmentUploadedDomainEvent(
-            attachment.Id,
-            attachment.TicketId,
-            attachment.UploadedByUserId,
-            attachment.FileName));
+        if (created.IsFailure)
+        {
+            // O arquivo já foi gravado para obter a chave: sem o anexo, ele ficaria órfão no disco.
+            await fileStorage.DeleteAsync(storageKey, CancellationToken.None);
+
+            return Result.Failure<Guid>(created.Error);
+        }
+
+        TicketAttachment attachment = created.Value;
+        TicketHistory upload = attachment.RecordUpload();
 
         context.TicketAttachments.Add(attachment);
-
-        context.TicketHistories.Add(TicketHistoryEntries.Create(
-            attachment.TicketId,
-            attachment.UploadedByUserId,
-            TicketHistoryAction.AttachmentAdded,
-            nowUtc,
-            newValue: attachment.FileName));
+        context.TicketHistories.Add(upload);
 
         try
         {
@@ -101,6 +97,10 @@ internal sealed class UploadTicketAttachmentCommandHandler(
             await fileStorage.DeleteAsync(storageKey, CancellationToken.None);
             throw;
         }
+
+        ticket.RecordAttachmentActivity(upload);
+
+        await activityWriter.WriteLastActivityAsync(ticket, cancellationToken);
 
         return attachment.Id;
     }

@@ -77,42 +77,6 @@ public sealed class TicketAccessGuardTests : BaseHandlerTest
         result.IsSuccess.ShouldBeTrue();
     }
 
-    [Fact]
-    public async Task EnsureOwnerOrManagerAsync_Should_ReturnUnauthorized_WhenOwnerLacksOwnPermission()
-    {
-        // Arrange
-        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        permissionProvider.HasPermissionAsync(RequesterId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
-            .Returns(false);
-
-        // Act
-        Result result = await TicketAccessGuard.EnsureOwnerOrManagerAsync(
-            permissionProvider, RequesterId, RequesterId, PermissionCodes.Tickets.UpdateOwn, CancellationToken.None);
-
-        // Assert
-        result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(UserErrors.Unauthorized());
-    }
-
-    [Fact]
-    public async Task EnsureOwnerOrManagerAsync_Should_Succeed_WhenOwnerHasOwnPermission()
-    {
-        // Arrange
-        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        permissionProvider.HasPermissionAsync(RequesterId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
-            .Returns(true);
-
-        // Act
-        Result result = await TicketAccessGuard.EnsureOwnerOrManagerAsync(
-            permissionProvider, RequesterId, RequesterId, PermissionCodes.Tickets.UpdateOwn, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.ShouldBeTrue();
-        // O dono é conferido pela permissão própria, sem cair na de gerenciar chamados.
-        await permissionProvider.DidNotReceive()
-            .HasPermissionAsync(RequesterId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>());
-    }
-
     private static IPermissionProvider CreatePermissionProvider(Guid callerId, bool canManage)
     {
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
@@ -124,18 +88,10 @@ public sealed class TicketAccessGuardTests : BaseHandlerTest
 
     private static async Task<Guid> SeedTicketAsync(TestDbContext context)
     {
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Medium,
-            Status = TicketStatus.Open,
-            CreatedByUserId = RequesterId,
-            AssignedToUserId = AssigneeId,
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow
-        };
+        Ticket ticket = TicketTestData.Create(
+            requesterId: RequesterId,
+            assignedToUserId: AssigneeId,
+            description: "Original description");
 
         context.Tickets.Add(ticket);
         await context.SaveChangesAsync();

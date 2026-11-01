@@ -12,9 +12,17 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasKey(u => u.Id);
 
         // citext: busca, login e e-mail único não diferenciam maiúsculas de minúsculas.
-        builder.Property(u => u.Email).HasColumnType("citext");
-        builder.Property(u => u.FirstName).HasColumnType("citext");
-        builder.Property(u => u.LastName).HasColumnType("citext");
+        builder.Property(u => u.Email).HasMaxLength(254).HasColumnType("citext");
+        builder.Property(u => u.FirstName).HasMaxLength(100).HasColumnType("citext");
+        builder.Property(u => u.LastName).HasMaxLength(100).HasColumnType("citext");
+
+        // O citext não guarda tamanho: os limites do e-mail e do nome valem no banco pelas constraints.
+        builder.ToTable(t =>
+        {
+            t.HasCheckConstraint("ck_users_email_length", "char_length(email) <= 254");
+            t.HasCheckConstraint("ck_users_first_name_length", "char_length(first_name) <= 100");
+            t.HasCheckConstraint("ck_users_last_name_length", "char_length(last_name) <= 100");
+        });
 
         builder.HasIndex(u => u.Email).IsUnique();
 

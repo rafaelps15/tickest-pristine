@@ -1,9 +1,8 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.TicketHistories;
+using TickestPristine.Application.Tickets;
 using TickestPristine.Domain.Tickets;
-using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -12,6 +11,8 @@ namespace TickestPristine.Application.TicketMessages.Edit;
 internal sealed class EditTicketMessageCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
+    TicketAgentLookup agentLookup,
+    ITicketActivityWriter activityWriter,
     IDateTimeProvider dateTimeProvider)
     : ICommandHandler<EditTicketMessageCommand>
 {
@@ -28,25 +29,23 @@ internal sealed class EditTicketMessageCommandHandler(
             return Result.Failure(TicketMessageErrors.NotFound(command.MessageId));
         }
 
-        if (message.AuthorUserId != userContext.UserId)
+        Result<TicketHistory> edition = message.Edit(command.Content, userContext.UserId, dateTimeProvider.UtcNow);
+
+        if (edition.IsFailure)
         {
-            return Result.Failure(UserErrors.Unauthorized());
+            return edition;
         }
 
-        DateTime nowUtc = dateTimeProvider.UtcNow;
+        // Sem rastreio: a última atividade e a situação de espera são gravadas depois do commit, sem a versão do chamado.
+        Ticket ticket = await context.Tickets.AsNoTracking().SingleAsync(t => t.Id == message.TicketId, cancellationToken);
 
-        message.Content = command.Content;
-        message.EditedAtUtc = nowUtc;
-
-        message.Raise(new TicketMessageEditedDomainEvent(message.Id, message.TicketId, message.AuthorUserId));
-
-        context.TicketHistories.Add(TicketHistoryEntries.Create(
-            message.TicketId,
-            message.AuthorUserId,
-            TicketHistoryAction.MessageEdited,
-            nowUtc));
+        context.TicketHistories.Add(edition.Value);
 
         await context.SaveChangesAsync(cancellationToken);
+
+        ticket.RecordMessageActivity(edition.Value, await agentLookup.IsLastMessageFromAgentAsync(ticket, cancellationToken));
+
+        await activityWriter.WriteLastActivityAndWaitingOnAsync(ticket, cancellationToken);
 
         return Result.Success();
     }

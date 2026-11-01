@@ -20,17 +20,24 @@ internal sealed class GetBacklogAttendantsQueryHandler(
     IPermissionProvider permissionProvider)
     : IQueryHandler<GetBacklogAttendantsQuery, PagedResponse<AttendantResponse>>
 {
+    // Tamanho aceito do termo de busca, depois do Trim.
+    private const int SearchTermMinLength = 2;
+    private const int SearchTermMaxLength = 100;
+
+    // Palavras do termo de busca que entram no filtro; as demais são ignoradas.
+    private const int SearchTermMaxWords = 5;
+
     public async Task<Result<PagedResponse<AttendantResponse>>> Handle(
         GetBacklogAttendantsQuery query,
         CancellationToken cancellationToken)
     {
         // Termo vazio conta como ausente; só com espaços, não.
         if (!string.IsNullOrEmpty(query.SearchTerm) &&
-            query.SearchTerm.Trim().Length is < UserValidationRules.SearchTermMinLength or > UserValidationRules.SearchTermMaxLength)
+            query.SearchTerm.Trim().Length is < SearchTermMinLength or > SearchTermMaxLength)
         {
             return Result.Failure<PagedResponse<AttendantResponse>>(UserErrors.InvalidSearchTerm(
-                UserValidationRules.SearchTermMinLength,
-                UserValidationRules.SearchTermMaxLength));
+                SearchTermMinLength,
+                SearchTermMaxLength));
         }
 
         bool canReadUsers = await permissionProvider.HasPermissionAsync(
@@ -67,7 +74,7 @@ internal sealed class GetBacklogAttendantsQueryHandler(
         // maiúsculas, e o termo vai como parâmetro (%, _ e \ contam como texto).
         IEnumerable<string> words = (query.SearchTerm ?? string.Empty)
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-            .Take(UserValidationRules.SearchTermMaxWords);
+            .Take(SearchTermMaxWords);
 
         foreach (string word in words)
         {

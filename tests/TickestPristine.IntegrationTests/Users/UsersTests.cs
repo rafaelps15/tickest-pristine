@@ -1342,6 +1342,326 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
+    public async Task GetAll_Should_ReturnOnlyUsersWithRole_WhenRoleNameIsGiven()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        RoleScenario scenario = await SeedRoleScenarioAsync();
+
+        // Act
+        PagedDto<UserSummaryDto>? exact = await GetUsersAsync(scenario, "roleName=Atendente");
+        PagedDto<UserSummaryDto>? padded = await GetUsersAsync(scenario, "roleName=%20Atendente%20");
+        PagedDto<UserSummaryDto>? unknown = await GetUsersAsync(scenario, "roleName=Inexistente");
+        PagedDto<UserSummaryDto>? blank = await GetUsersAsync(scenario, "roleName=%20");
+
+        // Assert
+        exact!.Items.Select(u => u.Id).ShouldBe([scenario.Ana, scenario.Bruno], ignoreOrder: true);
+        padded!.Items.Select(u => u.Id).ShouldBe([scenario.Ana, scenario.Bruno], ignoreOrder: true);
+        unknown!.Items.ShouldBeEmpty();
+        unknown.TotalCount.ShouldBe(0);
+        blank!.TotalCount.ShouldBe(4);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnOnlyUsersWithoutRole_WhenWithoutRoleIsTrue()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        RoleScenario scenario = await SeedRoleScenarioAsync();
+
+        // Act
+        PagedDto<UserSummaryDto>? withoutRole = await GetUsersAsync(scenario, "withoutRole=true");
+        PagedDto<UserSummaryDto>? withoutRoleAndRoleName = await GetUsersAsync(scenario, "withoutRole=true&roleName=Atendente");
+        PagedDto<UserSummaryDto>? withRoleOrNot = await GetUsersAsync(scenario, "withoutRole=false");
+
+        // Assert
+        withoutRole!.Items.ShouldHaveSingleItem().Id.ShouldBe(scenario.Davi);
+        withoutRoleAndRoleName!.Items.ShouldHaveSingleItem().Id.ShouldBe(scenario.Davi);
+        withRoleOrNot!.TotalCount.ShouldBe(4);
+    }
+
+    [Theory]
+    [InlineData("", new[] { "Ana", "Bruno", "Carla", "Davi" })]
+    [InlineData("sortBy=Name", new[] { "Ana", "Bruno", "Carla", "Davi" })]
+    [InlineData("sortBy=Name&sortDirection=Descending", new[] { "Davi", "Carla", "Bruno", "Ana" })]
+    [InlineData("sortBy=CreatedAt", new[] { "Davi", "Carla", "Bruno", "Ana" })]
+    [InlineData("sortBy=CreatedAt&sortDirection=Ascending", new[] { "Ana", "Bruno", "Carla", "Davi" })]
+    [InlineData("sortDirection=Descending", new[] { "Davi", "Carla", "Bruno", "Ana" })]
+    public async Task GetAll_Should_SortUsers_WhenSortIsGiven(string sortQuery, string[] expectedFirstNames)
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        RoleScenario scenario = await SeedRoleScenarioAsync();
+
+        // Act
+        PagedDto<UserSummaryDto>? users = await GetUsersAsync(scenario, sortQuery);
+
+        // Assert
+        users!.Items.Select(u => u.FirstName).ShouldBe(expectedFirstNames);
+    }
+
+    [Theory]
+    [InlineData("sortBy=Name", new[] { "Ana", "Bruno", "Carla" })]
+    [InlineData("sortBy=CreatedAt", new[] { "Carla", "Ana", "Bruno" })]
+    [InlineData("sortBy=CreatedAt&sortDirection=Ascending", new[] { "Bruno", "Ana", "Carla" })]
+    public async Task GetAll_Should_SortByCreatedAtInsteadOfName_WhenDatesDisagreeWithNames(
+        string sortQuery,
+        string[] expectedFirstNames)
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        // Nos dados comuns, as datas seguem a ordem dos nomes; aqui elas divergem, para a ordem por cadastro não
+        // coincidir com a ordem por nome.
+        string token = $"Spec018{Guid.NewGuid():N}";
+        Guid ana = await InsertUserAsync("Ana", token, UniqueEmail());
+        Guid bruno = await InsertUserAsync("Bruno", token, UniqueEmail());
+        Guid carla = await InsertUserAsync("Carla", token, UniqueEmail());
+        await SetCreatedAtAsync(new DateTime(2026, 10, 10, 12, 0, 0, DateTimeKind.Utc), ana);
+        await SetCreatedAtAsync(new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc), bruno);
+        await SetCreatedAtAsync(new DateTime(2026, 10, 15, 12, 0, 0, DateTimeKind.Utc), carla);
+
+        // Act
+        PagedDto<UserSummaryDto>? users = await HttpClient.GetFromJsonAsync<PagedDto<UserSummaryDto>>(
+            $"users?search={token}&{sortQuery}");
+
+        // Assert
+        users!.Items.Select(u => u.FirstName).ShouldBe(expectedFirstNames);
+    }
+
+    [Theory]
+    [InlineData("sortBy=Email")]
+    [InlineData("sortDirection=Up")]
+    public async Task GetAll_Should_ReturnBadRequest_WhenSortValueIsInvalid(string sortQuery)
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync($"users?{sortQuery}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Theory]
+    [InlineData("sortBy=Name&sortDirection=Ascending")]
+    [InlineData("sortBy=Name&sortDirection=Descending")]
+    [InlineData("sortBy=CreatedAt&sortDirection=Ascending")]
+    [InlineData("sortBy=CreatedAt&sortDirection=Descending")]
+    public async Task GetAll_Should_KeepStableOrderAcrossPages_WhenSortKeysAreEqual(string sortQuery)
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string token = $"Empate{Guid.NewGuid():N}";
+        var createdAtUtc = new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
+        Guid[] ids =
+        [
+            await InsertUserAsync("Ana", token, UniqueEmail()),
+            await InsertUserAsync("Ana", token, UniqueEmail()),
+            await InsertUserAsync("Ana", token, UniqueEmail())
+        ];
+        await SetCreatedAtAsync(createdAtUtc, ids);
+
+        // Act
+        List<Guid> firstRun = await GetAllPagesAsync(token, sortQuery);
+        List<Guid> secondRun = await GetAllPagesAsync(token, sortQuery);
+
+        // Assert
+        firstRun.ShouldBe(secondRun);
+        firstRun.ShouldBe(ids, ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReverseTieOrder_WhenDirectionIsDescending()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string token = $"Empate{Guid.NewGuid():N}";
+        Guid[] ids =
+        [
+            await InsertUserAsync("Ana", token, UniqueEmail()),
+            await InsertUserAsync("Ana", token, UniqueEmail()),
+            await InsertUserAsync("Ana", token, UniqueEmail())
+        ];
+        await SetCreatedAtAsync(new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc), ids);
+
+        // Act
+        List<Guid> byNameAscending = await GetAllPagesAsync(token, "sortBy=Name&sortDirection=Ascending");
+        List<Guid> byNameDescending = await GetAllPagesAsync(token, "sortBy=Name&sortDirection=Descending");
+        List<Guid> byCreatedAtAscending = await GetAllPagesAsync(token, "sortBy=CreatedAt&sortDirection=Ascending");
+        List<Guid> byCreatedAtDescending = await GetAllPagesAsync(token, "sortBy=CreatedAt&sortDirection=Descending");
+
+        // Assert
+        byNameDescending.ShouldBe(Enumerable.Reverse(byNameAscending));
+        byCreatedAtAscending.ShouldBe(byNameAscending);
+        byCreatedAtDescending.ShouldBe(byNameDescending);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ApplyRoleFilterAndSortWithOtherFilters_BeforePaging()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        RoleScenario scenario = await SeedRoleScenarioAsync();
+
+        // Act
+        PagedDto<UserSummaryDto>? combined = await GetUsersAsync(
+            scenario,
+            "roleName=Atendente&status=Active&createdFrom=2026-10-01&createdTo=2026-10-03&sortBy=CreatedAt&pageSize=1");
+        PagedDto<UserSummaryDto>? secondPage = await GetUsersAsync(scenario, "roleName=Atendente&pageSize=1&page=2");
+
+        // Assert
+        combined!.Items.ShouldHaveSingleItem().Id.ShouldBe(scenario.Ana);
+        combined.TotalCount.ShouldBe(1);
+        secondPage!.Items.ShouldHaveSingleItem().Id.ShouldBe(scenario.Bruno);
+        secondPage.TotalCount.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnUnauthorized_WhenNotAuthenticated()
+    {
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("users?roleName=Atendente&sortBy=Name");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnForbidden_WhenCallerLacksUsersReadPermissionAndUsesNewParameters()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("users?withoutRole=true&sortBy=CreatedAt");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetStatusCounts_Should_CountActivePendingAndInactiveSeparately()
+    {
+        // Arrange: o banco é compartilhado pelos testes (que rodam em série), então o teste confere a variação a partir
+        // da contagem anterior
+        await AuthenticateAsAdminAsync();
+        UserStatusCountsDto before = await GetUserStatusCountsAsync();
+
+        await RegisterUserAsync(UniqueEmail());                     // Ana: ativa, com senha
+        await RegisterPendingUserAsync(UniqueEmail());              // Bruno: pendente
+        Guid carla = await RegisterUserAsync(UniqueEmail());        // Carla: desativada depois de ativar a conta
+        Guid davi = await RegisterPendingUserAsync(UniqueEmail());  // Davi: desativado antes de ativar
+        (await HttpClient.PutAsync($"users/{carla}/deactivate", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await HttpClient.PutAsync($"users/{davi}/deactivate", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("users/stats/status");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        UserStatusCountsDto after = (await response.Content.ReadFromJsonAsync<UserStatusCountsDto>())!;
+        (after.TotalCount - before.TotalCount).ShouldBe(4);
+        (after.ActiveCount - before.ActiveCount).ShouldBe(1);
+        (after.PendingActivationCount - before.PendingActivationCount).ShouldBe(1);
+        (after.InactiveCount - before.InactiveCount).ShouldBe(2);
+        (after.ActiveCount + after.PendingActivationCount + after.InactiveCount).ShouldBe(after.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetStatusCounts_Should_MovePendingUserToActive_WhenAccountIsActivated()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        string email = UniqueEmail();
+        await RegisterPendingUserAsync(email);
+        UserStatusCountsDto before = await GetUserStatusCountsAsync();
+
+        // Act
+        (await ActivateAccountAsync(EmailSender.LatestTokenFor(email), "Password123!")).StatusCode
+            .ShouldBe(HttpStatusCode.NoContent);
+        UserStatusCountsDto after = await GetUserStatusCountsAsync();
+
+        // Assert
+        (after.PendingActivationCount - before.PendingActivationCount).ShouldBe(-1);
+        (after.ActiveCount - before.ActiveCount).ShouldBe(1);
+        after.InactiveCount.ShouldBe(before.InactiveCount);
+        after.TotalCount.ShouldBe(before.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetStatusCounts_Should_MoveActiveUserToInactive_WhenUserIsDeactivated()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid ana = await RegisterUserAsync(UniqueEmail());
+        UserStatusCountsDto before = await GetUserStatusCountsAsync();
+
+        // Act
+        (await HttpClient.PutAsync($"users/{ana}/deactivate", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        UserStatusCountsDto after = await GetUserStatusCountsAsync();
+
+        // Assert
+        (after.ActiveCount - before.ActiveCount).ShouldBe(-1);
+        (after.InactiveCount - before.InactiveCount).ShouldBe(1);
+        after.PendingActivationCount.ShouldBe(before.PendingActivationCount);
+        after.TotalCount.ShouldBe(before.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetStatusCounts_Should_ReturnForbidden_WhenCallerLacksUsersReadPermission()
+    {
+        // Arrange
+        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("users/stats/status");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetStatusCounts_Should_ReturnUnauthorized_WhenNotAuthenticated()
+    {
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("users/stats/status");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetStatusCounts_Should_CountInSingleSqlCommand()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        await RegisterPendingUserAsync(UniqueEmail());
+
+        // Act: conta os comandos que leem credenciais (a contagem é o único que precisa delas)
+        HttpResponseMessage response;
+        int credentialQueries;
+        int groupedCountQueries;
+
+        using (var credentialCounter = new EfCommandCounter(sql => sql.Contains("user_credentials", StringComparison.Ordinal)))
+        using (var groupedCounter = new EfCommandCounter(sql =>
+            sql.Contains("user_credentials", StringComparison.Ordinal) &&
+            sql.Contains("GROUP BY", StringComparison.Ordinal)))
+        {
+            response = await HttpClient.GetAsync("users/stats/status");
+            credentialQueries = credentialCounter.Count;
+            groupedCountQueries = groupedCounter.Count;
+        }
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        credentialQueries.ShouldBe(1);
+        groupedCountQueries.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task Activate_Should_RestoreLoginAndPermissions_WhenUserWasDeactivated()
     {
         // Arrange
@@ -1513,6 +1833,79 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         return roleName;
     }
+
+    /// <summary>
+    /// Usuários da spec 018, isolados pelo sobrenome único (<see cref="RoleScenario.Token"/>), que as consultas usam como
+    /// busca: Ana (Atendente, 01/10), Bruno (Atendente e uma role de teste, 05/10), Carla (Colaboradora, inativa, 10/10) e
+    /// Davi (sem role, 15/10). O Bruno não recebe a role Administrador: um segundo administrador ativo no banco
+    /// compartilhado mudaria os testes que dependem de o administrador do seed ser o último.
+    /// </summary>
+    private async Task<RoleScenario> SeedRoleScenarioAsync()
+    {
+        string token = $"Spec018{Guid.NewGuid():N}";
+        string secondRole = await CreateTestRoleAsync();
+
+        Guid ana = await InsertUserAsync("Ana", token, UniqueEmail(), null, true, RoleNames.Agent);
+        Guid bruno = await InsertUserAsync("Bruno", token, UniqueEmail(), null, true, RoleNames.Agent, secondRole);
+        Guid carla = await InsertUserAsync("Carla", token, UniqueEmail(), null, false, RoleNames.Collaborator);
+        Guid davi = await InsertUserAsync("Davi", token, UniqueEmail());
+
+        await SetCreatedAtAsync(new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc), ana);
+        await SetCreatedAtAsync(new DateTime(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc), bruno);
+        await SetCreatedAtAsync(new DateTime(2026, 10, 10, 12, 0, 0, DateTimeKind.Utc), carla);
+        await SetCreatedAtAsync(new DateTime(2026, 10, 15, 12, 0, 0, DateTimeKind.Utc), davi);
+
+        return new RoleScenario(token, ana, bruno, carla, davi);
+    }
+
+    private sealed record RoleScenario(string Token, Guid Ana, Guid Bruno, Guid Carla, Guid Davi);
+
+    private async Task SetCreatedAtAsync(DateTime createdAtUtc, params Guid[] userIds)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        await context.Users
+            .Where(u => userIds.Contains(u.Id))
+            .ExecuteUpdateAsync(setters => setters.SetProperty(u => u.CreatedAtUtc, createdAtUtc));
+    }
+
+    private Task<PagedDto<UserSummaryDto>?> GetUsersAsync(RoleScenario scenario, string query) =>
+        HttpClient.GetFromJsonAsync<PagedDto<UserSummaryDto>>($"users?search={scenario.Token}&{query}");
+
+    // Percorre as páginas de tamanho 1 até o fim e devolve os ids na ordem em que vieram.
+    private async Task<List<Guid>> GetAllPagesAsync(string token, string sortQuery)
+    {
+        var ids = new List<Guid>();
+        PagedDto<UserSummaryDto>? page;
+        int pageNumber = 1;
+        do
+        {
+            page = await HttpClient.GetFromJsonAsync<PagedDto<UserSummaryDto>>(
+                $"users?search={token}&{sortQuery}&pageSize=1&page={pageNumber}");
+            ids.AddRange(page!.Items.Select(u => u.Id));
+            pageNumber++;
+        }
+        while (page.HasNextPage);
+
+        return ids;
+    }
+
+    /// <summary>
+    /// Cadastra pelo administrador sem ativar a conta: o usuário fica pendente, com o convite no e-mail capturado.
+    /// </summary>
+    private async Task<Guid> RegisterPendingUserAsync(string email)
+    {
+        HttpResponseMessage response = await PostRegisterAsAdminAsync(new { email, firstName = "Test", lastName = "User" });
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<Guid>();
+    }
+
+    private async Task<UserStatusCountsDto> GetUserStatusCountsAsync() =>
+        (await HttpClient.GetFromJsonAsync<UserStatusCountsDto>("users/stats/status"))!;
+
+    private sealed record UserStatusCountsDto(int TotalCount, int ActiveCount, int InactiveCount, int PendingActivationCount);
 
     private sealed record PagedDto<T>(List<T> Items, int Page, int PageSize, int TotalCount, int TotalPages, bool HasPreviousPage, bool HasNextPage);
 

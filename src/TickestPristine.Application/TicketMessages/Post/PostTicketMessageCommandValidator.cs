@@ -7,6 +7,6 @@ internal sealed class PostTicketMessageCommandValidator : AbstractValidator<Post
     public PostTicketMessageCommandValidator()
     {
         RuleFor(c => c.TicketId).NotEmpty();
-        RuleFor(c => c.Content).NotEmpty().MaximumLength(4000);
+        RuleFor(c => c.Content).NotEmpty();
     }
 }

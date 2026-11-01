@@ -16,6 +16,10 @@ public static class TicketErrors
         "Tickets.AlreadyActive",
         $"O chamado com o Id = '{ticketId}' já está ativo");
 
+    public static Error ResolutionCycleAlreadyOpen(Guid ticketId) => Error.Conflict(
+        "Tickets.ResolutionCycleAlreadyOpen",
+        $"O chamado com o Id = '{ticketId}' já tem um ciclo de resolução em aberto");
+
     public static Error InvalidStatusTransition(TicketStatus from, TicketStatus to) => Error.Problem(
         "Tickets.InvalidStatusTransition",
         $"Não é possível alterar o status do chamado de '{TicketStatusNames.GetDisplayName(from)}' para '{TicketStatusNames.GetDisplayName(to)}'");
@@ -39,4 +43,16 @@ public static class TicketErrors
     public static readonly Error StatusChangeForbidden = Error.Forbidden(
         "Tickets.StatusChangeForbidden",
         "Só quem atende a fila de chamados pode mudar o status para Em Andamento ou Resolvido.");
+
+    public static readonly Error StatsScopeForbidden = Error.Forbidden(
+        "Tickets.StatsScopeForbidden",
+        "Só quem atende a fila de chamados pode filtrar as estatísticas por setor, prioridade, solicitante ou responsável.");
+
+    public static readonly Error InvalidPeriod = Error.Problem(
+        "Tickets.InvalidPeriod",
+        "A data inicial do período não pode ser posterior à data final.");
+
+    public static Error VolumeTooManyPoints(int maxPoints) => Error.Problem(
+        "Tickets.VolumeTooManyPoints",
+        $"O período gera mais de {maxPoints} pontos no gráfico. Escolha um período menor ou um agrupamento maior.");
 }

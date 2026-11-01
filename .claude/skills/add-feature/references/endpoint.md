@@ -1,10 +1,8 @@
 # Modelos de endpoint
 
-> Exemplos ilustrativos do modelo de referência (Todos). Use os caminhos, namespaces e referências vivas do `CLAUDE.md` do projeto.
+Um arquivo por caso de uso em `src/Web.Api/Endpoints/{Feature}/{UseCase}.cs`. Os endpoints implementam `IEndpoint` e são descobertos automaticamente por `AddEndpoints`/`MapEndpoints` — sem registro.
 
-Um arquivo por caso de uso em `src/Web.Api/Endpoints/{Feature}/{UseCase}.cs`. Os endpoints implementam `IEndpoint` e são descobertos automaticamente por `AddEndpoints`/`MapEndpoints` — não é preciso registrar.
-
-## Command com corpo de resposta (POST → 200 + valor)
+## Command com corpo na resposta (POST → 200 + valor)
 
 ```csharp
 using Application.Abstractions.Messaging;
@@ -21,9 +19,13 @@ internal sealed class Create : IEndpoint
     public sealed class Request
     {
         public Guid UserId { get; set; }
+
         public string Description { get; set; }
+
         public DateTime? DueDate { get; set; }
+
         public List<string> Labels { get; set; } = [];
+
         public int Priority { get; set; }
     }
 
@@ -118,8 +120,8 @@ internal sealed class GetOverdue : IEndpoint
 
 ## Regras
 
-- Rotas em minúsculas, no plural, sem barra inicial: `todos`, `todos/{id:guid}`, `users/{userId:guid}/todos`. Restrições de rota (`:guid`) em todos os parâmetros tipados.
-- A classe aninhada `Request` só existe quando há corpo JSON; ela mapeia 1:1 para o command dentro da lambda (valores de enum chegam como `int` e são convertidos).
-- Resolva a interface do handler (`ICommandHandler<...>` / `IQueryHandler<...>`) direto como parâmetro da lambda — é injetada a instância já com os decorators.
-- Termine sempre com `.WithTags(Tags.{Feature})` e `.RequireAuthorization()` (ou `.HasPermission(Permissions.X)` quando existir uma constante de permissão; a extensão recebe uma única permissão e se aplica ao endpoint). Acrescente a constante da feature em `Tags.cs` se for nova.
-- Falhas nunca ganham respostas montadas à mão — o `CustomResults.Problem` converte o `Error` em ProblemDetails (RFC 7807) com o status certo.
+- Rotas em minúsculas, no plural, sem barra no início: `todos`, `todos/{id:guid}`, `users/{userId:guid}/todos`. Restrições de rota (`:guid`) em todo parâmetro tipado.
+- A classe `Request` aninhada existe só quando há corpo JSON; ela é mapeada 1:1 para o command dentro da lambda (valores de enum chegam como `int` e são convertidos).
+- Resolva a interface do handler (`ICommandHandler<...>` / `IQueryHandler<...>`) direto como parâmetro da lambda — a instância decorada é injetada.
+- Termine sempre com `.WithTags(Tags.{Feature})` e `.RequireAuthorization()` (ou `.HasPermission(Permissions.X)` quando existir a constante de permissão). Acrescente a constante da feature em `Tags.cs` se for nova.
+- Falhas nunca ganham resposta feita à mão — `CustomResults.Problem` converte o `Error` em ProblemDetails (RFC 7807) com o status certo.

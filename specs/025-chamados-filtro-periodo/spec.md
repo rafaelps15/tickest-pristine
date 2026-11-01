@@ -1,0 +1,118 @@
+---
+id: 025
+titulo: Filtro de período (abertura e resolução) e vários setores na listagem de chamados
+status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+responsavel: Rafael Santos
+aprovada-em: 2026-10-28
+branch: feat/SPEC-025-tickets-period-filter                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
+pr: "#43"                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+---
+
+# 025 — Filtro de período (abertura e resolução) e vários setores na listagem de chamados
+
+## 1. Contexto
+- **Pedido original:** Rafael Santos, no chat da sessão do front-end (`tickest-pristine-front`), em 2026-10-28: "sim! pode criar na pasta do back", aprovando transformar em specs os itens "depende do back-end" do relatório do Início operacional (dashboard de chamados nível ITSM). Este é o item 1: filtro de período.
+- **Por que:** o Início ganhou filtros de setor, prioridade e responsável, mas não tem período, porque nenhum endpoint de chamados filtra por data. Sem período, "cumpridos" soma o histórico inteiro e não dá para olhar "este mês".
+- **Referências:**
+  - `SYSTEM_SPECIFICATION.md` 4.3 (rotas de chamados).
+  - Specs 026, 027 e 028, que usam o mesmo período e os mesmos setores.
+- **Fatos do repositório:**
+  - `GET tickets` (`Web.Api/Endpoints/Tickets/GetAll.cs:16-47`) aceita `status` repetido, mas `sectorId` uma vez só; não tem nenhum filtro de data. O filtro é montado em `Tickets/GetAll/GetTicketsQueryHandler.cs:20-29`.
+  - O chamado tem `CreatedAtUtc` e `ResolvedAtUtc` (só a primeira resolução, `Tickets/Update/UpdateTicketCommandHandler.cs:79-83`), ambos `timestamptz`.
+  - O único filtro de data do back é o de `GET users` (`createdFrom`/`createdTo` em `aaaa-mm-dd`), que trata a data como UTC (`Users/GetAll/GetUsersQueryHandler.cs:14-15`). O volume (`Tickets/GetVolume/GetTicketVolumeQueryHandler.cs:36`) já agrupa por `America/Sao_Paulo`.
+
+## 2. Requisitos
+| ID | Requisito | Fonte |
+|---|---|---|
+| REQ-1 | `GET tickets` aceita `createdFrom` e `createdTo`: datas locais `aaaa-mm-dd` em `America/Sao_Paulo`, intervalo inclusivo (do início do primeiro dia ao fim do último). Os dois são opcionais e independentes. | pedido; DEC-1; DEC-2 |
+| REQ-2 | `GET tickets` aceita `resolvedFrom` e `resolvedTo`, com a mesma regra, aplicados à data da primeira resolução (`ResolvedAtUtc`); um chamado nunca resolvido fica fora quando qualquer um dos dois é informado. | pedido; DEC-1; DEC-5 |
+| REQ-3 | Início depois do fim, em qualquer um dos dois intervalos, responde 400 com erro de validação claro. | DEC-2 |
+| REQ-4 | `GET tickets` aceita `sectorId` repetido (vários setores); um valor só continua funcionando como hoje. | DEC-4 |
+| REQ-5 | Os outros filtros, a ordenação, a paginação e a autorização (`tickets:manage`) não mudam; sem os parâmetros novos, a resposta é a de hoje. | fato do repositório |
+
+## 3. Critérios de aceitação
+Dados comuns: um atendente com `tickets:manage`; chamados abertos em 31/10 às 23h30 (horário de Brasília, 02h30 UTC de 01/11), em 01/11 às 10h e em 15/11; um deles resolvido em 02/11; setores Helpdesk e Infra.
+
+| ID | REQ | Dado | Quando | Então (resultado observável) |
+|---|---|---|---|---|
+| AC-1 | REQ-1 | os chamados acima | chama com `createdFrom=2026-11-01&createdTo=2026-11-01` | traz só o de 01/11 às 10h; o de 31/10 às 23h30 de Brasília fica fora, mesmo sendo 01/11 em UTC |
+| AC-2 | REQ-1 | os chamados acima | chama só com `createdFrom=2026-11-01` | traz os de 01/11 e 15/11 |
+| AC-3 | REQ-2 | o chamado resolvido em 02/11 e outro nunca resolvido | chama com `resolvedFrom=2026-11-02&resolvedTo=2026-11-02` | traz só o resolvido; o nunca resolvido fica fora |
+| AC-4 | REQ-3 | — | chama com `createdFrom=2026-11-10&createdTo=2026-11-01` | 400 com erro de validação |
+| AC-5 | REQ-4 | chamados no Helpdesk e na Infra | chama com `sectorId=<Helpdesk>&sectorId=<Infra>` e depois só com Helpdesk | primeiro os dois setores; depois só o Helpdesk, como hoje |
+| AC-6 | REQ-5 | a suíte de `GET tickets` existente | roda depois da mudança | todos passam sem alteração |
+| AC-7 | todos | a mudança aplicada | `dotnet build` e `dotnet test` | 0 avisos; todos os testes passam |
+
+## 4. Decisões
+| ID | Pergunta | Opções | Decisão | Decidido por, em |
+|---|---|---|---|---|
+| DEC-1 | Quais períodos o filtro cobre? | (a) abertura e resolução, separados; (b) só abertura | (a) | Rafael Santos, 2026-10-28, no chat |
+| DEC-2 | Formato das datas | (a) datas locais `aaaa-mm-dd` em `America/Sao_Paulo`, inclusivo; (b) instantes UTC | (a): o back converte para UTC; o front não precisa tratar fuso. Diferente do `GET users`, que trata a data como UTC | Rafael Santos, 2026-10-28, no chat |
+| DEC-3 | Nomes dos parâmetros | — | `createdFrom`/`createdTo` (como `GET users`) e `resolvedFrom`/`resolvedTo` | consequência da DEC-2, registrada em 2026-10-28 |
+| DEC-4 | `GET tickets` aceita vários setores? | (a) sim, `sectorId` repetido; (b) não | (a): o drill-down de um card filtrado por departamento (vários setores) precisa abrir a lista com o mesmo recorte | Rafael Santos, 2026-10-28, no chat |
+| DEC-5 | Na listagem, "resolvido no período" usa qual data? | (a) a primeira resolução (`ResolvedAtUtc`); (b) qualquer resolução, pelo histórico | (a): é a única data de resolução do chamado; a vazão com cada resolução fica na série da 028 | Rafael Santos, 2026-10-28, no chat |
+| DEC-6 | Onde recusar o período invertido (REQ-3), já que o decorator de validação só envolve commands (`CLAUDE.md`, "Comportamentos transversais") e um `GetTicketsQueryValidator` nunca rodaria? | (a) no handler, com `TicketErrors.InvalidPeriod` (`Error.Problem`, 400), como `GetBacklogAttendantsQueryHandler` faz com `UserErrors.InvalidSearchTerm`; (b) estender o decorator de validação às queries | (a): segue o precedente do projeto e não muda um comportamento transversal fora do plano; o AC-4 (400 com erro claro) não muda. A conversão de fuso fica em `SlaCalendars/LocalDatePeriod.cs`, junto de `DefaultSlaCalendar.TimeZoneId`, como o plano sugeria | Delegado por Rafael Santos ao agente, 2026-10-28, no chat ("atue como senior e só pare quando finalizar") |
+
+## 5. Fora do escopo
+- Período e setores no endpoint agregado (spec 026), nos tempos médios (027) e no volume (028), que usam esta mesma regra.
+- Filtro por `departmentId` explícito (o front manda os setores do departamento).
+- Período nas listagens de "Meus chamados" e em `GET tickets/sla-summary`.
+
+## 6. Plano técnico
+- **Arquivos a criar ou alterar:**
+  - Application:
+    - `Tickets/GetAll/GetTicketsQuery.cs`: os quatro limites de data (`DateOnly?`) e a lista de setores no lugar do setor único.
+    - `Tickets/GetAll/GetTicketsQueryValidator.cs` (novo ou existente): início não pode passar do fim, em cada par.
+    - `Tickets/GetAll/GetTicketsQueryHandler.cs`: converte cada data local de São Paulo para o intervalo UTC (início do dia inicial até o início do dia seguinte ao final) e filtra `CreatedAtUtc` e `ResolvedAtUtc`; setores por `Contains`.
+    - Uma conversão única de "data local de São Paulo → intervalo UTC", reaproveitada pelas specs 026 a 028, no lugar que o padrão do projeto indicar (por exemplo, junto do calendário de SLA, que já usa o fuso).
+  - Web.Api:
+    - `Endpoints/Tickets/GetAll.cs`: lê `createdFrom`, `createdTo`, `resolvedFrom`, `resolvedTo` e `sectorId` como lista.
+  - Testes:
+    - unitários: o teste da conversão de fuso (inclusive a virada do dia) e o do validador;
+    - integração: `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` (casos `GetAll_*` de período e de vários setores).
+- **Contratos:** `GET tickets` ganha `createdFrom`, `createdTo`, `resolvedFrom` e `resolvedTo` (datas `aaaa-mm-dd`) e passa a aceitar `sectorId` repetido. Mudança só aditiva; 400 novo só para intervalo invertido.
+- **Mudança no banco:** não. Os índices atuais por `CreatedAtUtc` atendem a abertura; a resolução filtra uma coluna já existente.
+- **Documentação de estado afetada:** `SYSTEM_SPECIFICATION.md` 4.3 (parâmetros de `GET tickets`) e a nota de fuso das datas de filtro.
+- **Análise:**
+  - **Fuso:** o Brasil não tem horário de verão desde 2019, mas a conversão usa o fuso IANA, não um deslocamento fixo, para continuar certa se isso mudar.
+  - **Desempenho:** os limites viram comparações simples em colunas indexadas ou já filtradas; a paginação não muda.
+  - **Segurança:** a autorização não muda; o período só estreita o que a pessoa já via.
+- **Riscos:**
+  - R-1: o `GET users` continua tratando as datas como UTC, então as duas telas diferem em quem faz login perto da meia-noite. Fica registrado para uma revisão futura do `GET users`.
+
+## 7. Tarefas
+| ID | Tarefa | ACs | Skill | Feita |
+|---|---|---|---|---|
+| T-1 | Conversão de data local de São Paulo para intervalo UTC, com teste | AC-1 | `add-feature` | [x] |
+| T-2 | Período de abertura e de resolução, vários setores e validação em `GET tickets` | AC-1 a AC-5 | `add-feature` | [x] |
+| T-3 | Testes unitários e de integração da seção 6 | AC-1 a AC-6 | `add-tests` | [x] |
+| T-4 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-7 | — | [x] |
+| T-5 | Revisão de convenções, build sem avisos e suíte inteira | AC-7 | `ca-review` | [x] |
+
+## 8. Rastreabilidade
+| AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
+|---|---|---|---|
+| AC-1 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetAll_Should_FilterByLocalCreationDay_WhenCreatedPeriodIsGiven`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketsQueryHandlerTests.cs` › `Handle_Should_FilterByLocalCreationDay_WhenCreatedPeriodIsGiven`; `tests/TickestPristine.Application.UnitTests/SlaCalendars/LocalDatePeriodTests.cs` › `FromLocalDates_Should_CoverWholeLocalDays_WhenBothDatesAreGiven`, `FromLocalDates_Should_LeaveLateEveningOfPreviousLocalDayOutside_WhenItIsNextDayInUtc` | Contra o PostgreSQL, `createdFrom=2026-11-01&createdTo=2026-11-01` traz só o chamado de 01/11 às 10h; o de 31/10 às 23h30 de Brasília (02h30 UTC de 01/11) fica fora. Os unitários conferem os limites UTC exatos (03h de 01/11 a 03h de 02/11, `Kind` UTC). Uma mutação que tratava a data como UTC (como o `GET users`) foi detectada por 4 casos unitários e 2 de integração. | Aprovado na execução da `spec-verify` de 2026-10-28 |
+| AC-2 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetAll_Should_FilterFromCreationDayOnward_WhenOnlyCreatedFromIsGiven`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketsQueryHandlerTests.cs` › `Handle_Should_FilterByLocalCreationDay_WhenCreatedPeriodIsGiven` (caso só com início); `tests/TickestPristine.Application.UnitTests/SlaCalendars/LocalDatePeriodTests.cs` › `FromLocalDates_Should_LeaveMissingEndOpen_WhenOnlyOneDateIsGiven` | Só com `createdFrom=2026-11-01`, vêm os chamados de 01/11 e 15/11; a ponta ausente fica aberta. | Aprovado na execução da `spec-verify` de 2026-10-28 |
+| AC-3 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetAll_Should_ReturnOnlyTicketsResolvedInPeriod_WhenResolvedPeriodIsGiven`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketsQueryHandlerTests.cs` › `Handle_Should_ExcludeNeverResolvedTickets_WhenResolvedPeriodIsGiven` | `resolvedFrom=2026-11-02&resolvedTo=2026-11-02` traz só o chamado resolvido em 02/11 (12h de Brasília), com `totalCount` 1; os nunca resolvidos ficam fora. | Aprovado na execução da `spec-verify` de 2026-10-28 |
+| AC-4 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetAll_Should_ReturnBadRequest_WhenPeriodIsInverted`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketsQueryHandlerTests.cs` › `Handle_Should_ReturnInvalidPeriod_WhenStartIsAfterEnd`; `tests/TickestPristine.Application.UnitTests/SlaCalendars/LocalDatePeriodTests.cs` › `IsInverted_Should_BeTrueOnlyWhenStartIsAfterEnd` | Início depois do fim, no período de abertura ou no de resolução, responde 400 com `Tickets.InvalidPeriod` e a mensagem "A data inicial do período não pode ser posterior à data final." (DEC-6); o handler devolve exatamente `TicketErrors.InvalidPeriod`. | Aprovado na execução da `spec-verify` de 2026-10-28 |
+| AC-5 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › `GetAll_Should_ReturnTicketsOfEverySector_WhenSectorIdIsRepeated`; `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketsQueryHandlerTests.cs` › `Handle_Should_ReturnTicketsOfEverySector_WhenSeveralSectorsAreGiven` | `sectorId` repetido com Helpdesk e Infra traz os chamados dos dois setores; só com Helpdesk, só os dele, como antes. | Aprovado na execução da `spec-verify` de 2026-10-28 |
+| AC-6 | `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` › os `GetAll_*` que já existiam (`ReturnForbidden_WhenCallerLacksManagePermission`, `ReturnTicketsWithRequesterAndSla_WhenCallerIsAdmin`, `FilterByStatusAndSlaStatus_WhenTicketWasResolvedWithinDeadline`, `ReturnEmployeeTicketsInAllStatusesNewestFirst_WhenAdminFiltersByRequester`, `IgnoreAssignee_WhenUnassignedOnlyIsTrue`); `tests/TickestPristine.Application.UnitTests/Tickets/GetTicketsQueryHandlerTests.cs` › os `Handle_*` que já existiam | Passam sem alteração nos testes; no unitário, só o helper `CreateQuery` mudou para montar a query com os campos novos. | Aprovado na execução da `spec-verify` de 2026-10-28 |
+| AC-7 | `dotnet build TickestPristine.slnx --no-incremental` e `dotnet test TickestPristine.slnx` | 0 avisos e 0 erros; 50 testes de arquitetura, 706 unitários e 393 de integração aprovados, nenhuma falha. | Aprovado na execução da `spec-verify` de 2026-10-28 |
+
+## 9. Evidências de verificação
+- **Build:** 2026-10-28, `dotnet build TickestPristine.slnx --no-incremental`: 0 avisos, 0 erros.
+- **Testes:** 2026-10-28, `dotnet test TickestPristine.slnx` com relatório TRX por teste: 50 de arquitetura, 706 unitários e 393 de integração aprovados, 0 com falha. No TRX, aparecem como `Passed` os 11 `GetAll_*` de `TicketsTests` (5 anteriores e 6 casos novos), os 5 casos novos de `GetTicketsQueryHandlerTests` e os 8 de `LocalDatePeriodTests`. Auditoria `python scripts/auditoria_sdd.py .`: score 100,0%, CONFORME, 0 falhas críticas, código de saída 0.
+- **Revisão:** `ca-review` sobre as mudanças da spec: nenhum achado bloqueante, nenhuma violação de convenção. A DEC-6 (período invertido recusado no handler, e não num validator de query, que o projeto não executa) segue o precedente `UserErrors.InvalidSearchTerm`.
+- **Documentação atualizada:** `SYSTEM_SPECIFICATION.md` 4.3.1 (parâmetros de `GET tickets`), a nota de fuso das datas de filtro (com o R-1 sobre o `GET users`) e 2.7 C-13, no commit `a492881` (T-4); conferidas nesta verificação, sem outra seção afetada.
+- **CI:** roda no PR para a `main`.
+- **Entrega:** PR [#43](https://github.com/rafaelps15/tickest-pristine/pull/43), mergeado na `main` em 2026-10-28. O número foi registrado depois do merge, numa branch de documentação, porque o campo ficou vazio no PR.
+
+## 10. Histórico
+| Data | Status | Observação |
+|---|---|---|
+| 2026-10-28 | Rascunho | Criada a partir do pedido de Rafael Santos no chat do front-end; número reservado já na criação, porque outra sessão cria specs em paralelo. |
+| 2026-10-28 | Em descoberta | Cinco rodadas de perguntas respondidas no chat (DEC-1 a DEC-5). Aguardando aprovação. |
+| 2026-10-28 | Aprovada | Aprovada por Rafael Santos no chat do front-end ("Pode aprovar as specs", confirmando "As seis (025 a 030)"). Checklist de completude conferido: nenhuma pergunta aberta e nenhum `[SUPOSIÇÃO]`. Pode começar já. |
+| 2026-10-28 | Em implementação | `/spec-implement 025` na branch `feat/SPEC-025-tickets-period-filter`, a partir da `origin/main`. Rafael Santos pediu a implementação completa seguindo as skills, com o agente respondendo por ele ("atue como senior e só pare quando finalizar e siga as minhas skills"). DEC-6 registrada: o plano previa um validator de query, que o projeto não executa; o período invertido é recusado no handler. Tabelas de rastreabilidade e de evidências criadas. |
+| 2026-10-28 | Verificada | `spec-verify`: build sem avisos, 1.149 testes aprovados, auditoria 100% (saída 0), AC-1 a AC-7 cobertos por testes que passaram nesta execução, `ca-review` sem achados bloqueantes. |

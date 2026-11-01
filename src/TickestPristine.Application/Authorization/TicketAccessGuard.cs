@@ -44,30 +44,4 @@ internal static class TicketAccessGuard
 
         return canManageTickets ? Result.Success() : Result.Failure(UserErrors.Unauthorized());
     }
-
-    /// <summary>
-    /// Confere se quem chama pode agir sobre um chamado ou um item dele: o dono (solicitante, autor ou quem enviou o
-    /// anexo) precisa de <paramref name="ownPermission"/>, ou passa direto quando ela é nula; os demais precisam de
-    /// <c>tickets:manage</c>. Falha com <see cref="UserErrors.Unauthorized"/>.
-    /// </summary>
-    public static async Task<Result> EnsureOwnerOrManagerAsync(
-        IPermissionProvider permissionProvider,
-        Guid callerId,
-        Guid ownerId,
-        string? ownPermission,
-        CancellationToken cancellationToken)
-    {
-        bool isOwner = callerId == ownerId;
-
-        if (isOwner && ownPermission is null)
-        {
-            return Result.Success();
-        }
-
-        string requiredPermission = isOwner ? ownPermission! : PermissionCodes.Tickets.Manage;
-
-        bool hasPermission = await permissionProvider.HasPermissionAsync(callerId, requiredPermission, cancellationToken);
-
-        return hasPermission ? Result.Success() : Result.Failure(UserErrors.Unauthorized());
-    }
 }

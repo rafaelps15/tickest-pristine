@@ -12,32 +12,23 @@ internal sealed class CreateSectorCommandHandler(IApplicationDbContext context)
 {
     public async Task<Result<Guid>> Handle(CreateSectorCommand command, CancellationToken cancellationToken)
     {
-        bool departmentExists = await context.Departments.AnyAsync(d => d.Id == command.DepartmentId && d.IsActive, cancellationToken);
+        Department? department = await context.Departments
+            .AsNoTracking()
+            .SingleOrDefaultAsync(d => d.Id == command.DepartmentId && d.IsActive, cancellationToken);
 
-        if (!departmentExists)
+        if (department is null)
         {
             return Result.Failure<Guid>(DepartmentErrors.NotFound(command.DepartmentId));
         }
 
-        bool nameInUse = await context.Sectors.AnyAsync(
-            s => s.DepartmentId == command.DepartmentId && s.IsActive && s.Name == command.Name,
-            cancellationToken);
-
-        if (nameInUse)
+        if (await context.Sectors.AnyAsync(
+            s => s.DepartmentId == department.Id && s.IsActive && s.Name == command.Name,
+            cancellationToken))
         {
             return Result.Failure<Guid>(SectorErrors.NameNotUnique(command.Name));
         }
 
-        var sector = new Sector
-        {
-            Id = Guid.NewGuid(),
-            Name = command.Name,
-            DepartmentId = command.DepartmentId,
-            Description = command.Description,
-            IsActive = true
-        };
-
-        sector.Raise(new SectorCreatedDomainEvent(sector.Id));
+        var sector = Sector.Create(department, command.Name, command.Description);
 
         context.Sectors.Add(sector);
 

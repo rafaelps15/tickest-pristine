@@ -11,20 +11,20 @@ internal sealed class GetTicketsQueryHandler(IApplicationDbContext context, IDat
 {
     public async Task<Result<PagedResponse<TicketSummaryResponse>>> Handle(GetTicketsQuery query, CancellationToken cancellationToken)
     {
+        if (query.Scope.HasInvertedPeriod)
+        {
+            return Result.Failure<PagedResponse<TicketSummaryResponse>>(TicketErrors.InvalidPeriod);
+        }
+
         DateTime nowUtc = dateTimeProvider.UtcNow;
         string? search = string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim();
         bool allStatuses = query.Statuses.Count == 0;
-        bool unassignedOnly = query.UnassignedOnly;
-        Guid? assignedToUserId = unassignedOnly ? null : query.AssignedToUserId;
 
-        IQueryable<Ticket> filtered = context.Tickets
+        IQueryable<Ticket> filtered = query.Scope
+            .Apply(context.Tickets)
             .Where(t =>
                 (allStatuses || query.Statuses.Contains(t.Status)) &&
-                (query.Priority == null || t.Priority == query.Priority) &&
-                (query.SectorId == null || t.SectorId == query.SectorId) &&
-                (query.RequesterId == null || t.CreatedByUserId == query.RequesterId) &&
-                (!unassignedOnly || t.AssignedToUserId == null) &&
-                (assignedToUserId == null || t.AssignedToUserId == assignedToUserId) &&
+                (query.WaitingOn == null || t.WaitingOn == query.WaitingOn) &&
                 (search == null || t.Title.Contains(search)))
             .WhereSlaStatus(query.SlaStatus, nowUtc);
 
@@ -63,8 +63,9 @@ internal sealed class GetTicketsQueryHandler(IApplicationDbContext context, IDat
                 DueAtUtc = x.Ticket.DueAtUtc,
                 SlaWarningAtUtc = x.Ticket.SlaWarningAtUtc,
                 ResolvedAtUtc = x.Ticket.ResolvedAtUtc,
-                // Regra do Domain: o EF lê as colunas e calcula a situação na projeção final.
-                SlaStatus = TicketSla.GetStatus(
+                WaitingOn = x.Ticket.WaitingOn,
+                // Regra do Ticket, calculada na projeção final sobre as colunas lidas.
+                SlaStatus = Ticket.GetSlaStatus(
                     x.Ticket.Status,
                     x.Ticket.DueAtUtc,
                     x.Ticket.SlaWarningAtUtc,

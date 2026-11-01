@@ -1,6 +1,7 @@
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Domain.Departments;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -11,33 +12,26 @@ internal sealed class CreateDepartmentCommandHandler(IApplicationDbContext conte
 {
     public async Task<Result<Guid>> Handle(CreateDepartmentCommand command, CancellationToken cancellationToken)
     {
-        bool nameInUse = await context.Departments.AnyAsync(d => d.IsActive && d.Name == command.Name, cancellationToken);
-
-        if (nameInUse)
+        if (await context.Departments.AnyAsync(d => d.IsActive && d.Name == command.Name, cancellationToken))
         {
             return Result.Failure<Guid>(DepartmentErrors.NameNotUnique(command.Name));
         }
 
-        Result responsibleCheck = await DepartmentResponsibleUser.EnsureExistsAsync(
-            context,
-            command.ResponsibleUserId,
-            cancellationToken);
+        User? responsibleUser = null;
 
-        if (responsibleCheck.IsFailure)
+        if (command.ResponsibleUserId is { } responsibleUserId)
         {
-            return Result.Failure<Guid>(responsibleCheck.Error);
+            responsibleUser = await context.Users
+                .AsNoTracking()
+                .SingleOrDefaultAsync(u => u.Id == responsibleUserId, cancellationToken);
+
+            if (responsibleUser is null)
+            {
+                return Result.Failure<Guid>(UserErrors.NotFound(responsibleUserId));
+            }
         }
 
-        var department = new Department
-        {
-            Id = Guid.NewGuid(),
-            Name = command.Name,
-            Description = command.Description,
-            IsActive = true,
-            ResponsibleUserId = command.ResponsibleUserId
-        };
-
-        department.Raise(new DepartmentCreatedDomainEvent(department.Id));
+        var department = Department.Create(command.Name, command.Description, responsibleUser);
 
         context.Departments.Add(department);
 

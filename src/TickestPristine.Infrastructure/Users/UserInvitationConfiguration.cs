@@ -10,6 +10,8 @@ internal sealed class UserInvitationConfiguration : IEntityTypeConfiguration<Use
     {
         builder.HasKey(invitation => invitation.Id);
 
+        builder.Property(invitation => invitation.Id).ValueGeneratedNever();
+
         // SHA-256 em hexadecimal: 64 caracteres. A ativação procura o convite pelo hash do token recebido.
         builder.Property(invitation => invitation.TokenHash).HasMaxLength(64);
 

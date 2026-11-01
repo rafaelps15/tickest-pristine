@@ -11,6 +11,8 @@ internal sealed class TicketAttachmentConfiguration : IEntityTypeConfiguration<T
     {
         builder.HasKey(a => a.Id);
 
+        builder.Property(a => a.Id).ValueGeneratedNever();
+
         builder.Property(a => a.FileName).HasMaxLength(260);
 
         builder.Property(a => a.ContentType).HasMaxLength(100);

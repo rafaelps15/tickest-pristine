@@ -2,7 +2,6 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.TicketHistories;
 using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
@@ -15,6 +14,7 @@ internal sealed class UpdateTicketCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IPermissionProvider permissionProvider,
+    TicketAgentLookup agentLookup,
     IDateTimeProvider dateTimeProvider)
     : ICommandHandler<UpdateTicketCommand>
 {
@@ -48,133 +48,65 @@ internal sealed class UpdateTicketCommandHandler(
             return Result.Failure(UserErrors.Unauthorized());
         }
 
-        if (!TicketStatusTransitions.IsActive(ticket.Status))
+        if (!ticket.IsActive)
         {
             return Result.Failure(TicketErrors.NotActive(ticket.Id));
         }
 
-        if (changesStatus && !TicketStatusTransitions.CanTransition(ticket.Status, command.Status))
+        if (changesStatus && !ticket.CanTransitionTo(command.Status))
         {
             return Result.Failure(TicketErrors.InvalidStatusTransition(ticket.Status, command.Status));
         }
 
         DateTime nowUtc = dateTimeProvider.UtcNow;
 
+        // Cancelar segue as regras do Ticket (janela do dono e tickets:cancel), conferidas pelo TicketSlaCycleService.Cancel
+        // antes de qualquer mudança. As demais trocas de status (Em Andamento e Resolvido) exigem tickets:manage: o dono
+        // só edita a descrição e cancela.
+        if (!cancels && changesStatus && !canManage)
+        {
+            return Result.Failure(TicketErrors.StatusChangeForbidden);
+        }
+
+        // Os cronômetros só mudam com o status; quem o chamado aguarda é recalculado na troca de status.
+        List<TicketSlaTimer> slaTimers = changesStatus
+            ? await context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id).ToListAsync(cancellationToken)
+            : [];
+
+        bool lastMessageIsFromAgent = changesStatus && await agentLookup.IsLastMessageFromAgentAsync(ticket, cancellationToken);
+
+        var historyEntries = new List<TicketHistory>();
+
+        // O status antes da descrição, como no histórico de antes; uma falha não muda nada.
         if (changesStatus)
         {
-            Result statusChange = EnsureCanChangeStatus(ticket, command.Status, nowUtc, isOwnerWhoCanEdit, canManage, canCancelAny);
+            var slaCycle = new TicketSlaCycleService();
+
+            Result<TicketHistory> statusChange = command.Status switch
+            {
+                TicketStatus.InProgress => ticket.StartProgress(lastMessageIsFromAgent, callerId, nowUtc),
+                TicketStatus.Resolved => slaCycle.Resolve(ticket, slaTimers, callerId, nowUtc),
+                TicketStatus.Canceled => slaCycle.Cancel(ticket, slaTimers, canCancelAny, isOwnerWhoCanEdit, callerId, nowUtc),
+                _ => Result.Failure<TicketHistory>(TicketErrors.InvalidStatusTransition(ticket.Status, command.Status))
+            };
 
             if (statusChange.IsFailure)
             {
                 return statusChange;
             }
+
+            historyEntries.Add(statusChange.Value);
         }
 
-        TicketStatus previousStatus = ticket.Status;
-        string previousDescription = ticket.Description;
-
-        ticket.Description = command.Description;
-        ticket.Status = command.Status;
-
-        // O SLA é medido até a primeira resolução; reaberturas não mudam o resultado.
-        if (command.Status == TicketStatus.Resolved && ticket.ResolvedAtUtc is null)
+        if (ticket.ChangeDescription(command.Description, callerId, nowUtc) is { } descriptionChange)
         {
-            ticket.ResolvedAtUtc = nowUtc;
+            historyEntries.Add(descriptionChange);
         }
 
-        if (changesStatus)
-        {
-            await UpdateSlaTimersAsync(ticket.Id, command.Status, nowUtc, cancellationToken);
-        }
-
-        ticket.Raise(new TicketUpdatedDomainEvent(ticket.Id));
-
-        if (changesStatus)
-        {
-            ticket.Raise(new TicketStatusChangedDomainEvent(ticket.Id, previousStatus, command.Status, userContext.UserId));
-
-            context.TicketHistories.Add(TicketHistoryEntries.StatusChanged(
-                ticket.Id,
-                userContext.UserId,
-                previousStatus,
-                command.Status,
-                nowUtc));
-        }
-
-        if (changesDescription)
-        {
-            context.TicketHistories.Add(TicketHistoryEntries.DescriptionChanged(
-                ticket.Id,
-                userContext.UserId,
-                previousDescription,
-                command.Description,
-                nowUtc));
-        }
+        context.TicketHistories.AddRange(historyEntries);
 
         await context.SaveChangesAsync(cancellationToken);
 
         return Result.Success();
-    }
-
-    /// <summary>
-    /// Cancelar: quem tem <c>tickets:cancel</c>, sempre; o dono, só dentro da janela de
-    /// <see cref="TicketCancellationPolicy"/>. As demais trocas de status (Em Andamento e Resolvido) exigem
-    /// <c>tickets:manage</c>: o dono só edita a descrição e cancela (spec 016).
-    /// </summary>
-    private static Result EnsureCanChangeStatus(
-        Ticket ticket,
-        TicketStatus newStatus,
-        DateTime nowUtc,
-        bool isOwnerWhoCanEdit,
-        bool canManage,
-        bool canCancelAny)
-    {
-        if (newStatus != TicketStatus.Canceled)
-        {
-            return canManage ? Result.Success() : Result.Failure(TicketErrors.StatusChangeForbidden);
-        }
-
-        if (TicketCancellationPolicy.CanCancel(ticket.Status, ticket.CreatedAtUtc, nowUtc, canCancelAny, isOwnerWhoCanEdit))
-        {
-            return Result.Success();
-        }
-
-        return isOwnerWhoCanEdit
-            ? Result.Failure(TicketErrors.CancelWindowExpired(TicketCancellationPolicy.OwnerWindowMinutes))
-            : Result.Failure(TicketErrors.CancelForbidden);
-    }
-
-    /// <summary>
-    /// Resolver conclui o ciclo corrente de resolução e, se ainda estiver em aberto, a primeira resposta, no mesmo
-    /// instante; cancelar para os cronômetros em aberto. Os demais status não mexem nos cronômetros. As mudanças são
-    /// gravadas no mesmo SaveChanges do chamado, sob o token de concorrência dele.
-    /// </summary>
-    private async Task UpdateSlaTimersAsync(Guid ticketId, TicketStatus newStatus, DateTime nowUtc, CancellationToken cancellationToken)
-    {
-        if (newStatus is not (TicketStatus.Resolved or TicketStatus.Canceled))
-        {
-            return;
-        }
-
-        List<TicketSlaTimer> timers = await context.TicketSlaTimers
-            .Where(t => t.TicketId == ticketId)
-            .ToListAsync(cancellationToken);
-
-        if (newStatus == TicketStatus.Canceled)
-        {
-            timers.ForEach(timer => TicketSlaClock.Stop(timer, nowUtc));
-
-            return;
-        }
-
-        if (TicketSlaClock.CurrentCycle(timers, SlaMetric.Resolution) is { } resolution)
-        {
-            TicketSlaClock.Complete(resolution, nowUtc);
-        }
-
-        if (TicketSlaClock.CurrentCycle(timers, SlaMetric.FirstResponse) is { } firstResponse)
-        {
-            TicketSlaClock.Complete(firstResponse, nowUtc);
-        }
     }
 }

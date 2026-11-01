@@ -1,9 +1,9 @@
 ﻿using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Permissions;
-using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Application.Tickets.Create;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
@@ -26,7 +26,7 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
 
     private static async Task<Guid> SeedSectorAsync(TestDbContext context)
     {
-        var sector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = Guid.NewGuid(), IsActive = true };
+        var sector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Helpdesk", description: null);
         context.Sectors.Add(sector);
         await context.SaveChangesAsync();
 
@@ -38,6 +38,7 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
+        await SeedCurrentUserAsync(context);
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(UserId);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
@@ -59,7 +60,9 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var sector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = Guid.NewGuid(), IsActive = false };
+        await SeedCurrentUserAsync(context);
+        var sector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Helpdesk", description: null);
+        sector.Deactivate();
         context.Sectors.Add(sector);
         await context.SaveChangesAsync();
 
@@ -85,6 +88,7 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
+        await SeedCurrentUserAsync(context);
         Guid sectorId = await SeedSectorAsync(context);
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(UserId);
@@ -114,6 +118,7 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
     {
         // Arrange: segunda-feira, 26/10/2026, 08:10 em São Paulo (11:10 UTC).
         await using TestDbContext context = CreateDbContext();
+        await SeedCurrentUserAsync(context);
         Guid sectorId = await SeedSectorAsync(context);
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(UserId);
@@ -163,6 +168,7 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
     {
         // Arrange: sexta-feira, 30/10/2026, 17:50 em São Paulo; segunda, 02/11, é Finados.
         await using TestDbContext context = CreateDbContext();
+        await SeedCurrentUserAsync(context);
         Guid sectorId = await SeedSectorAsync(context);
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(UserId);
@@ -193,6 +199,7 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
+        await SeedCurrentUserAsync(context);
         Guid sectorId = await SeedSectorAsync(context);
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(UserId);
@@ -219,6 +226,7 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
+        await SeedCurrentUserAsync(context);
         Guid sectorId = await SeedSectorAsync(context);
         Guid requesterId = await SeedUserAsync(context);
 
@@ -251,6 +259,7 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
+        await SeedCurrentUserAsync(context);
         Guid sectorId = await SeedSectorAsync(context);
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(UserId);
@@ -277,6 +286,7 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
+        await SeedCurrentUserAsync(context);
         Guid sectorId = await SeedSectorAsync(context);
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(UserId);
@@ -305,6 +315,7 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
+        await SeedCurrentUserAsync(context);
         Guid sectorId = await SeedSectorAsync(context);
         Guid assigneeId = await SeedUserAsync(context);
         IUserContext userContext = Substitute.For<IUserContext>();
@@ -332,6 +343,7 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
+        await SeedCurrentUserAsync(context);
         Guid sectorId = await SeedSectorAsync(context);
         // Usuário desativado conta como inexistente para receber o chamado.
         Guid assigneeId = await SeedUserAsync(context, isActive: false);
@@ -357,6 +369,15 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
         (await context.Tickets.AnyAsync()).ShouldBeFalse();
     }
 
+    // O handler carrega o usuário logado para abrir o chamado em nome dele.
+    private static async Task SeedCurrentUserAsync(TestDbContext context)
+    {
+        User user = CreateUser();
+        user.Id = UserId;
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+    }
+
     private static async Task<Guid> SeedUserAsync(TestDbContext context, bool isActive = true)
     {
         User user = CreateUser(isActive);
@@ -371,6 +392,7 @@ public sealed class CreateTicketCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
+        await SeedCurrentUserAsync(context);
         Guid sectorId = await SeedSectorAsync(context);
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(UserId);

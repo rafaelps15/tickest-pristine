@@ -1,7 +1,6 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.TicketHistories;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -27,23 +26,19 @@ internal sealed class CloseTicketCommandHandler(
             return Result.Failure(TicketErrors.NotFound(command.TicketId));
         }
 
-        if (!TicketStatusTransitions.CanTransition(ticket.Status, TicketStatus.Closed))
+        if (!ticket.CanTransitionTo(TicketStatus.Closed))
         {
             return Result.Failure(TicketErrors.InvalidStatusTransition(ticket.Status, TicketStatus.Closed));
         }
 
-        TicketStatus previousStatus = ticket.Status;
+        Result<TicketHistory> closing = ticket.Close(userContext.UserId, dateTimeProvider.UtcNow);
 
-        ticket.Status = TicketStatus.Closed;
+        if (closing.IsFailure)
+        {
+            return closing;
+        }
 
-        ticket.Raise(new TicketStatusChangedDomainEvent(ticket.Id, previousStatus, TicketStatus.Closed, userContext.UserId));
-
-        context.TicketHistories.Add(TicketHistoryEntries.StatusChanged(
-            ticket.Id,
-            userContext.UserId,
-            previousStatus,
-            TicketStatus.Closed,
-            dateTimeProvider.UtcNow));
+        context.TicketHistories.Add(closing.Value);
 
         await context.SaveChangesAsync(cancellationToken);
 

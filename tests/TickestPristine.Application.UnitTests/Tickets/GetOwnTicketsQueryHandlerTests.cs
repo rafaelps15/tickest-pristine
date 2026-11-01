@@ -5,6 +5,7 @@ using TickestPristine.Application.Permissions;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Tickets.GetOwn;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
@@ -81,7 +82,7 @@ public sealed class GetOwnTicketsQueryHandlerTests : BaseHandlerTest
         User ana = CreateUser();
         ana.FirstName = "Ana";
         ana.LastName = "Souza";
-        var helpdesk = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", IsActive = true, DepartmentId = Guid.NewGuid() };
+        var helpdesk = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Helpdesk", description: null);
         context.Users.Add(ana);
         context.Sectors.Add(helpdesk);
         await context.SaveChangesAsync();
@@ -91,9 +92,9 @@ public sealed class GetOwnTicketsQueryHandlerTests : BaseHandlerTest
             OwnerId,
             TicketStatus.InProgress,
             NowUtc.AddHours(-2),
-            sectorId: helpdesk.Id,
+            sector: helpdesk,
             assignedToUserId: ana.Id);
-        Ticket unassigned = await SeedTicketAsync(context, OwnerId, TicketStatus.Open, NowUtc.AddHours(-1), sectorId: helpdesk.Id);
+        Ticket unassigned = await SeedTicketAsync(context, OwnerId, TicketStatus.Open, NowUtc.AddHours(-1), sector: helpdesk);
 
         GetOwnTicketsQueryHandler handler = CreateHandler(context, OwnerId);
 
@@ -107,12 +108,7 @@ public sealed class GetOwnTicketsQueryHandlerTests : BaseHandlerTest
         withAssignee.SectorId.ShouldBe(helpdesk.Id);
         withAssignee.SectorName.ShouldBe("Helpdesk");
         withAssignee.DueAtUtc.ShouldBe(assigned.DueAtUtc);
-        withAssignee.SlaStatus.ShouldBe(TicketSla.GetStatus(
-            assigned.Status,
-            assigned.DueAtUtc,
-            assigned.SlaWarningAtUtc,
-            assigned.ResolvedAtUtc,
-            NowUtc));
+        withAssignee.SlaStatus.ShouldBe(TicketSlaStatus.OnTime);
         withAssignee.LastActivityAtUtc.ShouldBe(assigned.LastActivityAtUtc);
 
         result.Value.Items.Single(t => t.Id == unassigned.Id).AssignedToName.ShouldBeNull();
@@ -186,6 +182,78 @@ public sealed class GetOwnTicketsQueryHandlerTests : BaseHandlerTest
 
         // Assert
         result.Value.TotalCount.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Handle_Should_SearchTitleOrDescription_WhenSearchIsGiven()
+    {
+        // Arrange (maiúsculas e minúsculas são conferidas no teste de integração, com o citext do PostgreSQL)
+        await using TestDbContext context = CreateDbContext();
+        (Ticket printer, Ticket email, Ticket monitor) = await SeedSearchScenarioAsync(context);
+
+        GetOwnTicketsQueryHandler handler = CreateHandler(context, OwnerId);
+
+        // Act
+        Result<PagedResponse<OwnTicketResponse>> byDescription = await handler.Handle(
+            CreateQuery(search: "SENHA"),
+            CancellationToken.None);
+        Result<PagedResponse<OwnTicketResponse>> byTitle = await handler.Handle(
+            CreateQuery(search: "Impress"),
+            CancellationToken.None);
+        Result<PagedResponse<OwnTicketResponse>> byTitleOrDescription = await handler.Handle(
+            CreateQuery(search: "e"),
+            CancellationToken.None);
+
+        // Assert
+        byDescription.Value.Items.ShouldHaveSingleItem().Id.ShouldBe(email.Id);
+        byTitle.Value.Items.ShouldHaveSingleItem().Id.ShouldBe(printer.Id);
+        byTitleOrDescription.Value.Items.Select(t => t.Id).ShouldBe([printer.Id, email.Id, monitor.Id], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task Handle_Should_CombineDescriptionSearchWithStatusGroup_WhenBothAreGiven()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        (Ticket printer, Ticket email, Ticket monitor) = await SeedSearchScenarioAsync(context);
+
+        GetOwnTicketsQueryHandler handler = CreateHandler(context, OwnerId);
+
+        // Act
+        Result<PagedResponse<OwnTicketResponse>> activeWithE = await handler.Handle(
+            CreateQuery(OwnTicketStatusGroup.Active, "e"),
+            CancellationToken.None);
+        Result<PagedResponse<OwnTicketResponse>> finishedWithPassword = await handler.Handle(
+            CreateQuery(OwnTicketStatusGroup.Finished, "SENHA"),
+            CancellationToken.None);
+        Result<PagedResponse<OwnTicketResponse>> activeWithPassword = await handler.Handle(
+            CreateQuery(OwnTicketStatusGroup.Active, "SENHA"),
+            CancellationToken.None);
+
+        // Assert
+        activeWithE.Value.Items.Select(t => t.Id).ShouldBe([printer.Id, monitor.Id]);
+        activeWithE.Value.TotalCount.ShouldBe(2);
+        finishedWithPassword.Value.Items.ShouldHaveSingleItem().Id.ShouldBe(email.Id);
+        activeWithPassword.Value.Items.ShouldBeEmpty();
+        activeWithPassword.Value.TotalCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Handle_Should_NotReturnOtherUsersTickets_WhenDescriptionMatchesSearch()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        (_, Ticket email, _) = await SeedSearchScenarioAsync(context);
+
+        GetOwnTicketsQueryHandler handler = CreateHandler(context, OwnerId);
+
+        // Act
+        Result<PagedResponse<OwnTicketResponse>> result = await handler.Handle(
+            CreateQuery(search: "SENHA"),
+            CancellationToken.None);
+
+        // Assert
+        result.Value.Items.ShouldHaveSingleItem().Id.ShouldBe(email.Id);
     }
 
     [Fact]
@@ -265,10 +333,8 @@ public sealed class GetOwnTicketsQueryHandlerTests : BaseHandlerTest
         result.Value.Items.ShouldHaveSingleItem().CanCancel.ShouldBeFalse();
     }
 
-    /// <summary>
-    /// Handler para quem consulta, por padrão um Colaborador: pode editar os próprios chamados (tickets:update-own) e
-    /// não tem tickets:cancel.
-    /// </summary>
+    // Handler para quem consulta, por padrão um Colaborador: pode editar os próprios chamados (tickets:update-own) e
+    // não tem tickets:cancel.
     private static GetOwnTicketsQueryHandler CreateHandler(
         TestDbContext context,
         Guid callerId,
@@ -291,34 +357,53 @@ public sealed class GetOwnTicketsQueryHandlerTests : BaseHandlerTest
     private static GetOwnTicketsQuery CreateQuery(OwnTicketStatusGroup? statusGroup = null, string? search = null) =>
         new(statusGroup, search, new PageRequest(1, 20));
 
+    // Chamados do cenário: "Impressora não imprime" (Aberto), "Acesso ao e-mail" (Resolvido) e "Monitor piscando" (Em
+    // Andamento, com "e" só na descrição), da última atividade mais recente para a mais antiga, e um chamado de outro
+    // usuário com "SENHA" na descrição.
+    private static async Task<(Ticket Printer, Ticket Email, Ticket Monitor)> SeedSearchScenarioAsync(TestDbContext context)
+    {
+        Ticket printer = await SeedTicketAsync(
+            context, OwnerId, TicketStatus.Open, NowUtc.AddHours(-1), title: "Impressora não imprime", description: "Sai papel em branco");
+        Ticket email = await SeedTicketAsync(
+            context, OwnerId, TicketStatus.Resolved, NowUtc.AddHours(-2), title: "Acesso ao e-mail", description: "Outlook pede a SENHA toda hora");
+        Ticket monitor = await SeedTicketAsync(
+            context, OwnerId, TicketStatus.InProgress, NowUtc.AddHours(-3), title: "Monitor piscando", description: "Desde ontem");
+        await SeedTicketAsync(
+            context, Guid.NewGuid(), TicketStatus.Open, NowUtc.AddHours(-4), title: "Bloqueio", description: "SENHA bloqueada");
+
+        return (printer, email, monitor);
+    }
+
     private static async Task<Ticket> SeedTicketAsync(
         TestDbContext context,
         Guid openedByUserId,
         TicketStatus status,
         DateTime createdAtUtc,
         string title = "Printer is broken",
-        Guid? sectorId = null,
+        Sector? sector = null,
         Guid? assignedToUserId = null,
-        DateTime? lastActivityAtUtc = null)
+        DateTime? lastActivityAtUtc = null,
+        string description = "Original description")
     {
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = title,
-            Description = "Original description",
-            Priority = TicketPriority.Medium,
-            Status = status,
-            CreatedByUserId = openedByUserId,
-            AssignedToUserId = assignedToUserId,
-            SectorId = sectorId ?? Guid.NewGuid(),
-            CreatedAtUtc = createdAtUtc,
-            DueAtUtc = createdAtUtc.AddHours(24),
-            SlaWarningAtUtc = createdAtUtc.AddHours(18),
-            // Como o interceptor faria na abertura: a última atividade começa na data de abertura.
-            LastActivityAtUtc = lastActivityAtUtc ?? createdAtUtc
-        };
+        Ticket ticket = TicketTestData.Create(
+            requesterId: openedByUserId,
+            sector: sector,
+            status: status,
+            createdAtUtc: createdAtUtc,
+            assignedToUserId: assignedToUserId,
+            title: title,
+            description: description,
+            dueAtUtc: createdAtUtc.AddHours(24),
+            slaWarningAtUtc: createdAtUtc.AddHours(18));
 
         context.Tickets.Add(ticket);
+
+        // O Create já começa a última atividade na data de abertura; outra data só entra pelo EF.
+        if (lastActivityAtUtc is { } lastActivity)
+        {
+            context.Entry(ticket).Property(t => t.LastActivityAtUtc).CurrentValue = lastActivity;
+        }
+
         await context.SaveChangesAsync();
 
         return ticket;

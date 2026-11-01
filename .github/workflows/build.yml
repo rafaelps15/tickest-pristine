@@ -35,6 +35,9 @@ jobs:
       - name: Test SDD gate hook
         run: python -m unittest discover -s .claude/hooks -p "test_*.py"
 
+      - name: Test agent instructions
+        run: python -m unittest discover -s scripts -p "test_*.py"
+
       - name: SDD compliance audit
         run: python scripts/auditoria_sdd.py . --min-score 70
 
