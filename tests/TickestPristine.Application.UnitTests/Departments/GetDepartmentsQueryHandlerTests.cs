@@ -1,14 +1,54 @@
 using TickestPristine.Application.Departments.GetAll;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Application.Users;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 
 namespace TickestPristine.Application.UnitTests.Departments;
 
 public sealed class GetDepartmentsQueryHandlerTests : BaseHandlerTest
 {
     private static readonly DateTime OpenedAtUtc = new(2026, 10, 27, 12, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public async Task Handle_Should_ReturnResponsibleIdAndName_WhenDepartmentHasResponsible()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+
+        var ana = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "ana@tickestpristine.dev",
+            FirstName = "Ana",
+            LastName = "Souza",
+            Code = UserCodes.New()
+        };
+        var it = Department.Create("IT", "Information Technology", responsibleUser: ana);
+        var finance = Department.Create("Finance", "Finance department", responsibleUser: null);
+
+        context.Users.Add(ana);
+        context.Departments.AddRange(it, finance);
+        await context.SaveChangesAsync();
+
+        var handler = new GetDepartmentsQueryHandler(context);
+
+        // Act
+        Result<List<DepartmentResponse>> result = await handler.Handle(new GetDepartmentsQuery(), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        DepartmentResponse itResponse = result.Value.Single(d => d.Id == it.Id);
+        itResponse.ResponsibleUserId.ShouldBe(ana.Id);
+        itResponse.ResponsibleUserName.ShouldBe("Ana Souza");
+
+        DepartmentResponse financeResponse = result.Value.Single(d => d.Id == finance.Id);
+        financeResponse.ResponsibleUserId.ShouldBeNull();
+        financeResponse.ResponsibleUserName.ShouldBeNull();
+    }
 
     [Fact]
     public async Task Handle_Should_ReturnOnlyActiveDepartmentsWithActiveSectors_WhenSomeAreInactive()

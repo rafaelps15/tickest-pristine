@@ -29,6 +29,19 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
         return await response.Content.ReadFromJsonAsync<Guid>();
     }
 
+    private async Task<Guid> CreateDepartmentWithResponsibleAsync(Guid responsibleUserId)
+    {
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("departments", new
+        {
+            name = $"Department-{Guid.NewGuid():N}",
+            description = "A department created by tests",
+            responsibleUserId
+        });
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<Guid>();
+    }
+
     private async Task<Guid> CreateSectorAsync(Guid departmentId, string name)
     {
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync("sectors", new { name, departmentId });
@@ -183,6 +196,105 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
         DepartmentDto? department = await getResponse.Content.ReadFromJsonAsync<DepartmentDto>();
         department!.Name.ShouldBe("Customer Support");
         department.Description.ShouldBe("Updated description");
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnResponsibleIdAndName()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid anaId = await InsertUserAsync("Ana", "Souza", UniqueEmail());
+        Guid itId = await CreateDepartmentWithResponsibleAsync(anaId);
+        Guid financeId = await CreateDepartmentAsync();
+
+        // Act
+        List<DepartmentListItemDto>? departments = await HttpClient.GetFromJsonAsync<List<DepartmentListItemDto>>("departments");
+
+        // Assert
+        DepartmentListItemDto it = departments!.Single(d => d.Id == itId);
+        it.ResponsibleUserId.ShouldBe(anaId);
+        it.ResponsibleUserName.ShouldBe("Ana Souza");
+
+        DepartmentListItemDto finance = departments!.Single(d => d.Id == financeId);
+        finance.ResponsibleUserId.ShouldBeNull();
+        finance.ResponsibleUserName.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Update_Should_KeepResponsible_WhenClientSendsTheIdReadFromGetAll()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid anaId = await InsertUserAsync("Ana", "Souza", UniqueEmail());
+        Guid itId = await CreateDepartmentWithResponsibleAsync(anaId);
+
+        List<DepartmentListItemDto>? departments = await HttpClient.GetFromJsonAsync<List<DepartmentListItemDto>>("departments");
+        DepartmentListItemDto it = departments!.Single(d => d.Id == itId);
+        string newName = $"Tecnologia-{Guid.NewGuid():N}";
+
+        // Act
+        HttpResponseMessage updateResponse = await HttpClient.PutAsJsonAsync($"departments/{itId}", new
+        {
+            name = newName,
+            description = it.Description,
+            responsibleUserId = it.ResponsibleUserId
+        });
+
+        // Assert
+        updateResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        DepartmentDto? department = await HttpClient.GetFromJsonAsync<DepartmentDto>($"departments/{itId}");
+        department!.Name.ShouldBe(newName);
+        department.ResponsibleUserId.ShouldBe(anaId);
+    }
+
+    [Fact]
+    public async Task Update_Should_ReplaceResponsible_WhenAnotherUserIdIsSent()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid anaId = await InsertUserAsync("Ana", "Souza", UniqueEmail());
+        Guid brunoId = await InsertUserAsync("Bruno", "Lima", UniqueEmail());
+        Guid itId = await CreateDepartmentWithResponsibleAsync(anaId);
+        DepartmentDto? before = await HttpClient.GetFromJsonAsync<DepartmentDto>($"departments/{itId}");
+
+        // Act
+        HttpResponseMessage updateResponse = await HttpClient.PutAsJsonAsync($"departments/{itId}", new
+        {
+            name = before!.Name,
+            description = before.Description,
+            responsibleUserId = brunoId
+        });
+
+        // Assert
+        updateResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        DepartmentDto? department = await HttpClient.GetFromJsonAsync<DepartmentDto>($"departments/{itId}");
+        department!.ResponsibleUserId.ShouldBe(brunoId);
+    }
+
+    [Fact]
+    public async Task Update_Should_RemoveResponsible_WhenNullIsSent()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid anaId = await InsertUserAsync("Ana", "Souza", UniqueEmail());
+        Guid itId = await CreateDepartmentWithResponsibleAsync(anaId);
+        DepartmentDto? before = await HttpClient.GetFromJsonAsync<DepartmentDto>($"departments/{itId}");
+
+        // Act
+        HttpResponseMessage updateResponse = await HttpClient.PutAsJsonAsync($"departments/{itId}", new
+        {
+            name = before!.Name,
+            description = before.Description,
+            responsibleUserId = (Guid?)null
+        });
+
+        // Assert
+        updateResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        DepartmentDto? department = await HttpClient.GetFromJsonAsync<DepartmentDto>($"departments/{itId}");
+        department!.ResponsibleUserId.ShouldBeNull();
     }
 
     [Fact]
@@ -525,7 +637,14 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
 
     private sealed record ValidationErrorDto(string Code, string Description);
 
-    private sealed record DepartmentListItemDto(Guid Id, int ActiveTicketCount, List<DepartmentSectorListItemDto> Sectors);
+    private sealed record DepartmentListItemDto(
+        Guid Id,
+        string Name,
+        string Description,
+        Guid? ResponsibleUserId,
+        string? ResponsibleUserName,
+        int ActiveTicketCount,
+        List<DepartmentSectorListItemDto> Sectors);
 
     private sealed record DepartmentSectorListItemDto(Guid Id, int ActiveTicketCount);
 
