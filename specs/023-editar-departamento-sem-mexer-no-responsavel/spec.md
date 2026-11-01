@@ -1,7 +1,7 @@
 ---
 id: 023
 titulo: Listagem de departamentos traz o id do responsável, para editar sem buscar o detalhe
-status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+status: Em implementação  # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-023-department-list-responsible-id                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
@@ -75,6 +75,7 @@ Dados comuns: departamento TI com responsável Ana; departamento Financeiro sem 
 | T-2 | Testes de listagem e do fluxo listar → editar | AC-1, AC-2, AC-3 | `add-tests` | [x] |
 | T-3 | Atualizar o `SYSTEM_SPECIFICATION.md` | AC-5 | — | [x] |
 | T-4 | Revisão de convenções (inclui o AC-4), build sem avisos e suíte inteira | AC-4, AC-5 | `ca-review` | [x] |
+| T-5 | Atualizar a branch com a `main` (com a spec 022): resolver os conflitos mantendo as duas specs, adaptar o teste unitário da listagem ao domínio rico (`Department.Create`) e unificar o `DepartmentListItemDto` dos testes de integração; build sem avisos, testes unitários, de arquitetura e de integração de departamentos | AC-1, AC-2, AC-3, AC-5 | `add-tests` | [x] |
 
 ## 8. Rastreabilidade
 | AC | Teste(s) — arquivo › método | Como o teste cobre o critério | Resultado |
@@ -103,3 +104,4 @@ Dados comuns: departamento TI com responsável Ana; departamento Financeiro sem 
 | 2026-10-28 | Em implementação | `/spec-implement 023` pedido por Rafael Santos, na worktree `tickest-pristine-023`, branch `feat/SPEC-023-department-list-responsible-id` criada a partir da `origin/main` (`ad732da`). Mesmos arquivos da spec 022 (`GetAll/DepartmentResponse.cs`, `GetDepartmentsQueryHandler.cs`, `DepartmentsTests.cs`), ainda sem código da 022: segue isolada (R-1). Commits por tarefa aguardam autorização explícita do responsável. |
 | 2026-10-28 | Em implementação | Ajuste do AC-3 aprovado no chat por Rafael Santos ("AC-3: aprovo a opção 1."): o texto supunha testes de troca e de remoção do responsável no `PUT` que não existiam; o AC passa a exigir esses dois casos por teste de integração, sem mudar o comportamento do `PUT` (REQ-2 e DEC-2 intactos). |
 | 2026-10-28 | Verificada | `spec-verify`: build sem avisos, suíte inteira verde (1.275 testes), auditoria SDD 100% (saída 0), AC-1 a AC-5 cobertos por testes lidos e aprovados nesta execução, revisão sem achados bloqueantes. Documentação de estado já atualizada na T-3 (2.7 C-07 e 4.3.1). |
+| 2026-11-01 | Em implementação | `/spec-implement 023` pedido por Rafael Santos depois do merge da spec 022 na `main` (PR #60). A branch partiu de `ad732da`, antes dos PRs #53 a #57 e #60, e o PR #52 ficou com conflito. O merge da `origin/main` (`05e4f0f`), rodado pelo responsável, parou com conflito no `SYSTEM_SPECIFICATION.md`, no `GetDepartmentsQueryHandlerTests.cs` e no `DepartmentsTests.cs`. Além disso, o teste unitário da T-2 monta o `Department` por setters, que deixaram de existir com o domínio rico (spec 038), e as specs 022 e 023 criaram cada uma um `DepartmentListItemDto` nos testes de integração. A resolução (T-5) altera código coberto pela verificação de 2026-10-28, então a spec volta para `Em implementação` e precisa ser verificada de novo. REQs, ACs e DECs não mudam. |

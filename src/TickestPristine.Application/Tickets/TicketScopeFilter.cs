@@ -47,6 +47,13 @@ public sealed record TicketScopeFilter(
     public bool HasInvertedPeriod =>
         LocalDatePeriod.IsInverted(CreatedFrom, CreatedTo) || LocalDatePeriod.IsInverted(ResolvedFrom, ResolvedTo);
 
+    /// <summary>
+    /// Algum filtro de recorte além dos períodos: setores, prioridade, solicitante, responsável ou só sem responsável.
+    /// Os períodos não contam, porque o período da empresa toda não expõe setor nem pessoa (spec 031, DEC-3).
+    /// </summary>
+    public bool HasSlicingFilter =>
+        SectorIds.Count > 0 || Priority != null || RequesterId != null || AssignedToUserId != null || UnassignedOnly;
+
     internal IQueryable<Ticket> Apply(IQueryable<Ticket> tickets)
     {
         bool allSectors = SectorIds.Count == 0;

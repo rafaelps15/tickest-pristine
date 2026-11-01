@@ -1,6 +1,5 @@
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Sla;
-using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Domain.SlaCalendars;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;

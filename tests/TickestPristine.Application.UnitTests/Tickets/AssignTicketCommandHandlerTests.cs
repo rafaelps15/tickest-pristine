@@ -6,6 +6,7 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
+using TickestPristine.Application.Tickets;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -230,9 +231,6 @@ public sealed class AssignTicketCommandHandlerTests : BaseHandlerTest
         (await context.TicketHistories.AnyAsync(h => h.TicketId == ticketId)).ShouldBeFalse();
     }
 
-    /// <summary>
-    /// Provedor em que quem chama tem <c>tickets:assign</c> e pode atribuir o chamado a outra pessoa.
-    /// </summary>
     private static IPermissionProvider PermissionProviderWithAssign()
     {
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
@@ -247,7 +245,7 @@ public sealed class AssignTicketCommandHandlerTests : BaseHandlerTest
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(AgentId);
 
-        return new AssignTicketCommandHandler(context, userContext, permissionProvider, CreateClock());
+        return new AssignTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context), CreateClock());
     }
 
     private static async Task<User> SeedUserAsync(TestDbContext context, bool isActive = true, Guid? id = null)
@@ -261,9 +259,7 @@ public sealed class AssignTicketCommandHandlerTests : BaseHandlerTest
         return user;
     }
 
-    /// <summary>
-    /// Usuário com uma role que tem <c>tickets:manage</c>, gravada no banco.
-    /// </summary>
+    // Usuário com uma role que tem tickets:manage, gravada no banco.
     private static async Task<User> SeedAttendantAsync(TestDbContext context, bool isActive = true, Guid? id = null)
     {
         User user = await SeedUserAsync(context, isActive, id);
@@ -274,18 +270,10 @@ public sealed class AssignTicketCommandHandlerTests : BaseHandlerTest
 
     private static async Task<Guid> SeedTicketAsync(TestDbContext context, TicketStatus status, Guid? assignedToUserId = null)
     {
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Medium,
-            Status = status,
-            CreatedByUserId = Guid.NewGuid(),
-            AssignedToUserId = assignedToUserId,
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow
-        };
+        Ticket ticket = TicketTestData.Create(
+            status: status,
+            assignedToUserId: assignedToUserId,
+            description: "Original description");
 
         context.Tickets.Add(ticket);
         await context.SaveChangesAsync();

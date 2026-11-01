@@ -17,7 +17,7 @@ public sealed class GetRolesQueryHandlerTests : BaseHandlerTest
         Role manager = CreateRole("Manager");
         Role agent = CreateRole("Atendente");
         context.Roles.AddRange(manager, agent);
-        context.RolePermissions.Add(new RolePermission { RoleName = manager.Name, PermissionCode = "tickets:manage" });
+        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = manager.Name, PermissionCode = "tickets:manage" });
         await context.SaveChangesAsync();
 
         var handler = new GetRolesQueryHandler(context);

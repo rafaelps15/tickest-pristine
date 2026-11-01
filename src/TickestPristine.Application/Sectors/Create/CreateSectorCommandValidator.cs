@@ -6,8 +6,7 @@ internal sealed class CreateSectorCommandValidator : AbstractValidator<CreateSec
 {
     public CreateSectorCommandValidator()
     {
-        RuleFor(c => c.Name).NotEmpty().MaximumLength(SectorValidationRules.NameMaxLength);
-        RuleFor(c => c.Description).MaximumLength(SectorValidationRules.DescriptionMaxLength);
+        RuleFor(c => c.Name).NotEmpty();
         RuleFor(c => c.DepartmentId).NotEmpty();
     }
 }

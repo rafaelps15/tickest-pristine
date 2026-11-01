@@ -164,4 +164,21 @@ public class LayerTests : BaseTest
         // Assert
         result.IsSuccessful.ShouldBeTrue();
     }
+
+    [Fact]
+    public void BusinessCalendar_Should_LiveInDomainWithoutInterface()
+    {
+        // Arrange
+        Type[] domainTypes = DomainAssembly.GetTypes();
+
+        // Act
+        Type? calendar = domainTypes.SingleOrDefault(t => t.Name == "BusinessCalendar");
+        bool hasInterface = domainTypes.Any(t => t.Name == "IBusinessCalendar") ||
+            ApplicationAssembly.GetTypes().Any(t => t.Name is "BusinessCalendar" or "IBusinessCalendar");
+
+        // Assert
+        calendar.ShouldNotBeNull();
+        calendar.Namespace.ShouldBe("TickestPristine.Domain.SlaCalendars");
+        hasInterface.ShouldBeFalse();
+    }
 }

@@ -64,8 +64,8 @@ internal sealed class GetTicketsQueryHandler(IApplicationDbContext context, IDat
                 SlaWarningAtUtc = x.Ticket.SlaWarningAtUtc,
                 ResolvedAtUtc = x.Ticket.ResolvedAtUtc,
                 WaitingOn = x.Ticket.WaitingOn,
-                // Regra do Domain: o EF lê as colunas e calcula a situação na projeção final.
-                SlaStatus = TicketSla.GetStatus(
+                // Regra do Ticket, calculada na projeção final sobre as colunas lidas.
+                SlaStatus = Ticket.GetSlaStatus(
                     x.Ticket.Status,
                     x.Ticket.DueAtUtc,
                     x.Ticket.SlaWarningAtUtc,

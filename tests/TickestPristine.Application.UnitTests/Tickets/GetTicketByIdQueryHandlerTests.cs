@@ -2,11 +2,12 @@
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Tickets.GetById;
 using TickestPristine.Application.UnitTests.Abstractions;
-using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
+using TickestPristine.Domain.SlaCalendars;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -136,6 +137,68 @@ public sealed class GetTicketByIdQueryHandlerTests : BaseHandlerTest
         asAdministrator.Value.CanCancel.ShouldBeFalse();
     }
 
+    [Theory]
+    [InlineData(0, TicketSlaStatus.OnTime)]
+    [InlineData(179, TicketSlaStatus.OnTime)]
+    [InlineData(180, TicketSlaStatus.AtRisk)]
+    [InlineData(239, TicketSlaStatus.AtRisk)]
+    [InlineData(240, TicketSlaStatus.Breached)]
+    [InlineData(600, TicketSlaStatus.Breached)]
+    public async Task Handle_Should_ReturnSlaStatusFollowingWindow_WhenTicketIsNotResolved(
+        int minutesAfterCreation,
+        TicketSlaStatus expected)
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Ticket ticket = await SeedTicketAsync(context, NowUtc.AddMinutes(-minutesAfterCreation), TicketStatus.InProgress);
+        GetTicketByIdQueryHandler handler = CreateHandler(context, ticket.CreatedByUserId, canManage: false);
+
+        // Act
+        Result<TicketResponse> result = await handler.Handle(new GetTicketByIdQuery(ticket.Id), CancellationToken.None);
+
+        // Assert
+        result.Value.SlaStatus.ShouldBe(expected);
+    }
+
+    [Theory]
+    [InlineData(240, TicketSlaStatus.Met)]
+    [InlineData(241, TicketSlaStatus.Missed)]
+    public async Task Handle_Should_FreezeSlaStatusAtFirstResolution_WhenTicketWasResolved(
+        int resolvedMinutesAfterCreation,
+        TicketSlaStatus expected)
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        DateTime createdAtUtc = NowUtc.AddDays(-10);
+        Ticket ticket = await SeedTicketAsync(
+            context,
+            createdAtUtc,
+            TicketStatus.Resolved,
+            resolvedAtUtc: createdAtUtc.AddMinutes(resolvedMinutesAfterCreation));
+        GetTicketByIdQueryHandler handler = CreateHandler(context, ticket.CreatedByUserId, canManage: false);
+
+        // Act
+        Result<TicketResponse> result = await handler.Handle(new GetTicketByIdQuery(ticket.Id), CancellationToken.None);
+
+        // Assert
+        result.Value.SlaStatus.ShouldBe(expected);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnSlaNotApplicable_WhenTicketWasCanceledWithoutResolution()
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        Ticket ticket = await SeedTicketAsync(context, NowUtc.AddDays(-10), TicketStatus.Canceled);
+        GetTicketByIdQueryHandler handler = CreateHandler(context, ticket.CreatedByUserId, canManage: false);
+
+        // Act
+        Result<TicketResponse> result = await handler.Handle(new GetTicketByIdQuery(ticket.Id), CancellationToken.None);
+
+        // Assert
+        result.Value.SlaStatus.ShouldBe(TicketSlaStatus.NotApplicable);
+    }
+
     private static GetTicketByIdQueryHandler CreateHandler(
         TestDbContext context,
         Guid callerId,
@@ -158,33 +221,29 @@ public sealed class GetTicketByIdQueryHandlerTests : BaseHandlerTest
         return new GetTicketByIdQueryHandler(context, userContext, permissionProvider, CreateSlaCalendarProvider(), dateTimeProvider);
     }
 
-    /// <summary>
-    /// Chamado Urgente aberto, por padrão, 3,5 h antes de <see cref="NowUtc"/>: já passou do alerta (3 h) e não venceu
-    /// (4 h).
-    /// </summary>
+    // Chamado Urgente aberto, por padrão, 3,5 h antes de NowUtc: já passou do alerta (3 h) e não venceu
+    // (4 h).
     private static async Task<Ticket> SeedTicketAsync(
         TestDbContext context,
         DateTime? openedAtUtc = null,
-        TicketStatus status = TicketStatus.Open)
+        TicketStatus status = TicketStatus.Open,
+        DateTime? resolvedAtUtc = null)
     {
         User requester = CreateUser();
-        var sector = new Sector { Id = Guid.NewGuid(), Name = "Helpdesk", DepartmentId = Guid.NewGuid(), IsActive = true };
+        var sector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Helpdesk", description: null);
         DateTime createdAtUtc = openedAtUtc ?? NowUtc.AddHours(-3.5);
 
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "Original description",
-            Priority = TicketPriority.Urgent,
-            Status = status,
-            CreatedByUserId = requester.Id,
-            SectorId = sector.Id,
-            CreatedAtUtc = createdAtUtc,
-            DueAtUtc = TicketSla.DueAt(createdAtUtc, TicketPriority.Urgent),
-            SlaWarningAtUtc = TicketSla.WarningAt(createdAtUtc, TicketPriority.Urgent),
-            SlaPlan = TicketSla.LegacyPlan(TicketPriority.Urgent)
-        };
+        Ticket ticket = TicketTestData.Create(
+            requesterId: requester.Id,
+            sector: sector,
+            status: status,
+            createdAtUtc: createdAtUtc,
+            priority: TicketPriority.Urgent,
+            description: "Original description",
+            slaPlan: TicketSlaPlan.Legacy(TicketPriority.Urgent),
+            dueAtUtc: createdAtUtc.AddHours(4),
+            slaWarningAtUtc: createdAtUtc.AddHours(3),
+            resolvedAtUtc: resolvedAtUtc);
 
         context.Users.Add(requester);
         context.Sectors.Add(sector);

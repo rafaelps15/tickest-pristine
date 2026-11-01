@@ -44,7 +44,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
 
         Role role = CreateRole("Manager");
         context.Roles.Add(role);
-        context.RolePermissions.Add(new RolePermission { RoleName = role.Name, PermissionCode = PermissionCodes.Tickets.ReopenOwn });
+        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = role.Name, PermissionCode = PermissionCodes.Tickets.ReopenOwn });
 
         var firstUserId = Guid.NewGuid();
         var secondUserId = Guid.NewGuid();
@@ -91,7 +91,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
 
         Role role = CreateRole("Gestor");
         context.Roles.Add(role);
-        context.RolePermissions.Add(new RolePermission { RoleName = role.Name, PermissionCode = PermissionCodes.Tickets.Create });
+        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = role.Name, PermissionCode = PermissionCodes.Tickets.Create });
         await context.SaveChangesAsync();
 
         var callerId = Guid.NewGuid();
@@ -130,8 +130,8 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
 
         Role managerRole = CreateRole("Gestor");
         context.Roles.Add(managerRole);
-        context.RolePermissions.Add(new RolePermission { RoleName = managerRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
-        context.RolePermissions.Add(new RolePermission { RoleName = managerRole.Name, PermissionCode = PermissionCodes.Users.AssignRoles });
+        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = managerRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
+        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = managerRole.Name, PermissionCode = PermissionCodes.Users.AssignRoles });
         await context.SaveChangesAsync();
 
         var callerId = Guid.NewGuid();
@@ -170,7 +170,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
 
         Role adminRole = CreateRole(RoleNames.Administrator);
         context.Roles.Add(adminRole);
-        context.RolePermissions.Add(new RolePermission { RoleName = adminRole.Name, PermissionCode = PermissionCodes.Users.Read });
+        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = adminRole.Name, PermissionCode = PermissionCodes.Users.Read });
         await context.SaveChangesAsync();
 
         IUserContext userContext = Substitute.For<IUserContext>();

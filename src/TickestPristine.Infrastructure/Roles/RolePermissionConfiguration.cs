@@ -13,7 +13,11 @@ internal sealed class RolePermissionConfiguration : IEntityTypeConfiguration<Rol
     {
         builder.HasKey(rolePermission => rolePermission.Id);
 
+        builder.Property(rolePermission => rolePermission.Id).ValueGeneratedNever();
+
         builder.HasIndex(rolePermission => new { rolePermission.RoleName, rolePermission.PermissionCode }).IsUnique();
+
+        builder.Property(rolePermission => rolePermission.RoleName).HasMaxLength(50);
 
         builder.Property(rolePermission => rolePermission.PermissionCode).HasMaxLength(100);
 

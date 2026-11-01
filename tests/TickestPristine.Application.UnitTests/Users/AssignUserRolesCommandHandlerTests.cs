@@ -131,8 +131,8 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
 
         Role managerRole = CreateRole("Gestor");
         context.Roles.Add(managerRole);
-        context.RolePermissions.Add(new RolePermission { RoleName = managerRole.Name, PermissionCode = PermissionCodes.Users.Read });
-        context.RolePermissions.Add(new RolePermission { RoleName = managerRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
+        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = managerRole.Name, PermissionCode = PermissionCodes.Users.Read });
+        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = managerRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
 
         await context.SaveChangesAsync();
 
@@ -174,7 +174,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
 
         Role agentRole = CreateRole("Agente");
         context.Roles.Add(agentRole);
-        context.RolePermissions.Add(new RolePermission { RoleName = agentRole.Name, PermissionCode = PermissionCodes.Tickets.Manage });
+        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = agentRole.Name, PermissionCode = PermissionCodes.Tickets.Manage });
 
         await context.SaveChangesAsync();
 
@@ -212,8 +212,8 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
 
         Role adminRole = CreateRole("Administrador");
         context.Roles.Add(adminRole);
-        context.RolePermissions.Add(new RolePermission { RoleName = adminRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
-        context.RolePermissions.Add(new RolePermission { RoleName = adminRole.Name, PermissionCode = PermissionCodes.Users.AssignRoles });
+        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = adminRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
+        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = adminRole.Name, PermissionCode = PermissionCodes.Users.AssignRoles });
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleName = adminRole.Name });
 
         await context.SaveChangesAsync();
@@ -261,8 +261,8 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         Role agentRole = CreateRole("Agente");
         context.Roles.Add(managerRole);
         context.Roles.Add(agentRole);
-        context.RolePermissions.Add(new RolePermission { RoleName = managerRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
-        context.RolePermissions.Add(new RolePermission { RoleName = agentRole.Name, PermissionCode = PermissionCodes.Tickets.Manage });
+        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = managerRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
+        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = agentRole.Name, PermissionCode = PermissionCodes.Tickets.Manage });
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = managerRole.Name });
 
         await context.SaveChangesAsync();

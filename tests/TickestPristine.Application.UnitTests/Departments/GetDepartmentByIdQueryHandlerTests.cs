@@ -27,7 +27,7 @@ public sealed class GetDepartmentByIdQueryHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        var department = new Department { Id = Guid.NewGuid(), Name = "Support", Description = "Customer support department", IsActive = true };
+        var department = Department.Create("Support", "Customer support department", responsibleUser: null);
         context.Departments.Add(department);
         await context.SaveChangesAsync();
 

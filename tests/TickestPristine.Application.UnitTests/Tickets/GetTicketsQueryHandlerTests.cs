@@ -2,9 +2,11 @@ using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Application.Tickets.GetAll;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Tickets;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
+using TickestPristine.Domain.SlaCalendars;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -352,8 +354,9 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
         Ticket waitingOnRequester = await SeedTicketAsync(context, requester, sector, TicketStatus.InProgress, NowUtc.AddHours(-1));
         Ticket waitingOnAgent = await SeedTicketAsync(context, requester, sector, TicketStatus.Open, NowUtc.AddHours(-2));
         Ticket resolved = await SeedTicketAsync(context, requester, sector, TicketStatus.Resolved, NowUtc.AddHours(-3), resolvedAtUtc: NowUtc);
-        waitingOnRequester.WaitingOn = TicketWaitingOn.Requester;
-        waitingOnAgent.WaitingOn = TicketWaitingOn.Agent;
+        // A situação é calculada pelo banco; aqui entra pelo EF.
+        context.Entry(waitingOnRequester).Property(t => t.WaitingOn).CurrentValue = TicketWaitingOn.Requester;
+        context.Entry(waitingOnAgent).Property(t => t.WaitingOn).CurrentValue = TicketWaitingOn.Agent;
         await context.SaveChangesAsync();
 
         GetTicketsQueryHandler handler = CreateHandler(context);
@@ -442,13 +445,7 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
     private static async Task<(User Requester, Sector Sector)> SeedRequesterAndSectorAsync(TestDbContext context)
     {
         User requester = CreateUser();
-        var sector = new Sector
-        {
-            Id = Guid.NewGuid(),
-            Name = $"Sector-{Guid.NewGuid():N}",
-            IsActive = true,
-            DepartmentId = Guid.NewGuid()
-        };
+        var sector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), $"Sector-{Guid.NewGuid():N}", description: null);
 
         context.Users.Add(requester);
         context.Sectors.Add(sector);
@@ -457,9 +454,7 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
         return (requester, sector);
     }
 
-    /// <summary>
-    /// Chamado aberto no instante informado, por padrão de prioridade Urgente (4 h de SLA, alerta em 3 h).
-    /// </summary>
+    // Chamado aberto no instante informado, por padrão de prioridade Urgente (4 h de SLA, alerta em 3 h).
     private static async Task<Ticket> SeedTicketAsync(
         TestDbContext context,
         User requester,
@@ -471,25 +466,35 @@ public sealed class GetTicketsQueryHandlerTests : BaseHandlerTest
         Guid? assignedToUserId = null,
         TicketPriority priority = TicketPriority.Urgent)
     {
-        var ticket = new Ticket
+        // Ativo com data de resolução: resolvido nessa data e reaberto depois.
+        bool reopened = status is TicketStatus.Open or TicketStatus.InProgress && resolvedAtUtc is not null;
+
+        Ticket ticket = TicketTestData.Create(
+            requesterId: requester.Id,
+            sector: sector,
+            status: reopened ? TicketStatus.Resolved : status,
+            createdAtUtc: createdAtUtc,
+            assignedToUserId: assignedToUserId,
+            priority: priority,
+            title: title,
+            description: "Original description",
+            dueAtUtc: createdAtUtc.AddMinutes(ResolutionMinutes(priority)),
+            slaWarningAtUtc: createdAtUtc.AddMinutes(ResolutionMinutes(priority) * 0.75),
+            resolvedAtUtc: resolvedAtUtc);
+
+        if (reopened)
         {
-            Id = Guid.NewGuid(),
-            Title = title,
-            Description = "Original description",
-            Priority = priority,
-            Status = status,
-            CreatedByUserId = requester.Id,
-            AssignedToUserId = assignedToUserId,
-            SectorId = sector.Id,
-            CreatedAtUtc = createdAtUtc,
-            DueAtUtc = TicketSla.DueAt(createdAtUtc, priority),
-            SlaWarningAtUtc = TicketSla.WarningAt(createdAtUtc, priority),
-            ResolvedAtUtc = resolvedAtUtc
-        };
+            ticket.Reopen([], ContinuousSlaCalendar.Create(), lastMessageIsFromAgent: false, requester.Id, resolvedAtUtc!.Value);
+            ticket.ClearDomainEvents();
+        }
 
         context.Tickets.Add(ticket);
         await context.SaveChangesAsync();
 
         return ticket;
     }
+
+    // Meta de resolução do plano legado da prioridade, em horas corridas.
+    private static int ResolutionMinutes(TicketPriority priority) =>
+        TicketSlaPlan.Legacy(priority).ResolutionMinutes;
 }

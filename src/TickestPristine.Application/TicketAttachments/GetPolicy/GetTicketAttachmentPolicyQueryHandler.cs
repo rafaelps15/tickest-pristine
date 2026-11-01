@@ -1,4 +1,5 @@
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Domain.Tickets;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.TicketAttachments.GetPolicy;
@@ -15,10 +16,10 @@ internal sealed class GetTicketAttachmentPolicyQueryHandler
     {
         var policy = new TicketAttachmentPolicyResponse
         {
-            MaxFileSizeBytes = TicketAttachmentLimits.MaxFileSizeBytes,
-            MaxAttachmentsPerTicket = TicketAttachmentLimits.MaxAttachmentsPerTicket,
-            MaxTotalBytesPerTicket = TicketAttachmentLimits.MaxTotalBytesPerTicket,
-            AllowedTypes = TicketAttachmentLimits.AllowedTypes
+            MaxFileSizeBytes = TicketAttachment.MaxFileSizeBytes,
+            MaxAttachmentsPerTicket = TicketAttachment.MaxAttachmentsPerTicket,
+            MaxTotalBytesPerTicket = TicketAttachment.MaxTotalBytesPerTicket,
+            AllowedTypes = TicketAttachment.AllowedTypes
                 .Select(type => new AllowedAttachmentTypeResponse
                 {
                     ContentType = type.ContentType,

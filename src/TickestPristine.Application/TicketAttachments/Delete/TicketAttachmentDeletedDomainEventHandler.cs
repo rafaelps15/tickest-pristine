@@ -31,7 +31,7 @@ internal sealed class TicketAttachmentDeletedDomainEventHandler(
 
         await fileStorage.DeleteAsync(attachment.StorageKey, cancellationToken);
 
-        attachment.PurgedAtUtc = dateTimeProvider.UtcNow;
+        attachment.MarkPurged(dateTimeProvider.UtcNow);
 
         await context.SaveChangesAsync(cancellationToken);
     }

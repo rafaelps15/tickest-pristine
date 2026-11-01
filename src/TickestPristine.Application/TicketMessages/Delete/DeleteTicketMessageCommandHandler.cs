@@ -2,9 +2,10 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Authorization;
-using TickestPristine.Application.TicketHistories;
+using TickestPristine.Application.Permissions;
+using TickestPristine.Application.Tickets;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -14,6 +15,8 @@ internal sealed class DeleteTicketMessageCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IPermissionProvider permissionProvider,
+    TicketAgentLookup agentLookup,
+    ITicketActivityWriter activityWriter,
     IDateTimeProvider dateTimeProvider)
     : ICommandHandler<DeleteTicketMessageCommand>
 {
@@ -30,31 +33,28 @@ internal sealed class DeleteTicketMessageCommandHandler(
             return Result.Failure(TicketMessageErrors.NotFound(command.MessageId));
         }
 
-        Result access = await TicketAccessGuard.EnsureOwnerOrManagerAsync(
-            permissionProvider,
+        bool canDeleteAny = await permissionProvider.HasPermissionAsync(
             userContext.UserId,
-            message.AuthorUserId,
-            ownPermission: null,
+            PermissionCodes.Tickets.Manage,
             cancellationToken);
 
-        if (access.IsFailure)
+        Result<TicketHistory> removal = message.Delete(userContext.UserId, canDeleteAny, dateTimeProvider.UtcNow);
+
+        if (removal.IsFailure)
         {
-            return access;
+            return removal;
         }
 
-        DateTime nowUtc = dateTimeProvider.UtcNow;
+        // Sem rastreio: a última atividade e a situação de espera são gravadas depois do commit, sem a versão do chamado.
+        Ticket ticket = await context.Tickets.AsNoTracking().SingleAsync(t => t.Id == message.TicketId, cancellationToken);
 
-        message.DeletedAtUtc = nowUtc;
-
-        message.Raise(new TicketMessageDeletedDomainEvent(message.Id, message.TicketId));
-
-        context.TicketHistories.Add(TicketHistoryEntries.Create(
-            message.TicketId,
-            userContext.UserId,
-            TicketHistoryAction.MessageRemoved,
-            nowUtc));
+        context.TicketHistories.Add(removal.Value);
 
         await context.SaveChangesAsync(cancellationToken);
+
+        ticket.RecordMessageActivity(removal.Value, await agentLookup.IsLastMessageFromAgentAsync(ticket, cancellationToken));
+
+        await activityWriter.WriteLastActivityAndWaitingOnAsync(ticket, cancellationToken);
 
         return Result.Success();
     }

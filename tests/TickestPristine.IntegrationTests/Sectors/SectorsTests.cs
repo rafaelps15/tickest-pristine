@@ -1,10 +1,16 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using TickestPristine.Domain.Tickets;
+using TickestPristine.Infrastructure.Database;
 
 namespace TickestPristine.IntegrationTests.Sectors;
 
 public sealed class SectorsTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
+    private const string TicketDescription = "The printer on the second floor is not working";
+
     private async Task AuthenticateAsAdminAsync()
     {
         AccessTokens tokens = await LoginAsync(AdminEmail, AdminPassword);
@@ -34,6 +40,33 @@ public sealed class SectorsTests(IntegrationTestWebAppFactory factory) : BaseInt
         response.EnsureSuccessStatusCode();
 
         return await response.Content.ReadFromJsonAsync<Guid>();
+    }
+
+    private async Task<Guid> CreateTicketAsync(Guid sectorId)
+    {
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("tickets", new
+        {
+            title = "Printer is broken",
+            description = TicketDescription,
+            priority = 2,
+            sectorId
+        });
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<Guid>();
+    }
+
+    private async Task ChangeTicketStatusAsync(Guid ticketId, params TicketStatus[] statuses)
+    {
+        foreach (TicketStatus status in statuses)
+        {
+            HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+            {
+                description = TicketDescription,
+                status = (int)status
+            });
+            response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        }
     }
 
     [Fact]
@@ -85,6 +118,29 @@ public sealed class SectorsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Create_Should_BeRejectedByDatabase_WhenNameIsLongerThanColumnLimit()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid departmentId = await CreateDepartmentAsync();
+        string name = Guid.NewGuid().ToString("N").PadRight(101, 'a');
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("sectors", new
+        {
+            name,
+            departmentId
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await context.Sectors.AnyAsync(s => s.Name == name)).ShouldBeFalse();
     }
 
     [Fact]
@@ -344,9 +400,52 @@ public sealed class SectorsTests(IntegrationTestWebAppFactory factory) : BaseInt
         problem!.Title.ShouldBe("Sectors.HasActiveTickets");
     }
 
+    [Fact]
+    public async Task Deactivate_Should_ReturnConflictOnlyForSectorWithActiveTickets_WhenListingShowsTheirCounts()
+    {
+        // Arrange: Suporte com 2 Abertos e 1 Em andamento; Redes com 1 Resolvido, 1 Cancelado e 1 Aberto excluído;
+        // Infra sem chamados.
+        await AuthenticateAsAdminAsync();
+        Guid departmentId = await CreateDepartmentAsync();
+        Guid supportId = await CreateSectorAsync(departmentId, "Suporte");
+        Guid networksId = await CreateSectorAsync(departmentId, "Redes");
+        Guid infrastructureId = await CreateSectorAsync(departmentId, "Infra");
+
+        await CreateTicketAsync(supportId);
+        await CreateTicketAsync(supportId);
+        await ChangeTicketStatusAsync(await CreateTicketAsync(supportId), TicketStatus.InProgress);
+        await ChangeTicketStatusAsync(await CreateTicketAsync(networksId), TicketStatus.InProgress, TicketStatus.Resolved);
+        await ChangeTicketStatusAsync(await CreateTicketAsync(networksId), TicketStatus.Canceled);
+        (await HttpClient.DeleteAsync($"tickets/{await CreateTicketAsync(networksId)}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        List<DepartmentListItemDto>? departments = await HttpClient.GetFromJsonAsync<List<DepartmentListItemDto>>("departments");
+        List<DepartmentSectorListItemDto> listedSectors = departments!.Single(d => d.Id == departmentId).Sectors;
+
+        // Act
+        HttpResponseMessage supportResponse = await HttpClient.DeleteAsync($"sectors/{supportId}");
+        HttpResponseMessage networksResponse = await HttpClient.DeleteAsync($"sectors/{networksId}");
+        HttpResponseMessage infrastructureResponse = await HttpClient.DeleteAsync($"sectors/{infrastructureId}");
+
+        // Assert
+        listedSectors.Single(s => s.Id == supportId).ActiveTicketCount.ShouldBe(3);
+        listedSectors.Single(s => s.Id == networksId).ActiveTicketCount.ShouldBe(0);
+        listedSectors.Single(s => s.Id == infrastructureId).ActiveTicketCount.ShouldBe(0);
+
+        supportResponse.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        ProblemDto? problem = await supportResponse.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Sectors.HasActiveTickets");
+        problem.Detail.ShouldBe("O setor tem chamados em aberto ou em andamento. Conclua ou cancele esses chamados antes de desativá-lo.");
+        networksResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        infrastructureResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+    }
+
     private sealed record SectorDto(Guid Id, string Name, string? Description);
 
     private sealed record SectorDetailDto(Guid Id, string Name, string? Description, Guid DepartmentId);
 
     private sealed record ProblemDto(int Status, string Title, string Detail);
+
+    private sealed record DepartmentListItemDto(Guid Id, List<DepartmentSectorListItemDto> Sectors);
+
+    private sealed record DepartmentSectorListItemDto(Guid Id, int ActiveTicketCount);
 }

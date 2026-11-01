@@ -1,7 +1,6 @@
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Pagination;
-using TickestPristine.Application.Users;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Tickets.GetAssignees;
@@ -13,6 +12,9 @@ namespace TickestPristine.Application.Tickets.GetAssignees;
 internal sealed class GetTicketAssigneesQueryHandler(IApplicationDbContext context)
     : IQueryHandler<GetTicketAssigneesQuery, PagedResponse<TicketAssigneeResponse>>
 {
+    // Palavras do termo de busca que entram no filtro; as demais são ignoradas, como na busca de atendentes.
+    private const int SearchTermMaxWords = 5;
+
     public async Task<Result<PagedResponse<TicketAssigneeResponse>>> Handle(
         GetTicketAssigneesQuery query,
         CancellationToken cancellationToken)
@@ -34,7 +36,7 @@ internal sealed class GetTicketAssigneesQueryHandler(IApplicationDbContext conte
         // maiúsculas, e o termo vai como parâmetro (%, _ e \ contam como texto).
         IEnumerable<string> words = (query.Search ?? string.Empty)
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-            .Take(UserValidationRules.SearchTermMaxWords);
+            .Take(SearchTermMaxWords);
 
         foreach (string word in words)
         {

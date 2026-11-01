@@ -7,9 +7,7 @@ internal sealed class UpdateTicketCommandValidator : AbstractValidator<UpdateTic
     public UpdateTicketCommandValidator()
     {
         RuleFor(c => c.TicketId).NotEmpty();
-        RuleFor(c => c.Description)
-            .NotEmpty()
-            .Length(TicketValidationRules.DescriptionMinLength, TicketValidationRules.DescriptionMaxLength);
+        RuleFor(c => c.Description).NotEmpty();
         RuleFor(c => c.Status).IsInEnum();
     }
 }

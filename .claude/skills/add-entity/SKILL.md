@@ -1,6 +1,6 @@
 ---
 name: add-entity
-description: Adiciona uma nova entidade de domínio ao projeto — classe da entidade, catálogo de erros, eventos de domínio, configuração do EF Core, ligação no DbContext e migration. Use quando o usuário pedir para adicionar uma entidade, agregado, modelo de domínio ou tabela.
+description: Adiciona uma nova entidade de domínio que tem as próprias regras — classe rica da entidade, catálogo de erros, eventos de domínio, configuração do EF Core, ligação no DbContext e migration. Use quando o usuário pedir para adicionar uma entidade, agregado, modelo de domínio ou tabela.
 argument-hint: '<descrição da entidade, ex.: "Project with a name, owner, and list of todos">'
 ---
 
@@ -20,40 +20,38 @@ argument-hint: '<descrição da entidade, ex.: "Project with a name, owner, and 
 > escreva código: procure em `specs/` uma spec que cubra o pedido e indique o comando de implementação
 > dela; se não houver, use a skill de especificação.
 
-Crie uma entidade nova e ligue-a em todas as camadas, seguindo o padrão de `TodoItem`.
+Crie uma entidade que guarda o próprio estado e as próprias regras, e ligue-a em todas as camadas. Modelos completos: [references/rich-entity.md](references/rich-entity.md) (entidade, filho, mapeamento do objeto de valor) e [references/persistence.md](references/persistence.md) (coleções, datas UTC, auditoria). Os padrões de domínio estão na `domain-modeling`.
 
 ## Arquivos a criar/alterar
 
 1. **Entidade** — `src/Domain/{Feature}/{Entity}.cs`
 
 ```csharp
-using SharedKernel;
-
-namespace Domain.Projects;
-
 public sealed class Project : Entity
 {
-    public Guid Id { get; set; }
-    public Guid OwnerId { get; set; }
-    public string Name { get; set; }
-    public DateTime CreatedAt { get; set; }
+    private Project() { }
+
+    public Guid Id { get; private set; }
+
+    public ProjectName Name { get; private set; }
+
+    public static Project Create(User owner, ProjectName name) { /* ... */ }
 }
 ```
 
-`sealed class`, herda `Entity` (que dá `DomainEvents` + `Raise(...)`), `Guid Id`, propriedades simples com setter e coleções inicializadas com `= [];`.
+- `sealed`, herda `Entity` (que dá `DomainEvents` + `Raise(...)`), `Guid Id`. Um único construtor privado sem parâmetros, usado pelo EF Core e pelo `Create`; o `Create` monta a entidade com inicializador de objeto, o único lugar em que ele aparece (os métodos de comportamento alteram a instância que já existe).
+- `private set` em toda propriedade. Uma coleção fica num campo privado e é exposta como `IReadOnlyCollection<T>`.
+- Um `Create` simples quando a criação não pode falhar; `Result<T> Create` quando uma regra de negócio pode recusá-la. Os dois disparam o evento `Created`.
+- Os métodos de comportamento mudam o estado, disparam o próprio evento e devolvem `Result` (pode falhar), `bool` (pode não mudar nada) ou nada (`void`) quando o handler já conferiu o estado. A hora atual é parâmetro. Um `<summary>` em português só onde o comportamento não é óbvio.
 
 2. **Catálogo de erros** — `src/Domain/{Feature}/{Entity}Errors.cs`
 
 ```csharp
-using SharedKernel;
-
-namespace Domain.Projects;
-
 public static class ProjectErrors
 {
     public static Error NotFound(Guid projectId) => Error.NotFound(
         "Projects.NotFound",
-        $"The project with the Id = '{projectId}' was not found");
+        $"O projeto com o Id = '{projectId}' não foi encontrado.");
 }
 ```
 
@@ -62,14 +60,10 @@ Os códigos seguem `"{FeaturePlural}.{Reason}"`. Escolha a fábrica pelo signifi
 3. **Eventos de domínio** — um record por arquivo, `src/Domain/{Feature}/{Entity}{PastTenseVerb}DomainEvent.cs`
 
 ```csharp
-using SharedKernel;
-
-namespace Domain.Projects;
-
 public sealed record ProjectCreatedDomainEvent(Guid ProjectId) : IDomainEvent;
 ```
 
-Crie no mínimo o evento `Created`; acrescente outros conforme os commands precisarem. Eventos carregam ids, não entidades.
+Crie pelo menos o evento `Created`; os métodos da entidade disparam os outros. Os eventos levam ids, nunca entidades; um evento de alteração leva também o valor anterior. Sem `OccurredOnUtc`.
 
 4. **Configuração do EF** — `src/Infrastructure/{Feature}/{Entity}Configuration.cs`
 
@@ -92,15 +86,41 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
 }
 ```
 
-Os relacionamentos são configurados sem navegação (`HasOne<User>().WithMany()`) — as entidades guardam ids de chave estrangeira, não propriedades de navegação. As configurações são carregadas automaticamente pelo `ApplyConfigurationsFromAssembly`.
+O filho criado pelo agregado tem o `Id` gerado pelo código e um índice único para o par que não pode repetir:
 
-5. **Ligação no DbContext** — adicione `DbSet<{Entity}> {Plural}` em **ambos**:
+```csharp
+using Domain.Projects;
+using Domain.Users;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+namespace Infrastructure.Projects;
+
+internal sealed class ProjectMemberConfiguration : IEntityTypeConfiguration<ProjectMember>
+{
+    public void Configure(EntityTypeBuilder<ProjectMember> builder)
+    {
+        builder.HasKey(m => m.Id);
+
+        builder.Property(m => m.Id).ValueGeneratedNever();
+
+        builder.HasOne<Project>().WithMany().HasForeignKey(m => m.ProjectId);
+
+        builder.HasOne<User>().WithMany().HasForeignKey(m => m.UserId);
+
+        builder.HasIndex(m => new { m.ProjectId, m.UserId }).IsUnique();
+    }
+}
+```
+
+Os relacionamentos são configurados no estilo shadow (`HasOne<User>().WithMany()`): as entidades guardam ids de chave estrangeira, não propriedades de navegação. O `Id` que o código gera leva `ValueGeneratedNever()`; um valor que não pode repetir é um índice único (`HasIndex(...).IsUnique()`). Uma coluna `string` simples recebe o tamanho aqui e só aqui (`builder.Property(u => u.FirstName).HasMaxLength(200);`); objetos de valor usam `OwnsOne` com o `MaxLength` deles; uma coleção é mapeada pelo campo (`references/persistence.md`). As configurações são encontradas pelo `ApplyConfigurationsFromAssembly`.
+
+5. **Ligação no DbContext** — adicione `DbSet<{Entity}> {Plural}` **nos dois**:
    - `src/Application/Abstractions/Data/IApplicationDbContext.cs`
    - `src/Infrastructure/Database/ApplicationDbContext.cs`
+   Adicione também o `DbSet` em `tests/Application.UnitTests/Abstractions/TestDbContext.cs` para que os handlers continuem testáveis.
 
-   Adicione também o `DbSet` em `tests/Application.UnitTests/Abstractions/TestDbContext.cs`, para que os handlers continuem testáveis por teste unitário.
-
-6. **Migration** — a partir da raiz do repositório:
+6. **Migration** — na raiz do repositório:
 
 ```
 dotnet ef migrations add Add_{Plural} --project src/Infrastructure --startup-project src/Web.Api
@@ -110,6 +130,6 @@ Os nomes de migration seguem `PascalCase_With_Underscores` (veja `Add_RefreshTok
 
 ## Regras
 
-- O projeto Domain referencia só o `SharedKernel` — nada de EF nem de tipos da Application. Detalhes de persistência (chaves, conversões, relacionamentos) ficam só na configuração da Infrastructure.
-- Rode `dotnet build` e `dotnet test` ao terminar — os `ArchitectureTests` garantem as regras de camadas.
-- Se o usuário também quiser casos de uso para a entidade, continue com a skill `add-feature`.
+- O projeto Domain referencia só o `SharedKernel` — sem EF, sem tipos da Application. Os detalhes de persistência ficam na configuração da Infrastructure.
+- Nenhum handler ou classe estática atribui as propriedades da entidade nem dispara os eventos dela; eles chamam os métodos da entidade.
+- Rode `dotnet build` e `dotnet test` ao terminar — os `ArchitectureTests` garantem as regras de camada. Escreva os testes da entidade com a `add-tests`; siga com a `add-feature` para os casos de uso dela.

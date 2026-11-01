@@ -1,7 +1,6 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Permissions;
-using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Application.Tickets.GetSla;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Tickets;
@@ -114,33 +113,17 @@ public sealed class GetTicketSlaQueryHandlerTests : BaseHandlerTest
     {
         // Arrange: chamado anterior ao plano, só com o cronômetro de resolução em horas corridas.
         await using TestDbContext context = CreateDbContext();
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Legacy ticket",
-            Description = "Opened before the SLA plan",
-            Priority = TicketPriority.Urgent,
-            Status = TicketStatus.Open,
-            CreatedByUserId = RequesterId,
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = OpenedAtUtc,
-            DueAtUtc = OpenedAtUtc.AddHours(4),
-            SlaWarningAtUtc = OpenedAtUtc.AddHours(3),
-            SlaPlan = TicketSla.LegacyPlan(TicketPriority.Urgent)
-        };
+        Ticket ticket = TicketTestData.Create(
+            requesterId: RequesterId,
+            createdAtUtc: OpenedAtUtc,
+            priority: TicketPriority.Urgent,
+            title: "Legacy ticket",
+            description: "Opened before the SLA plan",
+            slaPlan: TicketSlaPlan.Legacy(TicketPriority.Urgent),
+            dueAtUtc: OpenedAtUtc.AddHours(4),
+            slaWarningAtUtc: OpenedAtUtc.AddHours(3));
         context.Tickets.Add(ticket);
-        context.TicketSlaTimers.Add(new TicketSlaTimer
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            Metric = SlaMetric.Resolution,
-            Cycle = 1,
-            TargetMinutes = 240,
-            CalendarId = SlaCalendarIds.Continuous,
-            StartedAtUtc = ticket.CreatedAtUtc,
-            WarningOnUtc = ticket.SlaWarningAtUtc,
-            DueOnUtc = ticket.DueAtUtc
-        });
+        context.TicketSlaTimers.AddRange(ticket.RecordOpening(RequesterId).SlaTimers);
         await context.SaveChangesAsync();
 
         // Act
@@ -174,24 +157,21 @@ public sealed class GetTicketSlaQueryHandlerTests : BaseHandlerTest
         // Arrange: chamado aberto quando a política tinha outras metas (versão anterior, 10 e 60 minutos).
         await using TestDbContext context = CreateDbContext();
         var olderPlan = new TicketSlaPlan(null, "Padrão", 0, SlaCalendarIds.Default, 10, 60, IsLegacy: false);
-        var ticketId = Guid.NewGuid();
-        List<TicketSlaTimer> timers = TicketSlaClock.Start(ticketId, olderPlan, DefaultSlaCalendar.Create(), OpenedAtUtc);
-        TicketSlaTimer recordedResolution = timers.Single(t => t.Metric == SlaMetric.Resolution);
 
-        context.Tickets.Add(new Ticket
-        {
-            Id = ticketId,
-            Title = "Printer is broken",
-            Description = "The printer on the 3rd floor is not working",
-            Priority = TicketPriority.Urgent,
-            Status = TicketStatus.Open,
-            CreatedByUserId = RequesterId,
-            SectorId = Guid.NewGuid(),
-            CreatedAtUtc = OpenedAtUtc,
-            DueAtUtc = recordedResolution.DueOnUtc,
-            SlaWarningAtUtc = recordedResolution.WarningOnUtc,
-            SlaPlan = olderPlan
-        });
+        Ticket ticket = TicketTestData.Create(
+            requesterId: RequesterId,
+            createdAtUtc: OpenedAtUtc,
+            priority: TicketPriority.Urgent,
+            slaPlan: olderPlan,
+            calendar: DefaultSlaCalendar.Create());
+        Guid ticketId = ticket.Id;
+        (_, IReadOnlyList<TicketSlaTimer> timers) = ticket.RecordOpening(RequesterId);
+        TicketSlaTimer recordedResolution = timers.Single(t => t.Metric == SlaMetric.Resolution);
+        ticket
+            .With(nameof(Ticket.DueAtUtc), recordedResolution.DueOnUtc)
+            .With(nameof(Ticket.SlaWarningAtUtc), recordedResolution.WarningOnUtc);
+
+        context.Tickets.Add(ticket);
         context.TicketSlaTimers.AddRange(timers);
         await context.SaveChangesAsync();
 

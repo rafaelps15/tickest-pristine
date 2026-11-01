@@ -70,7 +70,7 @@ internal sealed class DefaultOrganizationSeeder(IOptions<SeedingOptions> seeding
             var department = departmentSeed.ToDepartment();
 
             context.Departments.Add(department);
-            context.Sectors.AddRange(departmentSeed.Sectors.Select(sectorSeed => sectorSeed.ToSector(department.Id)));
+            context.Sectors.AddRange(departmentSeed.Sectors.Select(sectorSeed => sectorSeed.ToSector(department)));
         }
 
         await context.SaveChangesAsync(cancellationToken);
@@ -79,12 +79,12 @@ internal sealed class DefaultOrganizationSeeder(IOptions<SeedingOptions> seeding
     private sealed record DepartmentSeed(string Name, string Description, SectorSeed[] Sectors)
     {
         public Department ToDepartment() =>
-            new() { Id = Guid.NewGuid(), Name = Name, Description = Description, IsActive = true };
+            Department.Create(Name, Description, responsibleUser: null);
     }
 
     private sealed record SectorSeed(string Name, string Description)
     {
-        public Sector ToSector(Guid departmentId) =>
-            new() { Id = Guid.NewGuid(), Name = Name, Description = Description, IsActive = true, DepartmentId = departmentId };
+        public Sector ToSector(Department department) =>
+            Sector.Create(department, Name, Description);
     }
 }

@@ -65,11 +65,11 @@ internal sealed class GetOwnTicketsQueryHandler(
                     .FirstOrDefault()!,
                 CreatedAtUtc = t.CreatedAtUtc,
                 DueAtUtc = t.DueAtUtc,
-                // Mesma regra do Domain e mesmo instante da listagem geral: a situação é calculada na projeção final.
-                SlaStatus = TicketSla.GetStatus(t.Status, t.DueAtUtc, t.SlaWarningAtUtc, t.ResolvedAtUtc, nowUtc),
+                // Regras do Ticket, com o mesmo instante da listagem geral, calculadas na projeção final.
+                SlaStatus = Ticket.GetSlaStatus(t.Status, t.DueAtUtc, t.SlaWarningAtUtc, t.ResolvedAtUtc, nowUtc),
                 LastActivityAtUtc = t.LastActivityAtUtc,
-                CanCancel = TicketCancellationPolicy.CanCancel(t.Status, t.CreatedAtUtc, nowUtc, canCancelAny, canEditOwn),
-                OwnerCancelDeadlineUtc = TicketCancellationPolicy.OwnerDeadline(t.CreatedAtUtc)
+                CanCancel = Ticket.CanBeCanceled(t.Status, t.CreatedAtUtc, canCancelAny, canEditOwn, nowUtc),
+                OwnerCancelDeadlineUtc = Ticket.OwnerCancelDeadline(t.CreatedAtUtc)
             })
             .ToPagedListAsync(query.Paging, cancellationToken);
 

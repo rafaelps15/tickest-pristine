@@ -1,5 +1,4 @@
 using TickestPristine.Application.Abstractions.Sla;
-using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Domain.SlaCalendars;
 
 namespace TickestPristine.Application.UnitTests.Abstractions;

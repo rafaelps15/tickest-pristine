@@ -3,14 +3,12 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Sla;
-using TickestPristine.Application.Authorization;
-using TickestPristine.Application.TicketHistories;
 using TickestPristine.Application.Permissions;
-using TickestPristine.Application.SlaCalendars;
-using TickestPristine.Application.TicketMessages;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.SlaCalendars;
 
 namespace TickestPristine.Application.Tickets.Reopen;
 
@@ -19,6 +17,7 @@ internal sealed class ReopenTicketCommandHandler(
     IUserContext userContext,
     IPermissionProvider permissionProvider,
     ISlaCalendarProvider slaCalendarProvider,
+    TicketAgentLookup agentLookup,
     IDateTimeProvider dateTimeProvider)
     : ICommandHandler<ReopenTicketCommand>
 {
@@ -31,24 +30,22 @@ internal sealed class ReopenTicketCommandHandler(
             return Result.Failure(TicketErrors.NotFound(command.TicketId));
         }
 
-        Result access = await TicketAccessGuard.EnsureOwnerOrManagerAsync(
-            permissionProvider,
-            userContext.UserId,
-            ticket.CreatedByUserId,
-            PermissionCodes.Tickets.ReopenOwn,
-            cancellationToken);
+        // O dono reabre com tickets:reopen-own; os demais, com tickets:manage.
+        string reopenPermission = ticket.CreatedByUserId == userContext.UserId
+            ? PermissionCodes.Tickets.ReopenOwn
+            : PermissionCodes.Tickets.Manage;
 
-        if (access.IsFailure)
+        if (!await permissionProvider.HasPermissionAsync(userContext.UserId, reopenPermission, cancellationToken))
         {
-            return access;
+            return Result.Failure(UserErrors.Unauthorized());
         }
 
-        if (TicketStatusTransitions.IsActive(ticket.Status))
+        if (ticket.IsActive)
         {
             return Result.Failure(TicketErrors.AlreadyActive(ticket.Id));
         }
 
-        if (!TicketStatusTransitions.CanTransition(ticket.Status, TicketStatus.Open))
+        if (!ticket.CanTransitionTo(TicketStatus.Open))
         {
             return Result.Failure(TicketErrors.InvalidStatusTransition(ticket.Status, TicketStatus.Open));
         }
@@ -60,40 +57,40 @@ internal sealed class ReopenTicketCommandHandler(
             return calendar;
         }
 
-        TicketStatus previousStatus = ticket.Status;
         DateTime nowUtc = dateTimeProvider.UtcNow;
+        Guid callerId = userContext.UserId;
+        string? reason = command.Reason?.Trim();
+        bool hasReason = !string.IsNullOrEmpty(reason);
 
-        ticket.Status = TicketStatus.Open;
+        List<TicketSlaTimer> slaTimers = await context.TicketSlaTimers
+            .Where(t => t.TicketId == ticket.Id)
+            .ToListAsync(cancellationToken);
 
-        // A reabertura abre um novo ciclo de resolução com a meta integral do plano; os ciclos anteriores, a primeira
-        // resposta e os prazos gravados no chamado (os do ciclo 1) não mudam.
-        int lastResolutionCycle = await context.TicketSlaTimers
-            .Where(t => t.TicketId == ticket.Id && t.Metric == SlaMetric.Resolution)
-            .MaxAsync(t => (int?)t.Cycle, cancellationToken) ?? 0;
+        // Com motivo, a mensagem de quem reabriu passa a ser a última e decide quem o chamado aguarda (abaixo).
+        bool lastMessageIsFromAgent = !hasReason &&
+            await agentLookup.IsLastMessageFromAgentAsync(ticket, cancellationToken);
 
-        context.TicketSlaTimers.Add(TicketSlaClock.StartResolutionCycle(
-            ticket.Id,
-            ticket.SlaPlan,
-            lastResolutionCycle + 1,
+        // A reabertura abre um novo ciclo de resolução com a meta integral do plano; os ciclos anteriores e a primeira
+        // resposta não mudam.
+        (TicketHistory reopening, TicketSlaTimer resolutionTimer) = ticket.Reopen(
+            slaTimers,
             calendar.Value,
-            nowUtc));
+            lastMessageIsFromAgent,
+            callerId,
+            nowUtc);
 
-        ticket.Raise(new TicketReopenedDomainEvent(ticket.Id, userContext.UserId));
-
-        context.TicketHistories.Add(TicketHistoryEntries.Create(
-            ticket.Id,
-            userContext.UserId,
-            TicketHistoryAction.Reopened,
-            nowUtc,
-            oldValue: previousStatus.ToString(),
-            newValue: TicketStatus.Open.ToString()));
+        context.TicketHistories.Add(reopening);
+        context.TicketSlaTimers.Add(resolutionTimer);
 
         // Com motivo, a mensagem de quem reabriu entra no mesmo SaveChanges da reabertura: as duas ou nenhuma.
-        string? reason = command.Reason?.Trim();
-
-        if (!string.IsNullOrEmpty(reason))
+        if (hasReason)
         {
-            TicketMessageEntries.Add(context, ticket.Id, userContext.UserId, reason, nowUtc);
+            bool callerIsAgent = await agentLookup.IsAgentAsync(callerId, cancellationToken);
+
+            (TicketMessage message, TicketHistory posting) = ticket.PostMessage(callerId, reason!, callerIsAgent, nowUtc);
+
+            context.TicketMessages.Add(message);
+            context.TicketHistories.Add(posting);
         }
 
         await context.SaveChangesAsync(cancellationToken);

@@ -1,7 +1,6 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.TicketHistories;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -27,28 +26,17 @@ internal sealed class UnassignTicketCommandHandler(
             return Result.Failure(TicketErrors.NotFound(command.TicketId));
         }
 
-        if (!TicketStatusTransitions.IsActive(ticket.Status))
+        if (!ticket.IsActive)
         {
             return Result.Failure(TicketErrors.NotActive(ticket.Id));
         }
 
-        if (ticket.AssignedToUserId is not Guid previousAssignedToUserId)
+        if (ticket.AssignedToUserId is null)
         {
             return Result.Success();
         }
 
-        ticket.AssignedToUserId = null;
-
-        ticket.Raise(new TicketUnassignedDomainEvent(
-            ticket.Id,
-            previousAssignedToUserId,
-            userContext.UserId));
-
-        context.TicketHistories.Add(TicketHistoryEntries.Unassigned(
-            ticket.Id,
-            userContext.UserId,
-            previousAssignedToUserId,
-            dateTimeProvider.UtcNow));
+        context.TicketHistories.Add(ticket.Unassign(userContext.UserId, dateTimeProvider.UtcNow));
 
         await context.SaveChangesAsync(cancellationToken);
 

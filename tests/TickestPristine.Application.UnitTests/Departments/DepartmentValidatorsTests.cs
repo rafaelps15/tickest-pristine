@@ -77,36 +77,10 @@ public sealed class DepartmentValidatorsTests
     }
 
     [Fact]
-    public void CreateValidator_Should_HaveError_WhenNameExceedsMaxLength()
-    {
-        // Arrange
-        var command = new CreateDepartmentCommand { Name = new string('a', 101), Description = "Customer support department" };
-
-        // Act
-        TestValidationResult<CreateDepartmentCommand> result = _createValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Name);
-    }
-
-    [Fact]
     public void CreateValidator_Should_HaveError_WhenDescriptionIsEmpty()
     {
         // Arrange
         var command = new CreateDepartmentCommand { Name = "Support", Description = string.Empty };
-
-        // Act
-        TestValidationResult<CreateDepartmentCommand> result = _createValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Description);
-    }
-
-    [Fact]
-    public void CreateValidator_Should_HaveError_WhenDescriptionExceedsMaxLength()
-    {
-        // Arrange
-        var command = new CreateDepartmentCommand { Name = "Support", Description = new string('a', 501) };
 
         // Act
         TestValidationResult<CreateDepartmentCommand> result = _createValidator.TestValidate(command);
@@ -129,36 +103,10 @@ public sealed class DepartmentValidatorsTests
     }
 
     [Fact]
-    public void UpdateValidator_Should_HaveError_WhenNameExceedsMaxLength()
-    {
-        // Arrange
-        var command = new UpdateDepartmentCommand { DepartmentId = Guid.NewGuid(), Name = new string('a', 101), Description = "Updated" };
-
-        // Act
-        TestValidationResult<UpdateDepartmentCommand> result = _updateValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Name);
-    }
-
-    [Fact]
     public void UpdateValidator_Should_HaveError_WhenDescriptionIsEmpty()
     {
         // Arrange
         var command = new UpdateDepartmentCommand { DepartmentId = Guid.NewGuid(), Name = "Support", Description = string.Empty };
-
-        // Act
-        TestValidationResult<UpdateDepartmentCommand> result = _updateValidator.TestValidate(command);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(c => c.Description);
-    }
-
-    [Fact]
-    public void UpdateValidator_Should_HaveError_WhenDescriptionExceedsMaxLength()
-    {
-        // Arrange
-        var command = new UpdateDepartmentCommand { DepartmentId = Guid.NewGuid(), Name = "Support", Description = new string('a', 501) };
 
         // Act
         TestValidationResult<UpdateDepartmentCommand> result = _updateValidator.TestValidate(command);

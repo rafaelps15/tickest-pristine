@@ -10,6 +10,8 @@ internal sealed class TicketSlaTimerConfiguration : IEntityTypeConfiguration<Tic
     {
         builder.HasKey(t => t.Id);
 
+        builder.Property(t => t.Id).ValueGeneratedNever();
+
         // Objetivo gravado pelo nome (ex.: "FirstResponse"), legível no banco; a API continua devolvendo o número.
         builder.Property(t => t.Metric).HasConversion<string>().HasMaxLength(20);
 

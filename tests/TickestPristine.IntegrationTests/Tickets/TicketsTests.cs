@@ -1,10 +1,11 @@
 ﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
-using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Application.TicketHistories;
 using TickestPristine.Application.Tickets;
+using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Infrastructure.Database;
 using System.Net.Http.Headers;
@@ -20,6 +21,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using TickestPristine.Infrastructure.Tickets.SlaMonitoring;
+using TickestPristine.Domain.SlaCalendars;
 
 namespace TickestPristine.IntegrationTests.Tickets;
 
@@ -634,7 +636,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     public async Task Migration_Should_TurnDescriptionIntoCitextKeepingExistingText()
     {
         // Arrange: um chamado já gravado antes da migration. Ele é gravado com o esquema atual, antes de descer: o modelo
-        // do EF tem colunas que migrations posteriores criam (spec 029), e a descida mantém o texto, só troca o tipo.
+        // do EF tem colunas que migrations posteriores criam, e a descida mantém o texto, só troca o tipo.
         (Guid requesterId, Guid sectorId) = await CreateRequesterAndSectorAsync();
         const string description = "Outlook pede a SENHA toda hora";
         Guid ticketId = await InsertOwnTicketAsync(
@@ -917,17 +919,26 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
-    public async Task GetStatusCounts_Should_ReturnForbidden_WhenCallerLacksManagePermission()
+    public async Task GetStatusCounts_Should_ReturnSameTotalsAsAgent_WhenCallerLacksManagePermission()
     {
-        // Arrange
-        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
-        Authenticate(tokens.AccessToken);
+        // Arrange: chamados em vários status, um Solicitante (sem tickets:manage) e um Atendente
+        (_, AccessTokens requesterTokens) = await CreateTicketAsRequesterAsync();
+        (Guid resolvedId, _) = await CreateTicketAsRequesterAsync();
+        await ResolveTicketAsync(resolvedId);
+        AccessTokens agentTokens = await CreateAgentAsync();
 
         // Act
-        HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/status");
+        Authenticate(requesterTokens.AccessToken);
+        HttpResponseMessage requesterResponse = await HttpClient.GetAsync("tickets/stats/status");
+        Authenticate(agentTokens.AccessToken);
+        StatusCountsDto? agentCounts = await HttpClient.GetFromJsonAsync<StatusCountsDto>("tickets/stats/status");
 
-        // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        // Assert: a empresa toda, com os mesmos totais de quem atende
+        requesterResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        StatusCountsDto? requesterCounts = await requesterResponse.Content.ReadFromJsonAsync<StatusCountsDto>();
+        requesterCounts.ShouldBe(agentCounts);
+        requesterCounts!.OpenCount.ShouldBeGreaterThanOrEqualTo(1);
+        requesterCounts.ResolvedCount.ShouldBeGreaterThanOrEqualTo(1);
     }
 
     [Fact]
@@ -966,17 +977,82 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
-    public async Task GetVolume_Should_ReturnForbidden_WhenCallerLacksManagePermission()
+    public async Task GetVolume_Should_ReturnSameCompanyPointsAsAgent_WhenCallerLacksManagePermission()
     {
-        // Arrange
-        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
-        Authenticate(tokens.AccessToken);
+        // Arrange: chamados abertos em dois dias diferentes dos últimos 30, um Solicitante e um Atendente
+        Guid sectorId = await InsertSectorAsync($"Volume-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        DateTime yesterdayUtc = DateTime.UtcNow.AddDays(-1);
+        DateTime threeDaysAgoUtc = DateTime.UtcNow.AddDays(-3);
+        await InsertVolumeTicketAsync(sectorId, yesterdayUtc);
+        await InsertVolumeTicketAsync(sectorId, threeDaysAgoUtc);
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        AccessTokens agentTokens = await CreateAgentAsync();
 
         // Act
-        HttpResponseMessage response = await HttpClient.GetAsync("tickets/stats/volume");
+        Authenticate(requesterTokens.AccessToken);
+        HttpResponseMessage requesterResponse = await HttpClient.GetAsync("tickets/stats/volume?groupBy=Day");
+        Authenticate(agentTokens.AccessToken);
+        List<VolumePointDto> agentVolume = (await HttpClient.GetFromJsonAsync<List<VolumePointDto>>(
+            "tickets/stats/volume?groupBy=Day"))!;
 
-        // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        // Assert: os mesmos pontos de quem atende, com os dois dias contados
+        requesterResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        List<VolumePointDto> requesterVolume = (await requesterResponse.Content.ReadFromJsonAsync<List<VolumePointDto>>())!;
+        requesterVolume.ShouldBe(agentVolume);
+        requesterVolume.Single(p => p.PeriodStart == BrasiliaDate(yesterdayUtc)).Count.ShouldBeGreaterThanOrEqualTo(1);
+        requesterVolume.Single(p => p.PeriodStart == BrasiliaDate(threeDaysAgoUtc)).Count.ShouldBeGreaterThanOrEqualTo(1);
+    }
+
+    [Fact]
+    public async Task GetVolume_Should_ReturnPointsOfThePeriod_WhenCallerLacksManagePermissionAndGivesOnlyThePeriod()
+    {
+        // Arrange: chamados abertos em dois dias de uma semana, um Solicitante e um Atendente
+        Guid sectorId = await InsertSectorAsync($"Volume-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        await InsertVolumeTicketAsync(sectorId, BrasiliaToUtc(new DateOnly(2025, 2, 11), 10));
+        await InsertVolumeTicketAsync(sectorId, BrasiliaToUtc(new DateOnly(2025, 2, 13), 10));
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        AccessTokens agentTokens = await CreateAgentAsync();
+        const string Route = "tickets/stats/volume?groupBy=Day&createdFrom=2025-02-10&createdTo=2025-02-16";
+
+        // Act
+        Authenticate(requesterTokens.AccessToken);
+        HttpResponseMessage requesterResponse = await HttpClient.GetAsync(Route);
+        Authenticate(agentTokens.AccessToken);
+        List<VolumePointDto> agentVolume = (await HttpClient.GetFromJsonAsync<List<VolumePointDto>>(Route))!;
+
+        // Assert: o período não é filtro de recorte: um ponto por dia do período, como para quem atende
+        requesterResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        List<VolumePointDto> requesterVolume = (await requesterResponse.Content.ReadFromJsonAsync<List<VolumePointDto>>())!;
+        requesterVolume.Select(p => p.PeriodStart).ShouldBe(Enumerable.Range(10, 7).Select(day => new DateOnly(2025, 2, day)));
+        requesterVolume.ShouldBe(agentVolume);
+        requesterVolume.Single(p => p.PeriodStart == new DateOnly(2025, 2, 11)).Count.ShouldBeGreaterThanOrEqualTo(1);
+        requesterVolume.Single(p => p.PeriodStart == new DateOnly(2025, 2, 13)).Count.ShouldBeGreaterThanOrEqualTo(1);
+    }
+
+    [Theory]
+    [InlineData("sectorId=6f1c2a4e-0b7d-4c1e-9a52-3d8e7f6a1b20")]
+    [InlineData("sectorId=6f1c2a4e-0b7d-4c1e-9a52-3d8e7f6a1b20&createdFrom=2025-02-10&createdTo=2025-02-16")]
+    [InlineData("priority=Urgent")]
+    [InlineData("requesterId=1b9d4e7a-5c3f-4a2b-8e6d-0f7a9c2b4d31")]
+    [InlineData("assignedToUserId=1b9d4e7a-5c3f-4a2b-8e6d-0f7a9c2b4d31")]
+    [InlineData("unassignedOnly=true")]
+    public async Task GetVolume_Should_ReturnForbiddenToRequesterAndOkToAgent_WhenSlicingFilterIsGiven(string filter)
+    {
+        // Arrange
+        (_, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        AccessTokens agentTokens = await CreateAgentAsync();
+        string route = $"tickets/stats/volume?groupBy=Day&{filter}";
+
+        // Act
+        Authenticate(requesterTokens.AccessToken);
+        HttpResponseMessage requesterResponse = await HttpClient.GetAsync(route);
+        Authenticate(agentTokens.AccessToken);
+        HttpResponseMessage agentResponse = await HttpClient.GetAsync(route);
+
+        // Assert: sem tickets:manage, ninguém recorta por setor ou pessoa
+        requesterResponse.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await requesterResponse.Content.ReadAsStringAsync()).ShouldContain("Tickets.StatsScopeForbidden");
+        agentResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
     [Fact]
@@ -2166,14 +2242,15 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
         await ResolveTicketAsync(ticketId);
 
-        // Act: sem corpo, com motivo em branco e com 501 caracteres, resolvendo de novo entre as tentativas
+        // Act: sem corpo, com motivo em branco e acima do tamanho da mensagem (4001 caracteres), resolvendo de novo entre as
+        // tentativas
         HttpResponseMessage withoutBody = await HttpClient.PostAsync($"tickets/{ticketId}/reopen", null);
         await ResolveTicketAsync(ticketId);
         HttpResponseMessage blankReason = await HttpClient.PostAsJsonAsync($"tickets/{ticketId}/reopen", new { reason = "   " });
         await ResolveTicketAsync(ticketId);
         HttpResponseMessage longReason = await HttpClient.PostAsJsonAsync(
             $"tickets/{ticketId}/reopen",
-            new { reason = new string('a', 501) });
+            new { reason = new string('a', 4001) });
 
         // Assert
         withoutBody.StatusCode.ShouldBe(HttpStatusCode.NoContent);
@@ -2181,6 +2258,53 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         longReason.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         GetStoredStatus(ticketId).ShouldBe(TicketStatus.Resolved);
         GetMessages(ticketId).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task CreateAndUpdate_Should_ReturnBadRequestAndSaveNothing_WhenDescriptionIsShorterThanMinimum()
+    {
+        // Arrange: chamado aberto com descrição válida
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        Guid ticketId = await CreateTicketAsync(sectorId);
+        int ticketsBefore = CountTickets();
+
+        // Act: 9 caracteres na abertura e na edição, recusados pela constraint do banco
+        HttpResponseMessage create = await HttpClient.PostAsJsonAsync("tickets", new
+        {
+            title = "Printer is broken",
+            description = "Curta 123",
+            priority = 2,
+            sectorId
+        });
+        HttpResponseMessage update = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+        {
+            description = "Curta 123",
+            status = (int)TicketStatus.Open
+        });
+
+        // Assert
+        create.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        update.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await create.Content.ReadFromJsonAsync<ProblemDetails>())!.Title.ShouldBe("Texto fora do tamanho permitido");
+        (await update.Content.ReadFromJsonAsync<ProblemDetails>())!.Title.ShouldBe("Texto fora do tamanho permitido");
+        CountTickets().ShouldBe(ticketsBefore);
+        GetStoredDescription(ticketId).ShouldBe("The printer on the 3rd floor is not working");
+    }
+
+    private int CountTickets()
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return context.Tickets.Count();
+    }
+
+    private string GetStoredDescription(Guid ticketId)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return context.Tickets.AsNoTracking().Single(t => t.Id == ticketId).Description;
     }
 
     [Fact]
@@ -2245,10 +2369,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             status = 5 // Canceled
         });
 
-    /// <summary>
-    /// Desloca a abertura do chamado para o passado: a API de teste usa o relógio real, e a janela de cancelamento conta
-    /// da abertura (spec 016).
-    /// </summary>
+    // Desloca a abertura do chamado para o passado: a API de teste usa o relógio real, e a janela de cancelamento conta
+    // da abertura.
     private async Task SetOpenedAgoAsync(Guid ticketId, TimeSpan ago)
     {
         DateTime openedAtUtc = DateTime.UtcNow - ago;
@@ -2306,9 +2428,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
     private sealed record PagedCancelInfoDto(List<CancelInfoDto> Items, int TotalCount);
 
-    /// <summary>
-    /// Abre um chamado como um solicitante novo e o atribui ao administrador, que fica com o token configurado.
-    /// </summary>
+    // Abre um chamado como um solicitante novo e o atribui ao administrador, que fica com o token configurado.
     private async Task<(Guid TicketId, Guid AdminId)> CreateTicketAssignedToAdminAsync()
     {
         Guid sectorId = await CreateSectorAsAdminAsync();
@@ -2333,9 +2453,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
     private const string ChangedDescription = "The printer on the 3rd floor is not working after the toner change";
 
-    /// <summary>
-    /// Registros do histórico do chamado, menos o da abertura (que todo chamado criado pela API tem).
-    /// </summary>
+    // Registros do histórico do chamado, menos o da abertura (que todo chamado criado pela API tem).
     private List<TicketHistory> GetHistoryAfterCreation(Guid ticketId)
     {
         using IServiceScope scope = Services.CreateScope();
@@ -2356,10 +2474,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             .ToList();
     }
 
-    /// <summary>
-    /// Leva o chamado de Aberto a Resolvido pela API, como administrador, e devolve o token que estava configurado: desde
-    /// a spec 016, só quem atende a fila move o chamado para Em Andamento e Resolvido.
-    /// </summary>
+    // Leva o chamado de Aberto a Resolvido pela API como administrador e volta ao token que estava configurado: só quem
+    // atende a fila move o chamado para Em Andamento e Resolvido.
     private async Task ResolveTicketAsync(Guid ticketId)
     {
         await RunAsAdministratorAsync(async () =>
@@ -2380,9 +2496,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         });
     }
 
-    /// <summary>
-    /// Executa a ação autenticado como administrador e volta ao token que estava configurado.
-    /// </summary>
+    // Executa a ação autenticado como administrador e volta ao token que estava configurado.
     private async Task RunAsAdministratorAsync(Func<Task> action)
     {
         AuthenticationHeaderValue? previous = HttpClient.DefaultRequestHeaders.Authorization;
@@ -2402,6 +2516,9 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
     private static DateOnly BrasiliaToday() =>
         DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, BrasiliaTimeZone));
+
+    private static DateOnly BrasiliaDate(DateTime utc) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(utc, BrasiliaTimeZone));
 
     private static DateTime BrasiliaToUtc(DateOnly date, int hour) =>
         TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(new TimeOnly(hour, 0)), BrasiliaTimeZone);
@@ -2424,38 +2541,29 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         return volume!.ToDictionary(p => p.PeriodStart, p => p.Count);
     }
 
-    /// <summary>
-    /// Grava o chamado direto no banco: pela API a data de abertura é sempre agora, e os testes de volume precisam de
-    /// aberturas em horários e dias escolhidos.
-    /// </summary>
+    // Grava o chamado direto no banco: pela API a data de abertura é sempre agora, e os testes de volume precisam de
+    // aberturas em horários e dias escolhidos.
     private async Task InsertTicketAsync(Guid requesterId, Guid sectorId, DateTime createdAtUtc, DateTime? deletedAtUtc = null)
     {
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        context.Tickets.Add(new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Printer is broken",
-            Description = "The printer on the 3rd floor is not working",
-            Priority = TicketPriority.Medium,
-            Status = TicketStatus.Open,
-            CreatedByUserId = requesterId,
-            SectorId = sectorId,
-            CreatedAtUtc = createdAtUtc,
-            DueAtUtc = createdAtUtc.AddHours(8),
-            SlaWarningAtUtc = createdAtUtc.AddHours(6),
-            DeletedAtUtc = deletedAtUtc,
-            SlaPlan = TicketSla.LegacyPlan(TicketPriority.Medium)
-        });
+        Sector sector = await context.Sectors.SingleAsync(s => s.Id == sectorId);
+
+        context.Tickets.Add(TicketTestData.Create(
+            sector,
+            requesterId: requesterId,
+            createdAtUtc: createdAtUtc,
+            slaPlan: TicketSlaPlan.Legacy(TicketPriority.Medium),
+            dueAtUtc: createdAtUtc.AddHours(8),
+            slaWarningAtUtc: createdAtUtc.AddHours(6),
+            deletedAtUtc: deletedAtUtc));
 
         await context.SaveChangesAsync();
     }
 
-    /// <summary>
-    /// Chamado do solicitante gravado direto no banco, com o status e o título escolhidos (pela API, o chamado nasce
-    /// Aberto) e a última atividade igual à abertura, como o interceptor faria.
-    /// </summary>
+    // Chamado do solicitante gravado direto no banco, com o status e o título escolhidos (pela API, o chamado nasce
+    // Aberto) e a última atividade igual à abertura, como o interceptor faria.
     private async Task<Guid> InsertOwnTicketAsync(
         Guid requesterId,
         Guid sectorId,
@@ -2467,21 +2575,18 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = title,
-            Description = description,
-            Priority = TicketPriority.Medium,
-            Status = status,
-            CreatedByUserId = requesterId,
-            SectorId = sectorId,
-            CreatedAtUtc = createdAtUtc,
-            LastActivityAtUtc = createdAtUtc,
-            DueAtUtc = createdAtUtc.AddHours(8),
-            SlaWarningAtUtc = createdAtUtc.AddHours(6),
-            SlaPlan = TicketSla.LegacyPlan(TicketPriority.Medium)
-        };
+        Sector sector = await context.Sectors.SingleAsync(s => s.Id == sectorId);
+
+        Ticket ticket = TicketTestData.Create(
+            sector,
+            requesterId: requesterId,
+            status: status,
+            createdAtUtc: createdAtUtc,
+            title: title,
+            description: description,
+            slaPlan: TicketSlaPlan.Legacy(TicketPriority.Medium),
+            dueAtUtc: createdAtUtc.AddHours(8),
+            slaWarningAtUtc: createdAtUtc.AddHours(6));
 
         context.Tickets.Add(ticket);
         await context.SaveChangesAsync();
@@ -2489,11 +2594,9 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         return ticket.Id;
     }
 
-    /// <summary>
-    /// Chamados da spec 019, de Maria (o usuário autenticado): "Impressora não imprime" (Aberto), "Acesso ao e-mail"
-    /// (Resolvido) e "Monitor piscando" (Em Andamento, com "e" só na descrição), da última atividade mais recente para a
-    /// mais antiga; e um chamado de Paulo com "senha" na descrição.
-    /// </summary>
+    // Chamados do cenário, de Maria (o usuário autenticado): "Impressora não imprime" (Aberto), "Acesso ao e-mail"
+    // (Resolvido) e "Monitor piscando" (Em Andamento, com "e" só na descrição), da última atividade mais recente para a
+    // mais antiga; e um chamado de Paulo com "senha" na descrição.
     private async Task<OwnSearchScenario> SeedOwnSearchScenarioAsync()
     {
         (Guid mariaId, Guid sectorId) = await CreateRequesterAndSectorAsync();
@@ -2628,7 +2731,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     public async Task GetAssignees_Should_ListAssigneeThatAssignAccepts()
     {
         // Arrange: o atendente consulta a lista para um chamado do Helpdesk; quem atribui a outra pessoa é quem tem
-        // tickets:assign (spec 009), aqui o administrador
+        // tickets:assign, aqui o administrador
         AssigneeScenario scenario = await SeedAssigneeScenarioAsync();
         Guid ticketId = await CreateTicketAsync(scenario.Helpdesk);
         PagedAssigneesDto? page = await HttpClient.GetFromJsonAsync<PagedAssigneesDto>(
@@ -2649,11 +2752,9 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             .ShouldBe(scenario.Ana);
     }
 
-    /// <summary>
-    /// Usuários da spec 030, isolados pelo sobrenome único (<see cref="AssigneeScenario.Token"/>), que as consultas usam
-    /// como busca: Ana (Atendente, Helpdesk), Beto (Atendente, Infra), Caio (Atendente inativo, Helpdesk) e Davi
-    /// (Colaborador, Helpdesk). Termina autenticado como um Atendente novo, que não tem <c>users:read</c>.
-    /// </summary>
+    // Usuários do cenário, isolados pelo sobrenome único (AssigneeScenario.Token), que as consultas usam
+    // como busca: Ana (Atendente, Helpdesk), Beto (Atendente, Infra), Caio (Atendente inativo, Helpdesk) e Davi
+    // (Colaborador, Helpdesk). Termina autenticado como um Atendente novo, que não tem users:read.
     private async Task<AssigneeScenario> SeedAssigneeScenarioAsync()
     {
         string token = $"Resp{Guid.NewGuid():N}";
@@ -2761,11 +2862,9 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             ignoreOrder: true);
     }
 
-    /// <summary>
-    /// Chamados da spec 025, em setores novos (isolam os dados dos outros testes): no Helpdesk, um aberto em 31/10 às
-    /// 23h30 de Brasília (02h30 UTC de 01/11), um em 01/11 às 10h resolvido em 02/11 e um em 15/11 nunca resolvido;
-    /// na Infra, um aberto em 01/11 às 10h. Termina autenticado como administrador (<c>tickets:manage</c>).
-    /// </summary>
+    // Chamados do cenário, em setores novos (isolam os dados dos outros testes): no Helpdesk, um aberto em 31/10 às
+    // 23h30 de Brasília (02h30 UTC de 01/11), um em 01/11 às 10h resolvido em 02/11 e um em 15/11 nunca resolvido;
+    // na Infra, um aberto em 01/11 às 10h. Termina autenticado como administrador (tickets:manage).
     private async Task<PeriodScenario> SeedPeriodScenarioAsync()
     {
         Guid helpdesk = await CreateSectorAsAdminAsync();
@@ -2958,14 +3057,12 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 
-    /// <summary>
-    /// Chamados da spec 026 em setores novos, abertos em 10/09 (o prazo e o alerta são relativos a agora, para cada um
-    /// cair numa situação de SLA): no Helpdesk, (1) Aberto Urgente sem responsável no prazo, (2) Em andamento com
-    /// responsável em risco, (3) Aberto sem responsável atrasado, (4) Resolvido Urgente com responsável dentro do prazo,
-    /// (5) Fechado sem responsável resolvido depois do prazo e (6) Cancelado sem responsável nunca resolvido; na Infra,
-    /// (7) Aberto Urgente com responsável no prazo. Fora do período, um Aberto no Helpdesk em 25/09; fora dos setores, um
-    /// Aberto num terceiro setor. Termina autenticado como administrador (<c>tickets:manage</c>).
-    /// </summary>
+    // Chamados do cenário, em setores novos, abertos em 10/09 (o prazo e o alerta são relativos a agora, para cada um
+    // cair numa situação de SLA): no Helpdesk, (1) Aberto Urgente sem responsável no prazo, (2) Em andamento com
+    // responsável em risco, (3) Aberto sem responsável atrasado, (4) Resolvido Urgente com responsável dentro do prazo,
+    // (5) Fechado sem responsável resolvido depois do prazo e (6) Cancelado sem responsável nunca resolvido; na Infra,
+    // (7) Aberto Urgente com responsável no prazo. Fora do período, um Aberto no Helpdesk em 25/09; fora dos setores, um
+    // Aberto num terceiro setor. Termina autenticado como administrador (tickets:manage).
     private async Task<OverviewScenario> SeedOverviewScenarioAsync()
     {
         Guid helpdesk = await InsertSectorAsync($"Helpdesk-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
@@ -3007,23 +3104,21 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        context.Tickets.Add(new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Chamado do resumo",
-            Description = "Chamado gravado direto no banco para o resumo da operação",
-            Priority = priority,
-            Status = status,
-            CreatedByUserId = requesterId,
-            AssignedToUserId = assignedToUserId,
-            SectorId = sectorId,
-            CreatedAtUtc = createdAtUtc,
-            LastActivityAtUtc = createdAtUtc,
-            SlaWarningAtUtc = slaWarningAtUtc,
-            DueAtUtc = dueAtUtc,
-            ResolvedAtUtc = resolvedAtUtc,
-            SlaPlan = TicketSla.LegacyPlan(priority)
-        });
+        Sector sector = await context.Sectors.SingleAsync(s => s.Id == sectorId);
+
+        context.Tickets.Add(TicketTestData.Create(
+            sector,
+            requesterId: requesterId,
+            status: status,
+            createdAtUtc: createdAtUtc,
+            assignedToUserId: assignedToUserId,
+            priority: priority,
+            title: "Chamado do resumo",
+            description: "Chamado gravado direto no banco para o resumo da operação",
+            slaPlan: TicketSlaPlan.Legacy(priority),
+            dueAtUtc: dueAtUtc,
+            slaWarningAtUtc: slaWarningAtUtc,
+            resolvedAtUtc: resolvedAtUtc));
         await context.SaveChangesAsync();
     }
 
@@ -3245,9 +3340,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     // Início dos cronômetros dos tempos médios, em setembro (as conclusões caem no mesmo mês).
     private static readonly DateTime TimesStartUtc = new(2026, 9, 10, 12, 0, 0, DateTimeKind.Utc);
 
-    /// <summary>
-    /// Pela API: um chamado respondido pela mensagem de um Atendente e outro resolvido pelo administrador sem resposta.
-    /// </summary>
+    // Pela API: um chamado respondido pela mensagem de um Atendente e outro resolvido pelo administrador sem resposta.
     private async Task<(Guid Answered, Guid ResolvedWithoutAnswer)> CreateAnsweredAndResolvedTicketsAsync()
     {
         (Guid answered, AccessTokens requesterTokens) = await CreateTicketAsRequesterAsync();
@@ -3266,10 +3359,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         return (answered, resolvedWithoutAnswer);
     }
 
-    /// <summary>
-    /// Chamado gravado direto no banco com os cronômetros informados, todos no calendário contínuo (24 horas), em que o
-    /// minuto útil é o minuto do relógio; cada cronômetro é concluído <c>Minutes</c> minutos depois do início.
-    /// </summary>
+    // Chamado gravado direto no banco com os cronômetros informados, todos no calendário contínuo (24 horas), em que o
+    // minuto útil é o minuto do relógio; cada cronômetro é concluído Minutes minutos depois do início.
     private async Task InsertTimesTicketAsync(
         Guid sectorId,
         DateTime startUtc,
@@ -3279,36 +3370,32 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         Guid requesterId = await context.Users.Select(u => u.Id).FirstAsync();
 
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Chamado dos tempos médios",
-            Description = "Chamado gravado direto no banco para os tempos médios",
-            Priority = TicketPriority.Medium,
-            Status = TicketStatus.Resolved,
-            CreatedByUserId = requesterId,
-            SectorId = sectorId,
-            CreatedAtUtc = startUtc,
-            LastActivityAtUtc = startUtc,
-            DueAtUtc = startUtc.AddHours(8),
-            SlaWarningAtUtc = startUtc.AddHours(6),
-            SlaPlan = TicketSla.LegacyPlan(TicketPriority.Medium)
-        };
+        Sector sector = await context.Sectors.SingleAsync(s => s.Id == sectorId);
+
+        Ticket ticket = TicketTestData.Create(
+            sector,
+            requesterId: requesterId,
+            status: TicketStatus.Resolved,
+            createdAtUtc: startUtc,
+            title: "Chamado dos tempos médios",
+            description: "Chamado gravado direto no banco para os tempos médios",
+            slaPlan: TicketSlaPlan.Legacy(TicketPriority.Medium),
+            dueAtUtc: startUtc.AddHours(8),
+            slaWarningAtUtc: startUtc.AddHours(6));
         context.Tickets.Add(ticket);
-        context.TicketSlaTimers.AddRange(timers.Select(t => new TicketSlaTimer
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            Metric = t.Metric,
-            Cycle = t.Cycle,
-            TargetMinutes = 480,
-            CalendarId = SlaCalendarIds.Continuous,
-            StartedAtUtc = startUtc,
-            WarningOnUtc = startUtc.AddHours(6),
-            DueOnUtc = startUtc.AddHours(8),
-            CompletedOnUtc = startUtc.AddMinutes(t.Minutes),
-            CompletionCause = t.Cause
-        }));
+        // Ciclo e causa em qualquer combinação, gravados direto como a consulta os lê.
+        context.TicketSlaTimers.AddRange(timers.Select(t => EntityTestState.New<TicketSlaTimer>()
+            .With(nameof(TicketSlaTimer.Id), Guid.NewGuid())
+            .With(nameof(TicketSlaTimer.TicketId), ticket.Id)
+            .With(nameof(TicketSlaTimer.Metric), t.Metric)
+            .With(nameof(TicketSlaTimer.Cycle), t.Cycle)
+            .With(nameof(TicketSlaTimer.TargetMinutes), 480)
+            .With(nameof(TicketSlaTimer.CalendarId), SlaCalendarIds.Continuous)
+            .With(nameof(TicketSlaTimer.StartedAtUtc), startUtc)
+            .With(nameof(TicketSlaTimer.WarningOnUtc), startUtc.AddHours(6))
+            .With(nameof(TicketSlaTimer.DueOnUtc), startUtc.AddHours(8))
+            .With(nameof(TicketSlaTimer.CompletedOnUtc), startUtc.AddMinutes(t.Minutes))
+            .With(nameof(TicketSlaTimer.CompletionCause), t.Cause)));
         await context.SaveChangesAsync();
     }
 
@@ -3376,7 +3463,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         List<VolumePointDto> volume = (await HttpClient.GetFromJsonAsync<List<VolumePointDto>>(
             $"tickets/stats/volume?groupBy=Day&sectorId={sectorId}&createdFrom=2026-09-01&createdTo=2026-09-02"))!;
 
-        // Assert: o excluído sai dos criados e dos resolvidos, para os dois campos baterem (spec 028, R-1)
+        // Assert: o excluído sai dos criados e dos resolvidos, para os dois campos baterem
         volume.ShouldAllBe(p => p.Count == 0 && p.ResolvedCount == 0);
     }
 
@@ -3417,52 +3504,46 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         body.ShouldContain("366");
     }
 
-    /// <summary>
-    /// Chamado Aberto gravado direto no banco no setor e na data de abertura informados, com o administrador como
-    /// solicitante.
-    /// </summary>
+    // Chamado Aberto gravado direto no banco no setor e na data de abertura informados, com o administrador como
+    // solicitante.
     private async Task<Guid> InsertVolumeTicketAsync(Guid sectorId, DateTime createdAtUtc, DateTime? deletedAtUtc = null)
     {
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         Guid requesterId = await context.Users.Where(u => u.Email == AdminEmail).Select(u => u.Id).SingleAsync();
 
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Title = "Chamado do volume",
-            Description = "Chamado gravado direto no banco para o volume",
-            Priority = TicketPriority.Medium,
-            Status = TicketStatus.Open,
-            CreatedByUserId = requesterId,
-            SectorId = sectorId,
-            CreatedAtUtc = createdAtUtc,
-            LastActivityAtUtc = createdAtUtc,
-            DueAtUtc = createdAtUtc.AddHours(8),
-            SlaWarningAtUtc = createdAtUtc.AddHours(6),
-            DeletedAtUtc = deletedAtUtc,
-            SlaPlan = TicketSla.LegacyPlan(TicketPriority.Medium)
-        };
+        Sector sector = await context.Sectors.SingleAsync(s => s.Id == sectorId);
+
+        Ticket ticket = TicketTestData.Create(
+            sector,
+            requesterId: requesterId,
+            createdAtUtc: createdAtUtc,
+            title: "Chamado do volume",
+            description: "Chamado gravado direto no banco para o volume",
+            slaPlan: TicketSlaPlan.Legacy(TicketPriority.Medium),
+            dueAtUtc: createdAtUtc.AddHours(8),
+            slaWarningAtUtc: createdAtUtc.AddHours(6),
+            deletedAtUtc: deletedAtUtc);
         context.Tickets.Add(ticket);
         await context.SaveChangesAsync();
 
         return ticket.Id;
     }
 
-    /// <summary>
-    /// Mudança de status para Resolvido no histórico, como o handler grava ao resolver.
-    /// </summary>
+    // Mudança de status para Resolvido no histórico, como o handler grava ao resolver.
     private async Task InsertResolutionAsync(Guid ticketId, DateTime occurredAtUtc)
     {
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        context.TicketHistories.Add(TicketHistoryEntries.StatusChanged(
-            ticketId,
-            null,
-            TicketStatus.InProgress,
-            TicketStatus.Resolved,
-            occurredAtUtc));
+        // Sem autor, como um registro antigo: montado direto, fora do caminho do chamado.
+        context.TicketHistories.Add(EntityTestState.New<TicketHistory>()
+            .With(nameof(TicketHistory.Id), Guid.NewGuid())
+            .With(nameof(TicketHistory.TicketId), ticketId)
+            .With(nameof(TicketHistory.Action), TicketHistoryAction.StatusChanged)
+            .With(nameof(TicketHistory.OldValue), nameof(TicketStatus.InProgress))
+            .With(nameof(TicketHistory.NewValue), nameof(TicketStatus.Resolved))
+            .With(nameof(TicketHistory.OccurredAtUtc), occurredAtUtc));
         await context.SaveChangesAsync();
     }
 
@@ -3636,10 +3717,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         GetStoredStatus(scenario.Answered).ShouldBe(TicketStatus.Open);
     }
 
-    /// <summary>
-    /// Num setor novo: um chamado respondido pelo atendente (aguarda o solicitante), um sem resposta (aguarda quem
-    /// atende) e um resolvido (sem situação). Termina autenticado como administrador.
-    /// </summary>
+    // Num setor novo: um chamado respondido pelo atendente (aguarda o solicitante), um sem resposta (aguarda quem
+    // atende) e um resolvido (sem situação). Termina autenticado como administrador.
     private async Task<WaitingScenario> SeedWaitingScenarioAsync()
     {
         Guid sectorId = await CreateSectorAsAdminAsync();
@@ -3701,9 +3780,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     private const int Met = 4;
     private const int Stopped = 6;
 
-    /// <summary>
-    /// Chamado Urgente aberto por um Colaborador novo; devolve o chamado e o token do solicitante, já configurado.
-    /// </summary>
+    // Chamado Urgente aberto por um Colaborador novo; devolve o chamado e o token do solicitante, já configurado.
     private async Task<(Guid TicketId, AccessTokens RequesterTokens)> CreateTicketAsRequesterAsync()
     {
         Guid sectorId = await CreateSectorAsAdminAsync();
@@ -3722,9 +3799,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         return (await response.Content.ReadFromJsonAsync<Guid>(), requesterTokens);
     }
 
-    /// <summary>
-    /// Usuário novo com a role Atendente (que tem <c>tickets:manage</c>), atribuída pelo administrador.
-    /// </summary>
+    // Usuário novo com a role Atendente (que tem tickets:manage), atribuída pelo administrador.
     private async Task<AccessTokens> CreateAgentAsync()
     {
         string email = UniqueEmail();
@@ -3758,10 +3833,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         return await HttpClient.SendAsync(request);
     }
 
-    /// <summary>
-    /// Troca o status do chamado como administrador (que atende a fila e tem <c>tickets:cancel</c>) e volta ao token que
-    /// estava configurado.
-    /// </summary>
+    // Troca o status do chamado como administrador (que atende a fila e tem tickets:cancel) e volta ao token que
+    // estava configurado.
     private async Task UpdateStatusAsync(Guid ticketId, int status)
     {
         await RunAsAdministratorAsync(async () =>
@@ -4119,13 +4192,13 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         Ticket ticketToCancel = await second.Tickets.SingleAsync(t => t.Id == ticketId);
         List<TicketSlaTimer> timersToStop = await second.TicketSlaTimers.Where(t => t.TicketId == ticketId).ToListAsync();
 
-        ticketToCancel.Status = TicketStatus.Canceled;
-        timersToStop.ForEach(t => t.StoppedOnUtc = nowUtc);
+        ticketToCancel.Update(ticketToCancel.Description, TicketStatus.Canceled, timersToStop, lastMessageIsFromAgent: false, ticketToCancel.CreatedByUserId, nowUtc);
+        ticketToCancel.ClearDomainEvents();
         await second.SaveChangesAsync();
 
-        ticketToResolve.Status = TicketStatus.Resolved;
-        ticketToResolve.ResolvedAtUtc = nowUtc;
-        timersToComplete.ForEach(t => t.CompletedOnUtc = nowUtc);
+        // O Update grava a data de resolução na primeira resolução e conclui os cronômetros.
+        ticketToResolve.Update(ticketToResolve.Description, TicketStatus.Resolved, timersToComplete, lastMessageIsFromAgent: false, ticketToResolve.CreatedByUserId, nowUtc);
+        ticketToResolve.ClearDomainEvents();
 
         // Act
         Func<Task> losingSave = () => first.SaveChangesAsync();
@@ -4310,8 +4383,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         List<AuditLogEntry> modified = [.. entries.Where(a => a.Action == "Modified")];
         modified.Count.ShouldBe(2);
-        // A conclusão dentro do prazo também tira o cronômetro da fila do monitoramento (spec 006) e grava a causa da
-        // conclusão (spec 027), no mesmo registro.
+        // A conclusão dentro do prazo também tira o cronômetro da fila do monitoramento e grava a causa da
+        // conclusão, no mesmo registro.
         modified.ShouldAllBe(a => a.AffectedColumns ==
             $"{nameof(TicketSlaTimer.CompletedOnUtc)},{nameof(TicketSlaTimer.CompletionCause)},{nameof(TicketSlaTimer.NextActionOnUtc)}");
     }
@@ -4401,9 +4474,10 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         DateTime createdAtUtc,
         DateTime? resolvedAtUtc)
     {
-        TimeSpan resolutionTime = TicketSla.ResolutionTime(Enum.Parse<TicketPriority>(priority));
+        var resolutionTime = TimeSpan.FromMinutes(
+            TicketSlaPlan.Legacy(Enum.Parse<TicketPriority>(priority)).ResolutionMinutes);
         DateTime dueAtUtc = createdAtUtc + resolutionTime;
-        DateTime warningAtUtc = createdAtUtc + resolutionTime * TicketSla.WarningRatio;
+        DateTime warningAtUtc = createdAtUtc + resolutionTime * 0.75;
 
         await context.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO public.tickets (id, title, description, priority, status, created_by_user_id, sector_id,
@@ -4474,7 +4548,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
     private sealed record TicketIdsPageDto(List<TicketIdDto> Items);
 
-    // ----- Monitoramento do SLA (spec 006) -----
+    // ----- Monitoramento do SLA -----
 
     private SlaBreachEventRecorder BreachEvents => Services.GetRequiredService<SlaBreachEventRecorder>();
 
@@ -4493,10 +4567,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         await monitor.ProcessSlaBreachesAsync(CancellationToken.None);
     }
 
-    /// <summary>
-    /// Leva para o passado os instantes dos cronômetros do chamado (início, alerta, prazo e próxima ação), como se ele
-    /// tivesse sido aberto antes: o cenário do teste fica vencido no instante real, sem mexer no relógio da aplicação.
-    /// </summary>
+    // Leva para o passado os instantes dos cronômetros do chamado (início, alerta, prazo e próxima ação), como se ele
+    // tivesse sido aberto antes: o cenário do teste fica vencido no instante real, sem mexer no relógio da aplicação.
     private async Task ShiftSlaTimersAsync(Guid ticketId, TimeSpan shift)
     {
         using IServiceScope scope = Services.CreateScope();
@@ -4915,7 +4987,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     [Fact]
     public async Task Migration_Should_QueueOpenLegacyTimersAndBreachLateOnes_WithoutDuplicating()
     {
-        // Arrange: cronômetros como estavam antes da migration da spec 006 (sem violação nem próxima ação).
+        // Arrange: cronômetros como estavam antes da migration do monitoramento do SLA (sem violação nem próxima ação).
         Guid sectorId = await CreateSectorAsAdminAsync();
         DateTime nowUtc = DateTime.UtcNow;
 
@@ -4976,7 +5048,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         return [.. context.TicketSlaTimers.AsNoTracking().Where(t => ticketIds.Contains(t.TicketId)).OrderBy(t => t.TicketId)];
     }
 
-    // Chamado Urgente no plano legado (4 h corridas), com o cronômetro de resolução como a migration da spec 005 grava.
+    // Chamado Urgente no plano legado (4 h corridas), com o cronômetro de resolução como a migration dos cronômetros grava.
     private static Guid AddLegacyTicket(
         ApplicationDbContext context,
         Guid requesterId,
@@ -4987,42 +5059,41 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         TimeSpan? stoppedAfter = null,
         DateTime? deletedAtUtc = null)
     {
-        var ticketId = Guid.NewGuid();
         DateTime dueAtUtc = createdAtUtc.AddHours(4);
         DateTime warningAtUtc = createdAtUtc.AddHours(3);
         DateTime? completedAtUtc = createdAtUtc + completedAfter;
+        Sector sector = context.Sectors.Single(s => s.Id == sectorId);
 
-        context.Tickets.Add(new Ticket
-        {
-            Id = ticketId,
-            Title = "Legacy ticket",
-            Description = "Opened before the SLA monitoring",
-            Priority = TicketPriority.Urgent,
-            Status = status,
-            CreatedByUserId = requesterId,
-            SectorId = sectorId,
-            CreatedAtUtc = createdAtUtc,
-            DueAtUtc = dueAtUtc,
-            SlaWarningAtUtc = warningAtUtc,
-            ResolvedAtUtc = completedAtUtc,
-            DeletedAtUtc = deletedAtUtc,
-            SlaPlan = TicketSla.LegacyPlan(TicketPriority.Urgent)
-        });
+        Ticket ticket = TicketTestData.Create(
+            sector,
+            requesterId: requesterId,
+            status: status,
+            createdAtUtc: createdAtUtc,
+            priority: TicketPriority.Urgent,
+            title: "Legacy ticket",
+            description: "Opened before the SLA monitoring",
+            slaPlan: TicketSlaPlan.Legacy(TicketPriority.Urgent),
+            dueAtUtc: dueAtUtc,
+            slaWarningAtUtc: warningAtUtc,
+            resolvedAtUtc: completedAtUtc,
+            deletedAtUtc: deletedAtUtc);
+        Guid ticketId = ticket.Id;
 
-        context.TicketSlaTimers.Add(new TicketSlaTimer
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticketId,
-            Metric = SlaMetric.Resolution,
-            Cycle = 1,
-            TargetMinutes = 240,
-            CalendarId = SlaCalendarIds.Continuous,
-            StartedAtUtc = createdAtUtc,
-            WarningOnUtc = warningAtUtc,
-            DueOnUtc = dueAtUtc,
-            CompletedOnUtc = completedAtUtc,
-            StoppedOnUtc = createdAtUtc + stoppedAfter
-        });
+        context.Tickets.Add(ticket);
+
+        // Cronômetro legado como a migration o grava: concluído ou parado, mas sem causa nem fila.
+        context.TicketSlaTimers.Add(EntityTestState.New<TicketSlaTimer>()
+            .With(nameof(TicketSlaTimer.Id), Guid.NewGuid())
+            .With(nameof(TicketSlaTimer.TicketId), ticketId)
+            .With(nameof(TicketSlaTimer.Metric), SlaMetric.Resolution)
+            .With(nameof(TicketSlaTimer.Cycle), 1)
+            .With(nameof(TicketSlaTimer.TargetMinutes), 240)
+            .With(nameof(TicketSlaTimer.CalendarId), SlaCalendarIds.Continuous)
+            .With(nameof(TicketSlaTimer.StartedAtUtc), createdAtUtc)
+            .With(nameof(TicketSlaTimer.WarningOnUtc), warningAtUtc)
+            .With(nameof(TicketSlaTimer.DueOnUtc), dueAtUtc)
+            .With(nameof(TicketSlaTimer.CompletedOnUtc), completedAtUtc)
+            .With(nameof(TicketSlaTimer.StoppedOnUtc), createdAtUtc + stoppedAfter));
 
         return ticketId;
     }
@@ -5370,9 +5441,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         DROP FUNCTION IF EXISTS public.test_delay_ticket_assignee_change();
         """;
 
-    /// <summary>
-    /// Atribuição com o token já configurado no <see cref="BaseIntegrationTest.HttpClient"/>.
-    /// </summary>
+    // Atribuição com o token já configurado no BaseIntegrationTest.HttpClient.
     private Task<HttpResponseMessage> SendAssignAsync(Guid ticketId, Guid assignedToUserId) =>
         HttpClient.PutAsJsonAsync($"tickets/{ticketId}/assignee", new { assignedToUserId });
 
@@ -5384,10 +5453,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         return context.Tickets.AsNoTracking().Where(t => t.Id == ticketId).Select(t => t.AssignedToUserId).Single();
     }
 
-    /// <summary>
-    /// Atendente novo com nome próprio e um sobrenome único (para o nome completo não se repetir entre os testes);
-    /// deixa o administrador autenticado.
-    /// </summary>
+    // Atendente novo com nome próprio e um sobrenome único (para o nome completo não se repetir entre os testes);
+    // deixa o administrador autenticado.
     private async Task<(Guid UserId, string FullName)> CreateNamedAgentAsync(string firstName, string lastName)
     {
         string uniqueLastName = $"{lastName}-{Guid.NewGuid():N}";

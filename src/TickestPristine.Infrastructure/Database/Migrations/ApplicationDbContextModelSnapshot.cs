@@ -117,7 +117,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasIndex("ResponsibleUserId")
                         .HasDatabaseName("ix_departments_responsible_user_id");
 
-                    b.ToTable("departments", "public");
+                    b.ToTable("departments", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_departments_name_length", "char_length(name) <= 100");
+                        });
                 });
 
             modelBuilder.Entity("TickestPristine.Domain.Roles.Permission", b =>
@@ -377,7 +380,6 @@ namespace TickestPristine.Infrastructure.Database.Migrations
             modelBuilder.Entity("TickestPristine.Domain.Roles.RolePermission", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -389,6 +391,7 @@ namespace TickestPristine.Infrastructure.Database.Migrations
 
                     b.Property<string>("RoleName")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasColumnName("role_name");
 
@@ -603,7 +606,10 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .HasDatabaseName("ix_sectors_department_id_name")
                         .HasFilter("is_active");
 
-                    b.ToTable("sectors", "public");
+                    b.ToTable("sectors", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_sectors_name_length", "char_length(name) <= 100");
+                        });
                 });
 
             modelBuilder.Entity("TickestPristine.Domain.SlaCalendars.SlaCalendar", b =>
@@ -643,7 +649,6 @@ namespace TickestPristine.Infrastructure.Database.Migrations
             modelBuilder.Entity("TickestPristine.Domain.SlaCalendars.SlaCalendarHoliday", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -778,13 +783,17 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .IsDescending(false, true, true)
                         .HasDatabaseName("ix_tickets_created_by_user_id_last_activity_at_utc_id");
 
-                    b.ToTable("tickets", "public");
+                    b.ToTable("tickets", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_tickets_description_length", "char_length(description) BETWEEN 10 AND 500");
+
+                            t.HasCheckConstraint("ck_tickets_title_length", "char_length(title) <= 200");
+                        });
                 });
 
             modelBuilder.Entity("TickestPristine.Domain.Tickets.TicketAttachment", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -846,7 +855,6 @@ namespace TickestPristine.Infrastructure.Database.Migrations
             modelBuilder.Entity("TickestPristine.Domain.Tickets.TicketHistory", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -894,7 +902,6 @@ namespace TickestPristine.Infrastructure.Database.Migrations
             modelBuilder.Entity("TickestPristine.Domain.Tickets.TicketMessage", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -940,7 +947,6 @@ namespace TickestPristine.Infrastructure.Database.Migrations
             modelBuilder.Entity("TickestPristine.Domain.Tickets.TicketSlaTimer", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1018,7 +1024,6 @@ namespace TickestPristine.Infrastructure.Database.Migrations
             modelBuilder.Entity("TickestPristine.Domain.Users.RefreshToken", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1093,11 +1098,13 @@ namespace TickestPristine.Infrastructure.Database.Migrations
 
                     b.Property<string>("Email")
                         .IsRequired()
+                        .HasMaxLength(254)
                         .HasColumnType("citext")
                         .HasColumnName("email");
 
                     b.Property<string>("FirstName")
                         .IsRequired()
+                        .HasMaxLength(100)
                         .HasColumnType("citext")
                         .HasColumnName("first_name");
 
@@ -1109,6 +1116,7 @@ namespace TickestPristine.Infrastructure.Database.Migrations
 
                     b.Property<string>("LastName")
                         .IsRequired()
+                        .HasMaxLength(100)
                         .HasColumnType("citext")
                         .HasColumnName("last_name");
 
@@ -1133,13 +1141,19 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                     b.HasIndex("FirstName", "LastName", "Id")
                         .HasDatabaseName("ix_users_first_name_last_name_id");
 
-                    b.ToTable("users", "public");
+                    b.ToTable("users", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_users_email_length", "char_length(email) <= 254");
+
+                            t.HasCheckConstraint("ck_users_first_name_length", "char_length(first_name) <= 100");
+
+                            t.HasCheckConstraint("ck_users_last_name_length", "char_length(last_name) <= 100");
+                        });
                 });
 
             modelBuilder.Entity("TickestPristine.Domain.Users.UserCredential", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1184,7 +1198,6 @@ namespace TickestPristine.Infrastructure.Database.Migrations
             modelBuilder.Entity("TickestPristine.Domain.Users.UserInvitation", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1232,12 +1245,12 @@ namespace TickestPristine.Infrastructure.Database.Migrations
             modelBuilder.Entity("TickestPristine.Domain.Users.UserRole", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<string>("RoleName")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasColumnName("role_name");
 
