@@ -2,12 +2,15 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using TickestPristine.Domain.Tickets;
 using TickestPristine.Infrastructure.Database;
 
 namespace TickestPristine.IntegrationTests.Departments;
 
 public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
+    private const string TicketDescription = "The printer on the second floor is not working";
+
     private async Task AuthenticateAsAdminAsync()
     {
         AccessTokens tokens = await LoginAsync(AdminEmail, AdminPassword);
@@ -24,6 +27,86 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
         response.EnsureSuccessStatusCode();
 
         return await response.Content.ReadFromJsonAsync<Guid>();
+    }
+
+    private async Task<Guid> CreateDepartmentWithResponsibleAsync(Guid responsibleUserId)
+    {
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("departments", new
+        {
+            name = $"Department-{Guid.NewGuid():N}",
+            description = "A department created by tests",
+            responsibleUserId
+        });
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<Guid>();
+    }
+
+    private async Task<Guid> CreateSectorAsync(Guid departmentId, string name)
+    {
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("sectors", new { name, departmentId });
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<Guid>();
+    }
+
+    private async Task<Guid> CreateTicketAsync(Guid sectorId)
+    {
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("tickets", new
+        {
+            title = "Printer is broken",
+            description = TicketDescription,
+            priority = 2,
+            sectorId
+        });
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<Guid>();
+    }
+
+    private async Task ChangeTicketStatusAsync(Guid ticketId, params TicketStatus[] statuses)
+    {
+        foreach (TicketStatus status in statuses)
+        {
+            HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new
+            {
+                description = TicketDescription,
+                status = (int)status
+            });
+            response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        }
+    }
+
+    // TI com Suporte (2 Abertos e 1 Em andamento), Redes (1 Resolvido, 1 Cancelado e 1 Aberto excluído) e Infra, sem
+    // chamados; Financeiro, sem setores. Tudo pela API.
+    private async Task<CommonData> CreateCommonDataAsync()
+    {
+        Guid itId = await CreateDepartmentAsync();
+        Guid financeId = await CreateDepartmentAsync();
+        Guid supportId = await CreateSectorAsync(itId, "Suporte");
+        Guid networksId = await CreateSectorAsync(itId, "Redes");
+        Guid infrastructureId = await CreateSectorAsync(itId, "Infra");
+
+        List<Guid> supportTicketIds =
+        [
+            await CreateTicketAsync(supportId),
+            await CreateTicketAsync(supportId),
+            await CreateTicketAsync(supportId)
+        ];
+        await ChangeTicketStatusAsync(supportTicketIds[2], TicketStatus.InProgress);
+
+        await ChangeTicketStatusAsync(await CreateTicketAsync(networksId), TicketStatus.InProgress, TicketStatus.Resolved);
+        await ChangeTicketStatusAsync(await CreateTicketAsync(networksId), TicketStatus.Canceled);
+        (await HttpClient.DeleteAsync($"tickets/{await CreateTicketAsync(networksId)}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        return new CommonData(itId, financeId, supportId, networksId, infrastructureId, supportTicketIds);
+    }
+
+    private async Task<DepartmentListItemDto> GetListedDepartmentAsync(Guid departmentId)
+    {
+        List<DepartmentListItemDto>? departments = await HttpClient.GetFromJsonAsync<List<DepartmentListItemDto>>("departments");
+
+        return departments!.Single(d => d.Id == departmentId);
     }
 
     [Fact]
@@ -113,6 +196,105 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
         DepartmentDto? department = await getResponse.Content.ReadFromJsonAsync<DepartmentDto>();
         department!.Name.ShouldBe("Customer Support");
         department.Description.ShouldBe("Updated description");
+    }
+
+    [Fact]
+    public async Task GetAll_Should_ReturnResponsibleIdAndName()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid anaId = await InsertUserAsync("Ana", "Souza", UniqueEmail());
+        Guid itId = await CreateDepartmentWithResponsibleAsync(anaId);
+        Guid financeId = await CreateDepartmentAsync();
+
+        // Act
+        List<DepartmentListItemDto>? departments = await HttpClient.GetFromJsonAsync<List<DepartmentListItemDto>>("departments");
+
+        // Assert
+        DepartmentListItemDto it = departments!.Single(d => d.Id == itId);
+        it.ResponsibleUserId.ShouldBe(anaId);
+        it.ResponsibleUserName.ShouldBe("Ana Souza");
+
+        DepartmentListItemDto finance = departments!.Single(d => d.Id == financeId);
+        finance.ResponsibleUserId.ShouldBeNull();
+        finance.ResponsibleUserName.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Update_Should_KeepResponsible_WhenClientSendsTheIdReadFromGetAll()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid anaId = await InsertUserAsync("Ana", "Souza", UniqueEmail());
+        Guid itId = await CreateDepartmentWithResponsibleAsync(anaId);
+
+        List<DepartmentListItemDto>? departments = await HttpClient.GetFromJsonAsync<List<DepartmentListItemDto>>("departments");
+        DepartmentListItemDto it = departments!.Single(d => d.Id == itId);
+        string newName = $"Tecnologia-{Guid.NewGuid():N}";
+
+        // Act
+        HttpResponseMessage updateResponse = await HttpClient.PutAsJsonAsync($"departments/{itId}", new
+        {
+            name = newName,
+            description = it.Description,
+            responsibleUserId = it.ResponsibleUserId
+        });
+
+        // Assert
+        updateResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        DepartmentDto? department = await HttpClient.GetFromJsonAsync<DepartmentDto>($"departments/{itId}");
+        department!.Name.ShouldBe(newName);
+        department.ResponsibleUserId.ShouldBe(anaId);
+    }
+
+    [Fact]
+    public async Task Update_Should_ReplaceResponsible_WhenAnotherUserIdIsSent()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid anaId = await InsertUserAsync("Ana", "Souza", UniqueEmail());
+        Guid brunoId = await InsertUserAsync("Bruno", "Lima", UniqueEmail());
+        Guid itId = await CreateDepartmentWithResponsibleAsync(anaId);
+        DepartmentDto? before = await HttpClient.GetFromJsonAsync<DepartmentDto>($"departments/{itId}");
+
+        // Act
+        HttpResponseMessage updateResponse = await HttpClient.PutAsJsonAsync($"departments/{itId}", new
+        {
+            name = before!.Name,
+            description = before.Description,
+            responsibleUserId = brunoId
+        });
+
+        // Assert
+        updateResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        DepartmentDto? department = await HttpClient.GetFromJsonAsync<DepartmentDto>($"departments/{itId}");
+        department!.ResponsibleUserId.ShouldBe(brunoId);
+    }
+
+    [Fact]
+    public async Task Update_Should_RemoveResponsible_WhenNullIsSent()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        Guid anaId = await InsertUserAsync("Ana", "Souza", UniqueEmail());
+        Guid itId = await CreateDepartmentWithResponsibleAsync(anaId);
+        DepartmentDto? before = await HttpClient.GetFromJsonAsync<DepartmentDto>($"departments/{itId}");
+
+        // Act
+        HttpResponseMessage updateResponse = await HttpClient.PutAsJsonAsync($"departments/{itId}", new
+        {
+            name = before!.Name,
+            description = before.Description,
+            responsibleUserId = (Guid?)null
+        });
+
+        // Assert
+        updateResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        DepartmentDto? department = await HttpClient.GetFromJsonAsync<DepartmentDto>($"departments/{itId}");
+        department!.ResponsibleUserId.ShouldBeNull();
     }
 
     [Fact]
@@ -360,6 +542,89 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task GetAll_Should_ReturnActiveTicketCountOfDepartmentsAndSectors()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        CommonData data = await CreateCommonDataAsync();
+
+        // Act
+        List<DepartmentListItemDto>? departments = await HttpClient.GetFromJsonAsync<List<DepartmentListItemDto>>("departments");
+
+        // Assert
+        DepartmentListItemDto it = departments!.Single(d => d.Id == data.ItId);
+        it.ActiveTicketCount.ShouldBe(3);
+        it.Sectors.Single(s => s.Id == data.SupportId).ActiveTicketCount.ShouldBe(3);
+        it.Sectors.Single(s => s.Id == data.NetworksId).ActiveTicketCount.ShouldBe(0);
+        it.Sectors.Single(s => s.Id == data.InfrastructureId).ActiveTicketCount.ShouldBe(0);
+        departments!.Single(d => d.Id == data.FinanceId).ActiveTicketCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Deactivate_Should_ReturnConflictWithSameCodeAndText_WhenListingShowsActiveTickets()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        CommonData data = await CreateCommonDataAsync();
+        int listedCount = (await GetListedDepartmentAsync(data.ItId)).ActiveTicketCount;
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"departments/{data.ItId}");
+
+        // Assert
+        listedCount.ShouldBe(3);
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Departments.HasActiveTickets");
+        problem.Detail.ShouldBe(
+            "O departamento tem chamados em aberto ou em andamento nos seus setores. Conclua ou cancele esses chamados antes de desativá-lo.");
+    }
+
+    [Fact]
+    public async Task Deactivate_Should_ReturnNoContent_WhenActiveTicketsAreConcludedAndListingShowsZero()
+    {
+        // Arrange
+        await AuthenticateAsAdminAsync();
+        CommonData data = await CreateCommonDataAsync();
+        await ChangeTicketStatusAsync(data.SupportTicketIds[0], TicketStatus.InProgress, TicketStatus.Resolved);
+        await ChangeTicketStatusAsync(data.SupportTicketIds[1], TicketStatus.InProgress, TicketStatus.Resolved);
+        await ChangeTicketStatusAsync(data.SupportTicketIds[2], TicketStatus.Resolved);
+        int listedCount = (await GetListedDepartmentAsync(data.ItId)).ActiveTicketCount;
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"departments/{data.ItId}");
+
+        // Assert
+        listedCount.ShouldBe(0);
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task Deactivate_Should_ReturnConflictCountedByListing_WhenTicketIsReopenedInDeactivatedSector()
+    {
+        // Arrange: o chamado de Redes é resolvido, o setor é desativado e o chamado é reaberto, voltando a ser ativo num
+        // setor desativado.
+        await AuthenticateAsAdminAsync();
+        Guid departmentId = await CreateDepartmentAsync();
+        Guid networksId = await CreateSectorAsync(departmentId, "Redes");
+        Guid ticketId = await CreateTicketAsync(networksId);
+        await ChangeTicketStatusAsync(ticketId, TicketStatus.InProgress, TicketStatus.Resolved);
+        (await HttpClient.DeleteAsync($"sectors/{networksId}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await HttpClient.PostAsJsonAsync($"tickets/{ticketId}/reopen", new { })).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        DepartmentListItemDto listed = await GetListedDepartmentAsync(departmentId);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.DeleteAsync($"departments/{departmentId}");
+
+        // Assert
+        listed.ActiveTicketCount.ShouldBe(1);
+        listed.Sectors.ShouldNotContain(s => s.Id == networksId);
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Departments.HasActiveTickets");
+    }
+
     private sealed record DepartmentDto(Guid Id, string Name, string Description, bool IsActive, Guid? ResponsibleUserId);
 
     private sealed record DepartmentSummaryDto(Guid Id, string Name, string Description);
@@ -371,4 +636,23 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
     private sealed record ValidationProblemDto(int Status, string Title, List<ValidationErrorDto> Errors);
 
     private sealed record ValidationErrorDto(string Code, string Description);
+
+    private sealed record DepartmentListItemDto(
+        Guid Id,
+        string Name,
+        string Description,
+        Guid? ResponsibleUserId,
+        string? ResponsibleUserName,
+        int ActiveTicketCount,
+        List<DepartmentSectorListItemDto> Sectors);
+
+    private sealed record DepartmentSectorListItemDto(Guid Id, int ActiveTicketCount);
+
+    private sealed record CommonData(
+        Guid ItId,
+        Guid FinanceId,
+        Guid SupportId,
+        Guid NetworksId,
+        Guid InfrastructureId,
+        List<Guid> SupportTicketIds);
 }
