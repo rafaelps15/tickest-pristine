@@ -5,7 +5,7 @@ status: Verificada            # Rascunho | Em descoberta | Bloqueada | Aprovada 
 responsavel: Rafael Santos
 aprovada-em: 2026-10-31
 branch: refactor/SPEC-045-ticket-sla-aggregates                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: 59                  # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 045 — Chamado e SLA: agregados, ciclo do SLA e transições por intenção
@@ -153,7 +153,7 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 - **Revisão:** `ca-review` independente sobre as mudanças de `src/` e `tests/` (`git diff origin/main...HEAD`, 21 arquivos de produção e 19 de teste): aprovar, sem bloqueantes. Achados de convenção, não bloqueantes e sem correção nesta verificação: o `CloseTicketCommandHandler` repete a conferência de transição que o `Ticket.Close` já faz, com o mesmo erro; três testes de `TicketSlaTimerTests` mantêm o nome `RecordOpening_Should_*`, mas exercitam o `TicketSlaCycleService.Start` (nomes preservados pela DEC-18); o comentário do `UpdateTicketCommandHandler` sobre a ordem do histórico cita a versão anterior. Lacunas de teste, não bloqueantes: os testes do serviço não conferem o histórico nem o evento devolvidos pelo `Resolve` e pelo `Cancel` bem-sucedidos; o ramo `Tickets.ResolutionCycleAlreadyOpen` do `ReopenTicketCommandHandler` não tem teste de handler (o domínio é coberto pelo AC-6); as falhas de `StartProgress` e `Close` não comparam o `WaitingOn`; falta o caso de descrição nova com o cancelamento recusado no `PUT`. Observação: o `Ticket.EnsureCanReopen` (`internal`), usado pelo serviço antes do cálculo do novo ciclo (REQ-7 e DEC-8), não aparece no REQ-5 nem no plano técnico.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md`: na T-8, o cabeçalho e os adendos **[Spec 045]** em RN-01, RN-02, RN-26, RN-27, RN-31, RN-32, RN-34, C-14, C-20, seção 4, fluxos 5.3, 5.4, 5.5 e 5.10 e E-44; na verificação, o cabeçalho (spec verificada) e a tabela 6.1 (execução da verificação). `CLAUDE.md`: na T-8, o desvio do `Update` (DEC-14) e as três partes da DEC-17.
 - **CI:**
-- **Entrega:**
+- **Entrega:** PR #59 (https://github.com/rafaelps15/tickest-pristine/pull/59), aberto em 2026-10-31 da branch `refactor/SPEC-045-ticket-sla-aggregates` para a `main`. Merge pelo responsável.
 
 ## 10. Histórico
 | Data | Status | Observação |
