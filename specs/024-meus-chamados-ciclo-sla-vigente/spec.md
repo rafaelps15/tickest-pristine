@@ -1,9 +1,9 @@
 ---
 id: 024
 titulo: "Meus Chamados" com o prazo e a situação do ciclo de SLA vigente
-status: Em descoberta        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
+status: Aprovada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em implementação | Verificada | Entregue | Descartada (transições: spec-status.md da skill spec-new)
 responsavel: Rafael Santos
-aprovada-em:
+aprovada-em: 2026-10-28
 branch: feat/SPEC-024-own-tickets-current-sla-cycle                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
 pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
@@ -24,12 +24,17 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
   - O estado de um cronômetro é calculado na leitura por `TicketSlaClock.GetState(timer, nowUtc)` (`Application/Tickets/TicketSlaClock.cs:122`), em `SlaObjectiveState` (`Running`, `AtRisk`, `Breached`, `Met`, `Missed`, `Stopped`, `NotApplicable`). É a mesma regra que o `GET tickets/{id}/sla` usa para marcar o ciclo atual (`IsCurrentCycle`).
   - Chamados do plano legado (`TicketSlaPlan` legado) podem não ter cronômetro de resolução.
   - O Monitor (`GET tickets`) filtra e resume por SLA usando as colunas do chamado (`WhereSlaStatus`, spec 006); ele fica fora desta spec (DEC-3).
+- **Atualização de 2026-11-01, antes da implementação:** as specs 041 (PR #57) e 045 (PR #59) mudaram o código citado nos fatos acima.
+  - `TicketSla` e `TicketSlaClock` não existem mais. A listagem calcula `SlaStatus` com a regra estática do chamado `Ticket.GetSlaStatus(status, dueAtUtc, slaWarningAtUtc, resolvedAtUtc, nowUtc)` (`Ticket.cs:403`, usada em `GetOwnTicketsQueryHandler.cs:69`).
+  - O estado de um cronômetro é o método `TicketSlaTimer.GetState(utcNow)` (`TicketSlaTimer.cs:167`), que o `GET tickets/{id}/sla` chama depois de carregar os cronômetros (`GetTicketSlaQueryHandler.cs:120`). `SlaObjectiveState` e `TicketSlaStatus` ficam no Domain.
+  - A reabertura cria o novo ciclo só nos cronômetros, com `Cycle + 1` (`TicketSlaCycleService.cs:143`); o ciclo corrente é o cronômetro de resolução de maior número, aberto ou não (`TicketSlaCycleService.cs:195`). O prazo do chamado só é gravado na abertura (`Ticket.cs:82-83`) e a data de resolução fica com a primeira (`Ticket.cs:251`): o problema desta spec continua existindo.
+  - O índice único `(ticket_id, metric, cycle)` continua cobrindo a subconsulta (`TicketSlaTimerConfiguration.cs:28`).
 
 ## 2. Requisitos
 | ID | Requisito | Fonte |
 |---|---|---|
 | REQ-1 | Cada item de `GET tickets/mine` passa a trazer `currentDueAtUtc` e `currentSlaStatus`: o prazo e a situação do ciclo de resolução vigente (o cronômetro de `Resolution` de maior ciclo do chamado). Os campos atuais `dueAtUtc` e `slaStatus` continuam iguais, com o mesmo significado. | pedido; DEC-1; DEC-2 |
-| REQ-2 | `currentSlaStatus` usa o enum `TicketSlaStatus` (o mesmo de `slaStatus`), traduzido do estado do cronômetro calculado por `TicketSlaClock.GetState`: `Running` → `OnTime`, `AtRisk` → `AtRisk`, `Breached` → `Breached`, `Met` → `Met`, `Missed` → `Missed`, `Stopped` → `NotApplicable`, `NotApplicable` → `NotApplicable`. | DEC-6 |
+| REQ-2 | `currentSlaStatus` usa o enum `TicketSlaStatus` (o mesmo de `slaStatus`), traduzido do estado do cronômetro pela regra do `TicketSlaTimer.GetState` (até a spec 041, `TicketSlaClock.GetState`): `Running` → `OnTime`, `AtRisk` → `AtRisk`, `Breached` → `Breached`, `Met` → `Met`, `Missed` → `Missed`, `Stopped` → `NotApplicable`, `NotApplicable` → `NotApplicable`. | DEC-6; DEC-8 |
 | REQ-3 | Num chamado reaberto, os dois campos refletem o ciclo novo: prazo do novo ciclo e situação calculada sobre ele (`OnTime`, `AtRisk` ou `Breached` enquanto corre). | pedido; DEC-1 |
 | REQ-4 | Sem cronômetro de resolução (plano legado), `currentDueAtUtc` e `currentSlaStatus` repetem `dueAtUtc` e `slaStatus`; nunca vêm nulos. | DEC-7 |
 | REQ-5 | Filtros, busca, ordenação, paginação e autorização de `GET tickets/mine` não mudam; `GET tickets`, `GET tickets/{id}` e `GET tickets/{id}/sla` não mudam. | DEC-3 |
@@ -58,6 +63,8 @@ Dados comuns: Maria (solicitante, com `tickets:view-own`); o relógio controlado
 | DEC-5 | Como calcular o ciclo vigente | (a) subconsulta nos cronômetros, no mesmo `SELECT`, com o estado pela regra do `GET tickets/{id}/sla`; (b) colunas novas no chamado, gravadas a cada novo ciclo | (a): sem coluna nova nem migration; no máximo 100 linhas por página | Rafael Santos, 2026-10-28, no chat |
 | DEC-6 | Enum de `currentSlaStatus` | (a) o mesmo `TicketSlaStatus`, com a tradução do REQ-2; (b) `SlaObjectiveState` | (a): o front reaproveita rótulos e cores | Rafael Santos, 2026-10-28, no chat |
 | DEC-7 | Chamado sem cronômetro (plano legado) | (a) repete `dueAtUtc`/`slaStatus`; (b) vem nulo | (a): a coluna nunca fica vazia | Rafael Santos, 2026-10-28, no chat |
+| DEC-8 | Como a listagem calcula a situação do ciclo vigente, depois que a spec 041 tirou o `TicketSlaClock` e passou a regra para o método `TicketSlaTimer.GetState`, que o EF Core não traduz | (a) regra estática sobre as colunas no `TicketSlaTimer`, chamada na projeção; (b) segunda consulta com os cronômetros vigentes da página e `GetState` em memória; (c) a mesma regra do `TicketSlaTimer.GetState`, já com a tradução do REQ-2, escrita como expressão traduzível na própria consulta | (c): só esta consulta usa a regra, então ela fica escrita na consulta, que continua uma só (DEC-5) e calcula a situação no SQL. O `TicketSlaTimer.GetState` continua sendo a regra dos cronômetros carregados, e os dois expressam a mesma regra: os testes da entidade cobrem o método, e o teste de integração cobre a consulta traduzida. Se outra consulta passar a precisar da regra (o Monitor, DEC-3), ela vira um `Expression` no `TicketSlaTimer`. Sem mudança no Domain. | Rafael Santos, 2026-11-01, delegando a escolha no chat ("veja qual deles se encaixa melhor para esse caso e faça identico ok") |
+| DEC-9 | O que fazer com a branch `feat/SPEC-024-own-tickets-current-sla-cycle`, que só tem o commit da descoberta, de uma `main` antiga | (a) reaproveitar a branch, trazendo a `main` e gravando a spec revisada; (b) recriar a branch a partir da `origin/main`, excluindo a antiga | (a): sem excluir branch nem forçar push; a `main` entra sem conflito | Rafael Santos, 2026-11-01 (idem) |
 
 ## 5. Fora do escopo
 - O ciclo vigente no Monitor (`GET tickets`), nos filtros e no resumo de SLA (DEC-3).
@@ -66,14 +73,14 @@ Dados comuns: Maria (solicitante, com `tickets:view-own`); o relógio controlado
 - A troca da coluna "Prazo" no front (repositório `tickest-pristine-front`).
 
 ## 6. Plano técnico
-- **Pré-requisito:** PR da spec 019 mergeado na `main` (DEC-4).
+- **Pré-requisito:** PR da spec 019 mergeado na `main` (DEC-4). Cumprido, assim como as specs 041 e 045 (PRs #57 e #59), que mudaram o SLA (DEC-8).
 - **Arquivos a criar ou alterar:**
   - Application:
     - `Tickets/GetOwn/OwnTicketResponse.cs`: `CurrentDueAtUtc` (`DateTime`) e `CurrentSlaStatus` (`TicketSlaStatus`).
-    - `Tickets/GetOwn/GetOwnTicketsQueryHandler.cs`: no `.Select`, uma subconsulta em `TicketSlaTimers` pelo chamado e por `Metric = Resolution`, com o maior `Cycle`, trazendo as datas do cronômetro (DEC-5). O estado é calculado depois da consulta, sobre as no máximo 100 linhas da página, com `TicketSlaClock.GetState` e a tradução do REQ-2; sem cronômetro, os dois campos repetem `DueAtUtc`/`SlaStatus` (DEC-7).
-    - Uma tradução única de `SlaObjectiveState` para `TicketSlaStatus` (no próprio slice ou em `TicketSlaClock`, conforme o padrão já usado), para não haver duas regras.
+    - `Tickets/GetOwn/GetOwnTicketsQueryHandler.cs`: no `.Select`, uma subconsulta em `TicketSlaTimers` pelo chamado e por `Metric = Resolution`, com o maior `Cycle` (DEC-5), trazendo o prazo e a situação já como `TicketSlaStatus`: a regra do `TicketSlaTimer.GetState` com a tradução do REQ-2, escrita como expressão traduzível na própria consulta, que o SQL calcula (DEC-8). Sem cronômetro, os dois campos repetem `DueAtUtc`/`SlaStatus` (DEC-7).
+    - A tradução de `SlaObjectiveState` para `TicketSlaStatus` fica nessa mesma expressão, a única que a usa (DEC-8); não há segunda regra fora dela e do `TicketSlaTimer.GetState`.
   - Testes:
-    - unitários: `tests/TickestPristine.Application.UnitTests/Tickets/GetOwnTicketsQueryHandlerTests.cs` (estender) e o teste da tradução de estados;
+    - unitários: `tests/TickestPristine.Application.UnitTests/Tickets/GetOwnTicketsQueryHandlerTests.cs` (estender, incluídos os casos da tradução: cronômetro parado e resolvido depois do prazo); a regra do `TicketSlaTimer.GetState` já tem os testes da entidade;
     - integração: `tests/TickestPristine.IntegrationTests/Tickets/TicketsTests.cs` (casos `GetOwn_*` de reabertura, cancelamento e legado).
 - **Contratos:** `GET tickets/mine` (itens) ganha `currentDueAtUtc` e `currentSlaStatus`. Mudança só aditiva: nenhum campo sai nem muda de significado. Nenhuma rota, erro ou evento novo.
 - **Mudança no banco:** não.
@@ -81,7 +88,7 @@ Dados comuns: Maria (solicitante, com `tickets:view-own`); o relógio controlado
 - **Análise:**
   - **Concorrência:** só leitura; chamado e cronômetro saem do mesmo comando SQL, então o item é consistente mesmo com uma reabertura acontecendo ao mesmo tempo.
   - **Quebra de contrato:** nenhuma; dois campos novos.
-  - **Desempenho:** uma subconsulta por linha em `ticket_sla_timers`, pelo índice único `(ticket_id, metric, cycle)` (`TicketSlaTimerConfiguration.cs:23`), sobre no máximo 100 linhas por página. O estado é calculado em memória sobre a página, sem afetar o `Count`.
+  - **Desempenho:** uma subconsulta por linha em `ticket_sla_timers`, pelo índice único `(ticket_id, metric, cycle)` (`TicketSlaTimerConfiguration.cs:23`), sobre no máximo 100 linhas por página. A situação sai na própria consulta (DEC-8), sem afetar o `Count`.
   - **Segurança:** os campos novos seguem a autorização da rota; o usuário continua vindo do token.
 - **Árvore de arquivos:**
 
@@ -101,7 +108,7 @@ Dados comuns: Maria (solicitante, com `tickets:view-own`); o relógio controlado
   |---|---|---|
   | AC-1 | `GetOwnTicketsQueryHandlerTests` › `Handle_Should_ReturnSameCurrentCycle_WhenNeverReopened` | `GetOwn_Should_ReturnCurrentCycleEqualToTicket_WhenNeverReopened` |
   | AC-2, AC-3 | `Handle_Should_ReturnCurrentResolutionCycle_WhenReopened` | `GetOwn_Should_ReturnNewCycleDueAndStatus_AfterReopen` |
-  | AC-4, AC-5 | teste da tradução de `SlaObjectiveState` para `TicketSlaStatus` | `GetOwn_Should_ReturnNotApplicable_WhenCanceled` |
+  | AC-4, AC-5 | `Handle_Should_ReturnNotApplicable_WhenResolutionTimerIsStopped` e `Handle_Should_ReturnMissed_WhenResolvedAfterDue` | `GetOwn_Should_ReturnNotApplicable_WhenCanceled` |
   | AC-6 | `Handle_Should_FallBackToTicketSla_WhenNoResolutionTimer` | — |
   | AC-7 | suíte existente | suíte existente |
   | AC-8 | build e suíte inteira | build e suíte inteira |
@@ -143,3 +150,7 @@ Dados comuns: Maria (solicitante, com `tickets:view-own`); o relógio controlado
 | 2026-10-28 | Rascunho | Criada a partir do pedido de Rafael Santos no chat do front-end (P1 do critique de "Meus Chamados"). As specs 017 a 022 já existiam, então esta ficou com a 023. |
 | 2026-10-28 | Em descoberta | Renumerada para 024: outra sessão tinha criado a `023-editar-departamento-sem-mexer-no-responsavel` dez minutos antes (21:59 contra 22:09). Nenhuma regra muda. |
 | 2026-10-28 | Em descoberta | Duas rodadas de perguntas respondidas no chat (DEC-1 a DEC-7). Aguardando aprovação. |
+| 2026-10-28 | Em descoberta | Conferido: o pré-requisito da DEC-4 está cumprido (spec 019 mergeada na `main` pelo PR #41) e o `TicketSlaClock.GetState` existe na `main` (`TicketSlaClock.cs:124`). Checklist de completude atendido, sem `[SUPOSIÇÃO]`; aguardando aprovação explícita. |
+| 2026-10-28 | Aprovada | Aprovada por Rafael Santos no chat ("Aprovo a 023 e a 024."). |
+| 2026-11-01 | Aprovada | Revisão antes da implementação, a pedido de Rafael Santos ("vamos para a 24 tem como ?"): o texto aprovado citava `TicketSla.GetStatus` e `TicketSlaClock.GetState`, que a spec 041 removeu, e a spec 045 mudou a reabertura. Descoberta refeita no código da `main` com as specs 041 e 045 (atualização no Contexto): as regras de negócio continuam valendo. DEC-8 (a situação do ciclo vigente pela regra do `TicketSlaTimer.GetState`, escrita como expressão traduzível na própria consulta) e DEC-9 (branch reaproveitada) decididas por Rafael Santos, que delegou a escolha ("veja qual deles se encaixa melhor para esse caso e faça identico ok"); REQ-2 e plano técnico ajustados para citar o código atual, com o mesmo comportamento. Sem REQ novo nem removido e sem arquivo fora do plano: o status não muda. |
+| 2026-11-01 | Aprovada | Revisão aprovada por Rafael Santos no chat ("aprovo a revisão da 024"). |
