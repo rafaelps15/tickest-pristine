@@ -5,7 +5,7 @@ status: Verificada       # Rascunho | Em descoberta | Bloqueada | Aprovada | Em 
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-022-active-ticket-count-departments                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: 60                  # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 022 — Listagem de departamentos informa quantos chamados ativos cada departamento e setor tem
@@ -116,7 +116,7 @@ Dados comuns: departamento TI com os setores Suporte (2 chamados Abertos e 1 Em 
 - **Revisão:** a primeira revisão independente (`ca-review`) apontou 1 bloqueante (o total do departamento só com setores ativos contra a recusa, que olha todos os setores, pela reabertura em setor desativado), resolvido pela DEC-8 na T-5. A nova revisão independente não tem bloqueantes; dos achados não bloqueantes, as evidências foram atualizadas nesta verificação, a linha do AC-3 e o plano do front foram corrigidos pela DEC-8, e o detalhe de estilo do teste da reabertura (`PostAsJsonAsync` com corpo vazio, em vez do `PostAsync` sem corpo dos testes vizinhos) foi mantido.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md`: na T-3 e na T-5 (DEC-8), a RN-10, a C-07 e a rota `GET departments`; na verificação, a tabela 6.1. O cabeçalho "Estado documentado" não foi mudado (fora do plano; a branch parte de `ef1c981`, sem a spec 045).
 - **CI:**
-- **Entrega:**
+- **Entrega:** PR #60 (https://github.com/rafaelps15/tickest-pristine/pull/60), aberto em 2026-11-01 para a `main`.
 
 ## 10. Histórico
 | Data | Status | Observação |
