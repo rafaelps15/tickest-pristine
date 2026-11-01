@@ -78,7 +78,7 @@ O `Application/DependencyInjection.cs` envolve todos os handlers de command/quer
 
 ### Eventos de domínio
 
-As entidades herdam de `Entity` e guardam as próprias regras (domínio rico): os métodos da entidade mudam o estado e chamam `Raise(new SomeDomainEvent(...))`; o handler carrega a entidade, chama o método e salva. Os eventos são `sealed record` com ids (mais o valor anterior numa alteração), sem `OccurredOnUtc`. O código listado em [Em migração](#em-migração) ainda dispara os eventos pelos handlers. O `DomainEventsDispatcher` (Infrastructure) despacha os eventos disparados depois do `SaveChangesAsync`; os handlers de evento implementam `IDomainEventHandler<T>` e são registrados automaticamente pela varredura de assembly.
+As entidades herdam de `Entity` e guardam as próprias regras (domínio rico): os métodos da entidade mudam o estado e chamam `Raise(new SomeDomainEvent(...))`; o handler carrega a entidade, chama o método e salva. Os eventos são `sealed record` com ids (mais o valor anterior numa alteração), sem `OccurredOnUtc`. O código listado em [Em migração](#em-migração) ainda dispara os eventos pelos handlers. Depois de um `SaveChangesAsync` bem-sucedido, o `PublishDomainEventsInterceptor` (Infrastructure) recolhe os eventos das entidades e os entrega ao `IDomainEventsDispatcher`, fora da transação; se o save falha, os eventos continuam nas entidades. Os handlers de evento implementam `IDomainEventHandler<T>` e são registrados automaticamente pela varredura de assembly.
 
 ## Convenções a manter ao ampliar
 
@@ -132,7 +132,7 @@ Antes de criar algo, siga o slice real mais parecido (caminhos a partir de `src/
   3. filtro por `IUserContext.UserId` só nas consultas de dados do próprio usuário (`Tickets/GetOwn`, `Tickets/GetOwnSummary`).
   Permissão nova entra em `PermissionCodes` e em `PermissionCatalog`.
 - **Cache:** nenhuma query da Application usa cache; o único uso de `HybridCache` é o `PermissionProvider` (Infrastructure), invalidado com `IPermissionProvider.InvalidateAsync` depois do commit. O padrão de cache dos exemplos de Todo não se aplica aqui sem uma decisão explícita.
-- **Histórico de chamados:** todo command que altera um chamado, uma mensagem ou um anexo grava um `TicketHistory` no mesmo `SaveChangesAsync`; no modelo rico, o método do agregado cria a entrada e o handler a adiciona (os métodos do `Ticket` já criam as entradas do chamado; as de mensagens e anexos ainda são montadas por `TicketHistoryEntries.Create`, em migração).
+- **Histórico de chamados:** todo command que altera um chamado, uma mensagem ou um anexo grava um `TicketHistory` no mesmo `SaveChangesAsync`; no modelo rico, o método do agregado cria a entrada e o handler a adiciona (o `Ticket` cria as do chamado, inclusive a da mensagem publicada pelo `PostMessage`; o `TicketMessage`, as da edição e da exclusão; o `TicketAttachment`, as do envio e da exclusão).
 - **Exclusão lógica** (`DeletedAtUtc` + filtro global) em `Ticket`, `TicketMessage` e `TicketAttachment`.
 - **Textos em pt-BR:** mensagens de `{Entity}Errors`, `.WithMessage(...)` dos validators e textos escritos à mão nos `ProblemDetails` (`GlobalExceptionHandler`, `CustomResults`). Os nomes exibidos das propriedades validadas ficam em `Abstractions/Behaviors/ValidationDisplayNames.cs`.
 - **Testes de integração:** o cadastro de usuários exige `users:create`, então os testes cadastram pelo administrador (`BaseIntegrationTest.RegisterUserAsync` / `PostRegisterAsAdminAsync`).
@@ -142,7 +142,7 @@ Antes de criar algo, siga o slice real mais parecido (caminhos a partir de `src/
 - **Peças do domínio rico no `SharedKernel`:** `ValueObject`, `ResultExtensions`, `Result.Create` e `Result.FirstFailureOrSuccess` ainda não existem; entram, como na skill `domain-modeling`, na primeira tarefa de spec que os usar.
 - **Registro criado pelo agregado:** o exemplo real do padrão 7 da `domain-modeling` é o `TicketHistory` (linha "Histórico de chamados" acima).
 - **Tipos de erro:** além dos tipos listados nas skills, o `ErrorType.Forbidden` vira 403 no `CustomResults.Problem`; `UserErrors.Unauthorized()` e as falhas de autorização por recurso usam esse tipo.
-- **`Update` de departamento, setor e chamado:** `Department.Update`, `Sector.Update` e `Ticket.Update` disparam o evento de alteração sempre, mesmo quando nada mudou (comportamento mantido da versão anterior); o padrão das skills para "pode não mudar nada" (`bool`, evento só quando muda) vale para código novo.
+- **`Update` de departamento e setor:** `Department.Update` e `Sector.Update` disparam o evento de alteração sempre, mesmo quando nada mudou (comportamento mantido da versão anterior); o padrão das skills para "pode não mudar nada" (`bool`, evento só quando muda) vale para código novo. O `Ticket` não tem `Update` genérico: o `ChangeDescription` só dispara `TicketDescriptionChangedDomainEvent`, com a descrição anterior, quando a descrição muda, e devolve `null`, sem histórico nem evento, quando não muda; as mudanças de status são métodos por intenção, com o `TicketStatusChangedDomainEvent` (ou o `TicketReopenedDomainEvent`, na reabertura).
 - **Revisão do legado:** o código listado em [Em migração](#em-migração) não é achado da `ca-review` até a spec que o migrar; código novo, fora da lista, segue as regras da skill.
 
 ### Regras permanentes
@@ -156,13 +156,13 @@ Antes de criar algo, siga o slice real mais parecido (caminhos a partir de `src/
 
 ### Em migração
 
-Código que ainda segue o modelo anêmico. Ele continua valendo e funcionando até a spec que o migrar (a de `Department` e `Sector` foi na spec 038; a do `Ticket` começou na spec 039, com a entidade e as transições de status, e as próximas partes são o SLA e depois mensagens, anexos e histórico). Regra para cada mudança: o código que altera ou estende uma entidade, um handler ou uma classe desta lista segue o padrão dela até a migração (é o caso das specs de chamados que vêm antes, como a 029, a 031 e as seguintes, e o que elas criarem entra nesta lista); entidades e agregados novos, fora desta lista, já nascem no domínio rico.
+Código que ainda segue o modelo anêmico. Ele continua valendo e funcionando até a spec que o migrar (a de `Department` e `Sector` foi na spec 038; a do agregado de chamados, `Ticket`, `TicketSlaTimer`, `TicketMessage`, `TicketAttachment` e `TicketHistory`, nas specs 039, 041 e 045). Regra para cada mudança: o código que altera ou estende uma entidade, um handler ou uma classe desta lista segue o padrão dela até a migração; entidades e agregados novos, fora desta lista, já nascem no domínio rico.
 
-- **Entidades com `{ get; set; }`:** todas as do Domain, exceto `Department`, `Sector` e `Ticket` (`TicketMessage`, `TicketAttachment`, `TicketHistory`, `TicketSlaTimer`, `User`, `UserCredential`, `UserInvitation`, `UserRole`, `RefreshToken`, `Role`, `Permission`, `RolePermission`, `SlaCalendar`, `SlaCalendarHoliday`, `AuditLogEntry`).
-- **Regras em classes estáticas da Application:** `Tickets/TicketSla.cs`, `Tickets/TicketSlaClock.cs`, `TicketHistories/TicketHistoryEntries.cs` (só o `Create`, usado por mensagens e anexos), `Users/UserCodes.cs` e os calendários de SLA em `SlaCalendars/`.
+- **Entidades com `{ get; set; }`:** todas as do Domain, exceto as do agregado de chamados, `Department` e `Sector` (`User`, `UserCredential`, `UserInvitation`, `UserRole`, `RefreshToken`, `Role`, `Permission`, `RolePermission`, `SlaCalendar`, `SlaCalendarHoliday`, `AuditLogEntry`).
+- **Regras em classes estáticas da Application:** `Users/UserCodes.cs`.
 - **Guards estáticos de autorização:** `Authorization/TicketAccessGuard.cs`, `Authorization/PrivilegeEscalationGuard.cs` e `Authorization/AdministratorGuard.cs`.
 - **Eventos disparados pelos handlers** (`entity.Raise(...)` na Application) e propriedades atribuídas pelos handlers.
-- **Seeders** em `src/TickestPristine.Infrastructure/Database/Seeding/` (`DatabaseSeeder`, `AdminUserSeeder`, `DefaultOrganizationSeeder`, `SampleDataSeeder`), que montam as entidades pelos setters, exceto `Department` e `Sector`, já criados pelo `Create`, e o `Ticket` do `SampleDataSeeder`, montado pelos métodos dele; a estratégia de seed para o modelo rico é de uma spec própria.
+- **Seeders** em `src/TickestPristine.Infrastructure/Database/Seeding/` (`DatabaseSeeder`, `AdminUserSeeder`, `DefaultOrganizationSeeder`, `SampleDataSeeder`), que montam as entidades pelos setters, exceto `Department` e `Sector`, já criados pelo `Create`, e o `Ticket` do `SampleDataSeeder`, com o histórico e os cronômetros, montados pelos métodos do `Ticket` e pelo `TicketSlaCycleService`; a estratégia de seed para o modelo rico é de uma spec própria.
 
 ### Documentos de estado
 
