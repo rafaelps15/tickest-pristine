@@ -1,6 +1,6 @@
 # SYSTEM_SPECIFICATION — TickestPristine
 
-> **Estado documentado:** branch `refactor/SPEC-045-ticket-sla-aggregates`, commit `711a015` (31/10/2026), com a spec 045 implementada até a T-7, antes da verificação e do PR para a `main`. O código de `src/` e `tests/` é o desse commit; as mudanças de cada spec estão marcadas com **[Spec NNN]** nas seções afetadas. Produzido por leitura do código, da configuração, dos testes e da documentação, mais a execução de `dotnet build` e `dotnet test` (seção 6.1). O histórico das mudanças está no Git.
+> **Estado documentado:** branch `refactor/SPEC-045-ticket-sla-aggregates`, commit `711a015` (31/10/2026), com a spec 045 implementada e verificada em 31/10/2026, antes do PR para a `main`. O código de `src/` e `tests/` é o desse commit; as mudanças de cada spec estão marcadas com **[Spec NNN]** nas seções afetadas. Produzido por leitura do código, da configuração, dos testes e da documentação, mais a execução de `dotnet build` e `dotnet test` (seção 6.1). O histórico das mudanças está no Git.
 >
 > **Convenções de leitura:**
 > - **[Fato]** está no código ou na configuração e tem referência verificável.
@@ -761,6 +761,7 @@ Descrito no diagrama 3.6.
 | `dotnet --version` | `10.0.401` |
 | `docker info` | Servidor Docker 29.6.1 disponível |
 | `dotnet build TickestPristine.slnx` | **Sucesso, 0 avisos, 0 erros** (com `TreatWarningsAsErrors`) |
+| Verificação da spec 045 (31/10/2026 22:11, `spec-verify`): `dotnet build TickestPristine.slnx --no-incremental` e `dotnet test TickestPristine.slnx --no-build --logger trx` | Build com **0 avisos e 0 erros**. **1.466 aprovados, 0 falhas, 0 ignorados**: ArchitectureTests 60/60; Application.UnitTests 892/892; IntegrationTests 514/514 (6 min 59 s). `python -I scripts/test_instructions.py`: 14 aprovados. Auditoria SDD 100% |
 | Verificação da spec 012 (29/10/2026, `spec-verify`): `dotnet build TickestPristine.slnx` e `dotnet test TickestPristine.slnx --no-build --logger trx` | Build com 0 avisos e 0 erros. **1.288 aprovados, 0 falhas**: ArchitectureTests 56, Application.UnitTests 761, IntegrationTests 471. `python -m unittest discover -s scripts -p "test_*.py"`: 14 aprovados (12 aprovados e 2 pulados sem a biblioteca canônica). Auditoria SDD 100% |
 | `dotnet test TickestPristine.slnx --no-build` (análise inicial) | **Todos aprovados, 0 falhas, 0 ignorados**: ArchitectureTests 10/10 (0,8 s); Application.UnitTests 424/424 (1 s); IntegrationTests 240/240 (1 min 52 s, PostgreSQL 17 via Testcontainers) |
 | `dotnet build` + `dotnet test` (depois da revisão de 22/10) | Build com 0 avisos e 0 erros. **Todos aprovados, 0 falhas**: ArchitectureTests 10/10; Application.UnitTests 441/441; IntegrationTests 248/248 (2 min 44 s) |
