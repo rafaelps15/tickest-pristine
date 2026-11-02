@@ -2,6 +2,7 @@ using System.Data.Common;
 using Dapper;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.SharedKernel;
 
@@ -44,7 +45,11 @@ internal sealed class GetTicketOverviewQueryHandler(IDbConnectionFactory dbConne
              COUNT(*) FILTER (WHERE {Active} AND t.priority = '{Urgent}')::int AS {nameof(OverviewCounts.CriticalCount)},
              COUNT(*) FILTER (WHERE {Active} AND t.assigned_to_user_id IS NULL)::int AS {nameof(OverviewCounts.UnassignedCount)},
              COUNT(*) FILTER (WHERE t.waiting_on = '{nameof(TicketWaitingOn.Requester)}')::int AS {nameof(OverviewCounts.WaitingOnRequesterCount)},
-             COUNT(*) FILTER (WHERE t.waiting_on = '{nameof(TicketWaitingOn.Agent)}')::int AS {nameof(OverviewCounts.WaitingOnAgentCount)}
+             COUNT(*) FILTER (WHERE t.waiting_on = '{nameof(TicketWaitingOn.Agent)}')::int AS {nameof(OverviewCounts.WaitingOnAgentCount)},
+             COUNT(*) FILTER (WHERE {Active} AND t.created_at_utc >= @OneDayAgoStartUtc::timestamptz)::int AS {nameof(OverviewCounts.UpToOneDayCount)},
+             COUNT(*) FILTER (WHERE {Active} AND t.created_at_utc >= @ThreeDaysAgoStartUtc::timestamptz AND t.created_at_utc < @OneDayAgoStartUtc::timestamptz)::int AS {nameof(OverviewCounts.TwoToThreeDaysCount)},
+             COUNT(*) FILTER (WHERE {Active} AND t.created_at_utc >= @SevenDaysAgoStartUtc::timestamptz AND t.created_at_utc < @ThreeDaysAgoStartUtc::timestamptz)::int AS {nameof(OverviewCounts.FourToSevenDaysCount)},
+             COUNT(*) FILTER (WHERE {Active} AND t.created_at_utc < @SevenDaysAgoStartUtc::timestamptz)::int AS {nameof(OverviewCounts.OverSevenDaysCount)}
          FROM public.tickets t
          WHERE {TicketScopeFilter.SqlCondition}
          """;
@@ -59,6 +64,14 @@ internal sealed class GetTicketOverviewQueryHandler(IDbConnectionFactory dbConne
         DateTime nowUtc = dateTimeProvider.UtcNow;
         DynamicParameters parameters = query.Scope.ToSqlParameters();
         parameters.Add("NowUtc", nowUtc);
+
+        // A idade de um chamado ativo é a diferença em dias de calendário de São Paulo entre hoje e a data de abertura
+        // (aberto hoje = 0), não em blocos de 24 horas: cada faixa começa no início de um dia local, convertido para UTC
+        // pelo LocalDatePeriod, como os períodos de abertura do recorte.
+        DateOnly today = LocalDatePeriod.ToLocalDate(nowUtc);
+        parameters.Add("OneDayAgoStartUtc", StartOfLocalDayUtc(today.AddDays(-1)));
+        parameters.Add("ThreeDaysAgoStartUtc", StartOfLocalDayUtc(today.AddDays(-3)));
+        parameters.Add("SevenDaysAgoStartUtc", StartOfLocalDayUtc(today.AddDays(-7)));
 
         await using DbConnection connection = await dbConnectionFactory.OpenConnectionAsync(cancellationToken);
 
@@ -94,9 +107,18 @@ internal sealed class GetTicketOverviewQueryHandler(IDbConnectionFactory dbConne
                 UnassignedCount = counts.UnassignedCount,
                 WaitingOnRequesterCount = counts.WaitingOnRequesterCount,
                 WaitingOnAgentCount = counts.WaitingOnAgentCount
+            },
+            Aging = new TicketOverviewAgingResponse
+            {
+                UpToOneDayCount = counts.UpToOneDayCount,
+                TwoToThreeDaysCount = counts.TwoToThreeDaysCount,
+                FourToSevenDaysCount = counts.FourToSevenDaysCount,
+                OverSevenDaysCount = counts.OverSevenDaysCount
             }
         };
     }
+
+    private static DateTime? StartOfLocalDayUtc(DateOnly day) => LocalDatePeriod.FromLocalDates(day, null).FromUtc;
 
     /// <summary>
     /// Linha única devolvida pelo SQL, lida pelo Dapper pelos nomes das colunas.
@@ -119,5 +141,9 @@ internal sealed class GetTicketOverviewQueryHandler(IDbConnectionFactory dbConne
         public int UnassignedCount { get; init; }
         public int WaitingOnRequesterCount { get; init; }
         public int WaitingOnAgentCount { get; init; }
+        public int UpToOneDayCount { get; init; }
+        public int TwoToThreeDaysCount { get; init; }
+        public int FourToSevenDaysCount { get; init; }
+        public int OverSevenDaysCount { get; init; }
     }
 }

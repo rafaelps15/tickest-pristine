@@ -10,6 +10,7 @@ public sealed class TicketOverviewResponse
     public TicketOverviewVolumeResponse Volume { get; set; } = new();
     public TicketOverviewSlaResponse Sla { get; set; } = new();
     public TicketOverviewAttentionResponse Attention { get; set; } = new();
+    public TicketOverviewAgingResponse Aging { get; set; } = new();
 }
 
 /// <summary>
@@ -50,4 +51,12 @@ public sealed class TicketOverviewAttentionResponse
     public int UnassignedCount { get; set; }
     public int WaitingOnRequesterCount { get; set; }
     public int WaitingOnAgentCount { get; set; }
+}
+
+public sealed class TicketOverviewAgingResponse
+{
+    public int UpToOneDayCount { get; set; }
+    public int TwoToThreeDaysCount { get; set; }
+    public int FourToSevenDaysCount { get; set; }
+    public int OverSevenDaysCount { get; set; }
 }

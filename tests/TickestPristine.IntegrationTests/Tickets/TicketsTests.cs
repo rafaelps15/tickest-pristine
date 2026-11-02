@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
@@ -3170,6 +3171,126 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 
+    [Fact]
+    public async Task GetOverview_Should_CountActiveTicketsByAgeBucket_WhenTheyWereOpenedOnSeveralDays()
+    {
+        // Arrange
+        AgingScenario scenario = await SeedAgingScenarioAsync();
+        using IDisposable frozenClock = Clock.Freeze(scenario.NowUtc);
+
+        // Act
+        OverviewDto overview = (await HttpClient.GetFromJsonAsync<OverviewDto>($"tickets/stats/overview?sectorId={scenario.SectorId}"))!;
+
+        // Assert: hoje e ontem; 2 e 3 dias; 4 e 7 dias; 8 e 30 dias e o reaberto aberto há 10 dias
+        overview.Aging.ShouldBe(new OverviewAgingDto(2, 2, 2, 3));
+    }
+
+    [Theory]
+    [InlineData("2026-10-28 00:05", "2026-10-28 23:55", "0-1")]
+    [InlineData("2026-10-27 23:30", "2026-10-28 00:30", "0-1")]
+    [InlineData("2026-10-27 00:05", "2026-10-28 23:55", "0-1")]
+    [InlineData("2026-10-26 23:59", "2026-10-28 00:01", "2-3")]
+    [InlineData("2026-10-25 10:00", "2026-10-28 09:00", "2-3")]
+    [InlineData("2026-10-24 10:00", "2026-10-28 10:00", "4-7")]
+    [InlineData("2026-10-21 08:00", "2026-10-28 18:00", "4-7")]
+    [InlineData("2026-10-20 23:00", "2026-10-28 08:00", "8+")]
+    public async Task GetOverview_Should_AgeByLocalCalendarDays_AroundSaoPauloMidnight(
+        string openedAtLocal,
+        string queriedAtLocal,
+        string expectedBucket)
+    {
+        // Arrange: um chamado aberto, num setor novo, na data e hora de São Paulo informadas
+        Guid sectorId = await InsertSectorAsync($"Aging-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        Guid requesterId = await InsertUserAsync("Maria", "Souza", UniqueEmail());
+        DateTime openedAtUtc = SaoPauloToUtc(openedAtLocal);
+        await InsertOverviewTicketAsync(
+            requesterId, sectorId, TicketStatus.Open, TicketPriority.Medium, openedAtUtc, openedAtUtc.AddHours(18), openedAtUtc.AddHours(24));
+        await AuthenticateAsAdminAsync();
+        using IDisposable frozenClock = Clock.Freeze(SaoPauloToUtc(queriedAtLocal));
+
+        // Act
+        OverviewDto overview = (await HttpClient.GetFromJsonAsync<OverviewDto>($"tickets/stats/overview?sectorId={sectorId}"))!;
+
+        // Assert: a faixa da diferença entre as datas locais, e não a das horas corridas
+        overview.Aging.ShouldBe(expectedBucket switch
+        {
+            "0-1" => new OverviewAgingDto(1, 0, 0, 0),
+            "2-3" => new OverviewAgingDto(0, 1, 0, 0),
+            "4-7" => new OverviewAgingDto(0, 0, 1, 0),
+            _ => new OverviewAgingDto(0, 0, 0, 1)
+        });
+    }
+
+    [Fact]
+    public async Task GetOverview_Should_KeepAgeOfOriginalOpening_WhenTicketIsReopened()
+    {
+        // Arrange: com o relógio parado em 28/10 12h de São Paulo, um chamado aberto há 10 dias, num setor novo, lido pelo
+        // agregado e então resolvido e reaberto pela API, com o token do administrador obtido antes de parar o relógio
+        Guid sectorId = await InsertSectorAsync($"Aging-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        Guid requesterId = await InsertUserAsync("Maria", "Souza", UniqueEmail());
+        Guid ticketId = await InsertOwnTicketAsync(requesterId, sectorId, TicketStatus.Open, "Printer is broken", SaoPauloToUtc("2026-10-18 10:00"));
+        await AuthenticateAsAdminAsync();
+        using IDisposable frozenClock = Clock.Freeze(SaoPauloToUtc("2026-10-28 12:00"));
+        string overviewUrl = $"tickets/stats/overview?sectorId={sectorId}";
+
+        OverviewDto beforeReopen = (await HttpClient.GetFromJsonAsync<OverviewDto>(overviewUrl))!;
+        (await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new { description = "Looking into the printer", status = 2 }))
+            .StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await HttpClient.PutAsJsonAsync($"tickets/{ticketId}", new { description = "Fixed the printer", status = 3 }))
+            .StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await HttpClient.PostAsync($"tickets/{ticketId}/reopen", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        OverviewDto afterReopen = (await HttpClient.GetFromJsonAsync<OverviewDto>(overviewUrl))!;
+
+        // Assert: nas duas leituras, a faixa de mais de 7 dias, pela data da abertura original
+        beforeReopen.Aging.ShouldBe(new OverviewAgingDto(0, 0, 0, 1));
+        afterReopen.Volume.OpenCount.ShouldBe(1);
+        afterReopen.Aging.ShouldBe(new OverviewAgingDto(0, 0, 0, 1));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task GetOverview_Should_SumAgingBucketsToBacklog_ForEveryScope(bool bySector, bool byUrgentPriority)
+    {
+        // Arrange: sem recorte (com os chamados dos outros testes), com o setor do cenário e com o setor e a prioridade
+        // Urgente
+        AgingScenario scenario = await SeedAgingScenarioAsync();
+        string scope = string.Join('&', new[]
+        {
+            bySector ? $"sectorId={scenario.SectorId}" : null,
+            byUrgentPriority ? "priority=Urgent" : null
+        }.Where(part => part is not null));
+        using IDisposable frozenClock = Clock.Freeze(scenario.NowUtc);
+
+        // Act
+        OverviewDto overview = (await HttpClient.GetFromJsonAsync<OverviewDto>($"tickets/stats/overview?{scope}"))!;
+
+        // Assert
+        OverviewAgingDto aging = overview.Aging;
+        overview.Volume.BacklogCount.ShouldBeGreaterThan(0);
+        (aging.UpToOneDayCount + aging.TwoToThreeDaysCount + aging.FourToSevenDaysCount + aging.OverSevenDaysCount)
+            .ShouldBe(overview.Volume.BacklogCount);
+    }
+
+    [Fact]
+    public async Task GetOverview_Should_ReadTicketsInASingleCommand_WhenAgingIsIncluded()
+    {
+        // Arrange
+        AgingScenario scenario = await SeedAgingScenarioAsync();
+        using IDisposable frozenClock = Clock.Freeze(scenario.NowUtc);
+        using var ticketCommands = new NpgsqlCommandCounter(sql => sql.Contains("public.tickets", StringComparison.Ordinal));
+
+        // Act
+        OverviewDto overview = (await HttpClient.GetFromJsonAsync<OverviewDto>($"tickets/stats/overview?sectorId={scenario.SectorId}"))!;
+
+        // Assert: um só comando lê os chamados, e é ele que traz também a idade da fila
+        ticketCommands.Count.ShouldBe(1);
+        overview.Aging.ShouldBe(new OverviewAgingDto(2, 2, 2, 3));
+    }
+
     // Chamados do cenário, em setores novos, abertos em 10/09 (o prazo e o alerta são relativos a agora, para cada um
     // cair numa situação de SLA): no Helpdesk, (1) Aberto Urgente sem responsável no prazo, (2) Em andamento com
     // responsável em risco, (3) Aberto sem responsável atrasado, (4) Resolvido Urgente com responsável dentro do prazo,
@@ -3235,6 +3356,80 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         await context.SaveChangesAsync();
     }
 
+    // Cenário da idade da fila, num setor novo, para consultar com o relógio parado em 28/10/2026 12h de São Paulo:
+    // ativos abertos às 10h de hoje, de ontem e de 2, 3, 4, 7, 8 e 30 dias atrás (alternando Aberto Urgente e Em
+    // andamento de prioridade média), um reaberto aberto há 10 dias e um Resolvido, um Fechado e um Cancelado abertos há
+    // 40 dias. Termina autenticado como administrador (tickets:manage), antes de qualquer teste parar o relógio.
+    private async Task<AgingScenario> SeedAgingScenarioAsync()
+    {
+        Guid sectorId = await InsertSectorAsync($"Aging-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
+        Guid requesterId = await InsertUserAsync("Maria", "Souza", UniqueEmail());
+        DateTime todayAtTenUtc = SaoPauloToUtc("2026-10-28 10:00");
+        int[] activeAgesInDays = [0, 1, 2, 3, 4, 7, 8, 30];
+
+        for (int index = 0; index < activeAgesInDays.Length; index++)
+        {
+            bool urgent = index % 2 == 0;
+            DateTime openedAtUtc = todayAtTenUtc.AddDays(-activeAgesInDays[index]);
+            await InsertOverviewTicketAsync(
+                requesterId,
+                sectorId,
+                urgent ? TicketStatus.Open : TicketStatus.InProgress,
+                urgent ? TicketPriority.Urgent : TicketPriority.Medium,
+                openedAtUtc,
+                openedAtUtc.AddHours(18),
+                openedAtUtc.AddHours(24));
+        }
+
+        await InsertReopenedTicketAsync(requesterId, sectorId, todayAtTenUtc.AddDays(-10), todayAtTenUtc.AddDays(-5));
+
+        DateTime longAgoUtc = todayAtTenUtc.AddDays(-40);
+        await InsertOverviewTicketAsync(
+            requesterId, sectorId, TicketStatus.Resolved, TicketPriority.Urgent, longAgoUtc, longAgoUtc.AddHours(18), longAgoUtc.AddHours(24), resolvedAtUtc: longAgoUtc.AddHours(2));
+        await InsertOverviewTicketAsync(
+            requesterId, sectorId, TicketStatus.Closed, TicketPriority.Medium, longAgoUtc, longAgoUtc.AddHours(18), longAgoUtc.AddHours(24), resolvedAtUtc: longAgoUtc.AddHours(2));
+        await InsertOverviewTicketAsync(
+            requesterId, sectorId, TicketStatus.Canceled, TicketPriority.Medium, longAgoUtc, longAgoUtc.AddHours(18), longAgoUtc.AddHours(24));
+
+        await AuthenticateAsAdminAsync();
+
+        return new AgingScenario(sectorId, SaoPauloToUtc("2026-10-28 12:00"));
+    }
+
+    // Chamado resolvido no dia seguinte à abertura e reaberto pelo TicketSlaCycleService, como faz a reabertura pela API:
+    // volta para Aberto com um ciclo novo de resolução e mantém a data de abertura original.
+    private async Task InsertReopenedTicketAsync(Guid requesterId, Guid sectorId, DateTime openedAtUtc, DateTime reopenedAtUtc)
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        Sector sector = await context.Sectors.SingleAsync(s => s.Id == sectorId);
+
+        Ticket ticket = TicketTestData.Create(
+            sector,
+            requesterId: requesterId,
+            status: TicketStatus.Resolved,
+            createdAtUtc: openedAtUtc,
+            slaPlan: TicketSlaPlan.Legacy(TicketPriority.Medium),
+            dueAtUtc: openedAtUtc.AddHours(24),
+            slaWarningAtUtc: openedAtUtc.AddHours(18),
+            resolvedAtUtc: openedAtUtc.AddDays(1));
+        TicketReopening reopening = new TicketSlaCycleService()
+            .Reopen(ticket, [], ContinuousSlaCalendar.Create(), lastMessageIsFromAgent: false, requesterId, reopenedAtUtc)
+            .Value;
+        ticket.ClearDomainEvents();
+        reopening.ResolutionCycle.ClearDomainEvents();
+
+        context.Tickets.Add(ticket);
+        context.TicketSlaTimers.Add(reopening.ResolutionCycle);
+        await context.SaveChangesAsync();
+    }
+
+    // Instante UTC de uma data e hora de São Paulo no formato "aaaa-MM-dd HH:mm".
+    private static DateTime SaoPauloToUtc(string localDateTime) => TimeZoneInfo.ConvertTimeToUtc(
+        DateTime.ParseExact(localDateTime, "yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
+        TimeZoneInfo.FindSystemTimeZoneById(DefaultSlaCalendar.TimeZoneId));
+
     private async Task<int> CountTicketsAsync(string scope, string filter)
     {
         string query = string.Join('&', new[] { scope, filter, "pageSize=1" }.Where(part => part.Length > 0));
@@ -3245,11 +3440,16 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
     private sealed record OverviewScenario(Guid Helpdesk, Guid Infra);
 
+    private sealed record AgingScenario(Guid SectorId, DateTime NowUtc);
+
     private sealed record OverviewDto(
         DateTime ServerNowUtc,
         OverviewVolumeDto Volume,
         OverviewSlaDto Sla,
-        OverviewAttentionDto Attention);
+        OverviewAttentionDto Attention,
+        OverviewAgingDto Aging);
+
+    private sealed record OverviewAgingDto(int UpToOneDayCount, int TwoToThreeDaysCount, int FourToSevenDaysCount, int OverSevenDaysCount);
 
     private sealed record OverviewVolumeDto(
         int TotalCount,
