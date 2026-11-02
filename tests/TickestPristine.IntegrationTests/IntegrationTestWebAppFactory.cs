@@ -79,6 +79,10 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
 
             services.AddSingleton<CapturingEmailSender>();
             services.AddScoped<IEmailSender>(sp => sp.GetRequiredService<CapturingEmailSender>());
+
+            // O relógio continua o real; um teste pode pará-lo num instante pelo TestDateTimeProvider.
+            services.AddSingleton<TestDateTimeProvider>();
+            services.AddSingleton<IDateTimeProvider>(sp => sp.GetRequiredService<TestDateTimeProvider>());
             services.AddScoped<IDomainEventHandler<TicketSlaBreachedDomainEvent>, RecordingSlaBreachedDomainEventHandler>();
         });
     }

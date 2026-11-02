@@ -46,6 +46,12 @@ public abstract class BaseIntegrationTest
     protected CapturingEmailSender EmailSender => Services.GetRequiredService<CapturingEmailSender>();
 
     /// <summary>
+    /// Relógio da API nos testes (o real é trocado no <see cref="IntegrationTestWebAppFactory"/>), que um teste pode
+    /// parar num instante com <see cref="TestDateTimeProvider.Freeze"/>.
+    /// </summary>
+    protected TestDateTimeProvider Clock => Services.GetRequiredService<TestDateTimeProvider>();
+
+    /// <summary>
     /// Cadastra o usuário pelo administrador e ativa a conta com o token do e-mail de convite, definindo a senha
     /// <c>Password123!</c>: depois disso, o usuário já faz login, como antes do cadastro sem senha (spec 008, DEC-12).
     /// </summary>
