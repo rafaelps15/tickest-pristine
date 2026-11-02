@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-035-tickets-backlog-aging                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: 62                  # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 035 — Idade da fila (abertos e em andamento) por faixa no agregado de estatísticas
@@ -115,7 +115,7 @@ A 3ª linha mostra a diferença para os blocos de 24 horas: quase 48 horas ainda
 - **Revisão:** `ca-review` na T-4 e de novo na verificação, sobre o mesmo código: nenhum achado bloqueante nem violação de convenção. A regra usa o `LocalDatePeriod` (R-1), os limites são inclusivos no início de cada dia local, e a conversão pelo fuso IANA continua certa se o horário de verão voltar. A infraestrutura de teste nova segue os padrões existentes: o `TestDateTimeProvider` como o `CapturingEmailSender` e o `NpgsqlCommandCounter` como o `EfCommandCounter`. Observação: a API devolve só as faixas, então o "idade 1, não 0" do AC-2 e o "idade 0" do AC-3 não aparecem sozinhos; a regra de dias de calendário fica comprovada nas fronteiras das faixas (exemplos 4 e 8 da seção 3).
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md`: na T-3, a entrada "[Spec 026] Estatísticas da operação" (o bloco `aging` e a definição de idade) e a rota `GET tickets/stats/overview` (4.3.1); na verificação, a tabela 6.1.
 - **CI:**
-- **Entrega:**
+- **Entrega:** PR #62 (https://github.com/rafaelps15/tickest-pristine/pull/62), aberto em 2026-11-01 para a `main`.
 
 ## 10. Histórico
 | Data | Status | Observação |
