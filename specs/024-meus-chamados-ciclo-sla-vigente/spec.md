@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-10-28
 branch: feat/SPEC-024-own-tickets-current-sla-cycle                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: 61                  # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 024 — "Meus Chamados" com o prazo e a situação do ciclo de SLA vigente
@@ -159,7 +159,7 @@ Dados comuns: Maria (solicitante, com `tickets:view-own`); o relógio controlado
   - na T-3: o fato da reabertura (seção 2.6), a RN-26, a C-13 e a rota `GET tickets/mine` (4.3.1);
   - na verificação: os ajustes de texto acima e a tabela 6.1.
 - **CI:**
-- **Entrega:** <PR #n (o mesmo do campo `pr:`); a spec fica `Entregue` quando o responsável mergear o PR na `main`>
+- **Entrega:** PR #61 (https://github.com/rafaelps15/tickest-pristine/pull/61), aberto em 2026-11-01 para a `main`.
 
 ## 10. Histórico
 | Data | Status | Observação |
