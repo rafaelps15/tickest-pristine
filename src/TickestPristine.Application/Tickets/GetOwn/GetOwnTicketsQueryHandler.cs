@@ -37,6 +37,10 @@ internal sealed class GetOwnTicketsQueryHandler(
             _ => null
         };
 
+        // O ciclo vigente da resolução é o cronômetro de maior ciclo: a reabertura cria um novo, enquanto o prazo e a
+        // situação do próprio chamado continuam os do primeiro ciclo.
+        IQueryable<TicketSlaTimer> resolutionTimers = context.TicketSlaTimers.Where(timer => timer.Metric == SlaMetric.Resolution);
+
         // Título e descrição são citext: a busca não diferencia maiúsculas, como na listagem geral (spec 019).
         PagedResponse<OwnTicketResponse> tickets = await context.Tickets
             .Where(t =>
@@ -67,6 +71,24 @@ internal sealed class GetOwnTicketsQueryHandler(
                 DueAtUtc = t.DueAtUtc,
                 // Regras do Ticket, com o mesmo instante da listagem geral, calculadas na projeção final.
                 SlaStatus = Ticket.GetSlaStatus(t.Status, t.DueAtUtc, t.SlaWarningAtUtc, t.ResolvedAtUtc, nowUtc),
+                // A situação do ciclo vigente repete a regra do TicketSlaTimer.GetState, já como TicketSlaStatus (parado
+                // vira NotApplicable), escrita aqui para o banco calculá-la: uma regra por linha, na mesma ordem, e vale a
+                // primeira que se aplica. Sem cronômetro de resolução (plano legado), valem o prazo e a situação do chamado.
+                CurrentDueAtUtc = resolutionTimers
+                    .Where(timer => timer.TicketId == t.Id)
+                    .OrderByDescending(timer => timer.Cycle)
+                    .Select(timer => (DateTime?)timer.DueOnUtc)
+                    .FirstOrDefault() ?? t.DueAtUtc,
+                CurrentSlaStatus = resolutionTimers
+                    .Where(timer => timer.TicketId == t.Id)
+                    .OrderByDescending(timer => timer.Cycle)
+                    .Select(timer => (TicketSlaStatus?)(
+                        (timer.CompletedOnUtc <= timer.DueOnUtc ? TicketSlaStatus.Met : (TicketSlaStatus?)null) ??
+                        (timer.CompletedOnUtc != null ? TicketSlaStatus.Missed : (TicketSlaStatus?)null) ??
+                        (timer.StoppedOnUtc != null ? TicketSlaStatus.NotApplicable : (TicketSlaStatus?)null) ??
+                        (nowUtc >= timer.DueOnUtc ? TicketSlaStatus.Breached : (TicketSlaStatus?)null) ??
+                        (nowUtc >= timer.WarningOnUtc ? TicketSlaStatus.AtRisk : TicketSlaStatus.OnTime)))
+                    .FirstOrDefault() ?? Ticket.GetSlaStatus(t.Status, t.DueAtUtc, t.SlaWarningAtUtc, t.ResolvedAtUtc, nowUtc),
                 LastActivityAtUtc = t.LastActivityAtUtc,
                 CanCancel = Ticket.CanBeCanceled(t.Status, t.CreatedAtUtc, canCancelAny, canEditOwn, nowUtc),
                 OwnerCancelDeadlineUtc = Ticket.OwnerCancelDeadline(t.CreatedAtUtc)

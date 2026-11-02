@@ -501,6 +501,117 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
+    public async Task GetOwn_Should_ReturnCurrentCycleEqualToTicket_WhenNeverReopened()
+    {
+        // Arrange
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+
+        // Act
+        OwnTicketItemDto ticket = await GetOwnTicketItemAsync(ticketId);
+
+        // Assert
+        ticket.CurrentDueAtUtc.ShouldBe(ticket.DueAtUtc);
+        ticket.CurrentSlaStatus.ShouldBe(ticket.SlaStatus);
+        ticket.CurrentSlaStatus.ShouldBe((int)TicketSlaStatus.OnTime);
+    }
+
+    [Fact]
+    public async Task GetOwn_Should_ReturnNewCycleDueAndStatus_AfterReopen()
+    {
+        // Arrange: chamado de Maria resolvido dentro do prazo e reaberto, com o ciclo 2 da resolução correndo
+        Guid ticketId = await CreateReopenedTicketAsRequesterAsync();
+        List<SlaObjectiveDto> resolutionCycles = [.. (await GetSlaAsync(ticketId)).Objectives.Where(o => o.Metric == Resolution)];
+
+        // Act
+        OwnTicketItemDto ticket = await GetOwnTicketItemAsync(ticketId);
+
+        // Assert: o prazo e a situação do chamado continuam os do ciclo 1; os do ciclo vigente são os do ciclo 2
+        SlaObjectiveDto currentCycle = resolutionCycles.Single(o => o.IsCurrentCycle);
+        currentCycle.Cycle.ShouldBe(2);
+        ticket.SlaStatus.ShouldBe((int)TicketSlaStatus.Met);
+        ticket.DueAtUtc.ShouldBe(resolutionCycles.Single(o => o.Cycle == 1).DueAtUtc!.Value);
+        ticket.CurrentDueAtUtc.ShouldBe(currentCycle.DueAtUtc!.Value);
+        ticket.CurrentSlaStatus.ShouldBe((int)TicketSlaStatus.OnTime);
+    }
+
+    [Theory]
+    [InlineData(false, (int)TicketSlaStatus.AtRisk, (int)SlaObjectiveState.AtRisk)]
+    [InlineData(true, (int)TicketSlaStatus.Breached, (int)SlaObjectiveState.Breached)]
+    public async Task GetOwn_Should_FollowStateOfCurrentCycleInSla_WhenWarningOrDuePasses(
+        bool pastDue,
+        int expectedSlaStatus,
+        int expectedCycleState)
+    {
+        // Arrange: chamado reaberto, com os cronômetros levados para o passado até agora passar do alerta (ou do prazo)
+        // do ciclo 2
+        Guid ticketId = await CreateReopenedTicketAsRequesterAsync();
+        TicketSlaTimer currentCycle = GetTimers(ticketId).Where(t => t.Metric == SlaMetric.Resolution).MaxBy(t => t.Cycle)!;
+        DateTime crossedAtUtc = pastDue ? currentCycle.DueOnUtc : currentCycle.WarningOnUtc;
+        await ShiftSlaTimersAsync(ticketId, crossedAtUtc - DateTime.UtcNow + TimeSpan.FromMinutes(1));
+
+        // Act
+        OwnTicketItemDto ticket = await GetOwnTicketItemAsync(ticketId);
+
+        // Assert: a mesma situação que o GET tickets/{id}/sla mostra no ciclo vigente
+        ticket.CurrentSlaStatus.ShouldBe(expectedSlaStatus);
+        (await GetSlaAsync(ticketId)).Objectives.Single(o => o.Metric == Resolution && o.IsCurrentCycle).State.ShouldBe(expectedCycleState);
+        ticket.SlaStatus.ShouldBe((int)TicketSlaStatus.Met);
+    }
+
+    [Fact]
+    public async Task GetOwn_Should_ReturnMissed_WhenCurrentCycleWasResolvedAfterItsDue()
+    {
+        // Arrange: chamado de Maria resolvido agora, com os cronômetros levados 30 dias para o passado; a conclusão não se
+        // move, então o ciclo 1 fica resolvido depois do próprio prazo, e as colunas do chamado continuam as originais
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        await ResolveTicketAsync(ticketId);
+        await ShiftSlaTimersAsync(ticketId, TimeSpan.FromDays(30));
+
+        // Act
+        OwnTicketItemDto ticket = await GetOwnTicketItemAsync(ticketId);
+
+        // Assert: a mesma situação que o GET tickets/{id}/sla mostra no ciclo vigente, e a do chamado continua cumprida
+        ticket.CurrentSlaStatus.ShouldBe((int)TicketSlaStatus.Missed);
+        (await GetSlaAsync(ticketId)).Objectives.Single(o => o.Metric == Resolution && o.IsCurrentCycle).State.ShouldBe((int)SlaObjectiveState.Missed);
+        ticket.SlaStatus.ShouldBe((int)TicketSlaStatus.Met);
+    }
+
+    [Fact]
+    public async Task GetOwn_Should_ReturnNotApplicable_WhenCanceled()
+    {
+        // Arrange: chamado de Maria cancelado por ela dentro da janela, com o cronômetro de resolução parado
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        (await CancelAsync(ticketId)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Act
+        OwnTicketItemDto ticket = await GetOwnTicketItemAsync(ticketId);
+
+        // Assert
+        ticket.CurrentSlaStatus.ShouldBe((int)TicketSlaStatus.NotApplicable);
+        (await GetSlaAsync(ticketId)).Objectives.Single(o => o.Metric == Resolution && o.IsCurrentCycle).State.ShouldBe(Stopped);
+    }
+
+    [Fact]
+    public async Task GetOwn_Should_RepeatTicketDueAndStatus_WhenThereIsNoResolutionTimer()
+    {
+        // Arrange: chamado de Maria do plano legado, gravado sem cronômetro e aberto há 7 horas: passou do alerta (6 h) e
+        // não do prazo (8 h)
+        Guid sectorId = await CreateSectorAsAdminAsync();
+        (Guid requesterId, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
+        Authenticate(requesterTokens.AccessToken);
+        Guid ticketId = await InsertOwnTicketAsync(requesterId, sectorId, TicketStatus.Open, "Printer is broken", DateTime.UtcNow.AddHours(-7));
+
+        // Act
+        OwnTicketItemDto ticket = await GetOwnTicketItemAsync(ticketId);
+
+        // Assert
+        GetTimers(ticketId).ShouldBeEmpty();
+        ticket.SlaStatus.ShouldBe((int)TicketSlaStatus.AtRisk);
+        ticket.CurrentSlaStatus.ShouldBe(ticket.SlaStatus);
+        ticket.CurrentDueAtUtc.ShouldBe(ticket.DueAtUtc);
+    }
+
+    [Fact]
     public async Task GetOwn_Should_FilterByStatusGroup_WhenStatusIsGiven()
     {
         // Arrange: um chamado de Maria em cada status
@@ -2642,6 +2753,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         string SectorName,
         DateTime DueAtUtc,
         int SlaStatus,
+        DateTime CurrentDueAtUtc,
+        int CurrentSlaStatus,
         DateTime LastActivityAtUtc);
 
     private sealed record PagedOwnTicketItemsDto(List<OwnTicketItemDto> Items, int TotalCount);
@@ -3797,6 +3910,26 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         response.EnsureSuccessStatusCode();
 
         return (await response.Content.ReadFromJsonAsync<Guid>(), requesterTokens);
+    }
+
+    // Chamado Urgente de um Colaborador novo, resolvido dentro do prazo e reaberto pelo administrador: o ciclo 2 da
+    // resolução fica correndo, e o token do solicitante continua configurado.
+    private async Task<Guid> CreateReopenedTicketAsRequesterAsync()
+    {
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        await ResolveTicketAsync(ticketId);
+        await RunAsAdministratorAsync(async () =>
+            (await HttpClient.PostAsync($"tickets/{ticketId}/reopen", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent));
+
+        return ticketId;
+    }
+
+    // O item do chamado em "Meus chamados" de quem está autenticado.
+    private async Task<OwnTicketItemDto> GetOwnTicketItemAsync(Guid ticketId)
+    {
+        PagedOwnTicketItemsDto? page = await HttpClient.GetFromJsonAsync<PagedOwnTicketItemsDto>("tickets/mine");
+
+        return page!.Items.Single(t => t.Id == ticketId);
     }
 
     // Usuário novo com a role Atendente (que tem tickets:manage), atribuída pelo administrador.
