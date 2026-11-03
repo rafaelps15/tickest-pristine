@@ -5,7 +5,7 @@ status: Verificada        # Rascunho | Em descoberta | Bloqueada | Aprovada | Em
 responsavel: Rafael Santos
 aprovada-em: 2026-11-03
 branch: chore/SPEC-051-continuous-sdd-flow-rules
-pr:
+pr: "#64"
 ---
 
 # 051 — Regras do fluxo SDD contínuo
@@ -202,7 +202,7 @@ pr:
 - **Revisão:** a `ca-review` não se aplica, porque revisa convenções de código e a spec não altera `src/` nem `tests/`. A consistência entre o `CLAUDE.md` e as skills foi conferida pelos ACs 1 a 11. Nenhum achado bloqueante.
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md`, seção 6.9: os itens do fluxo no `CLAUDE.md`, da `spec-implement` e da `spec-verify`.
 - **CI:** roda no PR (`.github/workflows/build.yml`): testes do portão, testes de instruções, auditoria e a suíte completa (restore, build e test).
-- **Entrega:**
+- **Entrega:** PR #64 (https://github.com/rafaelps15/tickest-pristine/pull/64), o mesmo do campo `pr:`; a spec fica `Entregue` quando o responsável mergear o PR na `main`.
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -215,3 +215,4 @@ pr:
 | 2026-11-03 | Em implementação | T-1, T-2 e T-3 concluídas sem parada entre elas (DEC-14), com os testes de instruções aprovados ao fim de cada uma. O diff total vai para a revisão do responsável; o próximo passo é a `spec-verify`. |
 | 2026-11-03 | Em implementação | Diff da T-1 à T-3 revisado pelo responsável: ajuste da linha 41 da `spec-verify` aplicado (DEC-15); as precisões do `CLAUDE.md` e os registros da spec aprovados. Segue para a `spec-verify`, sem commit. |
 | 2026-11-03 | Verificada | `spec-verify`, com uma execução de cada conjunto: testes de instruções (12 aprovados e 2 pulados de 14), testes do portão (39 de 39) e auditoria (100,0%, código de saída 0). Os 13 ACs estão cobertos; a `ca-review` não se aplica (sem `src/` nem `tests/`); a seção 6.9 do `SYSTEM_SPECIFICATION.md` foi atualizada. Sem commit: stage, commit e push são do responsável. |
+| 2026-11-03 | Verificada | Commit `f7e10c1` e push feitos por autorização explícita do responsável. PR #64 aberto pela autorização "abra o PR da spec 051", pronto para revisão; o número do PR foi registrado no campo `pr:` e na linha "Entrega". |
