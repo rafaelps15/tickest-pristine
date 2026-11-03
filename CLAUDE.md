@@ -108,7 +108,7 @@ As entidades herdam de `Entity` e guardam as próprias regras (domínio rico): o
 | Endpoints | `src/TickestPristine.Web.Api/Endpoints/{Aggregate}/{UseCase}.cs`, com as constantes de permissão em `Endpoints/{Aggregate}/Permissions.cs` |
 | Testes | `tests/TickestPristine.Application.UnitTests/{Aggregate}/`, `tests/TickestPristine.IntegrationTests/{Aggregate}/`, `tests/TickestPristine.ArchitectureTests/` |
 
-Validação de uma mudança: `dotnet build TickestPristine.slnx` (0 avisos) e `dotnet test TickestPristine.slnx` (Docker ligado). Migration nova:
+Validação de uma mudança: por impacto, conforme o item "Testes por impacto" da seção [Desvios em relação aos exemplos das skills](#desvios-em-relação-aos-exemplos-das-skills): o build (`dotnet build TickestPristine.slnx`, 0 avisos) e só os testes afetados, com os de integração (Docker ligado) só na verificação final; a suíte completa (`dotnet test TickestPristine.slnx`) roda no CI. Migration nova:
 
 ```bash
 dotnet ef migrations add Nome_Da_Migration --project src/TickestPristine.Infrastructure --startup-project src/TickestPristine.Web.Api --output-dir Database/Migrations
@@ -144,6 +144,32 @@ Antes de criar algo, siga o slice real mais parecido (caminhos a partir de `src/
 - **Tipos de erro:** além dos tipos listados nas skills, o `ErrorType.Forbidden` vira 403 no `CustomResults.Problem`; `UserErrors.Unauthorized()` e as falhas de autorização por recurso usam esse tipo.
 - **`Update` de departamento e setor:** `Department.Update` e `Sector.Update` disparam o evento de alteração sempre, mesmo quando nada mudou (comportamento mantido da versão anterior); o padrão das skills para "pode não mudar nada" (`bool`, evento só quando muda) vale para código novo. O `Ticket` não tem `Update` genérico: o `ChangeDescription` só dispara `TicketDescriptionChangedDomainEvent`, com a descrição anterior, quando a descrição muda, e devolve `null`, sem histórico nem evento, quando não muda; as mudanças de status são métodos por intenção, com o `TicketStatusChangedDomainEvent` (ou o `TicketReopenedDomainEvent`, na reabertura).
 - **Revisão do legado:** o código listado em [Em migração](#em-migração) não é achado da `ca-review` até a spec que o migrar; código novo, fora da lista, segue as regras da skill.
+- **Testes por impacto:** a verificação local roda só o que a mudança afeta, e a suíte completa (`dotnet test TickestPristine.slnx`) fica para o CI. Esta regra prevalece sobre o `dotnet test` integral das skills de código (`add-feature`, `add-tests`, `add-entity`) e do agente `dotnet-architect`; dentro de uma spec, o passo de verificação dessas skills é o da tarefa. Testes de integração não rodam durante as tarefas nem durante as correções.
+  - **Critério de seleção:** a entrada é a lista de arquivos alterados (na tarefa, os dela; na verificação, os da spec). A verificação final junta as linhas que se aplicam e roda só o que não tiver resultado válido. Os caminhos omitem o prefixo `src/TickestPristine.` ou `tests/TickestPristine.`, e `{A}` é a pasta do agregado.
+
+    | Alteração | Na tarefa | Na verificação final |
+    |---|---|---|
+    | Teste unitário criado ou alterado | a classe dele | — |
+    | Teste de integração criado ou alterado | não roda | a classe dele |
+    | Infraestrutura de teste (classes base, fixtures, helpers) | o projeto de unitários inteiro, se for dele | o projeto de integração inteiro, se for dele |
+    | `Domain/{A}/` ou `Application/{A}/` | `Application.UnitTests/{A}/` e as pastas dependentes | `IntegrationTests/{A}/` e as pastas dependentes |
+    | `Infrastructure/{A}/` ou `Web.Api/Endpoints/{A}/` | os unitários das pastas dependentes | `IntegrationTests/{A}/` e as pastas dependentes |
+    | `SharedKernel`, `Application/Abstractions` (inclusive `Behaviors`) ou qualquer `DependencyInjection.cs` | o projeto de unitários inteiro | o projeto de integração inteiro |
+    | Infraestrutura compartilhada e borda HTTP: `ApplicationDbContext`, migrations, seeding, interceptors, autenticação e autorização, `Program.cs`, middleware, `GlobalExceptionHandler`, `CustomResults` | os unitários das pastas dependentes | o projeto de integração inteiro |
+    | Build e pacotes: `*.csproj`, `*.slnx`, `Directory.Build.props`, `Directory.Packages.props`, `global.json`, `.editorconfig` | o projeto de unitários inteiro | o projeto de integração inteiro |
+    | Qualquer arquivo em `src/` | `ArchitectureTests` | — |
+    | Sempre | — | os testes da rastreabilidade |
+    | Só normas: `CLAUDE.md`, `.claude/` ou `scripts/` | os testes de `scripts` | os testes de `scripts` e de `.claude/hooks` e a auditoria, sem build nem testes .NET |
+
+  - **Pastas dependentes:** para cada `.cs` de produção alterado, o nome do tipo (o nome do arquivo, e o nome antigo, se foi renomeado) é buscado como palavra inteira em `src/` e `tests/`; toda pasta de agregado que o cita entra como afetada. O filtro usa o namespace, que segue a pasta (ex.: `FullyQualifiedName~TickestPristine.Application.UnitTests.{A}`).
+  - **Na dúvida, amplia:** se um arquivo não se encaixa em nenhuma linha, se uma ocorrência fica fora das pastas de agregado ou se o impacto é incerto, roda o projeto de teste inteiro correspondente e registra o motivo nas evidências. Nunca omite testes.
+  - **Validade:**
+    - afetam o build: `src/`, `tests/`, `*.csproj`, `*.slnx`, `Directory.Build.props`, `Directory.Packages.props`, `global.json` e `.editorconfig`;
+    - o último build vale até um desses arquivos mudar; a verificação não builda de novo se nenhum deles mudou depois dele;
+    - um resultado de teste vale até mudar algum arquivo que, pelo critério de seleção, o afeta;
+    - a auditoria (`scripts/auditoria_sdd.py`) cobre tudo o que ela lê: todo arquivo de texto fora de `tests/` (a varredura de segredos), o que inclui `src/`, as specs, as instruções, os settings e o CI; a lista de arquivos rastreados e de projetos de teste; e os últimos 30 commits. Ela vale enquanto nada disso mudar: num ciclo de correção, é reaproveitada se a correção só alterou arquivos `.cs` dentro de `tests/`; se alterou arquivo auditado, ou se entrou commit novo, roda de novo, uma vez, na nova verificação. Fora desses casos, não se repete;
+    - as anotações da própria verificação na spec (rastreabilidade, evidências e histórico) e a atualização do documento de estado não invalidam build, testes nem auditoria;
+    - só contam as execuções desta sessão.
 
 ### Regras permanentes
 
@@ -186,8 +212,8 @@ Mudança funcional não trivial segue Spec-Driven Development, com uma spec por 
 
 1. **`spec-new`** faz a descoberta (no máximo 5 perguntas por rodada, de negócio e técnicas, e para à espera das respostas) e só então escreve a spec (requisitos, critérios de aceitação, decisões, plano e tarefas); o que não foi confirmado fica marcado como `[SUPOSIÇÃO]`.
 2. **Aprovação explícita** do responsável pelo produto no chat, sem `[SUPOSIÇÃO]` pendente; sem ela, nenhum código de `src/` ou `tests/` é escrito.
-3. **`/spec-implement NNN`** (só por comando, na branch da spec) executa uma tarefa por vez com as skills de implementação: build e testes, diff, ok do responsável e commit. Mudança de escopo ou DEC nova faz a skill parar e perguntar.
-4. **`spec-verify`** comprova cada critério com testes aprovados na execução atual, roda a auditoria (`python scripts/auditoria_sdd.py .`) e a revisão e atualiza as seções afetadas do `SYSTEM_SPECIFICATION.md`.
+3. **`/spec-implement NNN`** (só por comando, na branch da spec) executa as tarefas em sequência contínua, ou `tarefa-a-tarefa` a pedido, com o diff e a aprovação do responsável a cada tarefa, usando as skills de implementação e os testes por impacto, e segue direto para a verificação; numa reprovação, corrige e verifica de novo, em até 2 ciclos. Só para diante de uma decisão que a spec não cobre, de um impedimento ou dos 2 ciclos esgotados e, no fim, uma única vez, com o diff, as evidências e a mensagem de commit proposta; stage, commit e push são do responsável. Mudança de escopo ou DEC nova faz a skill parar e perguntar.
+4. **`spec-verify`** comprova cada critério com testes aprovados numa execução ainda válida, pelos testes por impacto, roda a auditoria (`python scripts/auditoria_sdd.py .`) uma vez, reaproveitada nos ciclos de correção conforme a validade, e a revisão, e atualiza as seções afetadas do `SYSTEM_SPECIFICATION.md`.
 5. **Entrega:** o PR leva a spec `Verificada`, com o número do PR no campo `pr:`; o push e o merge são do responsável. Com o PR mergeado na `main`, a spec está `Entregue`, e o `/spec-status` mostra isso.
 
 Estados e transições da spec: `.claude/skills/spec-new/references/spec-status.md`.

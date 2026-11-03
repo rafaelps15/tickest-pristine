@@ -1,7 +1,7 @@
 ---
 name: spec-implement
-description: Implementa uma spec aprovada, uma tarefa por vez (implementa, roda build e testes, mostra o diff, espera o ok e commita), usando as skills de implementação do projeto e preenchendo a rastreabilidade entre critérios de aceitação e testes. Só roda quando chamada explicitamente com /spec-implement.
-argument-hint: '<número ou pasta da spec, ex.: "001" ou "specs/001-remover-responsavel">'
+description: Implementa uma spec aprovada em sequência contínua (ou tarefa a tarefa, a pedido), com build e testes por impacto, segue direto para a verificação, corrige em até 2 ciclos e para uma única vez no fim, com o diff, as evidências e a mensagem de commit proposta, usando as skills de implementação do projeto e preenchendo a rastreabilidade entre critérios de aceitação e testes. Só roda quando chamada explicitamente com /spec-implement.
+argument-hint: '<número ou pasta da spec, ex.: "001" ou "specs/001-remover-responsavel"> [tarefa-a-tarefa]'
 disable-model-invocation: true
 ---
 
@@ -37,15 +37,19 @@ Os estados e as transições da spec seguem [../spec-new/references/spec-status.
 
 ## Execução
 
-Execute **uma tarefa por vez**, na ordem da spec. Para cada tarefa:
+As tarefas seguem a ordem da spec. Por padrão, a execução é **contínua**: todas as tarefas em sequência, sem parar entre elas. No modo **`tarefa-a-tarefa`**, pedido pelo argumento `tarefa-a-tarefa` ou explicitamente pelo responsável no chat, a qualquer momento, cada tarefa termina com o diff, o resultado dos testes e a mensagem de commit proposta para o checkpoint (`tipo(escopo): descrição [SPEC-NNN T00n]`, com o trailer de coautoria do agente); a próxima só começa depois da aprovação do responsável.
+
+Para cada tarefa:
 
 1. **Implemente** usando a skill indicada na coluna "Skill" (por exemplo, as de criar entidade, slice e testes) e siga o contexto do projeto; não repita aqui as convenções delas.
-2. **Rode o build e os testes** do projeto (quando a tarefa alterar código) e corrija antes de seguir.
+2. **Rode só o que a tarefa afeta**, pelo critério de impacto do contexto do projeto: o build, só se a tarefa alterou arquivo que afeta o build; depois, sem recompilar (no .NET, `dotnet test --no-build`), só os testes unitários e de arquitetura que o critério seleciona. Os testes de integração não rodam durante as tarefas nem durante as correções: rodam na verificação. A suíte completa não roda localmente; ela fica para o CI. Corrija as falhas antes de seguir.
 3. **Marque `[x]`** e preencha, na tabela de rastreabilidade, os testes reais (arquivo › método) que cobrem os ACs da tarefa e, em uma linha, como cada teste cobre o critério.
-4. **Mostre o diff** da tarefa e o resultado do build e dos testes, com o commit proposto no formato `tipo(escopo): descrição [SPEC-NNN T00n]`.
-5. **Espere o ok** do responsável. Só então faça o stage dos arquivos da tarefa e o commit, com o trailer de coautoria do agente. Só depois passe para a próxima tarefa.
 
 Se o portão SDD bloquear um comando, não o contorne: classifique o bloqueio como **correto** (a escrita violaria a regra) ou **falso positivo** (a escrita não toca `src/`, `tests/` nem o portão) e informe o responsável. Quando o comando for necessário, passe a ele o comando exato para rodar com `!`.
+
+## Verificação e correção
+
+Ao concluir a última tarefa, confira que todas estão marcadas e que todo AC tem pelo menos um teste na tabela de rastreabilidade, e siga direto para a verificação da skill `spec-verify`, sem parar. Se ela reprovar, corrija e verifique de novo: cada ciclo é uma correção e uma nova verificação, até **2 ciclos**. A correção fica dentro do plano técnico da spec e nunca altera as asserções dos testes da rastreabilidade; se for preciso fazer isso, ou sair do plano, pare e pergunte (seção "Mudança de escopo"). Se a verificação ainda reprovar depois do segundo ciclo, pare: a spec continua `Em implementação`; apresente o que falhou e o que foi tentado.
 
 ## Mudança de escopo
 
@@ -68,13 +72,14 @@ Pare, mude o status para `Bloqueada`, registre no histórico o estado de origem 
 - a spec contradisser o `CLAUDE.md`;
 - um teste falhar por um defeito fora do escopo da spec.
 
+Fora desses casos, só pare diante de uma decisão que a spec não cobre (seção "Mudança de escopo"), de um bloqueio do portão, da branch errada ("Antes de começar") ou dos 2 ciclos de correção esgotados ("Verificação e correção"). No modo contínuo, não pare nem peça confirmação por outro motivo: terminar uma tarefa, começar a verificação e registrar rastreabilidade, evidências ou histórico seguem sem parada.
+
 ## Ao terminar
 
-1. Confira que todas as tarefas estão marcadas e que todo AC tem pelo menos um teste na tabela.
-2. Informe o que foi feito e indique a skill `spec-verify` como próximo passo. O status continua `Em implementação` até a verificação.
+Com a verificação aprovada, faça a **parada final única**: apresente o diff total da spec, as evidências da verificação e a mensagem de commit proposta, no formato `tipo(escopo): descrição [SPEC-NNN]`, com o trailer de coautoria do agente. Stage, commit e push são do responsável.
 
 ## Regras
 
-- Commit só depois do ok do responsável para aquela tarefa, só com os arquivos dela. Nunca faça push, rebase, merge nem `git rm` sem autorização; quando o portão exigir, o responsável roda esses comandos com `!`.
+- Não faça stage, commit nem push. O responsável executa essas operações utilizando a mensagem de commit proposta.
 - Não altere requisitos, critérios nem decisões aprovados por conta própria: siga a seção "Mudança de escopo".
 - Não implemente nada que não esteja numa tarefa da spec.

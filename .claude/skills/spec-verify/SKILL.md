@@ -1,6 +1,6 @@
 ---
 name: spec-verify
-description: Verifica se uma spec implementada atende aos critérios de aceitação — roda build e testes, confere que cada critério é coberto por testes que exercitam o comportamento descrito e passaram na execução atual, executa a revisão de convenções e atualiza a documentação de estado afetada. Use depois de implementar uma spec ou quando o usuário pedir para verificar uma spec.
+description: Verifica se uma spec implementada atende aos critérios de aceitação — roda o build e os testes por impacto, reaproveitando os resultados ainda válidos, confere que cada critério é coberto por testes que exercitam o comportamento descrito e passaram numa execução ainda válida, executa a revisão de convenções e atualiza a documentação de estado afetada. Use depois de implementar uma spec ou quando o usuário pedir para verificar uma spec.
 argument-hint: '<número ou pasta da spec, ex.: "001">'
 ---
 
@@ -17,12 +17,12 @@ Esta skill não altera código de produção nem testes. Ela só atualiza a spec
 ## Fluxo
 
 1. **Localize a spec.** Se o status não for `Em implementação`, pare e informe.
-2. **Build, testes e auditoria:** rode os comandos de validação do contexto do projeto de forma que o resultado de cada teste fique visível (por exemplo, um relatório por teste ou uma execução filtrada pelos nomes da rastreabilidade): o build sem avisos, o `dotnet test` e a auditoria de conformidade `python scripts/auditoria_sdd.py .` (score e código de saída). Registre na seção "Evidências de verificação" as contagens (avisos, erros, testes aprovados e com falha), o score da auditoria e a data da execução.
+2. **Build, testes e auditoria, por impacto:** rode o conjunto que o critério de impacto do contexto do projeto seleciona para os arquivos alterados pela spec, no lugar da suíte completa, que fica para o CI, de forma que o resultado de cada teste fique visível (por exemplo, um relatório por teste ou uma execução filtrada pelos nomes da rastreabilidade). Siga a regra de validade do contexto do projeto: reaproveite o último build válido e só faça outro, sem avisos, se algum arquivo que afeta o build mudou depois dele; rode, sem recompilar, só os testes selecionados que ainda não têm resultado válido. Os testes de integração rodam uma única vez, aqui; na nova verificação de um ciclo de correção, repita só os de integração afetados pela correção. A auditoria de conformidade `python scripts/auditoria_sdd.py .` (score e código de saída) roda uma vez por verificação e, nos ciclos de correção, é reaproveitada conforme a regra de validade. Registre na seção "Evidências de verificação" as contagens (avisos, erros, testes aprovados e com falha), o score da auditoria, a data de cada execução e quais resultados foram reaproveitados.
 3. **Cobertura de cada critério:** para cada AC, abra cada teste listado na rastreabilidade e confirme, lendo o código do teste, que:
    - o cenário preparado corresponde ao "Dado";
    - a ação executada corresponde ao "Quando";
    - as asserções conferem o resultado observável do "Então" (status, estado gravado, registro produzido), e não só a ausência de erro;
-   - o teste aparece como aprovado na execução do passo 2.
+   - o teste aparece como aprovado numa execução ainda válida (passo 2).
 
    Preencha "Como o teste cobre o critério" com o que o teste afirma e "Resultado" com o resultado e a data dessa execução.
 4. **Revisão:** execute a skill de revisão de convenções do projeto (por exemplo, `ca-review`) sobre as mudanças da spec e registre o veredito e os achados bloqueantes.
@@ -30,12 +30,12 @@ Esta skill não altera código de produção nem testes. Ela só atualiza a spec
 6. **Veredito:**
    - build e testes verdes, auditoria com código de saída 0, todo AC coberto conforme o passo 3 e nenhum achado bloqueante → status `Verificada`, com a linha no histórico;
    - caso contrário → o status continua `Em implementação`; registre no histórico a verificação reprovada e o que falta.
-7. **Apresente o resultado:** evidências, limitações, riscos e pendências, com o diff da spec e da documentação e o commit proposto no formato `tipo(escopo): descrição [SPEC-NNN]`; commite só depois do ok do responsável.
-8. **Depois que o PR for aberto:** preencha o campo `pr:` e a linha "Entrega" das evidências com o número do PR, mostre o diff e commite na mesma branch depois do ok. A spec continua `Verificada`; o `/spec-status` passa a mostrá-la como `Entregue` quando o responsável mergear o PR.
+7. **Apresente o resultado:** evidências, limitações, riscos e pendências, com o diff da spec e da documentação e a mensagem de commit proposta no formato `tipo(escopo): descrição [SPEC-NNN]`, com o trailer de coautoria do agente. Quando a verificação for chamada pela `spec-implement`, esta apresentação é a parada final única dela, com o diff total. Stage, commit e push são do responsável.
+8. **Depois que o PR for aberto:** preencha o campo `pr:` e a linha "Entrega" das evidências com o número do PR e mostre o diff; o commit, na mesma branch, é do responsável. A spec continua `Verificada`; o `/spec-status` passa a mostrá-la como `Entregue` quando o responsável mergear o PR.
 
 ## Regras
 
-- Não corrija código nem testes para fazer a verificação passar; relate o que falhou.
-- Um AC não conta como atendido se não tiver teste, se o teste não rodou ou falhou nesta execução, ou se o teste não exercitar o comportamento descrito, mesmo que exista e passe. A mera existência do arquivo e do método de teste não basta.
-- Evidência de uma execução anterior não vale: a verificação usa a execução feita por ela.
-- Commit só depois do ok do responsável, só com a spec e a documentação de estado. Nunca faça push, rebase, merge nem `git rm` sem autorização. `Verificada` não é `Entregue`: a spec só fica `Entregue` quando o responsável mergear o PR.
+- Não corrija código nem testes para fazer a verificação passar; relate o que falhou. Quando a verificação for chamada pela `spec-implement`, a reprovação volta para a correção dela, em até 2 ciclos.
+- Um AC não conta como atendido se não tiver teste, se o teste não tiver resultado aprovado numa execução ainda válida, ou se o teste não exercitar o comportamento descrito, mesmo que exista e passe. A mera existência do arquivo e do método de teste não basta.
+- Uma evidência só vale pela regra de validade do contexto do projeto: execução feita nesta sessão, sem mudança posterior no que ela cobre. Na dúvida, rode de novo.
+- Não faça stage, commit nem push. O responsável executa essas operações utilizando a mensagem de commit proposta. `Verificada` não é `Entregue`: a spec só fica `Entregue` quando o responsável mergear o PR.
