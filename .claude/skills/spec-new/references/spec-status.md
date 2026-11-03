@@ -11,7 +11,7 @@ Fonte única dos estados de uma spec. O modelo (`spec-template.md`) e as skills 
 | `Bloqueada` | Parada por uma pendência que depende de decisão ou informação externa. |
 | `Aprovada` | Aprovada explicitamente pelo responsável; pronta para implementar. |
 | `Em implementação` | Tarefas em execução, ou verificação ainda não aprovada. |
-| `Verificada` | Todos os critérios de aceitação comprovados por testes aprovados na execução atual; o PR leva a spec neste estado, com o campo `pr:` preenchido. |
+| `Verificada` | Todos os critérios de aceitação comprovados por testes aprovados numa execução ainda válida; o PR leva a spec neste estado, com o campo `pr:` preenchido. |
 | `Entregue` | PR mergeado na `main`. Final. |
 | `Descartada` | Abandonada por decisão explícita do responsável. Final. |
 
@@ -26,7 +26,7 @@ Fonte única dos estados de uma spec. O modelo (`spec-template.md`) e as skills 
 | `Aprovada` | `Em descoberta` | REQ novo, REQ removido ou mudança grande de escopo (critérios na seção "Mudança de escopo" da `spec-implement`) | `spec-new` |
 | `Em implementação` | `Bloqueada` | Uma condição de parada da implementação | `spec-implement` |
 | `Em implementação` | `Em descoberta` | A implementação revelou a necessidade de REQ novo, REQ removido ou mudança grande de escopo | `spec-new` |
-| `Em implementação` | `Verificada` | `spec-verify` com todos os critérios de aceitação cobertos por testes aprovados na execução atual | `spec-verify` |
+| `Em implementação` | `Verificada` | `spec-verify` com todos os critérios de aceitação cobertos por testes aprovados numa execução ainda válida | `spec-verify` |
 | `Bloqueada` | estado de origem (`Em descoberta` ou `Em implementação`) | Pendência resolvida e registrada, no máximo com DEC nova ou ajuste de AC aprovados no chat | `spec-new` (origem `Em descoberta`) ou `spec-implement` (origem `Em implementação`) |
 | `Bloqueada` | `Em descoberta` | A resolução da pendência trouxe REQ novo, REQ removido ou mudança grande de escopo | `spec-new` |
 | `Verificada` | `Em implementação` | Código alterado depois da verificação, pela `spec-implement` ou fora dela (outra skill, edição à mão ou mudança trivial autorizada); exige nova verificação | `spec-implement`, ou quem alterou o código fora dela |
