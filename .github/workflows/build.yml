@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # Histórico completo: a auditoria de conformidade avalia os últimos commits (RAS-02/RAS-03).
           fetch-depth: 0
