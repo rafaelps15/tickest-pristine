@@ -9,9 +9,6 @@ on:
     branches:
       - main
 
-env:
-  DOTNET_VERSION: "10.x"
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -25,7 +22,15 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'Directory.Build.props', '**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -44,11 +49,43 @@ jobs:
       - name: Restore
         run: dotnet restore TickestPristine.slnx
 
+      # Projeto a projeto: o docker-compose.dcproj da solução não aceita o comando, que falharia pela .slnx.
+      - name: Vulnerable packages
+        run: |
+          for project in $(find src tests -name '*.csproj' | sort); do
+            dotnet list "$project" package --vulnerable --include-transitive 2>&1 | tee -a vulnerable-packages.txt
+          done
+          if grep -qi "has the following vulnerable packages" vulnerable-packages.txt; then
+            echo "::error::Pacote vulnerável encontrado; veja a lista acima."
+            exit 1
+          fi
+
       - name: Build
         run: dotnet build TickestPristine.slnx --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test TickestPristine.slnx --configuration Release --no-restore --no-build
+        run: >-
+          dotnet test TickestPristine.slnx --configuration Release --no-restore --no-build
+          --logger trx --collect "XPlat Code Coverage" --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/**/*.trx
+
+      # Relatório de cobertura (Cobertura XML), sem mínimo.
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: TestResults/**/coverage.cobertura.xml
+
+      # Só confere que a imagem é construída; nada é publicado.
+      - name: Build Docker image
+        run: docker build --file src/TickestPristine.Web.Api/Dockerfile --tag tickestpristine-web-api:ci .
 
       - name: Publish
         if: github.event_name != 'pull_request'

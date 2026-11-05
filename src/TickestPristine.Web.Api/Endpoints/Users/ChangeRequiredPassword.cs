@@ -26,6 +26,7 @@ internal sealed class ChangeRequiredPassword : IEndpoint
         })
         .WithTags(Tags.Users)
         .AllowAnonymous()
-        .RequireRateLimiting(RateLimitingPolicies.Authentication);
+        .RequireRateLimiting(RateLimitingPolicies.Authentication)
+        .WithNoStore();
     }
 }

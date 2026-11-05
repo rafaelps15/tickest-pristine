@@ -10,4 +10,6 @@ services:
       - "8081"
     volumes:
       - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
+      # A imagem não leva o appsettings.Development.json (.dockerignore); em Development, o compose o monta só para leitura.
+      - ./src/TickestPristine.Web.Api/appsettings.Development.json:/app/appsettings.Development.json:ro
       - ${APPDATA}/ASP.NET/Https:/home/app/.aspnet/https:ro

@@ -108,7 +108,7 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         IEmailSender emailSender = Substitute.For<IEmailSender>();
         emailSender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException(new InvalidOperationException("SMTP indisponível")));
-        var logger = new RecordingLogger<RegisterUserCommandHandler>();
+        var logger = new TestLogger<RegisterUserCommandHandler>();
         RegisterUserCommandHandler handler = CreateHandler(context, emailSender, logger);
 
         // Act
@@ -121,7 +121,7 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
 
         var message = (EmailMessage)emailSender.ReceivedCalls().ShouldHaveSingleItem().GetArguments()[0]!;
         string token = ExtractToken(message.TextBody);
-        RecordedLogEntry error = logger.Entries.ShouldHaveSingleItem();
+        TestLogEntry error = logger.Entries.ShouldHaveSingleItem();
         error.Level.ShouldBe(LogLevel.Error);
         error.Message.ShouldContain(result.Value.ToString());
         error.Message.ShouldNotContain(token);
@@ -160,5 +160,5 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
             emailSender,
             CreateLinkBuilder(),
             CreateClock(),
-            logger ?? new RecordingLogger<RegisterUserCommandHandler>());
+            logger ?? new TestLogger<RegisterUserCommandHandler>());
 }

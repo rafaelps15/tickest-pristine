@@ -1,12 +1,12 @@
 using TickestPristine.Application.Abstractions.Storage;
-using TickestPristine.Application.TicketAttachments.Delete;
+using TickestPristine.Application.TicketAttachments.TicketAttachmentDeleted;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
 
 namespace TickestPristine.Application.UnitTests.TicketAttachments;
 
-public sealed class TicketAttachmentDeletedDomainEventHandlerTests : BaseHandlerTest
+public sealed class PurgeFileOnTicketAttachmentDeletedDomainEventHandlerTests : BaseHandlerTest
 {
     private static readonly DateTime NowUtc = new(2026, 10, 27, 15, 0, 0, DateTimeKind.Utc);
 
@@ -17,7 +17,7 @@ public sealed class TicketAttachmentDeletedDomainEventHandlerTests : BaseHandler
         await using TestDbContext context = CreateDbContext();
         TicketAttachment attachment = await SeedDeletedAttachmentAsync(context);
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
-        TicketAttachmentDeletedDomainEventHandler handler = CreateHandler(context, fileStorage);
+        PurgeFileOnTicketAttachmentDeletedDomainEventHandler handler = CreateHandler(context, fileStorage);
 
         // Act
         await handler.Handle(new TicketAttachmentDeletedDomainEvent(attachment.Id, attachment.TicketId), CancellationToken.None);
@@ -39,7 +39,7 @@ public sealed class TicketAttachmentDeletedDomainEventHandlerTests : BaseHandler
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
         fileStorage.DeleteAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException(new IOException("Disco indisponível")));
-        TicketAttachmentDeletedDomainEventHandler handler = CreateHandler(context, fileStorage);
+        PurgeFileOnTicketAttachmentDeletedDomainEventHandler handler = CreateHandler(context, fileStorage);
 
         // Act
         Exception? exception = await Record.ExceptionAsync(() =>
@@ -60,7 +60,7 @@ public sealed class TicketAttachmentDeletedDomainEventHandlerTests : BaseHandler
         await using TestDbContext context = CreateDbContext();
         TicketAttachment attachment = await SeedDeletedAttachmentAsync(context, purgedAtUtc: NowUtc.AddHours(-1));
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
-        TicketAttachmentDeletedDomainEventHandler handler = CreateHandler(context, fileStorage);
+        PurgeFileOnTicketAttachmentDeletedDomainEventHandler handler = CreateHandler(context, fileStorage);
 
         // Act
         await handler.Handle(new TicketAttachmentDeletedDomainEvent(attachment.Id, attachment.TicketId), CancellationToken.None);
@@ -71,12 +71,12 @@ public sealed class TicketAttachmentDeletedDomainEventHandlerTests : BaseHandler
             .ShouldBe(NowUtc.AddHours(-1));
     }
 
-    private static TicketAttachmentDeletedDomainEventHandler CreateHandler(TestDbContext context, IFileStorage fileStorage)
+    private static PurgeFileOnTicketAttachmentDeletedDomainEventHandler CreateHandler(TestDbContext context, IFileStorage fileStorage)
     {
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(NowUtc);
 
-        return new TicketAttachmentDeletedDomainEventHandler(context, fileStorage, dateTimeProvider);
+        return new PurgeFileOnTicketAttachmentDeletedDomainEventHandler(context, fileStorage, dateTimeProvider);
     }
 
     private static async Task<TicketAttachment> SeedDeletedAttachmentAsync(TestDbContext context, DateTime? purgedAtUtc = null)

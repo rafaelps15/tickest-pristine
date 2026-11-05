@@ -1,5 +1,8 @@
 namespace TickestPristine.Application.Abstractions.Storage;
 
+/// <summary>
+/// Armazenamento dos arquivos de anexo; o banco guarda só a chave devolvida por <c>SaveAsync</c>.
+/// </summary>
 public interface IFileStorage
 {
     Task<string> SaveAsync(Stream content, string fileName, CancellationToken cancellationToken);

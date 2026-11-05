@@ -15,6 +15,7 @@
     <Project Path="tests/TickestPristine.Application.UnitTests/TickestPristine.Application.UnitTests.csproj" />
     <Project Path="tests/TickestPristine.ArchitectureTests/TickestPristine.ArchitectureTests.csproj" />
     <Project Path="tests/TickestPristine.IntegrationTests/TickestPristine.IntegrationTests.csproj" />
+    <Project Path="tests/TickestPristine.Tests.Shared/TickestPristine.Tests.Shared.csproj" />
   </Folder>
   <Project Path="docker-compose.dcproj">
     <Build />

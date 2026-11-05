@@ -22,6 +22,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using TickestPristine.Infrastructure.Tickets.SlaMonitoring;
+using System.Diagnostics.Metrics;
+using TickestPristine.Application.Abstractions.Telemetry;
 using TickestPristine.Domain.SlaCalendars;
 
 namespace TickestPristine.IntegrationTests.Tickets;
@@ -5049,7 +5051,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             logger ?? NullLogger<SlaMonitorBackgroundService>.Instance,
             Options.Create(new SlaMonitorSettings { BatchSize = batchSize, SleepTimeInMilliseconds = 1000 }),
             Services,
-            Services.GetRequiredService<NpgsqlDataSource>());
+            Services.GetRequiredService<NpgsqlDataSource>(),
+            Services.GetRequiredService<ApplicationTelemetry>());
 
     // Uma volta do monitoramento, no instante real.
     private async Task RunSlaMonitorAsync(int batchSize = 200, ILogger<SlaMonitorBackgroundService>? logger = null)
@@ -5467,6 +5470,53 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             TicketSlaTimer afterRetry = GetTimers(ticketId).Single(t => t.Metric == SlaMetric.FirstResponse);
             afterRetry.BreachedOnUtc.ShouldBe(afterRetry.DueOnUtc);
             BreachEvents.For(ticketId).ShouldHaveSingleItem();
+        }
+        finally
+        {
+            await context.Database.ExecuteSqlRawAsync(DropSkipFirstBreachUpdateSql);
+        }
+    }
+
+    [Fact]
+    public async Task SlaMonitor_Should_CountProcessedTimersAndBreaches_When_RoundBreachesTimer()
+    {
+        // Arrange: na fila, só o cronômetro da primeira resposta deste chamado vencido
+        await DrainSlaQueueAsync();
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        await MakeFirstResponseOverdueAsync(ticketId, TimeSpan.FromMinutes(1));
+        using var measurements = new MeasurementRecorder(Services.GetRequiredService<IMeterFactory>());
+
+        // Act
+        await RunSlaMonitorAsync();
+
+        // Assert
+        measurements.Sum("tickest.sla.timers_processed").ShouldBe(1);
+        measurements.Sum("tickest.sla.breaches").ShouldBe(1);
+        measurements.Sum("tickest.sla.batches_rolled_back").ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task SlaMonitor_Should_CountRolledBackBatch_When_SaveConflicts()
+    {
+        // Arrange
+        await DrainSlaQueueAsync();
+        (Guid ticketId, _) = await CreateTicketAsRequesterAsync();
+        await MakeFirstResponseOverdueAsync(ticketId, TimeSpan.FromMinutes(1));
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await context.Database.ExecuteSqlRawAsync(SkipFirstBreachUpdateSql);
+        using var measurements = new MeasurementRecorder(Services.GetRequiredService<IMeterFactory>());
+
+        try
+        {
+            // Act
+            await RunSlaMonitorAsync();
+
+            // Assert: o lote desfeito conta, e nada dele é apurado nem violado
+            measurements.Sum("tickest.sla.batches_rolled_back").ShouldBe(1);
+            measurements.Sum("tickest.sla.timers_processed").ShouldBe(0);
+            measurements.Sum("tickest.sla.breaches").ShouldBe(0);
         }
         finally
         {

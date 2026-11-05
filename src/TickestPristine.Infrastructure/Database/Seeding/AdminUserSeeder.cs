@@ -35,6 +35,15 @@ internal sealed class AdminUserSeeder(
                 "Atribua a função de administrador a uma conta manualmente ou configure outro e-mail.");
         }
 
+        // A senha do primeiro administrador segue a mesma política de qualquer senha; fora dela, nada é criado.
+        Result<Password> password = Password.Create(settings.Password);
+
+        if (password.IsFailure)
+        {
+            throw new InvalidOperationException(
+                $"'{AdminUserOptions.SectionName}:Password' fora da política de senha: {password.Error.Description}");
+        }
+
         var admin = new User
         {
             Id = Guid.NewGuid(),
@@ -51,7 +60,7 @@ internal sealed class AdminUserSeeder(
         {
             Id = Guid.NewGuid(),
             UserId = admin.Id,
-            PasswordHash = passwordHasher.Hash(settings.Password),
+            PasswordHash = passwordHasher.Hash(password.Value),
             MustChangePassword = true
         });
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleName = RoleNames.Administrator });

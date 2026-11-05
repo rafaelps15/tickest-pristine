@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TickestPristine.Application.Abstractions.Telemetry;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Infrastructure.DomainEvents;
@@ -11,6 +12,7 @@ namespace TickestPristine.Infrastructure.DomainEvents;
 /// </summary>
 internal sealed class DomainEventsDispatcher(
     IServiceProvider serviceProvider,
+    ApplicationTelemetry telemetry,
     ILogger<DomainEventsDispatcher> logger) : IDomainEventsDispatcher
 {
     private static readonly ConcurrentDictionary<Type, Type> HandlerTypeDictionary = new();
@@ -52,6 +54,7 @@ internal sealed class DomainEventsDispatcher(
                         "O handler {Handler} do evento de domínio {DomainEvent} falhou",
                         handler.GetType().Name,
                         domainEventType.Name);
+                    telemetry.RecordDomainEventHandlerFailure(domainEventType.Name, handler.GetType().Name);
                 }
 #pragma warning restore CA1031
             }

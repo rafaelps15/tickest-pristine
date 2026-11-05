@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -23,10 +24,11 @@ internal sealed class ConfigureJwtBearerOptions(IOptions<JwtOptions> jwtOptions)
     {
         JwtOptions jwt = jwtOptions.Value;
 
-        options.RequireHttpsMetadata = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            IssuerSigningKey = jwt.CreateSigningKey(),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SecurityKey)),
+            // Só o algoritmo com que o TokenProvider assina: HS384 ou HS512 com o mesmo segredo é recusado.
+            ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
             ValidIssuer = jwt.Issuer,
             ValidAudience = jwt.Audience,
             ClockSkew = TimeSpan.Zero

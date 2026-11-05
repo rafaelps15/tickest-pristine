@@ -13,8 +13,11 @@ using TickestPristine.Infrastructure.DomainEvents;
 using TickestPristine.Infrastructure.Notifications;
 using TickestPristine.Infrastructure.SlaCalendars;
 using TickestPristine.Infrastructure.Storage;
+using TickestPristine.Infrastructure.Health;
 using TickestPristine.Infrastructure.Tickets;
 using TickestPristine.Infrastructure.Time;
+using TickestPristine.Infrastructure.Validation;
+using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -32,6 +35,8 @@ namespace TickestPristine.Infrastructure;
 
 public static class DependencyInjection
 {
+    private static readonly string[] ReadyTags = [HealthCheckTags.Ready];
+
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
         IConfiguration configuration)
@@ -43,7 +48,7 @@ public static class DependencyInjection
             .AddServices()
             .AddCaching(configuration)
             .AddDatabase(connectionString)
-            .AddHealthChecks(connectionString)
+            .AddHealthChecks(connectionString, configuration)
             .AddAuthenticationInternal()
             .AddAuthorizationInternal();
     }
@@ -156,20 +161,33 @@ public static class DependencyInjection
         return services;
     }
 
-    private static IServiceCollection AddHealthChecks(this IServiceCollection services, string connectionString)
+    private static IServiceCollection AddHealthChecks(
+        this IServiceCollection services,
+        string connectionString,
+        IConfiguration configuration)
     {
-        services
+        // A do PostgreSQL pela connection string é a do health de sempre; as marcadas como prontidão são as do health/ready.
+        IHealthChecksBuilder healthChecks = services
             .AddHealthChecks()
-            .AddNpgSql(connectionString);
+            .AddNpgSql(connectionString)
+            .AddCheck<DatabaseHealthCheck>("database", tags: ReadyTags)
+            .AddCheck<FileStorageHealthCheck>("file-storage", tags: ReadyTags);
+
+        // Sem o Redis, o HybridCache fica só na memória, e não há cache externo a conferir.
+        if (!string.IsNullOrWhiteSpace(configuration.GetConnectionString("Cache")))
+        {
+            healthChecks.AddCheck<DistributedCacheHealthCheck>("cache", tags: ReadyTags);
+        }
 
         return services;
     }
 
     private static IServiceCollection AddAuthenticationInternal(this IServiceCollection services)
     {
+        services.AddSingleton<IValidator<JwtOptions>, JwtOptionsValidator>();
         services.AddOptions<JwtOptions>()
             .BindConfiguration(JwtOptions.SectionName)
-            .ValidateDataAnnotations()
+            .ValidateFluently()
             .ValidateOnStart();
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
@@ -191,6 +209,10 @@ public static class DependencyInjection
                 .RequireAuthenticatedUser()
                 .AddRequirements(new ActiveUserRequirement())
                 .Build();
+
+            // Nega por padrão: rota sem metadado de autorização (e rota inexistente) exige usuário autenticado e ativo;
+            // as rotas abertas declaram AllowAnonymous().
+            options.FallbackPolicy = options.DefaultPolicy;
 
             options.AddPolicy(AuthorizationPolicies.AuthenticatedUser, policy => policy.RequireAuthenticatedUser());
         });

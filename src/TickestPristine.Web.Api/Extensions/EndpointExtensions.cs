@@ -50,4 +50,18 @@ public static class EndpointExtensions
     {
         return app.RequireAuthorization(AuthorizationPolicies.AuthenticatedUser);
     }
+
+    /// <summary>
+    /// Responde com <c>Cache-Control: no-store</c>, para que nem o navegador nem um proxy guardem os tokens da resposta.
+    /// Vale para toda resposta da rota, inclusive as de erro.
+    /// </summary>
+    public static RouteHandlerBuilder WithNoStore(this RouteHandlerBuilder app)
+    {
+        return app.AddEndpointFilter(async (context, next) =>
+        {
+            context.HttpContext.Response.Headers.CacheControl = "no-store";
+
+            return await next(context);
+        });
+    }
 }

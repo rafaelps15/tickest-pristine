@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\TickestPristine.Web.Api\TickestPristine.Web.Api.csproj" />
+    <ProjectReference Include="..\TickestPristine.Tests.Shared\TickestPristine.Tests.Shared.csproj" />
   </ItemGroup>
 
 </Project>

@@ -18,12 +18,15 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
     public const string AdminEmail = "admin@tickestpristine.dev";
     public const string AdminPassword = "Admin123!";
 
+    // A mesma imagem do serviço postgres do docker-compose.yml (conferida por teste).
+    public const string PostgresImage = "postgres:17";
+
     /// <summary>
     /// Senha provisória com que o seed cria o administrador; o primeiro acesso troca para <see cref="AdminPassword"/>.
     /// </summary>
     private const string AdminInitialPassword = "ChangeMe123!";
 
-    private readonly PostgreSqlContainer _dbContainer = new PostgreSqlBuilder("postgres:17")
+    private readonly PostgreSqlContainer _dbContainer = new PostgreSqlBuilder(PostgresImage)
         .WithDatabase("tickestpristine")
         .WithUsername("postgres")
         .WithPassword("postgres")
@@ -39,10 +42,10 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         builder.UseSetting("FileStorage:RootPath", _fileStorageRootPath);
 
         // Configuração do JWT usada nos testes.
-        builder.UseSetting("Jwt:Secret", "super-duper-secret-value-that-should-be-in-user-secrets");
         builder.UseSetting("Jwt:Issuer", "tickestpristine");
         builder.UseSetting("Jwt:Audience", "developers");
-        builder.UseSetting("Jwt:ExpirationInMinutes", "60");
+        builder.UseSetting("Jwt:SecurityKey", "super-duper-secret-value-that-should-be-in-user-secrets");
+        builder.UseSetting("Jwt:AccessTokenExpirationInMinutes", "60");
 
         // Eleva o limite de requisições para não bloquear os testes.
         builder.UseSetting("RateLimiting:Global:PermitLimit", "100000");

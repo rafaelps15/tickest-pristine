@@ -17,6 +17,7 @@ internal static class ValidationDisplayNames
     {
         ["AssignedToUserId"] = "Responsável",
         ["AttachmentId"] = "Anexo",
+        ["BatchSize"] = "Tamanho do lote",
         ["Content"] = "Conteúdo",
         ["ContentType"] = "Tipo do arquivo",
         ["CurrentPassword"] = "Senha atual",

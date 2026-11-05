@@ -422,10 +422,9 @@ sequenceDiagram
     participant EH as Handlers do evento (escopo DI novo)
 
     H->>DB: SaveChangesAsync
-    DB->>DB: coleta as entidades com eventos (antes do save)
     DB->>PG: INSERT/UPDATE + auditoria (uma transação)
     PG-->>DB: OK
-    DB->>DB: lê e limpa os eventos
+    DB->>DB: lê e limpa os eventos das entidades rastreadas
     DB->>D: DispatchAsync(eventos, CancellationToken.None)
     loop cada evento, cada handler
         D->>EH: Handle (escopo DI novo)
@@ -435,7 +434,7 @@ sequenceDiagram
     end
 ```
 
-Fonte: `ApplicationDbContext.cs:57-108`, `DomainEventsDispatcher.cs:19-59`. **[Fato]** Se o processo cair entre o commit e o despacho, os eventos se perdem. Não há persistência de eventos.
+Fonte: `PublishDomainEventsInterceptor.cs:14-48`, `DomainEventsDispatcher.cs:21-62`. **[Fato]** Se o processo cair entre o commit e o despacho, os eventos se perdem. Não há persistência de eventos. **[Fato, spec 049, revisão da G1]** Os eventos são lidos depois do save, nas entidades ainda rastreadas: o de uma entidade removida no mesmo save não é despachado até o despacho explícito da 043 parte 2.
 
 ### 3.8 Persistência e estado
 
@@ -559,6 +558,8 @@ Fonte: `ApplicationDbContext.cs:57-108`, `DomainEventsDispatcher.cs:19-59`. **[F
 | `GET tickets/{id}/history` | Usuário ativo, e no handler: participante ou `tickets:manage` | — |
 | `GET audit-logs/{entityName}/{entityId}` | `audit:read` | — |
 | `GET health` | Anônima | Global |
+| `GET health/live` | Anônima | Global |
+| `GET health/ready` | Anônima | Global |
 
 Fonte: `src/TickestPristine.Web.Api/Endpoints/**`. O limite global (100 req/60 s por usuário ou IP) vale para todas as rotas (`RateLimitingExtensions.cs:29-32`, `appsettings.json:36-45`).
 
@@ -578,15 +579,16 @@ Fonte: `src/TickestPristine.Web.Api/Endpoints/**`. O limite global (100 req/60 s
 
 ### 4.6 Autenticação, autorização e fronteiras de segurança
 
-- **JWT** HMAC-SHA256, com segredo de pelo menos 32 caracteres validado na inicialização (`JwtOptions.cs:17-19`, `DependencyInjection.cs:130-133`). As claims são só `sub`, `email` e `name` (`TokenProvider.cs:24-29`). `ClockSkew = 0` (`ConfigureJwtBearerOptions.cs:32`). Expiração configurável de 1 a 1440 minutos (60 em Development).
-- **Senhas**: PBKDF2-SHA512 com 500.000 iterações, salt de 16 bytes e comparação em tempo constante (`PasswordHasher.cs:8-31`). O login com e-mail inexistente gasta tempo equivalente ao de um hash (`UserCredentialsVerifier.cs:36-42`); **[Spec 008]** o de conta pendente de ativação (sem credencial) também.
+- **JWT** HMAC-SHA256, com chave (`SecurityKey`) de pelo menos 32 caracteres validada na inicialização pelo `JwtOptionsValidator`, do FluentValidation, ligado ao Options pela ponte `FluentValidationOptions<T>` (`JwtOptionsValidator.cs:13-16`, `DependencyInjection.cs`); o `JwtOptions` só descreve a seção `Jwt`, e os valores vêm da configuração. As claims são só `sub`, `email` e `name` (`TokenProvider.cs:27-32`). `ClockSkew = 0` (`ConfigureJwtBearerOptions.cs:34`). **[Spec 049, G1]** Expiração de 1 a 60 minutos, e a validação só aceita HS256 (`ValidAlgorithms`).
+- **Senhas**: **[Spec 049, G1]** a política (mínimo de 6 caracteres, maiúscula e caractere especial) é o objeto de valor `Password` do Domain, usado pelos validators e pelo seed do administrador, que falha na subida com senha fora dela. PBKDF2-SHA512 com 500.000 iterações, salt de 16 bytes e comparação em tempo constante (`PasswordHasher.cs:8-31`). O login com e-mail inexistente gasta tempo equivalente ao de um hash (`UserCredentialsVerifier.cs:36-42`); **[Spec 008]** o de conta pendente de ativação (sem credencial) também.
 - **Convite de ativação (spec 008)**: token de 32 bytes aleatórios, só no e-mail e no fragmento (`#token=`) do link; o banco guarda só o hash SHA-256 (`user_invitations.token_hash`, único), que a auditoria não registra. O token não aparece em log, URL do servidor nem resposta da API.
 - **Refresh token**: 32 bytes aleatórios. Só o hash SHA-256 é gravado (`RefreshTokenHasher.cs`, `RefreshTokenStorageTests.cs`). Ele também é ligado ao `SecurityStamp` da credencial (`RefreshTokenCommandHandler.cs:51-61`).
 - **Autorização**:
-  - A policy padrão exige usuário autenticado e ativo (`DependencyInjection.cs:150-153`, `ActiveUserAuthorizationHandler.cs`).
+  - A policy padrão exige usuário autenticado e ativo (`DependencyInjection.cs`, `ActiveUserAuthorizationHandler.cs`). **[Spec 049, G1]** Ela também é a `FallbackPolicy`: rota sem metadado, rota inexistente e verbo errado respondem 401 sem token e 403 ao usuário desativado; as rotas anônimas declaram `.AllowAnonymous()`. Os dois handlers de autorização usam o `IPermissionProvider` da requisição e repassam o cancelamento dela. A proteção de cada rota é conferida por um teste de integração (`AuthorizationMatrixTests`).
   - `HasPermission(code)` cria dinamicamente uma policy com `PermissionRequirement` (`PermissionAuthorizationPolicyProvider.cs:14-18`). Essa policy **não** inclui `ActiveUserRequirement`, mas a consulta de permissões já filtra usuários inativos (`PermissionProvider.cs:18`).
   - As regras por recurso (participante, dono) ficam nos guards da Application.
-- **Auditoria**: grava toda inclusão, alteração ou exclusão de entidades `IAuditable` na mesma transação, excluindo `PasswordHash`, `SecurityStamp` e, **[Spec 008]**, `UserInvitation.TokenHash` dos valores (`AuditLoggingInterceptor.cs:19-24`, `AuditLogsTests.cs:128`, `UserInvitationsTests.cs`). A credencial criada na ativação anônima é auditada com autor nulo.
+- **Cabeçalhos e limites (spec 049, G1)**: toda resposta leva `X-Content-Type-Options: nosniff`; login, renovação e troca da senha provisória respondem com `Cache-Control: no-store`. O limitador fica entre a autenticação e a autorização: o limite separa por usuário autenticado e conta as tentativas que a autorização recusaria; o 429 sai em Problem Details com `code` `General.TooManyRequests` e `Retry-After`. As origens de CORS são validadas na subida.
+- **Auditoria**: grava toda inclusão, alteração ou exclusão de entidades `IAuditable` na mesma transação, excluindo `PasswordHash`, `SecurityStamp` e, **[Spec 008]**, `UserInvitation.TokenHash` dos valores (`AuditLoggingInterceptor.cs`, `AuditLogsTests.cs:128`, `UserInvitationsTests.cs`). **[Spec 049, revisão da G1]** A exclusão é declarada na configuração do EF de cada entidade, com `IsNotAudited()` (`AuditPropertyExtensions.cs`), e o nome da coluna alterada continua em `AffectedColumns`; um teste de arquitetura reprova propriedade com nome de segredo sem a marca. A credencial criada na ativação anônima é auditada com autor nulo.
 - **Arquivos**: a chave de armazenamento é gerada pelo servidor, a extensão é sanitizada e há proteção contra path traversal (`LocalFileStorage.cs:20,71-91`). **[Spec 011]** O conteúdo é conferido pela assinatura contra o tipo declarado, e o nome recusa caminho e caracteres de controle; **não há** antivírus. O download envia `Content-Disposition: attachment` e `nosniff`.
 - **Leitura do corpo**: **[Spec 011, DEC-6]** `RouteHandlerOptions.ThrowOnBadRequest` fica ligado em todos os ambientes: corpo ou parâmetros que não puderam ser lidos chegam ao `GlobalExceptionHandler` e respondem em Problem Details (antes, fora de Development, a resposta saía sem corpo). Corpo acima do limite da própria rota responde 413.
 
@@ -608,16 +610,16 @@ Fonte: `src/TickestPristine.Web.Api/Endpoints/**`. O limite global (100 req/60 s
 |---|---|---|---|
 | `ConnectionStrings:Database` | Sim | `Infrastructure/DependencyInjection.cs:31-32` (exceção na inicialização) | Em Development aponta para `localhost:5440`. |
 | `ConnectionStrings:Cache` | Não | — | Ativa o Redis como segundo nível do HybridCache. |
-| `Jwt:Secret` (≥ 32 caracteres), `Jwt:Issuer`, `Jwt:Audience`, `Jwt:ExpirationInMinutes` (1–1440), `Jwt:RefreshTokenExpirationInDays` (1–365) | Sim | `ValidateOnStart` | O segredo vem de user-secrets (`UserSecretsId` em `TickestPristine.Web.Api.csproj:4`). |
+| `Jwt:Issuer`, `Jwt:Audience`, `Jwt:SecurityKey` (≥ 32 caracteres), `Jwt:AccessTokenExpirationInMinutes` (1–60), `Jwt:RefreshTokenExpirationInDays` (1–365); nomes da spec 049 (antes `Jwt:Secret` e `Jwt:ExpirationInMinutes`) | Sim | `ValidateOnStart`, pelo `JwtOptionsValidator` | A chave vem de user-secrets (`UserSecretsId` em `TickestPristine.Web.Api.csproj:4`). |
 | `Admin:Email`, `Admin:Password` (+ `FirstName`, `LastName`) | Só quando não há administrador ativo | `ValidateDataAnnotations` (sem `ValidateOnStart`) | O seed falha se o e-mail já existir sem ser administrador (`AdminUserSeeder.cs:31-36`). |
 | `Seeding:DefaultOrganization` (padrão `true`), `Seeding:SampleData`, `Seeding:SampleUserPassword` | Condicional | `SampleDataSeeder.cs:102-106` | A senha de exemplo é obrigatória com `SampleData=true`. |
-| `FileStorage:RootPath` | Não (padrão `App_Data/attachments`) | `ValidateOnStart` | — |
+| `FileStorage:RootPath` | Não (padrão `App_Data/attachments`) | `ValidateOnStart` | **[Spec 049]** No contêiner, a pasta padrão pertence ao usuário da API, e o compose monta ali o volume `attachments`; o `health/ready` confere a escrita. |
 | `SlaMonitor:Enabled` (padrão `true`), `SlaMonitor:BatchSize` (200), `SlaMonitor:SleepTimeInMilliseconds` (60000) | Não (têm padrão no appsettings) | `ValidateDataAnnotations` + `ValidateOnStart` (valores menores que 1 impedem a API de subir) | Spec 006. Os testes de integração desligam o monitoramento e chamam as voltas diretamente. |
 | `Email:Host`, `Email:Port` (padrão 587), `Email:UseTls` (padrão `true`), `Email:UserName`, `Email:Password`, `Email:FromAddress`, `Email:FromName` | Sim (`Host` e `FromAddress`) | `ValidateDataAnnotations` + `ValidateOnStart` | Spec 008. No `appsettings.json` ficam vazios: fora de Development a API não sobe sem o SMTP configurado. Em Development, o Mailpit (`localhost:1025`, interface em `http://localhost:8025`). |
 | `Invitations:ActivationUrl` | Sim | `InvitationOptionsValidator` + `ValidateOnStart` | Spec 008. Endereço absoluto da tela de ativação do front (padrão de rota `/ativar-conta`), sem fragmento; HTTPS fora de Development. |
-| `Cors:AllowedOrigins[]`, `Cors:AllowLoopbackOrigins` | Não | — | Sem origens configuradas, nenhuma origem externa é aceita. |
+| `Cors:AllowedOrigins[]`, `Cors:AllowLoopbackOrigins` | Não | `ValidateOnStart` (spec 049): origem absoluta HTTP ou HTTPS | Sem origens configuradas, nenhuma origem externa é aceita. |
 | `RateLimiting:Global|Authentication|AttachmentUpload|AttachmentDelete:{PermitLimit,WindowInSeconds}` | Sim (têm padrão no appsettings) | `RateLimitingOptionsValidator` + `ValidateOnStart` | **[Spec 011]** `AttachmentUpload` (30 / 600 s) e `AttachmentDelete` (60 / 60 s), por usuário. |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Não | — | Ativa a exportação OTLP. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Não | — | Ativa a exportação OTLP. **[Spec 049]** Com ela, saem também os spans e as medidas da Application e o `service.version`. |
 | `Serilog:*` | Não | — | Em Development, envia para o Seq em `http://seq:5341`. |
 
 ---
@@ -780,6 +782,8 @@ Descrito no diagrama 3.6.
 
 ### 6.2 Estratégia e cobertura identificáveis
 
+- **[Fato, spec 049, G1]** Novos testes de arquitetura: as regras de texto e reflexão do REQ-416 da spec 049, a regra de pastas da Application, as entidades descobertas por reflexão e o `.Raise(` fora do Domain, cada um com a lista de exceções nomeadas e um teste que a faz encolher. O `TestDbContext` está congelado por um teste de inventário, e os auxiliares comuns dos testes (`EntityTestState`, `TestLogger`, `MeasurementRecorder`) ficam em `Abstractions/` do projeto de teste `tests/TickestPristine.Tests.Shared`, montado como os demais projetos de teste e sem testes próprios. Na integração entram a matriz de autorização de todas as rotas, o contrato OpenAPI de referência (`openapi-v1.approved.json`), a subida em `Production` e as rotas de saúde.
+
 | Projeto | Casos executados | O que cobre | Limitações |
 |---|---|---|---|
 | `TickestPristine.Application.UnitTests` | 494, em 69 arquivos `*Tests.cs` (462 antes da spec 004; 441 antes das specs 001 e 002; 424 antes da revisão de 22/10) | Handlers (EF InMemory via `TestDbContext` + NSubstitute) e validators de todos os módulos; regras de SLA, paginação e guards | O EF InMemory não reproduz `citext`, filtros parciais, `xmin` nem SQL do Dapper. |
@@ -800,7 +804,8 @@ Descrito no diagrama 3.6.
 
 - **[Fato]** Serilog configurado por `appsettings`. Uma propriedade `CorrelationId` é aceita do cliente se corresponder a `^[A-Za-z0-9._-]{1,64}$`; senão, usa o TraceId do OpenTelemetry. Ela é devolvida no header `Correlation-Id`, inclusive em respostas de erro (`RequestContextLoggingMiddleware.cs`, `RequestContextLoggingTests.cs`).
 - **[Fato]** O OpenTelemetry tem tracing (ASP.NET Core, HttpClient, Npgsql) e métricas (ASP.NET Core, HttpClient, Runtime). Não há métricas de negócio.
-- **[Fato]** O health check `GET health` verifica o PostgreSQL. O relatório detalhado só aparece em Development (`Program.cs:41-50`).
+- **[Fato]** O health check `GET health` verifica o PostgreSQL. O relatório detalhado só aparece em Development (`HealthCheckExtensions.cs`). **[Spec 049, G1]** `GET health/live` responde sem conferir dependências; `GET health/ready` confere o PostgreSQL pelo `NpgsqlDataSource` da aplicação, grava e apaga um arquivo de teste na pasta dos anexos e, com o Redis configurado, lê uma chave do cache. Fora de Development, as três rotas respondem só o status.
+- **[Fato, spec 049, G1]** A Application publica spans e medidas com o nome `TickestPristine.Application`, registrados no OpenTelemetry: um span por command e por query, com o resultado (`success` ou o código do erro); os contadores `tickest.request.failures` (por tipo de erro), `tickest.domain_event.handler_failures`, `tickest.sla.timers_processed`, `tickest.sla.breaches` e `tickest.sla.batches_rolled_back`; o recurso tem `service.version`. O command recusado pelo validator não gera span. O `LoggingDecorator` registra o tempo e um nível por tipo de erro: `Failure` em Error, `Forbidden` em Warning, os demais em Information.
 
 ### 6.5 Segurança
 
@@ -809,15 +814,17 @@ Pontos positivos comprovados: hash de senha forte, refresh token com hash e rota
 Pontos de atenção (detalhados na seção 7):
 
 - O auto-cadastro anônimo (GAP-03) foi **resolvido** em 22/10: o cadastro exige `users:create`.
-- Access token não revogável antes de expirar, até 1440 min por configuração (GAP-14).
+- Access token não revogável antes de expirar, até 60 min por configuração (spec 049; GAP-14).
 - **[Spec 011]** O conteúdo dos anexos é conferido pela assinatura; não há antivírus (GAP-09).
 - Não há `UseHttpsRedirection`, HSTS nem `ForwardedHeaders` no pipeline (`Program.cs`). **[Inferência]** Pode ser intencional se TLS e proxy forem tratados fora da aplicação (GAP-11).
 - `docker-compose.override.yml` e `appsettings.Development.json` contêm credenciais **padrão de desenvolvimento** do PostgreSQL em texto plano. Os valores não foram reproduzidos aqui.
 
 ### 6.6 Tratamento de falhas e resiliência
 
+- **[Fato, spec 049, G1]** As falhas do banco são classificadas num lugar só (`DatabaseFailures`), com e sem embrulho do EF, e o 409 de concorrência usa o erro `General.ConcurrencyConflict`. O despacho de eventos lê os eventos das entidades rastreadas só depois de um save bem-sucedido; num save que falha, nada é despachado e os eventos continuam nas entidades. A falha de um handler vai para o log e para o contador `tickest.domain_event.handler_failures`, sem derrubar a resposta; um handler que não pode ser criado (erro de registro na DI) chega ao cliente como 500 (revisão da G1).
+
 - **[Fato]** Não há retry ou circuit breaker explícito (ex.: `EnableRetryOnFailure` do Npgsql não está configurado em `DependencyInjection.cs:103-104`).
-- **[Fato]** A falha de um handler de evento é registrada em log e engolida (`DomainEventsDispatcher.cs:43-56`).
+- **[Fato]** A falha de um handler de evento é registrada em log e engolida (`DomainEventsDispatcher.cs:45-59`).
 - **[Fato]** A invalidação de cache depois do commit não tem compensação: se falhar, o cache expira em até 5 min.
 
 ### 6.7 Desempenho e escalabilidade
@@ -827,6 +834,8 @@ Pontos de atenção (detalhados na seção 7):
 - Não há evidência suficiente para avaliar o desempenho sob carga.
 
 ### 6.8 CI/CD e deploy
+
+- **[Fato, spec 049, G1]** O workflow usa o SDK do `global.json`, guarda o cache do NuGet, reprova pacote vulnerável (conferido projeto a projeto, porque o `docker-compose.dcproj` faz o comando falhar pela solução), publica os resultados `trx` e a cobertura como artefatos e constrói a imagem Docker sem publicá-la. O Dependabot cobre `nuget`, `github-actions` e `docker`. O `Dockerfile` fixa as imagens (`aspnet:10.0.14`, `sdk:10.0.403`), copia o `global.json` antes do restore e declara `HEALTHCHECK` em `health/ready`, com o `curl`; o `.dockerignore` deixa fora `tests/`, `specs/`, `.containers` e os `appsettings.Development.json`; no compose, a API só sobe com o PostgreSQL saudável (`pg_isready`).
 
 - **[Fato]** `.github/workflows/build.yml` roda em três eventos: push na `main`, pull request para a `main` e disparo manual (`workflow_dispatch`) (`build.yml:3-10`). Os passos são restore, build (Release) e test (Release). **[Corrigido em 23/10/2026]** Este item dizia que havia também um passo `Test SDD gate hook` (`build.yml:22-23`); o arquivo não tinha esse passo (conferido em 23/10/2026). Desde 23/10/2026, o workflow tem os passos `Setup Python` (3.12), `Test SDD gate hook` (`python -m unittest discover -s .claude/hooks -p "test_*.py"`) e `SDD compliance audit` (`python scripts/auditoria_sdd.py . --min-score 70`, commit `50fbdea`; o script fica em `scripts/` desde 24/10/2026), antes do restore, e o checkout baixa o histórico completo (`fetch-depth: 0`), porque a auditoria avalia os últimos commits (o script ignora commits de merge). O passo `Publish` tem a condição `if: github.event_name != 'pull_request'` (`build.yml:39-41`): roda em push e no disparo manual, e não roda em pull request. O workflow não publica artefatos nem imagens, e não há etapa de deploy.
 - **[Fato, desde 29/10/2026 pela spec 012]** O passo "Test agent instructions" roda `python -m unittest discover -s scripts -p "test_*.py"` (o `scripts/test_instructions.py`). No CI, onde a biblioteca canônica `C:\dev\dotnet-universal-skills` não existe, os 2 testes de paridade com ela são pulados e os demais rodam (DEC-34 da spec 012).
@@ -896,7 +905,7 @@ Pontos de atenção (detalhados na seção 7):
 | GAP-11 | Segurança / operação | Não há `ForwardedHeaders`, HTTPS redirection nem HSTS; rate limit por `RemoteIpAddress` (`RateLimitingExtensions.cs:50-56`) | Atrás de um proxy reverso, todos os anônimos podem cair na mesma partição (bloqueio coletivo do login). | **P2**: condicionado à topologia de rede, que é desconhecida. | Confirmar a topologia e configurar os forwarded headers, se aplicável. |
 | GAP-12 | CI | **[Resolvido no repositório em 22/10, commit `d9d1f50`; validação no GitHub pendente]** Antes: `build.yml` sem gatilho `pull_request`, com testes de integração só depois do merge. Agora: gatilho `pull_request` para a `main` e `Publish` só fora de PR (seção 6.8) | Até rodar num PR real, não há prova de que os 699 testes passam no runner Linux do GitHub | **P2** | Abrir um PR para a `main` e conferir a execução do workflow; avaliar exigir o check "Build" na proteção da `main`. |
 | GAP-13 | Observabilidade | Seq em `http://seq:5341` (só na rede do compose); enrichers sem pacote | Logs estruturados ausentes ao rodar a API no host | **P3** | Ajustar a URL por ambiente e adicionar ou remover os enrichers. |
-| GAP-14 | Segurança | Access token sem revogação (`TokenProvider.cs`); logout e troca de senha só revogam o refresh | Um token vazado vale até expirar (60 min em Development, até 1440 permitido) | **P3**: compensado pela checagem de usuário ativo a cada requisição. | Manter o prazo curto em produção. Avaliar uma denylist só se houver requisito. |
+| GAP-14 | Segurança | Access token sem revogação (`TokenProvider.cs`); logout e troca de senha só revogam o refresh | Um token vazado vale até expirar (60 min em Development; a configuração aceita no máximo 60, spec 049) | **P3**: compensado pela checagem de usuário ativo a cada requisição. | Manter o prazo curto em produção. Avaliar uma denylist só se houver requisito. |
 | GAP-15 | Arquitetura | SQL cru do PostgreSQL na Application (`GetTicketVolumeQueryHandler.cs`) | Acoplamento ao esquema físico; renomear uma coluna quebra só em execução (mitigado pelos testes de integração) | **P3** | Aceitar como decisão consciente ou mover para a Infrastructure. |
 | GAP-16 | Dados | Fuso `America/Sao_Paulo` fixo no SQL | Organizações em outros fusos teriam gráficos deslocados | **P3** | Só tratar se houver requisito multifuso. |
 | GAP-17 | Observabilidade | `LoggingDecorator` registra falhas esperadas (404, 409, validação) como `LogError` | Ruído em alertas baseados em nível de log | **P3** | Avaliar `Warning` para erros de negócio. |
@@ -926,7 +935,7 @@ As perguntas Q-01 a Q-12 estão na seção 9.5 (Q-01 e Q-02 foram respondidas e 
 | E-02 | Migrations automáticas só em Development | `src/TickestPristine.Web.Api/Program.cs:34-39` | `ApplyMigrations` | — |
 | E-03 | Decorators Validation → Logging → handler | `src/TickestPristine.Application/DependencyInjection.cs:28-34` | `AddApplication` | — |
 | E-04 | Commands validados, queries não | `src/TickestPristine.Application/DependencyInjection.cs:33-34` | — | — |
-| E-05 | Eventos publicados depois do commit, falhas engolidas | **[Spec 041]** `src/TickestPristine.Infrastructure/DomainEvents/PublishDomainEventsInterceptor.cs` (antes o `SaveChangesAsync` sobrescrito do `ApplicationDbContext`); `DomainEvents/DomainEventsDispatcher.cs:43-56` | `SavedChangesAsync`, `DispatchAsync` | `DomainEventsPublishingTests.cs` |
+| E-05 | Eventos publicados depois do commit, falhas engolidas | **[Spec 041]** `src/TickestPristine.Infrastructure/DomainEvents/PublishDomainEventsInterceptor.cs` (antes o `SaveChangesAsync` sobrescrito do `ApplicationDbContext`); `DomainEvents/DomainEventsDispatcher.cs:45-59` | `SavedChangesAsync`, `DispatchAsync` | `DomainEventsPublishingTests.cs` |
 | E-06 | Único handler de evento, sem efeito | `src/TickestPristine.Application/Users/Register/UserRegisteredDomainEventHandler.cs:6-12` | `UserRegisteredDomainEventHandler` | — |
 | E-07 | Auditoria na mesma transação, sem campos sensíveis | `src/TickestPristine.Infrastructure/Audit/AuditLoggingInterceptor.cs:19-58` | `AuditLoggingInterceptor` | `AuditLogsTests.cs:128` |
 | E-08 | Permissões por roles, com cache | `src/TickestPristine.Infrastructure/Authorization/PermissionProvider.cs:10-48` | `PermissionProvider` | `PermissionsTests.cs`, `RolesTests.cs` |

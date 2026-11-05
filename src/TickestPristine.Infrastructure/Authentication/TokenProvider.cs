@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text;
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Domain.Users;
 using Microsoft.Extensions.Options;
@@ -17,7 +18,9 @@ internal sealed class TokenProvider(
     {
         JwtOptions jwt = jwtOptions.Value;
 
-        var credentials = new SigningCredentials(jwt.CreateSigningKey(), SecurityAlgorithms.HmacSha256);
+        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SecurityKey));
+
+        var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
         // Só a identidade vai no token: as permissões são resolvidas no servidor a cada requisição e os clientes as
         // leem em GET /users/me.
@@ -31,7 +34,7 @@ internal sealed class TokenProvider(
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),
-            Expires = dateTimeProvider.UtcNow.AddMinutes(jwt.ExpirationInMinutes),
+            Expires = dateTimeProvider.UtcNow.AddMinutes(jwt.AccessTokenExpirationInMinutes),
             SigningCredentials = credentials,
             Issuer = jwt.Issuer,
             Audience = jwt.Audience

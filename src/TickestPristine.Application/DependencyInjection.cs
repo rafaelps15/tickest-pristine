@@ -1,6 +1,7 @@
 ﻿using System.Globalization;
 using TickestPristine.Application.Abstractions.Behaviors;
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Abstractions.Telemetry;
 using TickestPristine.Application.Tickets;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,6 +43,9 @@ public static class DependencyInjection
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly, includeInternalTypes: true);
 
         services.AddScoped<TicketAgentLookup>();
+
+        // O IMeterFactory vem do host (registrado pelo ASP.NET Core).
+        services.AddSingleton<ApplicationTelemetry>();
 
         return services;
     }

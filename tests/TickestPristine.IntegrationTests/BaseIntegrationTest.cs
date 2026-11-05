@@ -8,7 +8,9 @@ using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using TickestPristine.Infrastructure.Database;
 
 namespace TickestPristine.IntegrationTests;
@@ -221,5 +223,25 @@ public abstract class BaseIntegrationTest
         await context.SaveChangesAsync();
 
         return sector.Id;
+    }
+
+    /// <summary>
+    /// Cria um banco vazio no mesmo container dos testes e devolve a connection string dele, para os testes que sobem a
+    /// API apontando para um banco sem migrations.
+    /// </summary>
+    protected async Task<string> CreateEmptyDatabaseAsync()
+    {
+        string connectionString = Services.GetRequiredService<IConfiguration>().GetConnectionString("Database")!;
+        string databaseName = $"tickest_vazio_{Guid.NewGuid():N}";
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using NpgsqlCommand command = connection.CreateCommand();
+#pragma warning disable CA2100 // O nome do banco é gerado pelo próprio teste, sem entrada externa.
+        command.CommandText = $"CREATE DATABASE \"{databaseName}\"";
+#pragma warning restore CA2100
+        await command.ExecuteNonQueryAsync();
+
+        return new NpgsqlConnectionStringBuilder(connectionString) { Database = databaseName }.ConnectionString;
     }
 }

@@ -75,6 +75,47 @@ public sealed class DomainEventsPublishingTests(IntegrationTestWebAppFactory fac
         duplicate.DomainEvents.ShouldHaveSingleItem().ShouldBe(new DepartmentCreatedDomainEvent(duplicate.Id));
     }
 
+    [Fact]
+    public async Task SaveChangesAsync_Should_KeepEventsOfRemovedEntityAndPublishNothing_When_SaveFails()
+    {
+        // Arrange: a remoção falha porque o id não existe no banco
+        var dispatcher = new RecordingDomainEventsDispatcher();
+        using IServiceScope scope = Services.CreateScope();
+        await using EventProbeDbContext context = await CreateProbeContextAsync(scope, dispatcher);
+        var probe = EventProbe.Create();
+        context.Probes.Attach(probe);
+        probe.Discard();
+        context.Probes.Remove(probe);
+
+        // Act
+        Func<Task> save = () => context.SaveChangesAsync();
+
+        // Assert
+        await save.ShouldThrowAsync<DbUpdateConcurrencyException>();
+        dispatcher.Published.ShouldBeEmpty();
+        probe.DomainEvents.ShouldHaveSingleItem().ShouldBe(new EventProbeDiscardedDomainEvent(probe.Id));
+    }
+
+    // Contexto da entidade de teste, numa tabela própria do banco dos testes, com o mesmo interceptor de eventos.
+    private static async Task<EventProbeDbContext> CreateProbeContextAsync(IServiceScope scope, IDomainEventsDispatcher dispatcher)
+    {
+        ServiceProvider dispatcherProvider = new ServiceCollection()
+            .AddSingleton(dispatcher)
+            .BuildServiceProvider();
+
+        DbContextOptions<EventProbeDbContext> options = new DbContextOptionsBuilder<EventProbeDbContext>()
+            .UseNpgsql(scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>())
+            .AddInterceptors(new PublishDomainEventsInterceptor(dispatcherProvider.GetRequiredService<IServiceScopeFactory>()))
+            .Options;
+
+        var context = new EventProbeDbContext(options);
+        await context.Database.ExecuteSqlRawAsync(
+            "CREATE SCHEMA IF NOT EXISTS integration_tests; " +
+            "CREATE TABLE IF NOT EXISTS integration_tests.event_probes (id uuid PRIMARY KEY);");
+
+        return context;
+    }
+
     // Contexto só com o interceptor de eventos, que resolve o dispatcher que grava o que foi publicado.
     private static ApplicationDbContext CreateContext(IServiceScope scope, IDomainEventsDispatcher dispatcher)
     {
@@ -113,5 +154,37 @@ public sealed class DomainEventsPublishingTests(IntegrationTestWebAppFactory fac
 
             return Task.CompletedTask;
         }
+    }
+}
+
+// Entidade e evento só destes testes: a remoção dispara o evento, como faria uma entidade do domínio.
+internal sealed class EventProbe : Entity
+{
+    private EventProbe()
+    {
+    }
+
+    public Guid Id { get; private set; }
+
+    public static EventProbe Create() => new() { Id = Guid.NewGuid() };
+
+    public void Discard() => Raise(new EventProbeDiscardedDomainEvent(Id));
+}
+
+internal sealed record EventProbeDiscardedDomainEvent(Guid ProbeId) : IDomainEvent;
+
+internal sealed class EventProbeDbContext(DbContextOptions<EventProbeDbContext> options) : DbContext(options)
+{
+    public DbSet<EventProbe> Probes => Set<EventProbe>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EventProbe>(probe =>
+        {
+            probe.ToTable("event_probes", "integration_tests");
+            probe.HasKey(p => p.Id);
+            probe.Property(p => p.Id).HasColumnName("id").ValueGeneratedNever();
+            probe.Ignore(p => p.DomainEvents);
+        });
     }
 }
