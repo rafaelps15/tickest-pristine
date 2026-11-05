@@ -11,7 +11,12 @@ internal static class CorsExtensions
     internal static IServiceCollection AddCorsInternal(this IServiceCollection services)
     {
         services.AddOptions<CorsPolicyOptions>()
-            .BindConfiguration(CorsPolicyOptions.SectionName);
+            .BindConfiguration(CorsPolicyOptions.SectionName)
+            .Validate(
+                options => options.AllowedOrigins.All(IsValidOrigin),
+                $"{CorsPolicyOptions.SectionName}:AllowedOrigins aceita só URL absoluta http ou https, sem caminho " +
+                "(ex.: https://app.example.com).")
+            .ValidateOnStart();
 
         services.AddCors();
 
@@ -48,4 +53,12 @@ internal static class CorsExtensions
 
     private static bool IsLoopbackOrigin(string origin) =>
         Uri.TryCreate(origin, UriKind.Absolute, out Uri? uri) && uri.IsLoopback;
+
+    // A origem que o navegador manda é esquema, host e porta: caminho, consulta e fragmento nunca casariam com ela.
+    private static bool IsValidOrigin(string origin) =>
+        Uri.TryCreate(origin, UriKind.Absolute, out Uri? uri)
+        && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp)
+        && uri.AbsolutePath == "/"
+        && string.IsNullOrEmpty(uri.Query)
+        && string.IsNullOrEmpty(uri.Fragment);
 }

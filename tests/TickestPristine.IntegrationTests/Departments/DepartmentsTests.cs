@@ -313,7 +313,7 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
 
         HttpResponseMessage getAllResponse = await HttpClient.GetAsync("departments");
         getAllResponse.EnsureSuccessStatusCode();
-        List<DepartmentSummaryDto>? departments = await getAllResponse.Content.ReadFromJsonAsync<List<DepartmentSummaryDto>>();
+        List<DepartmentListItemDto>? departments = await getAllResponse.Content.ReadFromJsonAsync<List<DepartmentListItemDto>>();
         departments!.ShouldNotContain(d => d.Id == departmentId);
     }
 
@@ -509,6 +509,54 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
     }
 
     [Fact]
+    public async Task Update_Should_ReturnNoContent_WhenDepartmentIsDeactivated()
+    {
+        // Arrange: o comportamento de hoje, fixado até a spec 033 decidir sobre a edição de desativados
+        await AuthenticateAsAdminAsync();
+        Guid departmentId = await CreateDepartmentAsync();
+        (await HttpClient.DeleteAsync($"departments/{departmentId}")).EnsureSuccessStatusCode();
+        string newName = $"Department-{Guid.NewGuid():N}";
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"departments/{departmentId}", new
+        {
+            name = newName,
+            description = "Updated while deactivated"
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        DepartmentDto? department = await HttpClient.GetFromJsonAsync<DepartmentDto>($"departments/{departmentId}");
+        department!.Name.ShouldBe(newName);
+        department.Description.ShouldBe("Updated while deactivated");
+        department.IsActive.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Update_Should_ReturnConflict_WhenDeactivatedDepartmentNameIsReusedByActiveOne()
+    {
+        // Arrange: um departamento ativo reaproveitou o nome do desativado
+        await AuthenticateAsAdminAsync();
+        string name = $"Department-{Guid.NewGuid():N}";
+        Guid deactivatedId = await CreateDepartmentAsync(name);
+        (await HttpClient.DeleteAsync($"departments/{deactivatedId}")).EnsureSuccessStatusCode();
+        await CreateDepartmentAsync(name);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"departments/{deactivatedId}", new
+        {
+            name,
+            description = "Updated while deactivated"
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Departments.NameNotUnique");
+    }
+
+    [Fact]
     public async Task Update_Should_ReturnNotFound_WhenResponsibleUserDoesNotExist()
     {
         // Arrange
@@ -626,8 +674,6 @@ public sealed class DepartmentsTests(IntegrationTestWebAppFactory factory) : Bas
     }
 
     private sealed record DepartmentDto(Guid Id, string Name, string Description, bool IsActive, Guid? ResponsibleUserId);
-
-    private sealed record DepartmentSummaryDto(Guid Id, string Name, string Description);
 
     private sealed record SectorSummaryDto(Guid Id, string Name);
 

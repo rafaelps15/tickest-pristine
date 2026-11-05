@@ -193,6 +193,37 @@ public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseInteg
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 
+    [Fact]
+    public async Task AssignPermissions_Should_ForbidMemberNextRequest_WhenPermissionIsRemovedFromRole()
+    {
+        // Arrange: o membro passa pela permissão com o token emitido, e as permissões dele ficam em cache
+        await AuthenticateAsAdminAsync();
+        string roleName = await CreateTestRoleAsync();
+        (await HttpClient.PutAsJsonAsync($"roles/{roleName}/permissions", new { permissionCodes = TicketOnlyPermissionCodes }))
+            .EnsureSuccessStatusCode();
+
+        string memberEmail = UniqueEmail();
+        Guid memberId = await RegisterUserAsync(memberEmail);
+        (await HttpClient.PutAsJsonAsync($"users/{memberId}/roles", new { roleNames = new[] { roleName } }))
+            .EnsureSuccessStatusCode();
+
+        AccessTokens memberTokens = await LoginAsync(memberEmail);
+        Authenticate(memberTokens.AccessToken);
+        (await HttpClient.GetAsync("tickets")).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        await AuthenticateAsAdminAsync();
+        (await HttpClient.PutAsJsonAsync($"roles/{roleName}/permissions", new { permissionCodes = AssignedPermissionCodes }))
+            .EnsureSuccessStatusCode();
+
+        Authenticate(memberTokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("tickets");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
     /// <summary>
     /// Cria uma role de teste vazia e autentica como um colaborador cuja role só gerencia e lê funções.
     /// </summary>

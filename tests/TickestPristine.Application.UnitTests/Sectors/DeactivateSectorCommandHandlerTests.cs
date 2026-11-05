@@ -71,8 +71,10 @@ public sealed class DeactivateSectorCommandHandlerTests : BaseHandlerTest
         deactivated.DomainEvents.ShouldContain(domainEvent => domainEvent is SectorDeactivatedDomainEvent);
     }
 
-    [Fact]
-    public async Task Handle_Should_ReturnConflict_WhenSectorHasActiveTickets()
+    [Theory]
+    [InlineData(TicketStatus.Open)]
+    [InlineData(TicketStatus.InProgress)]
+    public async Task Handle_Should_ReturnConflict_WhenSectorHasActiveTickets(TicketStatus status)
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -80,7 +82,7 @@ public sealed class DeactivateSectorCommandHandlerTests : BaseHandlerTest
         context.Sectors.Add(sector);
         context.Tickets.Add(TicketTestData.Create(
             sector: sector,
-            status: TicketStatus.InProgress,
+            status: status,
             description: "The printer on the second floor is not working"));
         await context.SaveChangesAsync();
 
@@ -95,5 +97,34 @@ public sealed class DeactivateSectorCommandHandlerTests : BaseHandlerTest
 
         Sector unchanged = await context.Sectors.SingleAsync(s => s.Id == sector.Id);
         unchanged.IsActive.ShouldBeTrue();
+    }
+
+    [Theory]
+    [InlineData(TicketStatus.Resolved)]
+    [InlineData(TicketStatus.Closed)]
+    [InlineData(TicketStatus.Canceled)]
+    public async Task Handle_Should_DeactivateSector_WhenTicketsAreInactive(TicketStatus status)
+    {
+        // Arrange
+        await using TestDbContext context = CreateDbContext();
+        var sector = Sector.Create(Department.Create("Suporte", "Departamento de teste", responsibleUser: null), "Helpdesk", description: null);
+        context.Sectors.Add(sector);
+        context.Tickets.Add(TicketTestData.Create(
+            sector: sector,
+            status: status,
+            description: "The printer on the second floor is not working"));
+        await context.SaveChangesAsync();
+
+        var handler = new DeactivateSectorCommandHandler(context);
+
+        // Act
+        Result result = await handler.Handle(new DeactivateSectorCommand(sector.Id), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        Sector deactivated = await context.Sectors.SingleAsync(s => s.Id == sector.Id);
+        deactivated.IsActive.ShouldBeFalse();
+        deactivated.DomainEvents.ShouldContain(domainEvent => domainEvent is SectorDeactivatedDomainEvent);
     }
 }

@@ -375,6 +375,62 @@ public sealed class SectorsTests(IntegrationTestWebAppFactory factory) : BaseInt
     }
 
     [Fact]
+    public async Task Update_Should_ReturnNoContent_WhenSectorIsDeactivated()
+    {
+        // Arrange: o comportamento de hoje, fixado até a spec 033 decidir sobre a edição de desativados
+        await AuthenticateAsAdminAsync();
+        Guid departmentId = await CreateDepartmentAsync();
+        Guid sectorId = await CreateSectorAsync(departmentId);
+        (await HttpClient.DeleteAsync($"sectors/{sectorId}")).EnsureSuccessStatusCode();
+        string newName = $"Sector-{Guid.NewGuid():N}";
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"sectors/{sectorId}", new
+        {
+            name = newName,
+            description = "Updated while deactivated"
+        });
+
+        // Assert: GET sectors/{id} responde 404 para setor desativado, então a mudança é lida no banco
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var sector = await context.Sectors
+            .AsNoTracking()
+            .Where(s => s.Id == sectorId)
+            .Select(s => new { s.Name, s.Description, s.IsActive })
+            .SingleAsync();
+        sector.Name.ShouldBe(newName);
+        sector.Description.ShouldBe("Updated while deactivated");
+        sector.IsActive.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Update_Should_ReturnConflict_WhenDeactivatedSectorNameIsReusedByActiveOne()
+    {
+        // Arrange: um setor ativo do mesmo departamento reaproveitou o nome do desativado
+        await AuthenticateAsAdminAsync();
+        Guid departmentId = await CreateDepartmentAsync();
+        string name = $"Sector-{Guid.NewGuid():N}";
+        Guid deactivatedId = await CreateSectorAsync(departmentId, name);
+        (await HttpClient.DeleteAsync($"sectors/{deactivatedId}")).EnsureSuccessStatusCode();
+        await CreateSectorAsync(departmentId, name);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"sectors/{deactivatedId}", new
+        {
+            name,
+            description = "Updated while deactivated"
+        });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        ProblemDto? problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        problem!.Title.ShouldBe("Sectors.NameNotUnique");
+    }
+
+    [Fact]
     public async Task Deactivate_Should_ReturnConflict_WhenSectorHasOpenTickets()
     {
         // Arrange

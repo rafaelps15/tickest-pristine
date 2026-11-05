@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Abstractions.Telemetry;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Tickets.ProcessSlaBreaches;
 using TickestPristine.Domain.Sectors;
@@ -29,7 +30,8 @@ public sealed class SlaMonitorBackgroundServiceTests(IntegrationTestWebAppFactor
             logger,
             Options.Create(new SlaMonitorSettings { Enabled = enabled, BatchSize = 1, SleepTimeInMilliseconds = 1000 }),
             serviceProvider,
-            Services.GetRequiredService<NpgsqlDataSource>());
+            Services.GetRequiredService<NpgsqlDataSource>(),
+            Services.GetRequiredService<ApplicationTelemetry>());
 
     private static ServiceProvider CreateProviderWith(ScriptedProcessSlaBreachesHandlerState state)
     {

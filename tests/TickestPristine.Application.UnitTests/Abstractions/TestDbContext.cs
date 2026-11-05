@@ -56,17 +56,33 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
     {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.Entity<Role>().HasKey(r => r.Name);
-        modelBuilder.Entity<Role>().Property<int>("Version").IsConcurrencyToken();
+        // Chaves como na Infrastructure: o Id é a chave primária, e o nome da role e o código da permissão são as chaves
+        // alternativas que user_roles e role_permissions referenciam.
+        modelBuilder.Entity<Role>(role =>
+        {
+            role.HasKey(r => r.Id);
+            role.HasAlternateKey(r => r.Name);
+            role.Property<int>("Version").IsConcurrencyToken();
+        });
         modelBuilder.Entity<Permission>(permission =>
         {
-            permission.HasKey(p => p.Code);
+            permission.HasKey(p => p.Id);
+            permission.HasAlternateKey(p => p.Code);
             permission.Property(p => p.Name);
             permission.Property(p => p.Description);
             permission.Property(p => p.Group);
             permission.Property(p => p.IsAdministrative);
         });
-        modelBuilder.Entity<RolePermission>().HasKey(p => new { p.RoleName, p.PermissionCode });
+        modelBuilder.Entity<RolePermission>(rolePermission =>
+        {
+            rolePermission.HasKey(p => p.Id);
+            rolePermission.Property(p => p.Id).ValueGeneratedNever();
+        });
+        modelBuilder.Entity<UserRole>(userRole =>
+        {
+            userRole.HasKey(u => u.Id);
+            userRole.Property(u => u.Id).ValueGeneratedNever();
+        });
 
         modelBuilder.Entity<Ticket>().HasQueryFilter(t => t.DeletedAtUtc == null);
 

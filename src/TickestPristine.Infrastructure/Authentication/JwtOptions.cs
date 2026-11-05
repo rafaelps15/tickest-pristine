@@ -1,40 +1,16 @@
-using System.ComponentModel.DataAnnotations;
-using System.Text;
-using Microsoft.IdentityModel.Tokens;
-
 namespace TickestPristine.Infrastructure.Authentication;
 
-/// <summary>
-/// Configuração da seção "Jwt": chave de assinatura, emissor, audiência e validade do access token.
-/// </summary>
 public sealed class JwtOptions
 {
     public const string SectionName = "Jwt";
 
-    /// <summary>
-    /// Chave do HMAC-SHA256: pelo menos 32 caracteres (256 bits).
-    /// </summary>
-    [Required]
-    [MinLength(32)]
-    public string Secret { get; init; } = string.Empty;
+    public required string Issuer { get; init; }
 
-    [Required]
-    public string Issuer { get; init; } = string.Empty;
+    public required string Audience { get; init; }
 
-    [Required]
-    public string Audience { get; init; } = string.Empty;
+    public required string SecurityKey { get; init; }
 
-    [Range(1, 1440)]
-    public int ExpirationInMinutes { get; init; }
+    public required int AccessTokenExpirationInMinutes { get; init; }
 
-    /// <summary>
-    /// Validade do refresh token, em dias. Cada login ou renovação gera um token com essa validade.
-    /// </summary>
-    [Range(1, 365)]
-    public int RefreshTokenExpirationInDays { get; init; } = 7;
-
-    /// <summary>
-    /// Chave usada tanto para assinar quanto para validar o token.
-    /// </summary>
-    public SymmetricSecurityKey CreateSigningKey() => new(Encoding.UTF8.GetBytes(Secret));
+    public required int RefreshTokenExpirationInDays { get; init; }
 }

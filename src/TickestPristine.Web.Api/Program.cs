@@ -1,8 +1,6 @@
 ﻿using System.Reflection;
 using TickestPristine.Application;
-using HealthChecks.UI.Client;
 using TickestPristine.Infrastructure;
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Serilog;
 using TickestPristine.Web.Api;
 using TickestPristine.Web.Api.Extensions;
@@ -31,6 +29,9 @@ WebApplication app = builder.Build();
 
 app.MapEndpoints();
 
+// Antes de tudo, para que toda resposta leve os cabeçalhos de segurança, inclusive as do Swagger e as de erro.
+app.UseSecurityHeaders();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwaggerWithUi();
@@ -38,16 +39,7 @@ if (app.Environment.IsDevelopment())
     app.ApplyMigrations();
 }
 
-// O relatório detalhado (cada checagem, tempos e a mensagem de erro do banco) é anônimo: fica só em Development. Nos
-// demais ambientes a resposta é apenas o status (Healthy, Degraded ou Unhealthy).
-var healthCheckOptions = new HealthCheckOptions();
-
-if (app.Environment.IsDevelopment())
-{
-    healthCheckOptions.ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse;
-}
-
-app.MapHealthChecks("health", healthCheckOptions);
+app.MapHealthCheckRoutes();
 
 // Antes do UseExceptionHandler, para que o log da exceção também saia com o CorrelationId.
 app.UseRequestContextLogging();
@@ -62,9 +54,11 @@ app.UseCors(CorsExtensions.DefaultPolicyName);
 
 app.UseAuthentication();
 
-app.UseAuthorization();
-
+// Entre a autenticação e a autorização: o limite separa por usuário autenticado e conta também as tentativas que a
+// autorização recusaria (token inválido, rota sem permissão).
 app.UseRateLimiter();
+
+app.UseAuthorization();
 
 await app.RunAsync();
 

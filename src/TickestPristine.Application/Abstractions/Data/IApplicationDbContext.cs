@@ -10,6 +10,10 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace TickestPristine.Application.Abstractions.Data;
 
+/// <summary>
+/// Acesso da Application ao banco pelo EF Core: os conjuntos das entidades e o <c>SaveChangesAsync</c>, que grava a
+/// auditoria na mesma transação e publica os eventos de domínio depois do commit.
+/// </summary>
 public interface IApplicationDbContext
 {
     DbSet<User> Users { get; }

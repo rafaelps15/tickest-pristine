@@ -31,6 +31,11 @@ public class Result
 
     public static Result<TValue> Failure<TValue>(Error error) =>
         new(default, false, error);
+
+    /// <summary>Sucesso com o valor, ou o erro quando o valor é nulo.</summary>
+    public static Result<TValue> Create<TValue>(TValue? value, Error error)
+        where TValue : class =>
+        value is null ? Failure<TValue>(error) : Success(value);
 }
 
 public class Result<TValue> : Result

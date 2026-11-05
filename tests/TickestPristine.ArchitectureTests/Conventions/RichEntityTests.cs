@@ -1,23 +1,43 @@
+using NetArchTest.Rules;
 using Shouldly;
 using TickestPristine.ArchitectureTests.Conventions.Fixtures;
-using TickestPristine.Domain.Departments;
-using TickestPristine.Domain.Sectors;
-using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Audit;
+using TickestPristine.Domain.Roles;
+using TickestPristine.Domain.SlaCalendars;
+using TickestPristine.Domain.Users;
+using TickestPristine.SharedKernel;
 
 namespace TickestPristine.ArchitectureTests.Conventions;
 
 public class RichEntityTests : BaseTest
 {
-    // Entidades já migradas para o domínio rico; cada migração acrescenta as suas.
-    private static readonly Type[] RichEntities =
+    // Entidades ainda no modelo anêmico, até a migração de cada uma (usuários e identidade, funções e permissões,
+    // calendário de SLA e log de auditoria). A lista só encolhe: a entidade migrada sai daqui.
+    internal static readonly Type[] LegacyAnemicEntities =
     [
-        typeof(Department),
-        typeof(Sector),
-        typeof(Ticket),
-        typeof(TicketSlaTimer),
-        typeof(TicketHistory),
-        typeof(TicketMessage),
-        typeof(TicketAttachment)
+        typeof(AuditLogEntry),
+        typeof(Permission),
+        typeof(RefreshToken),
+        typeof(Role),
+        typeof(RolePermission),
+        typeof(SlaCalendar),
+        typeof(SlaCalendarHoliday),
+        typeof(User),
+        typeof(UserCredential),
+        typeof(UserInvitation),
+        typeof(UserRole)
+    ];
+
+    // Todas as entidades do Domain, descobertas por reflexão, menos as anêmicas da lista. A regra do Raise fora do Domain
+    // usa as mesmas.
+    internal static Type[] RichEntities =>
+    [
+        .. Types.InAssembly(DomainAssembly)
+            .That()
+            .Inherit(typeof(Entity))
+            .GetTypes()
+            .Where(type => !type.IsAbstract && !LegacyAnemicEntities.Contains(type))
+            .OrderBy(type => type.FullName, StringComparer.Ordinal)
     ];
 
     [Fact]
@@ -31,6 +51,19 @@ public class RichEntityTests : BaseTest
 
         // Assert
         messages.ShouldBeEmpty(string.Join(Environment.NewLine, messages));
+    }
+
+    [Fact]
+    public void LegacyAnemicEntities_Should_StillHaveNonPrivateSetters()
+    {
+        // Arrange: a entidade que já não tem setter público saiu do modelo anêmico e precisa sair da lista
+        Type[] types = LegacyAnemicEntities;
+
+        // Act
+        Type[] alreadyRich = [.. types.Where(type => RichEntitySetterChecker.Check([type]).Count == 0)];
+
+        // Assert
+        alreadyRich.ShouldBeEmpty();
     }
 
     [Fact]

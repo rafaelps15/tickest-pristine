@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using TickestPristine.Infrastructure.Authentication;
+using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Web.Api.Infrastructure;
 
@@ -16,10 +17,9 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
         CancellationToken cancellationToken)
     {
         ProblemDetails problemDetails;
+        DatabaseFailureKind? databaseFailure = DatabaseFailures.Classify(exception);
 
-        if (exception is DbUpdateConcurrencyException ||
-            exception is DbUpdateException { InnerException: PostgresException resolutionCycleConflict } &&
-            IsResolutionCycleConflict(resolutionCycleConflict))
+        if (databaseFailure == DatabaseFailureKind.ConcurrencyConflict)
         {
             // Os dados foram alterados por outra requisição ao mesmo tempo; nada foi salvo e a operação pode ser repetida.
             logger.LogWarning(exception, "Conflito de concorrência ao salvar as mudanças");
@@ -29,10 +29,10 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
                 Status = StatusCodes.Status409Conflict,
                 Type = "https://tools.ietf.org/html/rfc7231#section-6.5.8",
                 Title = "Conflito de concorrência",
-                Detail = "Os dados foram alterados por outra operação ao mesmo tempo. Atualize a tela e tente novamente."
+                Detail = GeneralErrors.ConcurrencyConflict.Description
             };
         }
-        else if (exception is DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } })
+        else if (databaseFailure == DatabaseFailureKind.DuplicateRecord)
         {
             // Duas requisições simultâneas passaram pela checagem de duplicidade do handler; o índice único barrou a segunda.
             logger.LogWarning(exception, "Violação de restrição de unicidade ao salvar as mudanças");
@@ -45,8 +45,7 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
                 Detail = "Já existe um registro com os mesmos dados. Atualize a tela e tente novamente."
             };
         }
-        else if (exception is DbUpdateException { InnerException: PostgresException postgresException } &&
-                 IsTextOutOfRange(postgresException))
+        else if (databaseFailure == DatabaseFailureKind.TextOutOfRange)
         {
             // Um texto ficou fora do tamanho da coluna: o limite fica só no banco (configuração e constraints), e a recusa é
             // erro do cliente. O nome da coluna ou da constraint fica no log.
@@ -120,26 +119,6 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
         return true;
     }
 
-    /// <summary>
-    /// Indica se o índice único de ciclo dos cronômetros recusou um novo ciclo de resolução: duas reaberturas simultâneas
-    /// do mesmo chamado calculam o mesmo ciclo, e a segunda é um conflito de concorrência, não um registro duplicado. As
-    /// demais violações de unicidade seguem o tratamento de registro duplicado.
-    /// </summary>
-    private static bool IsResolutionCycleConflict(PostgresException exception) =>
-        exception.SqlState == PostgresErrorCodes.UniqueViolation &&
-        exception.ConstraintName == "ix_ticket_sla_timers_ticket_id_metric_cycle";
-
-    /// <summary>
-    /// Indica se o banco recusou um texto fora do tamanho: acima do tamanho da coluna (<c>22001</c>) ou fora de uma check
-    /// constraint de tamanho, as das colunas <c>citext</c>, nomeadas <c>ck_{tabela}_{coluna}_length</c> (<c>23514</c>). As
-    /// demais check constraints seguem o tratamento padrão.
-    /// </summary>
-    private static bool IsTextOutOfRange(PostgresException exception) =>
-        exception.SqlState == PostgresErrorCodes.StringDataRightTruncation ||
-        exception.SqlState == PostgresErrorCodes.CheckViolation &&
-        exception.ConstraintName is { } constraint &&
-        constraint.StartsWith("ck_", StringComparison.Ordinal) &&
-        constraint.EndsWith("_length", StringComparison.Ordinal);
 
     /// <summary>
     /// Indica se a leitura falhou porque o corpo passou do limite declarado na própria rota

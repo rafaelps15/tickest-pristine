@@ -1,4 +1,7 @@
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Npgsql;
 using TickestPristine.Application.Roles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +19,8 @@ namespace TickestPristine.IntegrationTests.Seeding;
 /// </summary>
 public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
+    private readonly IntegrationTestWebAppFactory _factory = factory;
+
     [Fact]
     public async Task Seeding_Should_CreateAdministratorAndDefaultRoles()
     {
@@ -134,6 +139,35 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
         sectorNames.ShouldBe(
             ["Suporte ao Usuário", "Infraestrutura e Redes", "Sistemas Corporativos", "Segurança da Informação"],
             ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task Seeding_Should_FailWithoutCreatingAdministrator_WhenAdminPasswordBreaksPolicy()
+    {
+        // Arrange: um banco vazio, em que o seed precisa criar o primeiro administrador, com a senha fora da política
+        string emptyDatabase = await CreateEmptyDatabaseAsync();
+        await using WebApplicationFactory<Program> api = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("ConnectionStrings:Database", emptyDatabase);
+            builder.UseSetting("Admin:Password", "fraca");
+        });
+
+        // Act
+        Exception exception = Should.Throw<Exception>(() => api.CreateClient());
+
+        // Assert
+        exception.ToString().ShouldContain("Admin:Password");
+        (await CountUsersAsync(emptyDatabase)).ShouldBe(0);
+    }
+
+    private static async Task<long> CountUsersAsync(string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using NpgsqlCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT count(*) FROM public.users";
+
+        return (long)(await command.ExecuteScalarAsync())!;
     }
 
     private sealed record RoleDto(string Name, bool IsDefault, bool IsAdministrator, List<string> PermissionCodes);

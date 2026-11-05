@@ -32,7 +32,7 @@ internal sealed class PublishDomainEventsInterceptor(IServiceScopeFactory servic
             .Select(entry => entry.Entity)
             .SelectMany(entity =>
             {
-                List<IDomainEvent> domainEvents = entity.DomainEvents;
+                IReadOnlyCollection<IDomainEvent> domainEvents = entity.DomainEvents;
 
                 entity.ClearDomainEvents();
 

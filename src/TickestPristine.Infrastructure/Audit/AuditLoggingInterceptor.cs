@@ -15,82 +15,78 @@ namespace TickestPristine.Infrastructure.Audit;
 internal sealed class AuditLoggingInterceptor(IUserContext currentUser, IDateTimeProvider dateTimeProvider)
     : SaveChangesInterceptor
 {
-    // Valores que nunca vão para o log de auditoria; o nome da coluna alterada continua em AffectedColumns.
-    private static readonly HashSet<string> ExcludedProperties =
-    [
-        nameof(Domain.Users.UserCredential.PasswordHash),
-        nameof(Domain.Users.UserCredential.SecurityStamp),
-        nameof(Domain.Users.UserInvitation.TokenHash)
-    ];
-
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData,
         InterceptionResult<int> result,
         CancellationToken cancellationToken = default)
     {
-        AddAuditEntries(eventData.Context);
+        if (eventData.Context is not null)
+        {
+            AuditChanges(eventData.Context);
+        }
 
         return base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 
-    private void AddAuditEntries(DbContext? context)
+    private void AuditChanges(DbContext context)
     {
-        if (context is null)
-        {
-            return;
-        }
-
         context.ChangeTracker.DetectChanges();
 
-        var auditEntries = context.ChangeTracker.Entries<IAuditable>()
-            .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
-            .Select(CreateAuditEntry)
-            .ToList();
+        AuditLogEntry[] auditLogEntries = [.. context.ChangeTracker
+            .Entries<IAuditable>()
+            .Where(IsChanged)
+            .Select(ToAuditLogEntry)];
 
-        context.Set<AuditLogEntry>().AddRange(auditEntries);
+        context.Set<AuditLogEntry>().AddRange(auditLogEntries);
     }
 
-    private AuditLogEntry CreateAuditEntry(EntityEntry<IAuditable> entry)
+    private AuditLogEntry ToAuditLogEntry(EntityEntry<IAuditable> entry) => new()
     {
-        var auditEntry = new AuditLogEntry
-        {
-            Id = Guid.NewGuid(),
-            EntityName = entry.Entity.GetType().Name,
-            EntityId = GetPrimaryKey(entry),
-            UserId = currentUser.UserIdOrDefault,
-            Timestamp = dateTimeProvider.UtcNow,
-            Action = entry.State.ToString()
-        };
+        Id = Guid.NewGuid(),
+        EntityName = entry.Entity.GetType().Name,
+        EntityId = PrimaryKeyOf(entry),
+        Action = entry.State.ToString(),
+        UserId = currentUser.UserIdOrDefault,
+        Timestamp = dateTimeProvider.UtcNow,
+        OldValues = OldValuesOf(entry),
+        NewValues = NewValuesOf(entry),
+        AffectedColumns = AffectedColumnsOf(entry)
+    };
 
-        switch (entry.State)
-        {
-            case EntityState.Added:
-                auditEntry.NewValues = Serialize(entry.Properties, p => p.CurrentValue);
-                break;
+    private static bool IsChanged(EntityEntry entry) =>
+        entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted;
 
-            case EntityState.Modified:
-                PropertyEntry[] modified = [.. entry.Properties.Where(p => p.IsModified)];
-                auditEntry.OldValues = Serialize(modified, p => p.OriginalValue);
-                auditEntry.NewValues = Serialize(modified, p => p.CurrentValue);
-                auditEntry.AffectedColumns = string.Join(",", modified.Select(p => p.Metadata.Name));
-                break;
+    private static string? OldValuesOf(EntityEntry entry) => entry.State switch
+    {
+        EntityState.Modified => ToJson(ModifiedProperties(entry), property => property.OriginalValue),
+        EntityState.Deleted => ToJson(entry.Properties, property => property.CurrentValue),
+        _ => null
+    };
 
-            case EntityState.Deleted:
-                auditEntry.OldValues = Serialize(entry.Properties, p => p.CurrentValue);
-                break;
-        }
+    private static string? NewValuesOf(EntityEntry entry) => entry.State switch
+    {
+        EntityState.Added => ToJson(entry.Properties, property => property.CurrentValue),
+        EntityState.Modified => ToJson(ModifiedProperties(entry), property => property.CurrentValue),
+        _ => null
+    };
 
-        return auditEntry;
-    }
+    // O nome da coluna alterada entra mesmo quando o valor dela fica fora do log.
+    private static string? AffectedColumnsOf(EntityEntry entry) =>
+        entry.State is EntityState.Modified
+            ? string.Join(",", ModifiedProperties(entry).Select(property => property.Metadata.Name))
+            : null;
+
+    private static IEnumerable<PropertyEntry> ModifiedProperties(EntityEntry entry) =>
+        entry.Properties.Where(property => property.IsModified);
 
     // Chaves compostas viram as partes separadas por vírgula.
-    private static string GetPrimaryKey(EntityEntry entry) =>
+    private static string PrimaryKeyOf(EntityEntry entry) =>
         string.Join(",", entry.Properties
-            .Where(p => p.Metadata.IsPrimaryKey())
-            .Select(p => p.CurrentValue?.ToString() ?? "null"));
+            .Where(property => property.Metadata.IsPrimaryKey())
+            .Select(property => property.CurrentValue?.ToString() ?? "null"));
 
-    private static string Serialize(IEnumerable<PropertyEntry> properties, Func<PropertyEntry, object?> value) =>
+    private static string ToJson(IEnumerable<PropertyEntry> properties, Func<PropertyEntry, object?> value) =>
         JsonSerializer.Serialize(properties
-            .Where(p => !ExcludedProperties.Contains(p.Metadata.Name))
-            .ToDictionary(p => p.Metadata.Name, value));
+            .Where(property => property.Metadata.IsAudited())
+            .ToDictionary(property => property.Metadata.Name, value));
 }

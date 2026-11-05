@@ -1,15 +1,16 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 
-namespace TickestPristine.Application.UnitTests.Abstractions;
+namespace TickestPristine.Tests.Shared.Abstractions;
 
 /// <summary>
 /// Logger que guarda nível, mensagem e exceção de cada registro, para os testes conferirem o que foi registrado.
 /// </summary>
-public sealed class RecordingLogger<T> : ILogger<T>
+public sealed class TestLogger<T> : ILogger<T>
 {
-    private readonly List<RecordedLogEntry> _entries = [];
+    private readonly ConcurrentQueue<TestLogEntry> _entries = new();
 
-    public IReadOnlyList<RecordedLogEntry> Entries => _entries;
+    public IReadOnlyList<TestLogEntry> Entries => [.. _entries];
 
     public IDisposable? BeginScope<TState>(TState state)
         where TState : notnull => null;
@@ -22,7 +23,7 @@ public sealed class RecordingLogger<T> : ILogger<T>
         TState state,
         Exception? exception,
         Func<TState, Exception?, string> formatter) =>
-        _entries.Add(new RecordedLogEntry(logLevel, formatter(state, exception), exception));
+        _entries.Enqueue(new TestLogEntry(logLevel, formatter(state, exception), exception));
 }
 
-public sealed record RecordedLogEntry(LogLevel Level, string Message, Exception? Exception);
+public sealed record TestLogEntry(LogLevel Level, string Message, Exception? Exception);

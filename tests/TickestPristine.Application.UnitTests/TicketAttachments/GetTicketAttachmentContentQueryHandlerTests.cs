@@ -184,7 +184,7 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests : BaseHandlerTes
         userContext.UserId.Returns(CreatorId);
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
         fileStorage.OpenReadAsync("storage-key.pdf", Arg.Any<CancellationToken>()).Returns((Stream?)null);
-        var logger = new RecordingLogger<GetTicketAttachmentContentQueryHandler>();
+        var logger = new TestLogger<GetTicketAttachmentContentQueryHandler>();
 
         var handler = new GetTicketAttachmentContentQueryHandler(
             context,
@@ -202,7 +202,7 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests : BaseHandlerTes
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(TicketAttachmentErrors.FileMissing(attachmentId));
 
-        RecordedLogEntry error = logger.Entries.ShouldHaveSingleItem();
+        TestLogEntry error = logger.Entries.ShouldHaveSingleItem();
         error.Level.ShouldBe(LogLevel.Error);
         error.Message.ShouldContain(attachmentId.ToString());
     }

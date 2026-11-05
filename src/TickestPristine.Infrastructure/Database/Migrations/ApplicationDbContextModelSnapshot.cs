@@ -1173,13 +1173,15 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
-                        .HasColumnName("password_hash");
+                        .HasColumnName("password_hash")
+                        .HasAnnotation("Tickest:NotAudited", true);
 
                     b.Property<Guid>("SecurityStamp")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("security_stamp")
-                        .HasDefaultValueSql("gen_random_uuid()");
+                        .HasDefaultValueSql("gen_random_uuid()")
+                        .HasAnnotation("Tickest:NotAudited", true);
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
@@ -1218,7 +1220,8 @@ namespace TickestPristine.Infrastructure.Database.Migrations
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
-                        .HasColumnName("token_hash");
+                        .HasColumnName("token_hash")
+                        .HasAnnotation("Tickest:NotAudited", true);
 
                     b.Property<DateTime?>("UsedAtUtc")
                         .IsConcurrencyToken()

@@ -4,7 +4,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Application.Abstractions.Telemetry;
 using TickestPristine.Application.Tickets.ProcessSlaBreaches;
+using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Infrastructure.Tickets.SlaMonitoring;
 
@@ -21,6 +23,7 @@ internal sealed class SlaMonitorBackgroundService : BackgroundService
     private readonly SlaMonitorSettings _slaMonitorSettings;
     private readonly IServiceProvider _serviceProvider;
     private readonly NpgsqlDataSource _dataSource;
+    private readonly ApplicationTelemetry _telemetry;
 
     /// <summary>
     /// Inicializa uma nova instância de <see cref="SlaMonitorBackgroundService"/>.
@@ -29,16 +32,19 @@ internal sealed class SlaMonitorBackgroundService : BackgroundService
     /// <param name="slaMonitorSettingsOptions">As configurações do monitoramento do SLA.</param>
     /// <param name="serviceProvider">O provedor de serviços.</param>
     /// <param name="dataSource">A fonte de conexões do PostgreSQL, usada pela trava.</param>
+    /// <param name="telemetry">Os contadores das voltas do monitoramento.</param>
     public SlaMonitorBackgroundService(
         ILogger<SlaMonitorBackgroundService> logger,
         IOptions<SlaMonitorSettings> slaMonitorSettingsOptions,
         IServiceProvider serviceProvider,
-        NpgsqlDataSource dataSource)
+        NpgsqlDataSource dataSource,
+        ApplicationTelemetry telemetry)
     {
         _logger = logger;
         _slaMonitorSettings = slaMonitorSettingsOptions.Value;
         _serviceProvider = serviceProvider;
         _dataSource = dataSource;
+        _telemetry = telemetry;
     }
 
     /// <inheritdoc />
@@ -96,7 +102,20 @@ internal sealed class SlaMonitorBackgroundService : BackgroundService
                 ICommandHandler<ProcessSlaBreachesCommand, ProcessSlaBreachesResponse> handler = scope.ServiceProvider
                     .GetRequiredService<ICommandHandler<ProcessSlaBreachesCommand, ProcessSlaBreachesResponse>>();
 
-                await handler.Handle(new ProcessSlaBreachesCommand(_slaMonitorSettings.BatchSize), stoppingToken);
+                Result<ProcessSlaBreachesResponse> result =
+                    await handler.Handle(new ProcessSlaBreachesCommand(_slaMonitorSettings.BatchSize), stoppingToken);
+
+                if (result.IsSuccess)
+                {
+                    _telemetry.RecordSlaBatch(result.Value.Processed, result.Value.Breached);
+                }
+            }
+            catch (Exception) when (!stoppingToken.IsCancellationRequested)
+            {
+                // O lote é tudo ou nada: a falha desfaz o lote inteiro, registrado como Critical logo abaixo.
+                _telemetry.RecordSlaBatchRolledBack();
+
+                throw;
             }
             finally
             {

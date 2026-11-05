@@ -1,3 +1,6 @@
+using Microsoft.Extensions.Options;
+using TickestPristine.IntegrationTests.Tickets;
+
 namespace TickestPristine.IntegrationTests.Cors;
 
 /// <summary>
@@ -6,6 +9,41 @@ namespace TickestPristine.IntegrationTests.Cors;
 /// </summary>
 public sealed class CorsTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
+    private readonly IntegrationTestWebAppFactory _factory = factory;
+
+    [Fact]
+    public void Startup_Should_Fail_When_AllowedOriginHasNoScheme()
+    {
+        // Arrange
+        using WebApplicationFactoryWithSetting invalidFactory = new(_factory, "Cors:AllowedOrigins:0", "app.example.com");
+
+        // Act
+        Exception exception = Should.Throw<Exception>(() => invalidFactory.CreateClient());
+
+        // Assert
+        Exception? current = exception;
+
+        while (current is not null and not OptionsValidationException)
+        {
+            current = current.InnerException;
+        }
+
+        current.ShouldBeOfType<OptionsValidationException>().Message.ShouldContain("Cors:AllowedOrigins");
+    }
+
+    [Fact]
+    public async Task Startup_Should_Succeed_When_AllowedOriginIsAbsoluteHttps()
+    {
+        // Arrange: a fábrica dos testes configura "https://app.example.com/", com a barra final
+        HttpClient.DefaultRequestHeaders.Authorization = null;
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("health");
+
+        // Assert
+        response.StatusCode.ShouldBe(System.Net.HttpStatusCode.OK);
+    }
+
     [Theory]
     [InlineData("http://localhost:55343")]
     [InlineData("http://127.0.0.1:4200")]

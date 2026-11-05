@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using TickestPristine.Web.Api.Infrastructure;
@@ -8,6 +10,8 @@ namespace TickestPristine.Web.Api.Extensions;
 
 internal static class RateLimitingExtensions
 {
+    private const string TooManyRequestsCode = "General.TooManyRequests";
+
     internal static IServiceCollection AddRateLimitingInternal(this IServiceCollection services)
     {
         services.AddSingleton<IValidateOptions<RateLimitingOptions>, RateLimitingOptionsValidator>();
@@ -24,6 +28,7 @@ internal static class RateLimitingExtensions
                 RateLimitingOptions limits = rateLimitingOptions.Value;
 
                 limiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                limiter.OnRejected = WriteRejectionAsync;
 
                 // Limite global por janela fixa, separado por usuário autenticado ou por IP.
                 limiter.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
@@ -50,6 +55,36 @@ internal static class RateLimitingExtensions
             });
 
         return services;
+    }
+
+    /// <summary>
+    /// Responde a recusa do limite em Problem Details, com o código <c>General.TooManyRequests</c> e, quando o limitador
+    /// informa, o header <c>Retry-After</c> com os segundos até a janela seguinte.
+    /// </summary>
+    private static async ValueTask WriteRejectionAsync(OnRejectedContext context, CancellationToken cancellationToken)
+    {
+        HttpResponse response = context.HttpContext.Response;
+        int? retryAfterSeconds = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out TimeSpan retryAfter)
+            ? (int)Math.Ceiling(retryAfter.TotalSeconds)
+            : null;
+
+        if (retryAfterSeconds is { } seconds)
+        {
+            response.Headers.RetryAfter = seconds.ToString(CultureInfo.InvariantCulture);
+        }
+
+        var problemDetails = new ProblemDetails
+        {
+            Status = StatusCodes.Status429TooManyRequests,
+            Type = "https://tools.ietf.org/html/rfc6585#section-4",
+            Title = "Muitas requisições",
+            Detail = retryAfterSeconds is { } wait
+                ? $"O limite de requisições foi atingido. Tente de novo em {wait} segundos."
+                : "O limite de requisições foi atingido. Tente de novo em instantes."
+        };
+        problemDetails.Extensions["code"] = TooManyRequestsCode;
+
+        await response.WriteAsJsonAsync(problemDetails, options: null, contentType: "application/problem+json", cancellationToken);
     }
 
     private static FixedWindowRateLimiterOptions ToLimiterOptions(FixedWindowLimitOptions limit) => new()

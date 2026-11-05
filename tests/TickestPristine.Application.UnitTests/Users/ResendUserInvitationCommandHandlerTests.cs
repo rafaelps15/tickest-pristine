@@ -166,7 +166,7 @@ public sealed class ResendUserInvitationCommandHandlerTests : BaseHandlerTest
             emailSender,
             RegisterUserCommandHandlerTests.CreateLinkBuilder(),
             CreateClock(),
-            new RecordingLogger<ResendUserInvitationCommandHandler>());
+            new TestLogger<ResendUserInvitationCommandHandler>());
     }
 
     private static async Task<User> SeedUserAsync(TestDbContext context, bool isActive = true)

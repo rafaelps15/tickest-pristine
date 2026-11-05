@@ -148,6 +148,7 @@ public sealed class AuditLogsTests(IntegrationTestWebAppFactory factory) : BaseI
         added.UserId.ShouldBeNull();
         ReadValue(added.NewValues, "UserId").ShouldBe(userId.ToString());
         ReadValue(added.NewValues, "PasswordHash").ShouldBeNull();
+        ReadValue(added.NewValues, "SecurityStamp").ShouldBeNull();
     }
 
     private sealed record AuditLogDto(

@@ -3,6 +3,9 @@ using TickestPristine.Domain.SlaCalendars;
 
 namespace TickestPristine.Application.Abstractions.Sla;
 
+/// <summary>
+/// Calendários de expediente usados no cálculo dos prazos de SLA, em cache.
+/// </summary>
 public interface ISlaCalendarProvider
 {
     /// <summary>

@@ -36,6 +36,10 @@ public static class UserErrors
         "Users.InvalidCredentials",
         "E-mail ou senha inválidos");
 
+    public static readonly Error WeakPassword = Error.Problem(
+        "Users.WeakPassword",
+        "A senha precisa ter pelo menos 6 caracteres, incluindo uma letra maiúscula e um caractere especial (como !, @, # ou $).");
+
     public static readonly Error EmailNotUnique = Error.Conflict(
         "Users.EmailNotUnique",
         "O e-mail informado já está em uso");

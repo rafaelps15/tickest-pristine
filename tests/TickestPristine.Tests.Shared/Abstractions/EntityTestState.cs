@@ -1,9 +1,9 @@
-namespace TickestPristine.Application.UnitTests.Abstractions;
+namespace TickestPristine.Tests.Shared.Abstractions;
 
 // Ajusta propriedades de setter privado para montar cenários que a API levaria tempo ou vários passos para produzir
 // (datas no passado, prazos fixos, ids conhecidos); as mudanças de estado dos testes continuam vindo dos métodos da
 // entidade.
-internal static class EntityTestState
+public static class EntityTestState
 {
     // Instância pelo construtor privado, para o cenário que nenhum caminho da entidade monta direto.
     public static T New<T>()

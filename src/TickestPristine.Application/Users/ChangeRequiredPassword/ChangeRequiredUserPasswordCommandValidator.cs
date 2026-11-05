@@ -1,12 +1,10 @@
 using FluentValidation;
+using TickestPristine.Domain.Users;
 
 namespace TickestPristine.Application.Users.ChangeRequiredPassword;
 
 internal sealed class ChangeRequiredUserPasswordCommandValidator : AbstractValidator<ChangeRequiredUserPasswordCommand>
 {
-    private const string StrengthRequirementsMessage =
-        "A senha precisa ter pelo menos 6 caracteres, incluindo uma letra maiúscula e um caractere especial (como !, @, # ou $).";
-
     public ChangeRequiredUserPasswordCommandValidator()
     {
         RuleFor(c => c.Email).NotEmpty().EmailAddress();
@@ -14,9 +12,7 @@ internal sealed class ChangeRequiredUserPasswordCommandValidator : AbstractValid
         RuleFor(c => c.NewPassword)
             .Cascade(CascadeMode.Stop)
             .NotEmpty().WithMessage("Informe a nova senha.")
-            .MinimumLength(6).WithMessage(StrengthRequirementsMessage)
-            .Matches(@"\p{Lu}").WithMessage(StrengthRequirementsMessage)
-            .Matches(@"[^\p{L}\p{N}\s]").WithMessage(StrengthRequirementsMessage)
+            .Must(password => Password.Create(password).IsSuccess).WithMessage(UserErrors.WeakPassword.Description)
             .NotEqual(c => c.CurrentPassword).WithMessage("A nova senha precisa ser diferente da atual.");
     }
 }

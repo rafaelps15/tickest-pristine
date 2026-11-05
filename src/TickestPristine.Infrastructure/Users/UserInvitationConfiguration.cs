@@ -1,6 +1,7 @@
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using TickestPristine.Infrastructure.Audit;
 
 namespace TickestPristine.Infrastructure.Users;
 
@@ -13,7 +14,7 @@ internal sealed class UserInvitationConfiguration : IEntityTypeConfiguration<Use
         builder.Property(invitation => invitation.Id).ValueGeneratedNever();
 
         // SHA-256 em hexadecimal: 64 caracteres. A ativação procura o convite pelo hash do token recebido.
-        builder.Property(invitation => invitation.TokenHash).HasMaxLength(64);
+        builder.Property(invitation => invitation.TokenHash).HasMaxLength(64).IsNotAudited();
 
         builder.HasIndex(invitation => invitation.TokenHash).IsUnique();
 

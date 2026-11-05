@@ -1,6 +1,7 @@
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using TickestPristine.Infrastructure.Audit;
 
 namespace TickestPristine.Infrastructure.Users;
 
@@ -12,10 +13,10 @@ internal sealed class UserCredentialConfiguration : IEntityTypeConfiguration<Use
 
         builder.Property(credential => credential.Id).ValueGeneratedNever();
 
-        builder.Property(credential => credential.PasswordHash).HasMaxLength(500);
+        builder.Property(credential => credential.PasswordHash).HasMaxLength(500).IsNotAudited();
 
         // Credencial nova sem carimbo informado recebe um gerado pelo banco.
-        builder.Property(credential => credential.SecurityStamp).HasDefaultValueSql("gen_random_uuid()");
+        builder.Property(credential => credential.SecurityStamp).HasDefaultValueSql("gen_random_uuid()").IsNotAudited();
 
         builder.HasIndex(credential => credential.UserId).IsUnique();
 
