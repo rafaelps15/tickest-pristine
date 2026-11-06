@@ -2,8 +2,9 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using TickestPristine.Domain.TicketMessages;
 
-namespace TickestPristine.Infrastructure.Tickets;
+namespace TickestPristine.Infrastructure.TicketMessages;
 
 internal sealed class TicketMessageConfiguration : IEntityTypeConfiguration<TicketMessage>
 {

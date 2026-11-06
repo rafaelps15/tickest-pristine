@@ -128,13 +128,13 @@ internal sealed class TicketSlaReader(ISlaCalendarProvider slaCalendarProvider)
         return cycles.Select(timer =>
         {
             // Minutos inteiros: a fração de minuto é descartada, e o restante nunca é negativo.
-            int consumedMinutes = (int)(timer.GetConsumed(calendar, nowUtc).Ticks / TimeSpan.TicksPerMinute);
+            int consumedMinutes = (int)(timer.ConsumedBusinessTime(calendar, nowUtc).Ticks / TimeSpan.TicksPerMinute);
 
             return new TicketSlaObjectiveResponse
             {
                 Metric = metric,
                 Cycle = timer.Cycle,
-                State = timer.GetState(nowUtc),
+                State = timer.StateAt(nowUtc),
                 TargetMinutes = timer.TargetMinutes,
                 StartedAtUtc = timer.StartedAtUtc,
                 WarningAtUtc = timer.WarningOnUtc,

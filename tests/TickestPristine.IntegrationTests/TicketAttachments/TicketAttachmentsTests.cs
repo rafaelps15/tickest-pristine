@@ -6,10 +6,11 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using TickestPristine.Domain.Tickets;
 using TickestPristine.Infrastructure.Database;
 using TickestPristine.Infrastructure.Storage;
 using TickestPristine.IntegrationTests.Tickets;
+using TickestPristine.Domain.TicketAttachments;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.IntegrationTests.TicketAttachments;
 

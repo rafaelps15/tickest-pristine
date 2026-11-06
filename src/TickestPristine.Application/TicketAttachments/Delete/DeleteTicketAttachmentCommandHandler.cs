@@ -7,6 +7,8 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketAttachments;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.TicketAttachments.Delete;
 
@@ -36,7 +38,7 @@ internal sealed class DeleteTicketAttachmentCommandHandler(
             PermissionCodes.Tickets.Manage,
             cancellationToken);
 
-        Result<TicketHistory> removal = attachment.Delete(userContext.UserId, canDeleteAny, dateTimeProvider.UtcNow);
+        Result<TicketHistoryEntry> removal = attachment.Delete(userContext.UserId, canDeleteAny, dateTimeProvider.UtcNow);
 
         if (removal.IsFailure)
         {

@@ -1,8 +1,8 @@
 using System.Data.Common;
 using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Domain.Departments;
-using TickestPristine.Domain.Tickets;
 using TickestPristine.Infrastructure.Database;
+using TickestPristine.Domain.TicketMessages;
 
 namespace TickestPristine.IntegrationTests.Abstractions;
 

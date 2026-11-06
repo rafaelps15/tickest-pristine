@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.TicketAttachments.Upload;
+using TickestPristine.Domain.TicketAttachments;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
 using TickestPristine.Web.Api.Infrastructure;
@@ -9,11 +10,13 @@ namespace TickestPristine.Web.Api.Endpoints.TicketAttachments;
 
 internal sealed class Upload : IEndpoint
 {
-    // Os 10 MB do anexo mais uma folga para o envelope do multipart: acima disso, o corpo é recusado (413) antes de ser
-    // lido, em vez de chegar inteiro ao validator. O limite do Kestrel vale para a requisição toda; o do formulário é
-    // conferido pelo próprio ASP.NET ao ler o multipart, inclusive no TestServer dos testes de integração. Os dois
-    // chegam ao GlobalExceptionHandler, que responde 413 em Problem Details.
-    private const long MaxRequestBodySizeBytes = 11 * 1024 * 1024;
+    // O tamanho máximo do anexo pela política mais 1 MB de folga para o envelope do multipart: acima disso, o corpo é
+    // recusado (413) antes de ser lido, em vez de chegar inteiro ao validator. O limite do Kestrel vale para a
+    // requisição toda; o do formulário é conferido pelo próprio ASP.NET ao ler o multipart, inclusive no TestServer dos
+    // testes de integração. Os dois chegam ao GlobalExceptionHandler, que responde 413 em Problem Details.
+    private const long MaxRequestBodySizeBytes = TicketAttachmentPolicy.MaxFileSizeBytes + MultipartEnvelopeAllowanceBytes;
+
+    private const long MultipartEnvelopeAllowanceBytes = 1024 * 1024;
 
     public void MapEndpoint(IEndpointRouteBuilder app)
     {

@@ -1,6 +1,6 @@
 using TickestPristine.SharedKernel;
 
-namespace TickestPristine.Domain.Tickets;
+namespace TickestPristine.Domain.TicketMessages;
 
 public static class TicketMessageErrors
 {

@@ -12,6 +12,7 @@ using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Infrastructure.Database;
 using TickestPristine.Domain.SlaCalendars;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.IntegrationTests.Tickets;
 

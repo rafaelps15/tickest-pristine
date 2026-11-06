@@ -1,4 +1,4 @@
-namespace TickestPristine.Domain.Tickets;
+namespace TickestPristine.Domain.TicketHistories;
 
 public enum TicketHistoryAction
 {

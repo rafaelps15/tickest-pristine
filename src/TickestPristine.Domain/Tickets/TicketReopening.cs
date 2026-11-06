@@ -1,3 +1,5 @@
+using TickestPristine.Domain.TicketHistories;
+
 namespace TickestPristine.Domain.Tickets;
 
-public sealed record TicketReopening(TicketHistory History, TicketSlaTimer ResolutionCycle);
+public sealed record TicketReopening(TicketHistoryEntry History, TicketSlaTimer ResolutionCycle);

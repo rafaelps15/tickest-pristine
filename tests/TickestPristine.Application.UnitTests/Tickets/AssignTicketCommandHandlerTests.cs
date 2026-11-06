@@ -7,6 +7,7 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.Application.Tickets;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -174,7 +175,7 @@ public sealed class AssignTicketCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsSuccess.ShouldBeTrue();
 
-        TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticketId);
+        TicketHistoryEntry history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticketId);
         history.Action.ShouldBe(TicketHistoryAction.Assigned);
         history.ChangedByUserId.ShouldBe(AgentId);
         history.OldValue.ShouldBeNull();
@@ -200,13 +201,13 @@ public sealed class AssignTicketCommandHandlerTests : BaseHandlerTest
 
         Ticket ticket = await context.Tickets.SingleAsync(t => t.Id == ticketId);
         ticket.AssignedToUserId.ShouldBe(assignee.Id);
-        TicketReassignedDomainEvent reassigned = ticket.DomainEvents
-            .OfType<TicketReassignedDomainEvent>()
+        TicketAssignedDomainEvent reassigned = ticket.DomainEvents
+            .OfType<TicketAssignedDomainEvent>()
             .ShouldHaveSingleItem();
         reassigned.PreviousAssignedToUserId.ShouldBe(previousAssigneeId);
         reassigned.AssignedToUserId.ShouldBe(assignee.Id);
 
-        TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticketId);
+        TicketHistoryEntry history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticketId);
         history.Action.ShouldBe(TicketHistoryAction.Reassigned);
         history.ChangedByUserId.ShouldBe(AgentId);
         history.OldValue.ShouldBe(previousAssigneeId.ToString());

@@ -8,6 +8,8 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketAttachments;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.TicketAttachments.Upload;
 
@@ -82,7 +84,7 @@ internal sealed class UploadTicketAttachmentCommandHandler(
         }
 
         TicketAttachment attachment = created.Value;
-        TicketHistory upload = attachment.RecordUpload();
+        TicketHistoryEntry upload = attachment.RecordUpload();
 
         context.TicketAttachments.Add(attachment);
         context.TicketHistories.Add(upload);

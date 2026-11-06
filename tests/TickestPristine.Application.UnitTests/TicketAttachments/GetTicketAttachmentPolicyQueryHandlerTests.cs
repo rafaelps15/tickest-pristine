@@ -1,7 +1,7 @@
 using TickestPristine.Application.TicketAttachments;
 using TickestPristine.Application.TicketAttachments.GetPolicy;
-using TickestPristine.Domain.Tickets;
 using TickestPristine.Application.UnitTests.Abstractions;
+using TickestPristine.Domain.TicketAttachments;
 
 namespace TickestPristine.Application.UnitTests.TicketAttachments;
 

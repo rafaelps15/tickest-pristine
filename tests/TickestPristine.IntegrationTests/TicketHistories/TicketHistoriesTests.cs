@@ -4,8 +4,8 @@ using System.Net.Http.Json;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using TickestPristine.Domain.Tickets;
 using TickestPristine.Infrastructure.Database;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.IntegrationTests.TicketHistories;
 

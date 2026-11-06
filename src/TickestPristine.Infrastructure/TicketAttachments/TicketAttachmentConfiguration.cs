@@ -2,8 +2,9 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using TickestPristine.Domain.TicketAttachments;
 
-namespace TickestPristine.Infrastructure.Tickets;
+namespace TickestPristine.Infrastructure.TicketAttachments;
 
 internal sealed class TicketAttachmentConfiguration : IEntityTypeConfiguration<TicketAttachment>
 {

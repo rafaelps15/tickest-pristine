@@ -1,6 +1,8 @@
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
+using TickestPristine.Domain.TicketAttachments;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.UnitTests.TicketAttachments;
 
@@ -125,7 +127,7 @@ public sealed class TicketAttachmentTests
         TicketAttachment attachment = Create("report.pdf", "application/pdf", 1024).Value;
 
         // Act
-        TicketHistory history = attachment.RecordUpload();
+        TicketHistoryEntry history = attachment.RecordUpload();
 
         // Assert
         history.TicketId.ShouldBe(TicketId);
@@ -145,7 +147,7 @@ public sealed class TicketAttachmentTests
         DateTime deletedAtUtc = UploadedAtUtc.AddHours(1);
 
         // Act
-        TicketHistory history = attachment.Delete(managerId, canDeleteAny: true, deletedAtUtc).Value;
+        TicketHistoryEntry history = attachment.Delete(managerId, canDeleteAny: true, deletedAtUtc).Value;
 
         // Assert
         attachment.DeletedAtUtc.ShouldBe(deletedAtUtc);
@@ -163,7 +165,7 @@ public sealed class TicketAttachmentTests
         TicketAttachment attachment = Create("report.pdf", "application/pdf", 1024).Value;
 
         // Act
-        Result<TicketHistory> result = attachment.Delete(UploaderId, canDeleteAny: false, UploadedAtUtc.AddHours(1));
+        Result<TicketHistoryEntry> result = attachment.Delete(UploaderId, canDeleteAny: false, UploadedAtUtc.AddHours(1));
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
@@ -178,7 +180,7 @@ public sealed class TicketAttachmentTests
         attachment.ClearDomainEvents();
 
         // Act
-        Result<TicketHistory> result = attachment.Delete(Guid.NewGuid(), canDeleteAny: false, UploadedAtUtc.AddHours(1));
+        Result<TicketHistoryEntry> result = attachment.Delete(Guid.NewGuid(), canDeleteAny: false, UploadedAtUtc.AddHours(1));
 
         // Assert
         result.Error.ShouldBe(UserErrors.Unauthorized());

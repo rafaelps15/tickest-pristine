@@ -1,4 +1,4 @@
-using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.TicketHistories.GetAll;
 

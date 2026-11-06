@@ -3,6 +3,8 @@ using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.SlaCalendars;
 using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketHistories;
+using TickestPristine.Domain.TicketMessages;
 
 namespace TickestPristine.Domain.Tickets;
 
@@ -100,7 +102,7 @@ public sealed class Ticket : Entity, IAuditable
     /// <summary>
     /// Entrada de abertura do histórico, com a data de abertura; o handler a adiciona junto com o chamado.
     /// </summary>
-    public TicketHistory RecordOpening(Guid openedByUserId) =>
+    public TicketHistoryEntry RecordOpening(Guid openedByUserId) =>
         RecordHistory(
             openedByUserId,
             TicketHistoryAction.Created,
@@ -111,7 +113,7 @@ public sealed class Ticket : Entity, IAuditable
     /// Troca a descrição e dispara o evento com a anterior; devolve <c>null</c>, sem histórico nem evento, quando a
     /// descrição não muda. O handler já conferiu que o chamado está ativo.
     /// </summary>
-    public TicketHistory? ChangeDescription(string description, Guid changedByUserId, DateTime utcNow)
+    public TicketHistoryEntry? ChangeDescription(string description, Guid changedByUserId, DateTime utcNow)
     {
         if (string.Equals(Description, description, StringComparison.Ordinal))
         {
@@ -137,18 +139,18 @@ public sealed class Ticket : Entity, IAuditable
     /// <see cref="TicketErrors.NotActive"/>, sem mudar nada, para o chamado inativo. O handler já conferiu que o
     /// responsável muda.
     /// </summary>
-    public Result<TicketHistory> Assign(User assignee, Guid changedByUserId, DateTime utcNow)
+    public Result<TicketHistoryEntry> Assign(User assignee, Guid changedByUserId, DateTime utcNow)
     {
         if (!IsActive)
         {
-            return Result.Failure<TicketHistory>(TicketErrors.NotActive(Id));
+            return Result.Failure<TicketHistoryEntry>(TicketErrors.NotActive(Id));
         }
 
         Guid? previousAssignedToUserId = AssignedToUserId;
 
         AssignedToUserId = assignee.Id;
 
-        Raise(new TicketReassignedDomainEvent(Id, previousAssignedToUserId, assignee.Id, changedByUserId));
+        Raise(new TicketAssignedDomainEvent(Id, previousAssignedToUserId, assignee.Id, changedByUserId));
 
         TicketHistoryAction action = previousAssignedToUserId is null
             ? TicketHistoryAction.Assigned
@@ -166,11 +168,11 @@ public sealed class Ticket : Entity, IAuditable
     /// Remove o responsável. Falha com <see cref="TicketErrors.NotActive"/>, sem mudar nada, para o chamado inativo. O
     /// handler já conferiu que o chamado tem responsável.
     /// </summary>
-    public Result<TicketHistory> Unassign(Guid changedByUserId, DateTime utcNow)
+    public Result<TicketHistoryEntry> Unassign(Guid changedByUserId, DateTime utcNow)
     {
         if (!IsActive)
         {
-            return Result.Failure<TicketHistory>(TicketErrors.NotActive(Id));
+            return Result.Failure<TicketHistoryEntry>(TicketErrors.NotActive(Id));
         }
 
         Guid previousAssignedToUserId = AssignedToUserId!.Value;
@@ -187,7 +189,7 @@ public sealed class Ticket : Entity, IAuditable
     /// salvar. Leva a última atividade à data da mensagem e, com o chamado ativo, passa a aguardar o solicitante quando
     /// quem escreve atende a fila e não é o solicitante, ou quem atende nos demais casos.
     /// </summary>
-    public (TicketMessage Message, TicketHistory History) PostMessage(
+    public (TicketMessage Message, TicketHistoryEntry History) PostMessage(
         Guid authorUserId,
         string content,
         bool authorIsAgent,
@@ -197,7 +199,7 @@ public sealed class Ticket : Entity, IAuditable
 
         RecalculateWaitingOn(authorIsAgent && authorUserId != CreatedByUserId);
 
-        TicketHistory history = RecordHistory(authorUserId, TicketHistoryAction.MessageAdded, utcNow);
+        TicketHistoryEntry history = RecordHistory(authorUserId, TicketHistoryAction.MessageAdded, utcNow);
 
         return (message, history);
     }
@@ -205,14 +207,14 @@ public sealed class Ticket : Entity, IAuditable
     /// <summary>
     /// Leva a última atividade à data de uma entrada do histórico de anexo, sem nunca diminuí-la.
     /// </summary>
-    public void RecordAttachmentActivity(TicketHistory entry) => AdvanceLastActivityTo(entry.OccurredAtUtc);
+    public void RecordAttachmentActivity(TicketHistoryEntry entry) => AdvanceLastActivityTo(entry.OccurredAtUtc);
 
     /// <summary>
     /// Leva a última atividade à data de uma entrada do histórico de mensagem editada ou excluída, sem nunca
     /// diminuí-la, e recalcula quem o chamado ativo aguarda: o solicitante quando a última mensagem válida é de quem
     /// atende, quem atende nos demais casos.
     /// </summary>
-    public void RecordMessageActivity(TicketHistory entry, bool lastMessageIsFromAgent)
+    public void RecordMessageActivity(TicketHistoryEntry entry, bool lastMessageIsFromAgent)
     {
         AdvanceLastActivityTo(entry.OccurredAtUtc);
 
@@ -224,16 +226,16 @@ public sealed class Ticket : Entity, IAuditable
     /// para o chamado inativo e com <see cref="TicketErrors.InvalidStatusTransition"/> quando a transição não é
     /// permitida, sem mudar nada.
     /// </summary>
-    public Result<TicketHistory> StartProgress(bool lastMessageIsFromAgent, Guid changedByUserId, DateTime utcNow)
+    public Result<TicketHistoryEntry> StartProgress(bool lastMessageIsFromAgent, Guid changedByUserId, DateTime utcNow)
     {
         Result transition = EnsureActiveTransition(TicketStatus.InProgress);
 
         if (transition.IsFailure)
         {
-            return Result.Failure<TicketHistory>(transition.Error);
+            return Result.Failure<TicketHistoryEntry>(transition.Error);
         }
 
-        TicketHistory history = ChangeStatus(TicketStatus.InProgress, changedByUserId, utcNow);
+        TicketHistoryEntry history = ChangeStatus(TicketStatus.InProgress, changedByUserId, utcNow);
 
         RecalculateWaitingOn(lastMessageIsFromAgent);
 
@@ -246,13 +248,13 @@ public sealed class Ticket : Entity, IAuditable
     /// quando a transição não é permitida, sem mudar nada. Chamado só pelo <see cref="TicketSlaCycleService"/>, que fecha
     /// o ciclo de resolução.
     /// </summary>
-    internal Result<TicketHistory> Resolve(Guid resolvedByUserId, DateTime utcNow)
+    internal Result<TicketHistoryEntry> Resolve(Guid resolvedByUserId, DateTime utcNow)
     {
         Result transition = EnsureActiveTransition(TicketStatus.Resolved);
 
         if (transition.IsFailure)
         {
-            return Result.Failure<TicketHistory>(transition.Error);
+            return Result.Failure<TicketHistoryEntry>(transition.Error);
         }
 
         // O SLA é medido até a primeira resolução; reaberturas não mudam o resultado.
@@ -265,11 +267,11 @@ public sealed class Ticket : Entity, IAuditable
     /// Fecha o chamado, que deixa de aguardar alguém. Falha com <see cref="TicketErrors.InvalidStatusTransition"/>, sem
     /// mudar nada, quando a transição para Fechado não é permitida.
     /// </summary>
-    public Result<TicketHistory> Close(Guid changedByUserId, DateTime utcNow)
+    public Result<TicketHistoryEntry> Close(Guid changedByUserId, DateTime utcNow)
     {
         if (!CanTransitionTo(TicketStatus.Closed))
         {
-            return Result.Failure<TicketHistory>(TicketErrors.InvalidStatusTransition(Status, TicketStatus.Closed));
+            return Result.Failure<TicketHistoryEntry>(TicketErrors.InvalidStatusTransition(Status, TicketStatus.Closed));
         }
 
         return ChangeStatus(TicketStatus.Closed, changedByUserId, utcNow);
@@ -283,18 +285,18 @@ public sealed class Ticket : Entity, IAuditable
     /// <see cref="TicketErrors.CancelForbidden"/> para os demais. Chamado só pelo <see cref="TicketSlaCycleService"/>, que
     /// para os cronômetros.
     /// </summary>
-    internal Result<TicketHistory> Cancel(bool canCancelAny, bool isOwnerWhoCanEdit, Guid canceledByUserId, DateTime utcNow)
+    internal Result<TicketHistoryEntry> Cancel(bool canCancelAny, bool isOwnerWhoCanEdit, Guid canceledByUserId, DateTime utcNow)
     {
         Result transition = EnsureActiveTransition(TicketStatus.Canceled);
 
         if (transition.IsFailure)
         {
-            return Result.Failure<TicketHistory>(transition.Error);
+            return Result.Failure<TicketHistoryEntry>(transition.Error);
         }
 
         if (!CanBeCanceled(Status, CreatedAtUtc, canCancelAny, isOwnerWhoCanEdit, utcNow))
         {
-            return Result.Failure<TicketHistory>(isOwnerWhoCanEdit
+            return Result.Failure<TicketHistoryEntry>(isOwnerWhoCanEdit
                 ? TicketErrors.CancelWindowExpired(OwnerCancelWindowMinutes)
                 : TicketErrors.CancelForbidden);
         }
@@ -331,7 +333,7 @@ public sealed class Ticket : Entity, IAuditable
     /// <see cref="TicketErrors.ResolutionCycleAlreadyOpen"/> quando o chamado ainda tem um ciclo de resolução aberto.
     /// Chamado só pelo <see cref="TicketSlaCycleService"/>, que abre o novo ciclo de resolução.
     /// </summary>
-    internal Result<TicketHistory> Reopen(
+    internal Result<TicketHistoryEntry> Reopen(
         bool hasOpenResolutionCycle,
         bool lastMessageIsFromAgent,
         Guid reopenedByUserId,
@@ -341,7 +343,7 @@ public sealed class Ticket : Entity, IAuditable
 
         if (canReopen.IsFailure)
         {
-            return Result.Failure<TicketHistory>(canReopen.Error);
+            return Result.Failure<TicketHistoryEntry>(canReopen.Error);
         }
 
         TicketStatus previousStatus = Status;
@@ -364,11 +366,11 @@ public sealed class Ticket : Entity, IAuditable
     /// Exclui o chamado logicamente. Falha com <see cref="TicketErrors.NotActive"/>, sem mudar nada, para o chamado
     /// inativo. Chamado só pelo <see cref="TicketSlaCycleService"/>, que tira os cronômetros da fila.
     /// </summary>
-    internal Result<TicketHistory> Delete(Guid deletedByUserId, DateTime utcNow)
+    internal Result<TicketHistoryEntry> Delete(Guid deletedByUserId, DateTime utcNow)
     {
         if (!IsActive)
         {
-            return Result.Failure<TicketHistory>(TicketErrors.NotActive(Id));
+            return Result.Failure<TicketHistoryEntry>(TicketErrors.NotActive(Id));
         }
 
         DeletedAtUtc = utcNow;
@@ -467,7 +469,7 @@ public sealed class Ticket : Entity, IAuditable
 
     // Chamado depois das conferências: troca o status, dispara o evento e grava o histórico. O chamado que fica inativo
     // deixa de aguardar alguém; quem leva a um status ativo recalcula quem ele aguarda.
-    private TicketHistory ChangeStatus(TicketStatus status, Guid changedByUserId, DateTime utcNow)
+    private TicketHistoryEntry ChangeStatus(TicketStatus status, Guid changedByUserId, DateTime utcNow)
     {
         TicketStatus previousStatus = Status;
 
@@ -512,7 +514,7 @@ public sealed class Ticket : Entity, IAuditable
     }
 
     // Toda entrada do histórico leva a última atividade à data dela.
-    private TicketHistory RecordHistory(
+    private TicketHistoryEntry RecordHistory(
         Guid changedByUserId,
         TicketHistoryAction action,
         DateTime occurredAtUtc,
@@ -521,6 +523,6 @@ public sealed class Ticket : Entity, IAuditable
     {
         AdvanceLastActivityTo(occurredAtUtc);
 
-        return TicketHistory.Create(Id, changedByUserId, action, occurredAtUtc, oldValue, newValue);
+        return TicketHistoryEntry.Create(Id, changedByUserId, action, occurredAtUtc, oldValue, newValue);
     }
 }

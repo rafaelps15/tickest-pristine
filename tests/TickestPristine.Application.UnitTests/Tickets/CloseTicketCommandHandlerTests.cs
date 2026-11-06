@@ -3,6 +3,7 @@ using TickestPristine.Application.Tickets.Close;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -69,7 +70,7 @@ public sealed class CloseTicketCommandHandlerTests : BaseHandlerTest
         statusChanged.OldStatus.ShouldBe(TicketStatus.Resolved);
         statusChanged.NewStatus.ShouldBe(TicketStatus.Closed);
 
-        TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticketId);
+        TicketHistoryEntry history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticketId);
         history.Action.ShouldBe(TicketHistoryAction.StatusChanged);
         history.ChangedByUserId.ShouldBe(AgentId);
         history.OldValue.ShouldBe(nameof(TicketStatus.Resolved));

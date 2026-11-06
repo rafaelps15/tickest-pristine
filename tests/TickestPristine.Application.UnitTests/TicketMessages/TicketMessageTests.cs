@@ -1,6 +1,8 @@
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
+using TickestPristine.Domain.TicketHistories;
+using TickestPristine.Domain.TicketMessages;
 
 namespace TickestPristine.Application.UnitTests.TicketMessages;
 
@@ -37,7 +39,7 @@ public sealed class TicketMessageTests
         DateTime editedAtUtc = PostedAtUtc.AddMinutes(5);
 
         // Act
-        Result<TicketHistory> result = message.Edit("Conteúdo novo", AuthorId, editedAtUtc);
+        Result<TicketHistoryEntry> result = message.Edit("Conteúdo novo", AuthorId, editedAtUtc);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
@@ -57,7 +59,7 @@ public sealed class TicketMessageTests
         TicketMessage message = CreateMessage();
 
         // Act
-        Result<TicketHistory> result = message.Edit("Conteúdo novo", Guid.NewGuid(), PostedAtUtc.AddMinutes(5));
+        Result<TicketHistoryEntry> result = message.Edit("Conteúdo novo", Guid.NewGuid(), PostedAtUtc.AddMinutes(5));
 
         // Assert
         result.Error.ShouldBe(UserErrors.Unauthorized());
@@ -75,7 +77,7 @@ public sealed class TicketMessageTests
         DateTime deletedAtUtc = PostedAtUtc.AddMinutes(10);
 
         // Act
-        TicketHistory history = message.Delete(managerId, canDeleteAny: true, deletedAtUtc).Value;
+        TicketHistoryEntry history = message.Delete(managerId, canDeleteAny: true, deletedAtUtc).Value;
 
         // Assert
         message.DeletedAtUtc.ShouldBe(deletedAtUtc);
@@ -92,7 +94,7 @@ public sealed class TicketMessageTests
         TicketMessage message = CreateMessage();
 
         // Act
-        Result<TicketHistory> result = message.Delete(AuthorId, canDeleteAny: false, PostedAtUtc.AddMinutes(10));
+        Result<TicketHistoryEntry> result = message.Delete(AuthorId, canDeleteAny: false, PostedAtUtc.AddMinutes(10));
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
@@ -106,7 +108,7 @@ public sealed class TicketMessageTests
         TicketMessage message = CreateMessage();
 
         // Act
-        Result<TicketHistory> result = message.Delete(Guid.NewGuid(), canDeleteAny: false, PostedAtUtc.AddMinutes(10));
+        Result<TicketHistoryEntry> result = message.Delete(Guid.NewGuid(), canDeleteAny: false, PostedAtUtc.AddMinutes(10));
 
         // Assert
         result.Error.ShouldBe(UserErrors.Unauthorized());

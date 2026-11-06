@@ -4,6 +4,8 @@ using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using TickestPristine.Domain.SlaCalendars;
+using TickestPristine.Domain.TicketHistories;
+using TickestPristine.Domain.TicketMessages;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -95,7 +97,7 @@ public sealed class TicketTests
         var openedByUserId = Guid.NewGuid();
 
         // Act
-        TicketHistory history = ticket.RecordOpening(openedByUserId);
+        TicketHistoryEntry history = ticket.RecordOpening(openedByUserId);
 
         // Assert
         history.Id.ShouldNotBe(Guid.Empty);
@@ -209,7 +211,7 @@ public sealed class TicketTests
         string description = ticket.Description;
 
         // Act
-        TicketHistory history = ticket.StartProgress(lastMessageIsFromAgent: false, AgentId, OccurredAtUtc).Value;
+        TicketHistoryEntry history = ticket.StartProgress(lastMessageIsFromAgent: false, AgentId, OccurredAtUtc).Value;
 
         // Assert
         ticket.Status.ShouldBe(TicketStatus.InProgress);
@@ -239,7 +241,7 @@ public sealed class TicketTests
         DateTime lastActivityAtUtc = ticket.LastActivityAtUtc;
 
         // Act
-        Result<TicketHistory> result = ticket.StartProgress(lastMessageIsFromAgent: false, AgentId, OccurredAtUtc);
+        Result<TicketHistoryEntry> result = ticket.StartProgress(lastMessageIsFromAgent: false, AgentId, OccurredAtUtc);
 
         // Assert
         result.Error.Code.ShouldBe(expectedErrorCode);
@@ -260,7 +262,7 @@ public sealed class TicketTests
         DateTime lastActivityAtUtc = ticket.LastActivityAtUtc;
 
         // Act
-        Result<TicketHistory> result = ticket.Close(AgentId, OccurredAtUtc);
+        Result<TicketHistoryEntry> result = ticket.Close(AgentId, OccurredAtUtc);
 
         // Assert
         result.Error.ShouldBe(TicketErrors.InvalidStatusTransition(status, TicketStatus.Closed));
@@ -276,7 +278,7 @@ public sealed class TicketTests
         Ticket ticket = CreateTicket(description: "Original description");
 
         // Act
-        TicketHistory? history = ticket.ChangeDescription("Updated description", AgentId, OccurredAtUtc);
+        TicketHistoryEntry? history = ticket.ChangeDescription("Updated description", AgentId, OccurredAtUtc);
 
         // Assert
         ticket.Description.ShouldBe("Updated description");
@@ -299,9 +301,9 @@ public sealed class TicketTests
         Ticket ticket = CreateTicket(description: "Original description");
 
         // Act: na ordem do PUT do chamado, o status antes da descrição.
-        TicketHistory statusChange = ticket.StartProgress(lastMessageIsFromAgent: false, AgentId, OccurredAtUtc).Value;
-        TicketHistory descriptionChange = ticket.ChangeDescription("Updated description", AgentId, OccurredAtUtc)!;
-        TicketHistory[] entries = [statusChange, descriptionChange];
+        TicketHistoryEntry statusChange = ticket.StartProgress(lastMessageIsFromAgent: false, AgentId, OccurredAtUtc).Value;
+        TicketHistoryEntry descriptionChange = ticket.ChangeDescription("Updated description", AgentId, OccurredAtUtc)!;
+        TicketHistoryEntry[] entries = [statusChange, descriptionChange];
 
         // Assert
         entries.Select(e => e.Action).ShouldBe([TicketHistoryAction.StatusChanged, TicketHistoryAction.DescriptionChanged]);
@@ -321,7 +323,7 @@ public sealed class TicketTests
         Ticket ticket = CreateTicket();
 
         // Act
-        TicketHistory? history = ticket.ChangeDescription(ticket.Description, AgentId, OccurredAtUtc);
+        TicketHistoryEntry? history = ticket.ChangeDescription(ticket.Description, AgentId, OccurredAtUtc);
 
         // Assert
         history.ShouldBeNull();
@@ -367,7 +369,7 @@ public sealed class TicketTests
         var assignee = new User { Id = Guid.NewGuid() };
 
         // Act
-        TicketHistory history = ticket.Assign(assignee, AgentId, OccurredAtUtc).Value;
+        TicketHistoryEntry history = ticket.Assign(assignee, AgentId, OccurredAtUtc).Value;
 
         // Assert
         ticket.AssignedToUserId.ShouldBe(assignee.Id);
@@ -377,7 +379,7 @@ public sealed class TicketTests
         history.OldValue.ShouldBeNull();
         history.NewValue.ShouldBe(assignee.Id.ToString());
         history.OccurredAtUtc.ShouldBe(OccurredAtUtc);
-        ticket.DomainEvents.OfType<TicketReassignedDomainEvent>().ShouldContain(e =>
+        ticket.DomainEvents.OfType<TicketAssignedDomainEvent>().ShouldContain(e =>
             e.TicketId == ticket.Id &&
             e.PreviousAssignedToUserId == null &&
             e.AssignedToUserId == assignee.Id &&
@@ -393,7 +395,7 @@ public sealed class TicketTests
         var assignee = new User { Id = Guid.NewGuid() };
 
         // Act
-        TicketHistory history = ticket.Assign(assignee, AgentId, OccurredAtUtc).Value;
+        TicketHistoryEntry history = ticket.Assign(assignee, AgentId, OccurredAtUtc).Value;
 
         // Assert
         ticket.AssignedToUserId.ShouldBe(assignee.Id);
@@ -403,7 +405,7 @@ public sealed class TicketTests
         history.OldValue.ShouldBe(previous.Id.ToString());
         history.NewValue.ShouldBe(assignee.Id.ToString());
         history.OccurredAtUtc.ShouldBe(OccurredAtUtc);
-        ticket.DomainEvents.OfType<TicketReassignedDomainEvent>().ShouldContain(e =>
+        ticket.DomainEvents.OfType<TicketAssignedDomainEvent>().ShouldContain(e =>
             e.TicketId == ticket.Id &&
             e.PreviousAssignedToUserId == previous.Id &&
             e.AssignedToUserId == assignee.Id &&
@@ -418,7 +420,7 @@ public sealed class TicketTests
         Ticket ticket = CreateTicket(previous);
 
         // Act
-        TicketHistory history = ticket.Unassign(AgentId, OccurredAtUtc).Value;
+        TicketHistoryEntry history = ticket.Unassign(AgentId, OccurredAtUtc).Value;
 
         // Assert
         ticket.AssignedToUserId.ShouldBeNull();
@@ -445,7 +447,7 @@ public sealed class TicketTests
         DateTime lastActivityAtUtc = ticket.LastActivityAtUtc;
 
         // Act
-        Result<TicketHistory> result = ticket.Assign(new User { Id = Guid.NewGuid() }, AgentId, OccurredAtUtc);
+        Result<TicketHistoryEntry> result = ticket.Assign(new User { Id = Guid.NewGuid() }, AgentId, OccurredAtUtc);
 
         // Assert
         result.Error.ShouldBe(TicketErrors.NotActive(ticket.Id));
@@ -466,7 +468,7 @@ public sealed class TicketTests
         DateTime lastActivityAtUtc = ticket.LastActivityAtUtc;
 
         // Act
-        Result<TicketHistory> result = ticket.Unassign(AgentId, OccurredAtUtc);
+        Result<TicketHistoryEntry> result = ticket.Unassign(AgentId, OccurredAtUtc);
 
         // Assert
         result.Error.ShouldBe(TicketErrors.NotActive(ticket.Id));
@@ -482,7 +484,7 @@ public sealed class TicketTests
         Ticket ticket = CreateTicketIn(TicketStatus.Resolved);
 
         // Act
-        TicketHistory history = ticket.Close(AgentId, OccurredAtUtc).Value;
+        TicketHistoryEntry history = ticket.Close(AgentId, OccurredAtUtc).Value;
 
         // Assert
         ticket.Status.ShouldBe(TicketStatus.Closed);
@@ -510,7 +512,7 @@ public sealed class TicketTests
         DateTime? resolvedAtUtc = ticket.ResolvedAtUtc;
 
         // Act
-        TicketHistory history = new TicketSlaCycleService()
+        TicketHistoryEntry history = new TicketSlaCycleService()
             .Reopen(ticket, [], Calendar, lastMessageIsFromAgent: false, AgentId, OccurredAtUtc).Value.History;
 
         // Assert
@@ -535,7 +537,7 @@ public sealed class TicketTests
         Ticket ticket = CreateTicket();
 
         // Act
-        TicketHistory history = new TicketSlaCycleService().Delete(ticket, [], AgentId, OccurredAtUtc).Value;
+        TicketHistoryEntry history = new TicketSlaCycleService().Delete(ticket, [], AgentId, OccurredAtUtc).Value;
 
         // Assert
         ticket.DeletedAtUtc.ShouldBe(OccurredAtUtc);
@@ -728,7 +730,7 @@ public sealed class TicketTests
         // Arrange
         Ticket ticket = CreateTicket();
         ticket.Assign(new User { Id = AgentId }, AgentId, OccurredAtUtc);
-        TicketHistory olderEntry = TicketTestData.CreateAttachment(ticket.Id, AgentId, OpenedAtUtc.AddMinutes(5)).RecordUpload();
+        TicketHistoryEntry olderEntry = TicketTestData.CreateAttachment(ticket.Id, AgentId, OpenedAtUtc.AddMinutes(5)).RecordUpload();
 
         // Act
         ticket.RecordAttachmentActivity(olderEntry);
@@ -746,7 +748,7 @@ public sealed class TicketTests
     {
         // Arrange
         Ticket ticket = CreateTicket();
-        TicketHistory posting = TicketTestData.CreateMessage(ticket.Id, AgentId, "Resposta", OpenedAtUtc)
+        TicketHistoryEntry posting = TicketTestData.CreateMessage(ticket.Id, AgentId, "Resposta", OpenedAtUtc)
             .Edit("Resposta corrigida", AgentId, OccurredAtUtc).Value;
 
         // Act
@@ -762,7 +764,7 @@ public sealed class TicketTests
     {
         // Arrange
         Ticket ticket = CreateTicketIn(TicketStatus.Resolved);
-        TicketHistory posting = TicketTestData.CreateMessage(ticket.Id, AgentId, "Resposta", OpenedAtUtc)
+        TicketHistoryEntry posting = TicketTestData.CreateMessage(ticket.Id, AgentId, "Resposta", OpenedAtUtc)
             .Edit("Resposta corrigida", AgentId, OccurredAtUtc).Value;
 
         // Act
@@ -779,7 +781,7 @@ public sealed class TicketTests
         Ticket ticket = CreateTicket();
 
         // Act
-        (TicketMessage message, TicketHistory history) = ticket.PostMessage(AgentId, "Verificando", authorIsAgent: true, OccurredAtUtc);
+        (TicketMessage message, TicketHistoryEntry history) = ticket.PostMessage(AgentId, "Verificando", authorIsAgent: true, OccurredAtUtc);
 
         // Assert
         message.TicketId.ShouldBe(ticket.Id);

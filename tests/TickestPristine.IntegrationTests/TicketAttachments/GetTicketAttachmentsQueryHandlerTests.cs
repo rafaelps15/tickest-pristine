@@ -10,6 +10,7 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using NSubstitute;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketAttachments;
 
 namespace TickestPristine.IntegrationTests.TicketAttachments;
 

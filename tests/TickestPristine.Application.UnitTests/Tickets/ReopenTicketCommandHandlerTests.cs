@@ -9,6 +9,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Domain.SlaCalendars;
+using TickestPristine.Domain.TicketHistories;
+using TickestPristine.Domain.TicketMessages;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -189,7 +191,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketReopenedDomainEvent);
 
         // O histórico guarda o status anterior e o novo.
-        TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id);
+        TicketHistoryEntry history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id);
         history.Action.ShouldBe(TicketHistoryAction.Reopened);
         history.OldValue.ShouldBe(status.ToString());
         history.NewValue.ShouldBe(TicketStatus.Open.ToString());
@@ -221,7 +223,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         ticket.Status.ShouldBe(TicketStatus.Open);
         ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketReopenedDomainEvent);
 
-        TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id);
+        TicketHistoryEntry history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id);
         history.OldValue.ShouldBe(nameof(TicketStatus.Closed));
         history.NewValue.ShouldBe(nameof(TicketStatus.Open));
     }
@@ -296,7 +298,7 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         probe.Saves.ShouldBe(1);
         probe.SavedEntities.ShouldContain(nameof(Ticket));
         probe.SavedEntities.ShouldContain(nameof(TicketMessage));
-        probe.SavedEntities.Count(name => name == nameof(TicketHistory)).ShouldBe(2);
+        probe.SavedEntities.Count(name => name == nameof(TicketHistoryEntry)).ShouldBe(2);
     }
 
     [Fact]

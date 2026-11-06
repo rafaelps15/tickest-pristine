@@ -10,6 +10,7 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using NSubstitute;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketMessages;
 
 namespace TickestPristine.IntegrationTests.TicketMessages;
 

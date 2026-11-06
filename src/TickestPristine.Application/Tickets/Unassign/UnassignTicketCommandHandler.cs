@@ -4,6 +4,7 @@ using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.Tickets.Unassign;
 
@@ -36,7 +37,7 @@ internal sealed class UnassignTicketCommandHandler(
             return Result.Success();
         }
 
-        Result<TicketHistory> unassignment = ticket.Unassign(userContext.UserId, dateTimeProvider.UtcNow);
+        Result<TicketHistoryEntry> unassignment = ticket.Unassign(userContext.UserId, dateTimeProvider.UtcNow);
 
         if (unassignment.IsFailure)
         {

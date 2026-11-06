@@ -4,8 +4,8 @@ using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Pagination;
 using TickestPristine.Application.Tickets;
-using TickestPristine.Domain.Tickets;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.TicketHistories.GetAll;
 
@@ -67,7 +67,7 @@ internal sealed class GetTicketHistoryQueryHandler(
                 request.Paging,
                 (item, names) =>
                 {
-                    item.Description = TicketHistoryDescriptions.For(
+                    item.Description = TicketHistoryEntryDescription.For(
                         item.Action,
                         item.OldValue,
                         item.NewValue,

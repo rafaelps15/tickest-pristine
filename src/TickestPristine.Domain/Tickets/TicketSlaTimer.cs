@@ -164,7 +164,7 @@ public sealed class TicketSlaTimer : Entity, IAuditable
     /// Estado no instante informado: em aberto, em andamento antes do alerta, em risco do alerta até o prazo e violado
     /// a partir do prazo; concluído até o prazo (inclusive), cumprido; depois dele, perdido; parado, parado.
     /// </summary>
-    public SlaObjectiveState GetState(DateTime utcNow)
+    public SlaObjectiveState StateAt(DateTime utcNow)
     {
         if (CompletedOnUtc is { } completedAt)
         {
@@ -189,7 +189,7 @@ public sealed class TicketSlaTimer : Entity, IAuditable
     /// <summary>
     /// Tempo útil consumido entre o início e o menor instante entre agora, a conclusão e a parada.
     /// </summary>
-    public TimeSpan GetConsumed(BusinessCalendar calendar, DateTime utcNow)
+    public TimeSpan ConsumedBusinessTime(BusinessCalendar calendar, DateTime utcNow)
     {
         DateTime endUtc = new[] { utcNow, CompletedOnUtc ?? DateTime.MaxValue, StoppedOnUtc ?? DateTime.MaxValue }.Min();
 

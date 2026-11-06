@@ -134,7 +134,7 @@ public sealed class TicketSqlTests(IntegrationTestWebAppFactory factory) : BaseQ
         var expected = tickets.ToDictionary(
             ticket => ticket.Id,
             ticket => timers.Where(timer => timer.TicketId == ticket.Id).MaxBy(timer => timer.Cycle) is { } current
-                ? ToSlaStatus(current.GetState(nowUtc))
+                ? ToSlaStatus(current.StateAt(nowUtc))
                 : (TicketSlaStatus?)null);
         expected[withoutTimer.Id].ShouldBeNull();
         expected[reopened.Id].ShouldBe(TicketSlaStatus.OnTime);

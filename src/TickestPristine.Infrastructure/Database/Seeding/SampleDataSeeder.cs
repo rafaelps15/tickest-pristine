@@ -9,6 +9,7 @@ using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
 using TickestPristine.Application.Users;
 using TickestPristine.Domain.SlaCalendars;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Infrastructure.Database.Seeding;
 
@@ -75,7 +76,7 @@ internal sealed class SampleDataSeeder(
                 continue;
             }
 
-            (Ticket ticket, List<TicketHistory> history, IReadOnlyList<TicketSlaTimer> slaTimers) =
+            (Ticket ticket, List<TicketHistoryEntry> history, IReadOnlyList<TicketSlaTimer> slaTimers) =
                 CreateTicket(faker, sampleTicket, sector, requesters, agents, now);
 
             context.Tickets.Add(ticket);
@@ -166,7 +167,7 @@ internal sealed class SampleDataSeeder(
     /// resposta). Cada passo é conferido com <see cref="Ticket.CanTransitionTo"/>, para o seed nunca gerar um histórico
     /// que a API recusaria.
     /// </summary>
-    private static (Ticket Ticket, List<TicketHistory> History, IReadOnlyList<TicketSlaTimer> SlaTimers) CreateTicket(
+    private static (Ticket Ticket, List<TicketHistoryEntry> History, IReadOnlyList<TicketSlaTimer> SlaTimers) CreateTicket(
         Faker faker,
         SampleTicket sampleTicket,
         Sector sector,
@@ -208,7 +209,7 @@ internal sealed class SampleDataSeeder(
 
         var slaCycle = new TicketSlaCycleService();
         IReadOnlyList<TicketSlaTimer> slaTimers = slaCycle.Start(ticket, calendar);
-        List<TicketHistory> history = [ticket.RecordOpening(requester.Id)];
+        List<TicketHistoryEntry> history = [ticket.RecordOpening(requester.Id)];
         DateTime occurredAtUtc = createdAtUtc;
 
         foreach (TicketStatus newStatus in StatusPaths[status])
@@ -230,7 +231,7 @@ internal sealed class SampleDataSeeder(
             // Sem mensagens, quem o chamado aguarda segue só o status.
             Guid changedByUserId = assignee?.Id ?? requester.Id;
 
-            Result<TicketHistory> statusChange = newStatus switch
+            Result<TicketHistoryEntry> statusChange = newStatus switch
             {
                 TicketStatus.InProgress => ticket.StartProgress(lastMessageIsFromAgent: false, changedByUserId, occurredAtUtc),
                 TicketStatus.Resolved => slaCycle.Resolve(ticket, slaTimers, changedByUserId, occurredAtUtc),

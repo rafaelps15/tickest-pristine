@@ -5,11 +5,11 @@ using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Storage;
 using TickestPristine.Application.Tickets;
-using TickestPristine.Domain.Tickets;
 using Microsoft.Extensions.Logging;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketAttachments;
 
-namespace TickestPristine.Application.TicketAttachments.Download;
+namespace TickestPristine.Application.TicketAttachments.GetContent;
 
 internal sealed class GetTicketAttachmentContentQueryHandler(
     IDbConnectionFactory dbConnectionFactory,

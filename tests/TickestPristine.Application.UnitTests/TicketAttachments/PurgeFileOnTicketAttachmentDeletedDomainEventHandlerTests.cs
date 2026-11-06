@@ -1,8 +1,8 @@
 using TickestPristine.Application.Abstractions.Storage;
 using TickestPristine.Application.TicketAttachments.TicketAttachmentDeleted;
 using TickestPristine.Application.UnitTests.Abstractions;
-using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
+using TickestPristine.Domain.TicketAttachments;
 
 namespace TickestPristine.Application.UnitTests.TicketAttachments;
 

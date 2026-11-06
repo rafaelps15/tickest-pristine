@@ -1,5 +1,6 @@
 using TickestPristine.Domain.SlaCalendars;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Domain.Tickets;
 
@@ -53,7 +54,7 @@ public sealed class TicketSlaCycleService
     /// Resolve o chamado e conclui, com a causa "resolução", o ciclo corrente de resolução e a primeira resposta, cada um
     /// só se ainda estiver aberto. Falha como o <see cref="Ticket"/>, sem mudar nada.
     /// </summary>
-    public Result<TicketHistory> Resolve(
+    public Result<TicketHistoryEntry> Resolve(
         Ticket ticket,
         IReadOnlyCollection<TicketSlaTimer> slaTimers,
         Guid resolvedByUserId,
@@ -64,7 +65,7 @@ public sealed class TicketSlaCycleService
         // A primeira resposta só existe no ciclo 1.
         TicketSlaTimer? firstResponse = slaTimers.FirstOrDefault(t => t.BelongsTo(ticket) && t.Metric == SlaMetric.FirstResponse);
 
-        Result<TicketHistory> resolving = ticket.Resolve(resolvedByUserId, utcNow);
+        Result<TicketHistoryEntry> resolving = ticket.Resolve(resolvedByUserId, utcNow);
 
         if (resolving.IsFailure)
         {
@@ -90,7 +91,7 @@ public sealed class TicketSlaCycleService
     /// Cancela o chamado e para os cronômetros dele que estão abertos; os concluídos não mudam. Falha como o
     /// <see cref="Ticket"/>, sem mudar nada.
     /// </summary>
-    public Result<TicketHistory> Cancel(
+    public Result<TicketHistoryEntry> Cancel(
         Ticket ticket,
         IReadOnlyCollection<TicketSlaTimer> slaTimers,
         bool canCancelAny,
@@ -100,7 +101,7 @@ public sealed class TicketSlaCycleService
     {
         TicketSlaTimer[] openTimers = [.. slaTimers.Where(t => t.BelongsTo(ticket) && t.IsOpen)];
 
-        Result<TicketHistory> cancellation = ticket.Cancel(canCancelAny, isOwnerWhoCanEdit, canceledByUserId, utcNow);
+        Result<TicketHistoryEntry> cancellation = ticket.Cancel(canCancelAny, isOwnerWhoCanEdit, canceledByUserId, utcNow);
 
         if (cancellation.IsFailure)
         {
@@ -154,7 +155,7 @@ public sealed class TicketSlaCycleService
             utcNow,
             TicketSlaPlan.CalculateDeadlines(plan.ResolutionMinutes, calendar, utcNow));
 
-        Result<TicketHistory> reopening = ticket.Reopen(hasOpenResolutionCycle, lastMessageIsFromAgent, reopenedByUserId, utcNow);
+        Result<TicketHistoryEntry> reopening = ticket.Reopen(hasOpenResolutionCycle, lastMessageIsFromAgent, reopenedByUserId, utcNow);
 
         if (reopening.IsFailure)
         {
@@ -168,7 +169,7 @@ public sealed class TicketSlaCycleService
     /// Exclui o chamado logicamente e tira da fila do monitoramento os cronômetros dele que ainda estão nela, sem
     /// violação, parada nem evento. Falha como o <see cref="Ticket"/>, sem mudar nada.
     /// </summary>
-    public Result<TicketHistory> Delete(
+    public Result<TicketHistoryEntry> Delete(
         Ticket ticket,
         IReadOnlyCollection<TicketSlaTimer> slaTimers,
         Guid deletedByUserId,
@@ -176,7 +177,7 @@ public sealed class TicketSlaCycleService
     {
         TicketSlaTimer[] queuedTimers = [.. slaTimers.Where(t => t.BelongsTo(ticket) && t.IsQueued)];
 
-        Result<TicketHistory> deletion = ticket.Delete(deletedByUserId, utcNow);
+        Result<TicketHistoryEntry> deletion = ticket.Delete(deletedByUserId, utcNow);
 
         if (deletion.IsFailure)
         {

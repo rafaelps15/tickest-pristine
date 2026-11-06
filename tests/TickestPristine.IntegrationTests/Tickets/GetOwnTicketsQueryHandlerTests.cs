@@ -414,7 +414,7 @@ public sealed class GetOwnTicketsQueryHandlerTests(IntegrationTestWebAppFactory 
         // Assert: a mesma situação que o método do cronômetro dá ao ciclo vigente, e a do chamado continua congelada
         OwnTicketResponse item = result.Value.Items.ShouldHaveSingleItem();
         item.CurrentSlaStatus.ShouldBe(expectedStatus);
-        currentCycle.GetState(nowUtc).ShouldBe(expectedCycleState);
+        currentCycle.StateAt(nowUtc).ShouldBe(expectedCycleState);
         item.SlaStatus.ShouldBe(TicketSlaStatus.Met);
     }
 
@@ -485,7 +485,7 @@ public sealed class GetOwnTicketsQueryHandlerTests(IntegrationTestWebAppFactory 
         OwnTicketResponse item = result.Value.Items.ShouldHaveSingleItem();
         currentCycle.DueOnUtc.ShouldBe(OpenedAtUtc.AddHours(10));
         item.CurrentSlaStatus.ShouldBe(TicketSlaStatus.Met);
-        currentCycle.GetState(nowUtc).ShouldBe(SlaObjectiveState.Met);
+        currentCycle.StateAt(nowUtc).ShouldBe(SlaObjectiveState.Met);
         item.SlaStatus.ShouldBe(TicketSlaStatus.Missed);
     }
 
@@ -509,7 +509,7 @@ public sealed class GetOwnTicketsQueryHandlerTests(IntegrationTestWebAppFactory 
         // Assert: parado vale antes de violado, como no método do cronômetro
         OwnTicketResponse item = result.Value.Items.ShouldHaveSingleItem();
         item.CurrentSlaStatus.ShouldBe(TicketSlaStatus.NotApplicable);
-        currentCycle.GetState(nowUtc).ShouldBe(SlaObjectiveState.Stopped);
+        currentCycle.StateAt(nowUtc).ShouldBe(SlaObjectiveState.Stopped);
         item.SlaStatus.ShouldBe(TicketSlaStatus.Met);
     }
 

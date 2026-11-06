@@ -1,6 +1,6 @@
 using System.IO.Compression;
 using TickestPristine.Application.Abstractions.Storage;
-using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.TicketAttachments;
 
 namespace TickestPristine.Infrastructure.Storage;
 
@@ -37,11 +37,17 @@ internal sealed class AttachmentContentInspector : IAttachmentContentInspector
     private static readonly byte[] EmptyZipSignature = [0x50, 0x4B, 0x05, 0x06];
 
     /// <summary>
-    /// Indica se o conteúdo corresponde ao tipo informado. Lê o começo do arquivo (e, para DOCX e XLSX, o índice do
-    /// pacote) e devolve o fluxo à posição em que estava. Exige um fluxo posicionável.
+    /// Indica se o conteúdo corresponde ao tipo informado. Um tipo que a <see cref="TicketAttachmentPolicy"/> não aceita
+    /// não corresponde a nenhum conteúdo, sem ler o arquivo. Para os aceitos, lê o começo do arquivo (e, para DOCX e XLSX,
+    /// o índice do pacote) e devolve o fluxo à posição em que estava. Exige um fluxo posicionável.
     /// </summary>
     public async Task<bool> MatchesAsync(Stream content, string contentType, CancellationToken cancellationToken)
     {
+        if (!TicketAttachmentPolicy.Accepts(contentType))
+        {
+            return false;
+        }
+
         long start = content.Position;
 
         try
@@ -50,7 +56,7 @@ internal sealed class AttachmentContentInspector : IAttachmentContentInspector
             int read = await content.ReadAtLeastAsync(sample, SampleSize, throwOnEndOfStream: false, cancellationToken);
             ReadOnlyMemory<byte> header = sample.AsMemory(0, read);
 
-            string mediaType = TicketAttachment.GetMediaType(contentType);
+            string mediaType = TicketAttachmentPolicy.GetMediaType(contentType);
 
             if (Is(mediaType, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
             {

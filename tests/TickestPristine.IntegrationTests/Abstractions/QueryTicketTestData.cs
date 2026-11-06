@@ -3,6 +3,8 @@ using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using TickestPristine.Domain.SlaCalendars;
+using TickestPristine.Domain.TicketAttachments;
+using TickestPristine.Domain.TicketMessages;
 
 namespace TickestPristine.IntegrationTests.Abstractions;
 

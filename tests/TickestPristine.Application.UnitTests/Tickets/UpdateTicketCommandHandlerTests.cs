@@ -8,6 +8,7 @@ using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Domain.SlaCalendars;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -465,7 +466,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
-        TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticketId);
+        TicketHistoryEntry history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticketId);
         history.Action.ShouldBe(TicketHistoryAction.DescriptionChanged);
         history.OldValue.ShouldBe("Original description");
         history.NewValue.ShouldBe("Updated description");
@@ -486,14 +487,14 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
-        List<TicketHistory> histories = await context.TicketHistories.Where(h => h.TicketId == ticketId).ToListAsync();
+        List<TicketHistoryEntry> histories = await context.TicketHistories.Where(h => h.TicketId == ticketId).ToListAsync();
         histories.Count.ShouldBe(2);
 
-        TicketHistory statusChanged = histories.Single(h => h.Action == TicketHistoryAction.StatusChanged);
+        TicketHistoryEntry statusChanged = histories.Single(h => h.Action == TicketHistoryAction.StatusChanged);
         statusChanged.OldValue.ShouldBe(nameof(TicketStatus.Open));
         statusChanged.NewValue.ShouldBe(nameof(TicketStatus.InProgress));
 
-        TicketHistory descriptionChanged = histories.Single(h => h.Action == TicketHistoryAction.DescriptionChanged);
+        TicketHistoryEntry descriptionChanged = histories.Single(h => h.Action == TicketHistoryAction.DescriptionChanged);
         descriptionChanged.OldValue.ShouldBe("Original description");
         descriptionChanged.NewValue.ShouldBe("Updated description");
     }
@@ -546,7 +547,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
-        TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticketId);
+        TicketHistoryEntry history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticketId);
         history.Action.ShouldBe(TicketHistoryAction.DescriptionChanged);
         history.NewValue.ShouldBe("original description");
     }
