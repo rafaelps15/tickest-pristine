@@ -11,7 +11,7 @@ internal sealed class GetTicketAttachmentPolicyQueryHandler
     : IQueryHandler<GetTicketAttachmentPolicyQuery, TicketAttachmentPolicyResponse>
 {
     public Task<Result<TicketAttachmentPolicyResponse>> Handle(
-        GetTicketAttachmentPolicyQuery query,
+        GetTicketAttachmentPolicyQuery request,
         CancellationToken cancellationToken)
     {
         var policy = new TicketAttachmentPolicyResponse

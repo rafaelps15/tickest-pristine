@@ -39,6 +39,7 @@ PAIRS = (
     "add-feature/SKILL.md",
     "add-feature/references/command-slice.md",
     "add-feature/references/query-slice.md",
+    "add-feature/references/pagination.md",
     "add-feature/references/endpoint.md",
     "add-feature/references/tests.md",
     "add-feature/references/rich-domain-handler.md",
@@ -52,8 +53,8 @@ PAIRS = (
 )
 # Arquivos da biblioteca sem par no Tickest (nenhum hoje).
 LIBRARY_ONLY: tuple[str, ...] = ()
-# Só no Tickest, fora da comparação.
-TICKEST_ONLY = ("add-feature/references/pagination.md",)
+# Só no Tickest, fora da comparação (nenhum hoje).
+TICKEST_ONLY: tuple[str, ...] = ()
 TICKEST_ONLY_SKILLS = ("spec-new", "spec-implement", "spec-verify")
 
 CODE_BLOCK_RE = re.compile(r"```[^\n]*\n(.*?)```", re.S)

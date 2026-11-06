@@ -18,6 +18,7 @@ internal sealed class GetAll : IEndpoint
             [FromQuery(Name = "status")] TicketStatus[]? statuses,
             TicketPriority? priority,
             [FromQuery(Name = "sectorId")] Guid[]? sectorIds,
+            Guid? departmentId,
             Guid? requesterId,
             Guid? assignedToUserId,
             bool? unassignedOnly,
@@ -35,6 +36,7 @@ internal sealed class GetAll : IEndpoint
         {
             var scope = new TicketScopeFilter(
                 sectorIds ?? [],
+                departmentId,
                 priority,
                 requesterId,
                 assignedToUserId,

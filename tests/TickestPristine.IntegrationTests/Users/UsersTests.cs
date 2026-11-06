@@ -1645,8 +1645,8 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         int credentialQueries;
         int groupedCountQueries;
 
-        using (var credentialCounter = new EfCommandCounter(sql => sql.Contains("user_credentials", StringComparison.Ordinal)))
-        using (var groupedCounter = new EfCommandCounter(sql =>
+        using (var credentialCounter = new NpgsqlCommandCounter(sql => sql.Contains("user_credentials", StringComparison.Ordinal)))
+        using (var groupedCounter = new NpgsqlCommandCounter(sql =>
             sql.Contains("user_credentials", StringComparison.Ordinal) &&
             sql.Contains("GROUP BY", StringComparison.Ordinal)))
         {

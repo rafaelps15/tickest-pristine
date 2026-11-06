@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.SlaCalendars;
 using TickestPristine.Domain.Users;
@@ -46,6 +47,13 @@ public sealed class Ticket : Entity, IAuditable
     public DateTime? DeletedAtUtc { get; private set; }
 
     public bool IsActive => Status is TicketStatus.Open or TicketStatus.InProgress;
+
+    /// <summary>
+    /// A regra de <see cref="IsActive"/> como filtro que o EF traduz para SQL, para os commands que procuram chamados
+    /// ativos pelo contexto; as consultas em SQL usam o trecho com o mesmo nome da Application.
+    /// </summary>
+    public static Expression<Func<Ticket, bool>> Active { get; } =
+        ticket => ticket.Status == TicketStatus.Open || ticket.Status == TicketStatus.InProgress;
 
     /// <summary>
     /// Abre o chamado com o plano de SLA e o prazo e o alerta de resolução do ciclo 1, no tempo útil do calendário do

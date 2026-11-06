@@ -5,7 +5,9 @@ namespace TickestPristine.Application.Permissions.GetAll;
 
 internal sealed class GetPermissionsQueryHandler : IQueryHandler<GetPermissionsQuery, List<PermissionResponse>>
 {
-    public Task<Result<List<PermissionResponse>>> Handle(GetPermissionsQuery query, CancellationToken cancellationToken)
+    public Task<Result<List<PermissionResponse>>> Handle(
+        GetPermissionsQuery request,
+        CancellationToken cancellationToken)
     {
         var permissions = PermissionCatalog.All
             .Select(p => new PermissionResponse

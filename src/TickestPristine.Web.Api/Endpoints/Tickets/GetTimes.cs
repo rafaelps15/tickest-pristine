@@ -16,6 +16,7 @@ internal sealed class GetTimes : IEndpoint
         // Os mesmos filtros de recorte de GET tickets; o período de resolução vale para a data de cada conclusão.
         app.MapGet("tickets/stats/times", async (
             [FromQuery(Name = "sectorId")] Guid[]? sectorIds,
+            Guid? departmentId,
             TicketPriority? priority,
             Guid? requesterId,
             Guid? assignedToUserId,
@@ -29,6 +30,7 @@ internal sealed class GetTimes : IEndpoint
         {
             var scope = new TicketScopeFilter(
                 sectorIds ?? [],
+                departmentId,
                 priority,
                 requesterId,
                 assignedToUserId,

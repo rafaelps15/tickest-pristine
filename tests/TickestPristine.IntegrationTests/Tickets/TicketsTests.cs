@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Application.TicketHistories;
 using TickestPristine.Application.Tickets;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Infrastructure.Database;
@@ -1150,6 +1151,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     [InlineData("requesterId=1b9d4e7a-5c3f-4a2b-8e6d-0f7a9c2b4d31")]
     [InlineData("assignedToUserId=1b9d4e7a-5c3f-4a2b-8e6d-0f7a9c2b4d31")]
     [InlineData("unassignedOnly=true")]
+    [InlineData("departmentId=6f1c2a4e-0b7d-4c1e-9a52-3d8e7f6a1b20")]
     public async Task GetVolume_Should_ReturnForbiddenToRequesterAndOkToAgent_WhenSlicingFilterIsGiven(string filter)
     {
         // Arrange
@@ -3299,6 +3301,61 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     // (5) Fechado sem responsável resolvido depois do prazo e (6) Cancelado sem responsável nunca resolvido; na Infra,
     // (7) Aberto Urgente com responsável no prazo. Fora do período, um Aberto no Helpdesk em 25/09; fora dos setores, um
     // Aberto num terceiro setor. Termina autenticado como administrador (tickets:manage).
+    [Fact]
+    public async Task GetOverview_Should_CountEverySectorOfTheDepartment_WhenOneOfThemIsDeactivated()
+    {
+        // Arrange: um departamento com um setor ativo e um desativado, este com dois chamados resolvidos
+        (Guid departmentId, Guid activeSector, Guid deactivatedSector) = await InsertDepartmentWithDeactivatedSectorAsync();
+        Guid requesterId = await InsertUserAsync("Maria", "Souza", UniqueEmail());
+        DateTime now = DateTime.UtcNow;
+        await InsertOverviewTicketAsync(requesterId, activeSector, TicketStatus.Open, TicketPriority.Urgent, now.AddHours(-2), now.AddHours(5), now.AddHours(7));
+        await InsertOverviewTicketAsync(requesterId, deactivatedSector, TicketStatus.Resolved, TicketPriority.Medium, now.AddHours(-30), now.AddHours(-6), now.AddHours(-3), resolvedAtUtc: now.AddHours(-5));
+        await InsertOverviewTicketAsync(requesterId, deactivatedSector, TicketStatus.Resolved, TicketPriority.Low, now.AddHours(-30), now.AddHours(-12), now.AddHours(-10), resolvedAtUtc: now.AddHours(-1));
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        OverviewDto byDepartment = (await HttpClient.GetFromJsonAsync<OverviewDto>($"tickets/stats/overview?departmentId={departmentId}"))!;
+        OverviewDto active = (await HttpClient.GetFromJsonAsync<OverviewDto>($"tickets/stats/overview?sectorId={activeSector}"))!;
+        OverviewDto deactivated = (await HttpClient.GetFromJsonAsync<OverviewDto>($"tickets/stats/overview?sectorId={deactivatedSector}"))!;
+
+        // Assert: os três chamados, iguais à soma dos dois setores
+        byDepartment.Volume.TotalCount.ShouldBe(3);
+        byDepartment.Volume.ResolvedCount.ShouldBe(2);
+        byDepartment.Volume.ShouldBe(new OverviewVolumeDto(
+            active.Volume.TotalCount + deactivated.Volume.TotalCount,
+            active.Volume.OpenCount + deactivated.Volume.OpenCount,
+            active.Volume.InProgressCount + deactivated.Volume.InProgressCount,
+            active.Volume.ResolvedCount + deactivated.Volume.ResolvedCount,
+            active.Volume.ClosedCount + deactivated.Volume.ClosedCount,
+            active.Volume.CanceledCount + deactivated.Volume.CanceledCount,
+            active.Volume.BacklogCount + deactivated.Volume.BacklogCount));
+        byDepartment.Sla.ShouldBe(new OverviewSlaDto(
+            active.Sla.OnTimeCount + deactivated.Sla.OnTimeCount,
+            active.Sla.AtRiskCount + deactivated.Sla.AtRiskCount,
+            active.Sla.BreachedCount + deactivated.Sla.BreachedCount,
+            active.Sla.MetCount + deactivated.Sla.MetCount,
+            active.Sla.MissedCount + deactivated.Sla.MissedCount,
+            active.Sla.NotApplicableCount + deactivated.Sla.NotApplicableCount));
+    }
+
+    // Departamento novo com um setor ativo e um desativado, gravados direto no banco.
+    private async Task<(Guid DepartmentId, Guid ActiveSectorId, Guid DeactivatedSectorId)> InsertDepartmentWithDeactivatedSectorAsync()
+    {
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var department = Department.Create($"Department-{Guid.NewGuid():N}", "A department created by tests", responsibleUser: null);
+        var activeSector = Sector.Create(department, $"Active-{Guid.NewGuid():N}", description: null);
+        var deactivatedSector = Sector.Create(department, $"Deactivated-{Guid.NewGuid():N}", description: null);
+        deactivatedSector.Deactivate();
+
+        context.Departments.Add(department);
+        context.Sectors.AddRange(activeSector, deactivatedSector);
+        await context.SaveChangesAsync();
+
+        return (department.Id, activeSector.Id, deactivatedSector.Id);
+    }
+
     private async Task<OverviewScenario> SeedOverviewScenarioAsync()
     {
         Guid helpdesk = await InsertSectorAsync($"Helpdesk-{Guid.NewGuid():N}", $"Department-{Guid.NewGuid():N}");
@@ -5913,8 +5970,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         int nameQueries;
         int pageQueriesWithNames;
 
-        using (var nameCounter = new EfCommandCounter(sql => sql.Contains("first_name", StringComparison.Ordinal)))
-        using (var pageCounter = new EfCommandCounter(sql =>
+        using (var nameCounter = new NpgsqlCommandCounter(sql => sql.Contains("first_name", StringComparison.Ordinal)))
+        using (var pageCounter = new NpgsqlCommandCounter(sql =>
             sql.Contains("ticket_histories", StringComparison.Ordinal) &&
             sql.Contains("first_name", StringComparison.Ordinal)))
         {

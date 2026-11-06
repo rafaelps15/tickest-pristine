@@ -1,4 +1,5 @@
-using Microsoft.EntityFrameworkCore;
+using System.Data.Common;
+using Dapper;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Sla;
@@ -14,35 +15,61 @@ namespace TickestPristine.Application.Tickets.GetTimes;
 /// (abertura até a primeira resolução). Cronômetros parados (cancelamento) ficam fora, porque não têm conclusão. Os
 /// minutos úteis de cada cronômetro saem da mesma regra do <c>GET tickets/{id}/sla</c>
 /// (<see cref="TicketSlaTimer.GetConsumed"/>), com o calendário do próprio cronômetro, e o cálculo é feito em memória
-/// sobre os cronômetros do recorte (spec 027).
+/// sobre os cronômetros do recorte.
 /// </summary>
-internal sealed class GetTicketTimesQueryHandler(IApplicationDbContext context, ISlaCalendarProvider slaCalendarProvider)
+internal sealed class GetTicketTimesQueryHandler(IDbConnectionFactory dbConnectionFactory, ISlaCalendarProvider slaCalendarProvider)
     : IQueryHandler<GetTicketTimesQuery, TicketTimesResponse>
 {
-    public async Task<Result<TicketTimesResponse>> Handle(GetTicketTimesQuery query, CancellationToken cancellationToken)
+    public async Task<Result<TicketTimesResponse>> Handle(
+        GetTicketTimesQuery request,
+        CancellationToken cancellationToken)
     {
-        if (query.Scope.HasInvertedPeriod)
+        if (request.Scope.HasInvertedPeriod)
         {
             return Result.Failure<TicketTimesResponse>(TicketErrors.InvalidPeriod);
         }
 
-        // O período de resolução do recorte vale para a data da conclusão de cada cronômetro (DEC-4), e não para a
-        // primeira resolução do chamado; os demais filtros recortam os chamados.
-        var completedPeriod = LocalDatePeriod.FromLocalDates(query.Scope.ResolvedFrom, query.Scope.ResolvedTo);
-        DateTime? completedFromUtc = completedPeriod.FromUtc;
-        DateTime? completedUntilUtc = completedPeriod.UntilUtc;
-        IQueryable<Ticket> tickets = (query.Scope with { ResolvedFrom = null, ResolvedTo = null }).Apply(context.Tickets);
+        await using DbConnection connection = await dbConnectionFactory.OpenConnectionAsync(cancellationToken);
 
-        List<TicketSlaTimer> timers = await context.TicketSlaTimers
-            .AsNoTracking()
-            .Where(s =>
-                tickets.Any(t => t.Id == s.TicketId) &&
-                s.CompletedOnUtc != null &&
-                (s.Metric == SlaMetric.FirstResponse && s.CompletionCause == SlaCompletionCause.Message ||
-                 s.Metric == SlaMetric.Resolution && s.Cycle == 1) &&
-                (completedFromUtc == null || s.CompletedOnUtc >= completedFromUtc) &&
-                (completedUntilUtc == null || s.CompletedOnUtc < completedUntilUtc))
-            .ToListAsync(cancellationToken);
+        // Os cronômetros concluídos dos chamados do recorte: a primeira resposta concluída por mensagem e a resolução do
+        // ciclo 1, com o período de conclusão.
+        const string sql =
+            $"""
+             SELECT
+                 {TicketSql.SlaTimerColumns}
+             FROM public.ticket_sla_timers tm
+             WHERE EXISTS (SELECT 1 FROM public.tickets t WHERE t.id = tm.ticket_id AND {TicketSql.MatchesScope})
+               AND tm.completed_on_utc IS NOT NULL
+               AND ((tm.metric = '{nameof(SlaMetric.FirstResponse)}' AND tm.completion_cause = '{nameof(SlaCompletionCause.Message)}')
+                    OR (tm.metric = '{nameof(SlaMetric.Resolution)}' AND tm.cycle = 1))
+               AND (@CompletedFromUtc::timestamptz IS NULL OR tm.completed_on_utc >= @CompletedFromUtc::timestamptz)
+               AND (@CompletedUntilUtc::timestamptz IS NULL OR tm.completed_on_utc < @CompletedUntilUtc::timestamptz)
+             """;
+
+        // O período de resolução do recorte vale para a data da conclusão de cada cronômetro, e não para a
+        // primeira resolução do chamado; os demais filtros recortam os chamados.
+        var created = LocalDatePeriod.FromLocalDates(request.Scope.CreatedFrom, request.Scope.CreatedTo);
+        var completed = LocalDatePeriod.FromLocalDates(request.Scope.ResolvedFrom, request.Scope.ResolvedTo);
+
+        List<TicketSlaTimer> timers = (await connection.QueryAsync<TicketSlaTimer>(
+            new CommandDefinition(
+                sql,
+                new
+                {
+                    SectorIds = request.Scope.SectorIds.ToArray(),
+                    request.Scope.DepartmentId,
+                    Priority = request.Scope.Priority?.ToString(),
+                    request.Scope.RequesterId,
+                    request.Scope.UnassignedOnly,
+                    request.Scope.AssignedToUserId,
+                    CreatedFromUtc = created.FromUtc,
+                    CreatedUntilUtc = created.UntilUtc,
+                    ResolvedFromUtc = (DateTime?)null,
+                    ResolvedUntilUtc = (DateTime?)null,
+                    CompletedFromUtc = completed.FromUtc,
+                    CompletedUntilUtc = completed.UntilUtc
+                },
+                cancellationToken: cancellationToken))).AsList();
 
         var calendars = new Dictionary<Guid, BusinessCalendar>();
 

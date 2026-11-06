@@ -16,6 +16,7 @@ internal sealed class GetOverview : IEndpoint
         // Os mesmos filtros de recorte de GET tickets; status, situação de SLA, busca e paginação não se aplicam.
         app.MapGet("tickets/stats/overview", async (
             [FromQuery(Name = "sectorId")] Guid[]? sectorIds,
+            Guid? departmentId,
             TicketPriority? priority,
             Guid? requesterId,
             Guid? assignedToUserId,
@@ -29,6 +30,7 @@ internal sealed class GetOverview : IEndpoint
         {
             var scope = new TicketScopeFilter(
                 sectorIds ?? [],
+                departmentId,
                 priority,
                 requesterId,
                 assignedToUserId,

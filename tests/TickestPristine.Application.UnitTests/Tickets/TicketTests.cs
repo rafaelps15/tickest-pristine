@@ -126,6 +126,25 @@ public sealed class TicketTests
     }
 
     [Theory]
+    [InlineData(TicketStatus.Open)]
+    [InlineData(TicketStatus.InProgress)]
+    [InlineData(TicketStatus.Resolved)]
+    [InlineData(TicketStatus.Closed)]
+    [InlineData(TicketStatus.Canceled)]
+    public void Active_Should_AgreeWithIsActive_WhenTicketIsInStatus(TicketStatus status)
+    {
+        // Arrange
+        Ticket ticket = CreateTicketIn(status);
+        Func<Ticket, bool> active = Ticket.Active.Compile();
+
+        // Act
+        bool matches = active(ticket);
+
+        // Assert
+        matches.ShouldBe(ticket.IsActive);
+    }
+
+    [Theory]
     [InlineData(TicketStatus.Open, TicketStatus.Open, false)]
     [InlineData(TicketStatus.Open, TicketStatus.InProgress, true)]
     [InlineData(TicketStatus.Open, TicketStatus.Resolved, false)]

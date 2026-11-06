@@ -1,6 +1,6 @@
 ---
 name: add-tests
-description: Completa os testes que faltam em entidades e casos de uso existentes — testes das regras da entidade, testes unitários de handler, testes de validator do FluentValidation e testes de integração por HTTP que cobrem a persistência e a tradução das consultas. Use quando o usuário pedir para adicionar, melhorar ou completar a cobertura de testes.
+description: Completa os testes que faltam em entidades e casos de uso existentes — testes das regras da entidade, testes unitários de handler, testes de validator do FluentValidation e testes de integração que cobrem a persistência por HTTP e o SQL dos query handlers. Use quando o usuário pedir para adicionar, melhorar ou completar a cobertura de testes.
 argument-hint: '<caso de uso ou feature a cobrir, ex.: "CopyTodoCommand" ou "a feature Users">'
 ---
 
@@ -29,7 +29,7 @@ Complete os tipos de teste de que toda entidade e todo slice precisam. Leia prim
 3. **Escreva os testes da entidade** — as invariantes conferidas na construção (`Create` devolvendo o erro); cada transição válida (estado novo e evento disparado); cada transição inválida (o erro exato, com o estado e os eventos inalterados).
 4. **Escreva os testes unitários do handler** — um teste por caminho de falha do handler (não encontrado, permissão, a falha devolvida pela entidade) mais um caminho feliz conferindo o estado gravado e os eventos de domínio disparados.
 5. **Escreva os testes de validator** (só commands) — um teste de falha por regra mais um command totalmente válido.
-6. **Escreva os testes de integração** — caminho feliz por HTTP real, com o estado conferido por um GET seguinte (persistência); para toda query com predicado, um teste que prove que ela filtra no banco (tradução); conversão de erro (404/409/400) onde o handler tiver caminhos de falha; 401 sem token se a família de rotas for nova.
+6. **Escreva os testes de integração** — caminho feliz por HTTP real, com o estado conferido por um GET seguinte (persistência); para todo query handler, testes de integração dos caminhos de falha e do caminho feliz contra o banco (`BaseQueryHandlerTest`); conversão de erro (404/409/400) onde o handler tiver caminhos de falha; 401 sem token se a família de rotas for nova.
 7. **Rode** `dotnet test` (o Docker precisa estar rodando para os testes de integração) e corrija as falhas antes de terminar.
 
 ## Convenções

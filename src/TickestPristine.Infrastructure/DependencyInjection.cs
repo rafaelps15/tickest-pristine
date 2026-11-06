@@ -17,6 +17,7 @@ using TickestPristine.Infrastructure.Health;
 using TickestPristine.Infrastructure.Tickets;
 using TickestPristine.Infrastructure.Time;
 using TickestPristine.Infrastructure.Validation;
+using Dapper;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -137,6 +138,9 @@ public static class DependencyInjection
         // Uma fonte de conexões só, com um pool só, para o EF e para as leituras em SQL (IDbConnectionFactory).
         services.AddSingleton(new NpgsqlDataSourceBuilder(connectionString).Build());
         services.AddSingleton<IDbConnectionFactory, DbConnectionFactory>();
+
+        // Tipos que o Dapper não lê sozinho como o EF grava, registrados uma vez para todas as consultas em SQL.
+        SqlMapper.AddTypeHandler(new TicketSlaPlanTypeHandler());
 
         // O seed roda junto com as migrations (Migrate/MigrateAsync e dotnet ef database update).
         services.AddDbContext<ApplicationDbContext>(

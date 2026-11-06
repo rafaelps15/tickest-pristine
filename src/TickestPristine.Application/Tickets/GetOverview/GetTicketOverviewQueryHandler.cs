@@ -9,141 +9,109 @@ using TickestPristine.SharedKernel;
 namespace TickestPristine.Application.Tickets.GetOverview;
 
 /// <summary>
-/// Conta tudo num só comando, com contagens condicionais sobre os chamados do recorte (spec 026, DEC-2). As condições de
-/// SLA repetem as de <see cref="TicketSlaFilters"/> (relógio correndo = sem resolução e não cancelado; no prazo, em
-/// risco e atrasado pelo instante atual; cumprido e perdido pela primeira resolução contra o prazo; sem SLA = cancelado
-/// nunca resolvido), e os testes de paridade com a listagem conferem que as duas versões concordam.
+/// Conta tudo num só comando, com contagens condicionais sobre os chamados do recorte. As situações de SLA e o chamado
+/// ativo saem dos trechos com nome de <see cref="TicketSql"/>, os mesmos da listagem, e os testes de concordância
+/// conferem que eles concordam com as regras do chamado.
 /// </summary>
 internal sealed class GetTicketOverviewQueryHandler(IDbConnectionFactory dbConnectionFactory, IDateTimeProvider dateTimeProvider)
     : IQueryHandler<GetTicketOverviewQuery, TicketOverviewResponse>
 {
-    private const string Open = nameof(TicketStatus.Open);
-    private const string InProgress = nameof(TicketStatus.InProgress);
-    private const string Resolved = nameof(TicketStatus.Resolved);
-    private const string Closed = nameof(TicketStatus.Closed);
-    private const string Canceled = nameof(TicketStatus.Canceled);
-    private const string Urgent = nameof(TicketPriority.Urgent);
-
-    private const string Running = $"t.resolved_at_utc IS NULL AND t.status <> '{Canceled}'";
-    private const string Active = $"t.status IN ('{Open}', '{InProgress}')";
-
-    private const string Sql =
-        $"""
-         SELECT
-             COUNT(*)::int AS {nameof(OverviewCounts.TotalCount)},
-             COUNT(*) FILTER (WHERE t.status = '{Open}')::int AS {nameof(OverviewCounts.OpenCount)},
-             COUNT(*) FILTER (WHERE t.status = '{InProgress}')::int AS {nameof(OverviewCounts.InProgressCount)},
-             COUNT(*) FILTER (WHERE t.status = '{Resolved}')::int AS {nameof(OverviewCounts.ResolvedCount)},
-             COUNT(*) FILTER (WHERE t.status = '{Closed}')::int AS {nameof(OverviewCounts.ClosedCount)},
-             COUNT(*) FILTER (WHERE t.status = '{Canceled}')::int AS {nameof(OverviewCounts.CanceledCount)},
-             COUNT(*) FILTER (WHERE {Running} AND @NowUtc::timestamptz < t.sla_warning_at_utc)::int AS {nameof(OverviewCounts.OnTimeCount)},
-             COUNT(*) FILTER (WHERE {Running} AND @NowUtc::timestamptz >= t.sla_warning_at_utc AND @NowUtc::timestamptz < t.due_at_utc)::int AS {nameof(OverviewCounts.AtRiskCount)},
-             COUNT(*) FILTER (WHERE {Running} AND @NowUtc::timestamptz >= t.due_at_utc)::int AS {nameof(OverviewCounts.BreachedCount)},
-             COUNT(*) FILTER (WHERE t.resolved_at_utc IS NOT NULL AND t.resolved_at_utc <= t.due_at_utc)::int AS {nameof(OverviewCounts.MetCount)},
-             COUNT(*) FILTER (WHERE t.resolved_at_utc IS NOT NULL AND t.resolved_at_utc > t.due_at_utc)::int AS {nameof(OverviewCounts.MissedCount)},
-             COUNT(*) FILTER (WHERE t.resolved_at_utc IS NULL AND t.status = '{Canceled}')::int AS {nameof(OverviewCounts.NotApplicableCount)},
-             COUNT(*) FILTER (WHERE {Active} AND t.priority = '{Urgent}')::int AS {nameof(OverviewCounts.CriticalCount)},
-             COUNT(*) FILTER (WHERE {Active} AND t.assigned_to_user_id IS NULL)::int AS {nameof(OverviewCounts.UnassignedCount)},
-             COUNT(*) FILTER (WHERE t.waiting_on = '{nameof(TicketWaitingOn.Requester)}')::int AS {nameof(OverviewCounts.WaitingOnRequesterCount)},
-             COUNT(*) FILTER (WHERE t.waiting_on = '{nameof(TicketWaitingOn.Agent)}')::int AS {nameof(OverviewCounts.WaitingOnAgentCount)},
-             COUNT(*) FILTER (WHERE {Active} AND t.created_at_utc >= @OneDayAgoStartUtc::timestamptz)::int AS {nameof(OverviewCounts.UpToOneDayCount)},
-             COUNT(*) FILTER (WHERE {Active} AND t.created_at_utc >= @ThreeDaysAgoStartUtc::timestamptz AND t.created_at_utc < @OneDayAgoStartUtc::timestamptz)::int AS {nameof(OverviewCounts.TwoToThreeDaysCount)},
-             COUNT(*) FILTER (WHERE {Active} AND t.created_at_utc >= @SevenDaysAgoStartUtc::timestamptz AND t.created_at_utc < @ThreeDaysAgoStartUtc::timestamptz)::int AS {nameof(OverviewCounts.FourToSevenDaysCount)},
-             COUNT(*) FILTER (WHERE {Active} AND t.created_at_utc < @SevenDaysAgoStartUtc::timestamptz)::int AS {nameof(OverviewCounts.OverSevenDaysCount)}
-         FROM public.tickets t
-         WHERE {TicketScopeFilter.SqlCondition}
-         """;
-
-    public async Task<Result<TicketOverviewResponse>> Handle(GetTicketOverviewQuery query, CancellationToken cancellationToken)
+    public async Task<Result<TicketOverviewResponse>> Handle(
+        GetTicketOverviewQuery request,
+        CancellationToken cancellationToken)
     {
-        if (query.Scope.HasInvertedPeriod)
+        if (request.Scope.HasInvertedPeriod)
         {
             return Result.Failure<TicketOverviewResponse>(TicketErrors.InvalidPeriod);
         }
 
+        await using DbConnection connection = await dbConnectionFactory.OpenConnectionAsync(cancellationToken);
+
+        // Uma linha só, com os blocos da resposta lado a lado: cada bloco começa na sua coluna de corte (splitOn), e o
+        // instante usado nas situações de SLA vem antes deles.
+        const string sql =
+            $"""
+             SELECT
+                 @NowUtc::timestamptz AS {nameof(TicketOverviewResponse.ServerNowUtc)},
+                 COUNT(*)::int AS {nameof(TicketOverviewVolumeResponse.TotalCount)},
+                 COUNT(*) FILTER (WHERE t.status = '{nameof(TicketStatus.Open)}')::int AS {nameof(TicketOverviewVolumeResponse.OpenCount)},
+                 COUNT(*) FILTER (WHERE t.status = '{nameof(TicketStatus.InProgress)}')::int AS {nameof(TicketOverviewVolumeResponse.InProgressCount)},
+                 COUNT(*) FILTER (WHERE t.status = '{nameof(TicketStatus.Resolved)}')::int AS {nameof(TicketOverviewVolumeResponse.ResolvedCount)},
+                 COUNT(*) FILTER (WHERE t.status = '{nameof(TicketStatus.Closed)}')::int AS {nameof(TicketOverviewVolumeResponse.ClosedCount)},
+                 COUNT(*) FILTER (WHERE t.status = '{nameof(TicketStatus.Canceled)}')::int AS {nameof(TicketOverviewVolumeResponse.CanceledCount)},
+                 COUNT(*) FILTER (WHERE {TicketSql.IsActive})::int AS {nameof(TicketOverviewVolumeResponse.BacklogCount)},
+                 COUNT(*) FILTER (WHERE {TicketSql.IsSlaOnTime})::int AS {nameof(TicketOverviewSlaResponse.OnTimeCount)},
+                 COUNT(*) FILTER (WHERE {TicketSql.IsSlaAtRisk})::int AS {nameof(TicketOverviewSlaResponse.AtRiskCount)},
+                 COUNT(*) FILTER (WHERE {TicketSql.IsSlaBreached})::int AS {nameof(TicketOverviewSlaResponse.BreachedCount)},
+                 COUNT(*) FILTER (WHERE {TicketSql.IsSlaMet})::int AS {nameof(TicketOverviewSlaResponse.MetCount)},
+                 COUNT(*) FILTER (WHERE {TicketSql.IsSlaMissed})::int AS {nameof(TicketOverviewSlaResponse.MissedCount)},
+                 COUNT(*) FILTER (WHERE {TicketSql.IsSlaNotApplicable})::int AS {nameof(TicketOverviewSlaResponse.NotApplicableCount)},
+                 COUNT(*) FILTER (WHERE {TicketSql.IsActive} AND t.priority = '{nameof(TicketPriority.Urgent)}')::int AS {nameof(TicketOverviewAttentionResponse.CriticalCount)},
+                 COUNT(*) FILTER (WHERE {TicketSql.IsActive} AND t.assigned_to_user_id IS NULL)::int AS {nameof(TicketOverviewAttentionResponse.UnassignedCount)},
+                 COUNT(*) FILTER (WHERE t.waiting_on = '{nameof(TicketWaitingOn.Requester)}')::int AS {nameof(TicketOverviewAttentionResponse.WaitingOnRequesterCount)},
+                 COUNT(*) FILTER (WHERE t.waiting_on = '{nameof(TicketWaitingOn.Agent)}')::int AS {nameof(TicketOverviewAttentionResponse.WaitingOnAgentCount)},
+                 COUNT(*) FILTER (WHERE {TicketSql.IsSlaBreached})::int AS {nameof(TicketOverviewAttentionResponse.BreachedCount)},
+                 COUNT(*) FILTER (WHERE {TicketSql.IsActive} AND t.created_at_utc >= @OneDayAgoStartUtc::timestamptz)::int AS {nameof(TicketOverviewAgingResponse.UpToOneDayCount)},
+                 COUNT(*) FILTER (WHERE {TicketSql.IsActive} AND t.created_at_utc >= @ThreeDaysAgoStartUtc::timestamptz AND t.created_at_utc < @OneDayAgoStartUtc::timestamptz)::int AS {nameof(TicketOverviewAgingResponse.TwoToThreeDaysCount)},
+                 COUNT(*) FILTER (WHERE {TicketSql.IsActive} AND t.created_at_utc >= @SevenDaysAgoStartUtc::timestamptz AND t.created_at_utc < @ThreeDaysAgoStartUtc::timestamptz)::int AS {nameof(TicketOverviewAgingResponse.FourToSevenDaysCount)},
+                 COUNT(*) FILTER (WHERE {TicketSql.IsActive} AND t.created_at_utc < @SevenDaysAgoStartUtc::timestamptz)::int AS {nameof(TicketOverviewAgingResponse.OverSevenDaysCount)}
+             FROM public.tickets t
+             WHERE {TicketSql.MatchesScope}
+             """;
+
+        const string splitOn =
+            $"{nameof(TicketOverviewVolumeResponse.TotalCount)},{nameof(TicketOverviewSlaResponse.OnTimeCount)}," +
+            $"{nameof(TicketOverviewAttentionResponse.CriticalCount)},{nameof(TicketOverviewAgingResponse.UpToOneDayCount)}";
+
         DateTime nowUtc = dateTimeProvider.UtcNow;
-        DynamicParameters parameters = query.Scope.ToSqlParameters();
-        parameters.Add("NowUtc", nowUtc);
+        var created = LocalDatePeriod.FromLocalDates(request.Scope.CreatedFrom, request.Scope.CreatedTo);
+        var resolved = LocalDatePeriod.FromLocalDates(request.Scope.ResolvedFrom, request.Scope.ResolvedTo);
 
         // A idade de um chamado ativo é a diferença em dias de calendário de São Paulo entre hoje e a data de abertura
         // (aberto hoje = 0), não em blocos de 24 horas: cada faixa começa no início de um dia local, convertido para UTC
         // pelo LocalDatePeriod, como os períodos de abertura do recorte.
         DateOnly today = LocalDatePeriod.ToLocalDate(nowUtc);
-        parameters.Add("OneDayAgoStartUtc", StartOfLocalDayUtc(today.AddDays(-1)));
-        parameters.Add("ThreeDaysAgoStartUtc", StartOfLocalDayUtc(today.AddDays(-3)));
-        parameters.Add("SevenDaysAgoStartUtc", StartOfLocalDayUtc(today.AddDays(-7)));
 
-        await using DbConnection connection = await dbConnectionFactory.OpenConnectionAsync(cancellationToken);
+        IEnumerable<TicketOverviewResponse> overviews = await connection.QueryAsync<
+            TicketOverviewResponse,
+            TicketOverviewVolumeResponse,
+            TicketOverviewSlaResponse,
+            TicketOverviewAttentionResponse,
+            TicketOverviewAgingResponse,
+            TicketOverviewResponse>(
+            new CommandDefinition(
+                sql,
+                new
+                {
+                    SectorIds = request.Scope.SectorIds.ToArray(),
+                    request.Scope.DepartmentId,
+                    Priority = request.Scope.Priority?.ToString(),
+                    request.Scope.RequesterId,
+                    request.Scope.UnassignedOnly,
+                    request.Scope.AssignedToUserId,
+                    CreatedFromUtc = created.FromUtc,
+                    CreatedUntilUtc = created.UntilUtc,
+                    ResolvedFromUtc = resolved.FromUtc,
+                    ResolvedUntilUtc = resolved.UntilUtc,
+                    NowUtc = nowUtc,
+                    OneDayAgoStartUtc = StartOfLocalDayUtc(today.AddDays(-1)),
+                    ThreeDaysAgoStartUtc = StartOfLocalDayUtc(today.AddDays(-3)),
+                    SevenDaysAgoStartUtc = StartOfLocalDayUtc(today.AddDays(-7))
+                },
+                cancellationToken: cancellationToken),
+            (response, volume, sla, attention, aging) =>
+            {
+                response.Volume = volume;
+                response.Sla = sla;
+                response.Attention = attention;
+                response.Aging = aging;
 
-        OverviewCounts counts = await connection.QuerySingleAsync<OverviewCounts>(
-            new CommandDefinition(Sql, parameters, cancellationToken: cancellationToken));
+                return response;
+            },
+            splitOn);
 
-        return new TicketOverviewResponse
-        {
-            ServerNowUtc = nowUtc,
-            Volume = new TicketOverviewVolumeResponse
-            {
-                TotalCount = counts.TotalCount,
-                OpenCount = counts.OpenCount,
-                InProgressCount = counts.InProgressCount,
-                ResolvedCount = counts.ResolvedCount,
-                ClosedCount = counts.ClosedCount,
-                CanceledCount = counts.CanceledCount,
-                BacklogCount = counts.OpenCount + counts.InProgressCount
-            },
-            Sla = new TicketOverviewSlaResponse
-            {
-                OnTimeCount = counts.OnTimeCount,
-                AtRiskCount = counts.AtRiskCount,
-                BreachedCount = counts.BreachedCount,
-                MetCount = counts.MetCount,
-                MissedCount = counts.MissedCount,
-                NotApplicableCount = counts.NotApplicableCount
-            },
-            Attention = new TicketOverviewAttentionResponse
-            {
-                BreachedCount = counts.BreachedCount,
-                CriticalCount = counts.CriticalCount,
-                UnassignedCount = counts.UnassignedCount,
-                WaitingOnRequesterCount = counts.WaitingOnRequesterCount,
-                WaitingOnAgentCount = counts.WaitingOnAgentCount
-            },
-            Aging = new TicketOverviewAgingResponse
-            {
-                UpToOneDayCount = counts.UpToOneDayCount,
-                TwoToThreeDaysCount = counts.TwoToThreeDaysCount,
-                FourToSevenDaysCount = counts.FourToSevenDaysCount,
-                OverSevenDaysCount = counts.OverSevenDaysCount
-            }
-        };
+        return overviews.Single();
     }
 
     private static DateTime? StartOfLocalDayUtc(DateOnly day) => LocalDatePeriod.FromLocalDates(day, null).FromUtc;
-
-    /// <summary>
-    /// Linha única devolvida pelo SQL, lida pelo Dapper pelos nomes das colunas.
-    /// </summary>
-    internal sealed class OverviewCounts
-    {
-        public int TotalCount { get; init; }
-        public int OpenCount { get; init; }
-        public int InProgressCount { get; init; }
-        public int ResolvedCount { get; init; }
-        public int ClosedCount { get; init; }
-        public int CanceledCount { get; init; }
-        public int OnTimeCount { get; init; }
-        public int AtRiskCount { get; init; }
-        public int BreachedCount { get; init; }
-        public int MetCount { get; init; }
-        public int MissedCount { get; init; }
-        public int NotApplicableCount { get; init; }
-        public int CriticalCount { get; init; }
-        public int UnassignedCount { get; init; }
-        public int WaitingOnRequesterCount { get; init; }
-        public int WaitingOnAgentCount { get; init; }
-        public int UpToOneDayCount { get; init; }
-        public int TwoToThreeDaysCount { get; init; }
-        public int FourToSevenDaysCount { get; init; }
-        public int OverSevenDaysCount { get; init; }
-    }
 }
