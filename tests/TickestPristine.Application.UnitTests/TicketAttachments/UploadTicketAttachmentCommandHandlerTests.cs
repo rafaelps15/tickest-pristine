@@ -10,7 +10,6 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.Application.TicketAttachments;
-using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Domain.TicketAttachments;
 using TickestPristine.Domain.TicketHistories;
 
@@ -31,7 +30,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
 
-        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage, CreateContentInspector(), Substitute.For<ITicketActivityWriter>());
+        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage, CreateContentInspector());
         UploadTicketAttachmentCommand command = ValidCommand(Guid.NewGuid());
 
         // Act
@@ -58,7 +57,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
 
-        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage, CreateContentInspector(), Substitute.For<ITicketActivityWriter>());
+        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage, CreateContentInspector());
         UploadTicketAttachmentCommand command = ValidCommand(ticketId);
 
         // Act
@@ -82,10 +81,9 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
-        fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns("generated-storage-key.pdf");
+        fileStorage.CreateKey(Arg.Any<string>()).Returns("generated-storage-key.pdf");
 
-        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage, CreateContentInspector(), Substitute.For<ITicketActivityWriter>());
+        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage, CreateContentInspector());
         UploadTicketAttachmentCommand command = ValidCommand(ticketId);
 
         // Act
@@ -103,6 +101,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         TicketHistoryEntry history = await context.TicketHistories.SingleAsync(h => h.TicketId == attachment.TicketId);
         history.Action.ShouldBe(TicketHistoryAction.AttachmentAdded);
         history.NewValue.ShouldBe(command.FileName);
+        await fileStorage.Received(1).SaveAsync(command.Content, "generated-storage-key.pdf", Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -121,10 +120,9 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
-        fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns("generated-storage-key.pdf");
+        fileStorage.CreateKey(Arg.Any<string>()).Returns("generated-storage-key.pdf");
 
-        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage, CreateContentInspector(), Substitute.For<ITicketActivityWriter>());
+        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage, CreateContentInspector());
 
         // Act
         Result<Guid> result = await handler.Handle(ValidCommand(ticketId), CancellationToken.None);
@@ -155,6 +153,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
+        fileStorage.CreateKey(Arg.Any<string>()).Returns("generated-storage-key.pdf");
         // Depois de gravar o arquivo, um setor com chave repetida entra no contexto e faz o SaveChanges falhar.
         fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
@@ -165,10 +164,10 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
                 context.Entry(duplicated).Property(s => s.Id).CurrentValue = existingSector.Id;
                 context.Sectors.Add(duplicated);
 
-                return Task.FromResult("generated-storage-key.pdf");
+                return Task.CompletedTask;
             });
 
-        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage, CreateContentInspector(), Substitute.For<ITicketActivityWriter>());
+        var handler = new UploadTicketAttachmentCommandHandler(context, userContext, permissionProvider, dateTimeProvider, fileStorage, CreateContentInspector());
 
         // Act
         Exception? exception = await Record.ExceptionAsync(() => handler.Handle(ValidCommand(ticketId), CancellationToken.None));
@@ -207,7 +206,6 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         Guid ticketId = await SeedTicketAsync(context);
         await SeedAttachmentsAsync(context, ticketId, TicketAttachmentPolicy.MaxAttachmentsPerTicket, sizeBytes: 1024);
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
-        fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("key.pdf");
         UploadTicketAttachmentCommandHandler handler = CreateHandler(context, fileStorage);
 
         // Act
@@ -218,8 +216,8 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         result.Error.ShouldBe(TicketAttachmentErrors.TicketLimitReached(
             TicketAttachmentPolicy.MaxAttachmentsPerTicket,
             TicketAttachmentPolicy.MaxTotalBytesPerTicket / (1024 * 1024)));
-        // O arquivo é gravado para obter a chave e apagado quando o anexo é recusado.
-        await fileStorage.Received(1).DeleteAsync("key.pdf", Arg.Any<CancellationToken>());
+        // O chamado recusa o envio antes de qualquer gravação.
+        await fileStorage.DidNotReceive().SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         (await context.TicketAttachments.CountAsync()).ShouldBe(TicketAttachmentPolicy.MaxAttachmentsPerTicket);
     }
 
@@ -249,9 +247,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         Guid ticketId = await SeedTicketAsync(context);
         await SeedAttachmentsAsync(context, ticketId, 1, sizeBytes: TicketAttachmentPolicy.MaxTotalBytesPerTicket - 1024);
-        IFileStorage fileStorage = Substitute.For<IFileStorage>();
-        fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("key.pdf");
-        UploadTicketAttachmentCommandHandler handler = CreateHandler(context, fileStorage);
+        UploadTicketAttachmentCommandHandler handler = CreateHandler(context, Substitute.For<IFileStorage>());
 
         // Act
         Result<Guid> result = await handler.Handle(ValidCommand(ticketId), CancellationToken.None);
@@ -268,9 +264,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         Guid ticketId = await SeedTicketAsync(context);
         await SeedAttachmentsAsync(context, ticketId, TicketAttachmentPolicy.MaxAttachmentsPerTicket - 1, sizeBytes: 1024);
         await SeedAttachmentsAsync(context, ticketId, 1, sizeBytes: 1024, deleted: true);
-        IFileStorage fileStorage = Substitute.For<IFileStorage>();
-        fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("key.pdf");
-        UploadTicketAttachmentCommandHandler handler = CreateHandler(context, fileStorage);
+        UploadTicketAttachmentCommandHandler handler = CreateHandler(context, Substitute.For<IFileStorage>());
 
         // Act
         Result<Guid> result = await handler.Handle(ValidCommand(ticketId), CancellationToken.None);
@@ -301,13 +295,12 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnExtensionMismatchAndDeleteStoredFile_WhenExtensionDoesNotMatchContentType()
+    public async Task Handle_Should_ReturnExtensionMismatchAndStoreNothing_WhenExtensionDoesNotMatchContentType()
     {
         // Arrange: executável declarado como PDF
         await using TestDbContext context = CreateDbContext();
         Guid ticketId = await SeedTicketAsync(context);
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
-        fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("key.pdf");
         UploadTicketAttachmentCommandHandler handler = CreateHandler(context, fileStorage);
         UploadTicketAttachmentCommand command = ValidCommand(ticketId);
         command.FileName = "nota.pdf.exe";
@@ -318,7 +311,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsFailure.ShouldBeTrue();
         result.Error.Description.ShouldBe("A extensão do arquivo não corresponde ao tipo 'application/pdf'.");
-        await fileStorage.Received(1).DeleteAsync("key.pdf", Arg.Any<CancellationToken>());
+        await fileStorage.DidNotReceive().SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         (await context.TicketAttachments.AnyAsync()).ShouldBeFalse();
     }
 
@@ -331,7 +324,6 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         Guid ticketId = await SeedTicketAsync(context);
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
-        fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("chave");
         UploadTicketAttachmentCommandHandler handler = CreateHandler(context, fileStorage);
         UploadTicketAttachmentCommand command = ValidCommand(ticketId);
         command.FileSizeBytes = fileSizeBytes;
@@ -345,7 +337,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         if (!expectedSuccess)
         {
             result.Error.Description.ShouldBe("O arquivo excede o tamanho máximo permitido de 10 MB.");
-            await fileStorage.Received(1).DeleteAsync("chave", Arg.Any<CancellationToken>());
+            await fileStorage.DidNotReceive().SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         }
     }
 
@@ -357,9 +349,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         // Arrange: a extensão não diferencia maiúsculas, e alguns clientes enviam o charset junto com o tipo
         await using TestDbContext context = CreateDbContext();
         Guid ticketId = await SeedTicketAsync(context);
-        IFileStorage fileStorage = Substitute.For<IFileStorage>();
-        fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("chave");
-        UploadTicketAttachmentCommandHandler handler = CreateHandler(context, fileStorage);
+        UploadTicketAttachmentCommandHandler handler = CreateHandler(context, Substitute.For<IFileStorage>());
         UploadTicketAttachmentCommand command = ValidCommand(ticketId);
         command.FileName = fileName;
         command.ContentType = contentType;
@@ -390,8 +380,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
             Substitute.For<IPermissionProvider>(),
             dateTimeProvider,
             fileStorage,
-            CreateContentInspector(contentMatches),
-            Substitute.For<ITicketActivityWriter>());
+            CreateContentInspector(contentMatches));
     }
 
     // A inspeção do conteúdo tem os próprios testes; aqui ela só responde se o conteúdo corresponde ao tipo.

@@ -13,25 +13,29 @@ internal sealed class LocalFileStorage(IOptions<FileStorageOptions> options) : I
     // Sem o separador no fim: com "C:\anexos\\" configurado, a checagem de caminho contido recusaria todos os arquivos.
     private readonly string _rootPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(options.Value.RootPath));
 
-    public async Task<string> SaveAsync(Stream content, string fileName, CancellationToken cancellationToken)
+    public string CreateKey(string fileName) => $"{Guid.NewGuid():N}{SanitizeExtension(Path.GetExtension(fileName))}";
+
+    public async Task SaveAsync(Stream content, string storageKey, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(_rootPath);
 
-        string storageKey = $"{Guid.NewGuid():N}{SanitizeExtension(Path.GetExtension(fileName))}";
-
         string path = ResolveContainedPath(storageKey);
+
+        // Fora do try: com a chave já usada, o CreateNew falha antes de existir algo desta gravação para apagar.
+        var fileStream = new FileStream(
+            path,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            BufferSize,
+            FileOptions.Asynchronous);
 
         try
         {
-            await using var fileStream = new FileStream(
-                path,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                BufferSize,
-                FileOptions.Asynchronous);
-
-            await content.CopyToAsync(fileStream, cancellationToken);
+            await using (fileStream)
+            {
+                await content.CopyToAsync(fileStream, cancellationToken);
+            }
         }
         catch
         {
@@ -40,8 +44,6 @@ internal sealed class LocalFileStorage(IOptions<FileStorageOptions> options) : I
 
             throw;
         }
-
-        return storageKey;
     }
 
     public Task<Stream?> OpenReadAsync(string storageKey, CancellationToken cancellationToken)

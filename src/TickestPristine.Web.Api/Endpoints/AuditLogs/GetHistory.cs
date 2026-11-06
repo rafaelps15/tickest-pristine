@@ -11,7 +11,6 @@ internal sealed class GetHistory : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        // entityId é texto porque chaves compostas chegam com as partes separadas por vírgula.
         app.MapGet("audit-logs/{entityName}/{entityId}", async (
             string entityName,
             string entityId,

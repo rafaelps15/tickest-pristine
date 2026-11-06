@@ -3,8 +3,6 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Permissions;
-using TickestPristine.Application.Tickets;
-using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -17,8 +15,6 @@ internal sealed class DeleteTicketMessageCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IPermissionProvider permissionProvider,
-    TicketAgentLookup agentLookup,
-    ITicketActivityWriter activityWriter,
     IDateTimeProvider dateTimeProvider)
     : ICommandHandler<DeleteTicketMessageCommand>
 {
@@ -47,16 +43,9 @@ internal sealed class DeleteTicketMessageCommandHandler(
             return removal;
         }
 
-        // Sem rastreio: a última atividade e a situação de espera são gravadas depois do commit, sem a versão do chamado.
-        Ticket ticket = await context.Tickets.AsNoTracking().SingleAsync(t => t.Id == message.TicketId, cancellationToken);
-
         context.TicketHistories.Add(removal.Value);
 
         await context.SaveChangesAsync(cancellationToken);
-
-        ticket.RecordMessageActivity(removal.Value, await agentLookup.IsLastValidMessageFromAgentAsync(ticket, cancellationToken));
-
-        await activityWriter.WriteLastActivityAndWaitingOnAsync(ticket, cancellationToken);
 
         return Result.Success();
     }

@@ -14,14 +14,14 @@ public sealed class TicketAttachmentTests
     private static readonly DateTime UploadedAtUtc = new(2026, 10, 30, 12, 0, 0, DateTimeKind.Utc);
 
     [Fact]
-    public void Create_Should_CreateAttachmentAndRaiseEvent_WhenFileIsAccepted()
+    public void AddAttachment_Should_CreateAttachmentAndHistoryAndRaiseEvent_WhenFileIsAccepted()
     {
         // Act
-        Result<TicketAttachment> result = Create("report.pdf", "application/pdf", 1024);
+        Result<TicketAttachmentUpload> result = AddAttachment("report.pdf", "application/pdf", 1024);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
-        TicketAttachment attachment = result.Value;
+        TicketAttachment attachment = result.Value.Attachment;
         attachment.Id.ShouldNotBe(Guid.Empty);
         attachment.TicketId.ShouldBe(TicketId);
         attachment.UploadedByUserId.ShouldBe(UploaderId);
@@ -30,18 +30,51 @@ public sealed class TicketAttachmentTests
         attachment.FileSizeBytes.ShouldBe(1024);
         attachment.StorageKey.ShouldBe("chave");
         attachment.UploadedAtUtc.ShouldBe(UploadedAtUtc);
-        attachment.DomainEvents.OfType<TicketAttachmentUploadedDomainEvent>().ShouldContain(e =>
-            e.AttachmentId == attachment.Id &&
-            e.TicketId == TicketId &&
-            e.UploadedByUserId == UploaderId &&
-            e.FileName == "report.pdf");
+        attachment.DomainEvents.ShouldHaveSingleItem().ShouldBe(
+            new TicketAttachmentUploadedDomainEvent(attachment.Id, TicketId, UploaderId, "report.pdf"));
+
+        TicketHistoryEntry history = result.Value.History;
+        history.TicketId.ShouldBe(TicketId);
+        history.ChangedByUserId.ShouldBe(UploaderId);
+        history.Action.ShouldBe(TicketHistoryAction.AttachmentAdded);
+        history.NewValue.ShouldBe("report.pdf");
+        history.OccurredAtUtc.ShouldBe(UploadedAtUtc);
     }
 
     [Fact]
-    public void Create_Should_ReturnUnsupportedContentType_WhenContentTypeIsNotAllowed()
+    public void AddAttachment_Should_NotChangeTicket_WhenAttachmentIsAdded()
+    {
+        // Arrange
+        Ticket ticket = TicketTestData.Create();
+        DateTime lastActivityAtUtc = ticket.LastActivityAtUtc;
+        TicketWaitingOn? waitingOn = ticket.WaitingOn;
+        ticket.ClearDomainEvents();
+
+        // Act
+        ticket.AddAttachment(UploaderId, "report.pdf", "application/pdf", 1024, "chave", true, 0, 0, UploadedAtUtc);
+
+        // Assert: a última atividade sai da projeção, depois do commit.
+        ticket.LastActivityAtUtc.ShouldBe(lastActivityAtUtc);
+        ticket.WaitingOn.ShouldBe(waitingOn);
+        ticket.DomainEvents.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void AddAttachment_Should_ReturnContentMismatch_WhenContentDoesNotMatchContentType()
     {
         // Act
-        Result<TicketAttachment> result = Create("setup.exe", "application/x-msdownload", 1024);
+        Result<TicketAttachmentUpload> result = AddAttachment("report.pdf", "application/pdf", 1024, contentMatches: false);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(TicketAttachmentErrors.ContentMismatch);
+    }
+
+    [Fact]
+    public void AddAttachment_Should_ReturnUnsupportedContentType_WhenContentTypeIsNotAllowed()
+    {
+        // Act
+        Result<TicketAttachmentUpload> result = AddAttachment("setup.exe", "application/x-msdownload", 1024);
 
         // Assert
         result.IsFailure.ShouldBeTrue();
@@ -49,10 +82,10 @@ public sealed class TicketAttachmentTests
     }
 
     [Fact]
-    public void Create_Should_ReturnExtensionMismatch_WhenFileNameHasNoExtensionOfContentType()
+    public void AddAttachment_Should_ReturnExtensionMismatch_WhenFileNameHasNoExtensionOfContentType()
     {
         // Act: executável declarado como PDF
-        Result<TicketAttachment> result = Create("nota.pdf.exe", "application/pdf", 1024);
+        Result<TicketAttachmentUpload> result = AddAttachment("nota.pdf.exe", "application/pdf", 1024);
 
         // Assert
         result.IsFailure.ShouldBeTrue();
@@ -63,10 +96,12 @@ public sealed class TicketAttachmentTests
     [InlineData("Foto.JPEG", "image/jpeg")]
     [InlineData("notas.txt", "text/plain; charset=utf-8")]
     [InlineData("Planilha.XLSX", "APPLICATION/VND.OPENXMLFORMATS-OFFICEDOCUMENT.SPREADSHEETML.SHEET")]
-    public void Create_Should_AcceptFile_WhenExtensionOrTypeDifferOnlyInCaseOrTypeHasParameters(string fileName, string contentType)
+    public void AddAttachment_Should_AcceptFile_WhenExtensionOrTypeDifferOnlyInCaseOrTypeHasParameters(
+        string fileName,
+        string contentType)
     {
         // Act
-        Result<TicketAttachment> result = Create(fileName, contentType, 1024);
+        Result<TicketAttachmentUpload> result = AddAttachment(fileName, contentType, 1024);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
@@ -75,10 +110,10 @@ public sealed class TicketAttachmentTests
     [Theory]
     [InlineData(10 * 1024 * 1024, true)]
     [InlineData(10 * 1024 * 1024 + 1, false)]
-    public void Create_Should_AcceptFilesUpToMaxSize_WhenSizeIsGiven(long fileSizeBytes, bool expectedSuccess)
+    public void AddAttachment_Should_AcceptFilesUpToMaxSize_WhenSizeIsGiven(long fileSizeBytes, bool expectedSuccess)
     {
         // Act
-        Result<TicketAttachment> result = Create("report.pdf", "application/pdf", fileSizeBytes);
+        Result<TicketAttachmentUpload> result = AddAttachment("report.pdf", "application/pdf", fileSizeBytes);
 
         // Assert
         result.IsSuccess.ShouldBe(expectedSuccess);
@@ -94,19 +129,19 @@ public sealed class TicketAttachmentTests
     [InlineData(20, 0, false)]
     [InlineData(1, 100 * 1024 * 1024 - 1024, true)]
     [InlineData(1, 100 * 1024 * 1024 - 1023, false)]
-    public void Create_Should_RespectTicketLimits_WhenTicketAlreadyHasAttachments(
+    public void AddAttachment_Should_RespectTicketLimits_WhenTicketAlreadyHasAttachments(
         int currentCount,
         long currentTotalBytes,
         bool expectedSuccess)
     {
         // Act: o anexo novo tem 1.024 bytes
-        Result<TicketAttachment> result = TicketAttachment.Create(
-            Ticket,
+        Result<TicketAttachmentUpload> result = Ticket.AddAttachment(
             UploaderId,
             "report.pdf",
             "application/pdf",
             1024,
             "chave",
+            contentMatches: true,
             currentCount,
             currentTotalBytes,
             UploadedAtUtc);
@@ -121,28 +156,39 @@ public sealed class TicketAttachmentTests
     }
 
     [Fact]
-    public void RecordUpload_Should_RecordAttachmentAddedByUploaderWithFileName()
+    public void AddAttachment_Should_CheckContentThenFileThenTicketLimits_WhenSeveralRulesFail()
     {
-        // Arrange
-        TicketAttachment attachment = Create("report.pdf", "application/pdf", 1024).Value;
+        // Arrange: extensão errada, arquivo grande demais e chamado no limite ao mesmo tempo
+        static Result<TicketAttachmentUpload> Add(bool contentMatches, string fileName, long fileSizeBytes) =>
+            Ticket.AddAttachment(
+                UploaderId,
+                fileName,
+                "application/pdf",
+                fileSizeBytes,
+                "chave",
+                contentMatches,
+                TicketAttachmentPolicy.MaxAttachmentsPerTicket,
+                0,
+                UploadedAtUtc);
 
         // Act
-        TicketHistoryEntry history = attachment.RecordUpload();
+        Result<TicketAttachmentUpload> contentFirst = Add(contentMatches: false, "nota.exe", 11 * 1024 * 1024);
+        Result<TicketAttachmentUpload> extensionNext = Add(contentMatches: true, "nota.exe", 11 * 1024 * 1024);
+        Result<TicketAttachmentUpload> sizeNext = Add(contentMatches: true, "nota.pdf", 11 * 1024 * 1024);
+        Result<TicketAttachmentUpload> limitLast = Add(contentMatches: true, "nota.pdf", 1024);
 
         // Assert
-        history.TicketId.ShouldBe(TicketId);
-        history.ChangedByUserId.ShouldBe(UploaderId);
-        history.Action.ShouldBe(TicketHistoryAction.AttachmentAdded);
-        history.NewValue.ShouldBe("report.pdf");
-        history.OccurredAtUtc.ShouldBe(UploadedAtUtc);
+        contentFirst.Error.ShouldBe(TicketAttachmentErrors.ContentMismatch);
+        extensionNext.Error.ShouldBe(TicketAttachmentErrors.ExtensionMismatch("application/pdf"));
+        sizeNext.Error.ShouldBe(TicketAttachmentErrors.FileTooLarge(10));
+        limitLast.Error.ShouldBe(TicketAttachmentErrors.TicketLimitReached(20, 100));
     }
 
     [Fact]
     public void Delete_Should_MarkDeletedRaiseEventAndRecordRemovalByWhoDeleted()
     {
         // Arrange
-        TicketAttachment attachment = Create("report.pdf", "application/pdf", 1024).Value;
-        attachment.ClearDomainEvents();
+        TicketAttachment attachment = CreateAttachment();
         var managerId = Guid.NewGuid();
         DateTime deletedAtUtc = UploadedAtUtc.AddHours(1);
 
@@ -162,7 +208,7 @@ public sealed class TicketAttachmentTests
     public void Delete_Should_AllowUploader_WhenUploaderCannotDeleteAny()
     {
         // Arrange
-        TicketAttachment attachment = Create("report.pdf", "application/pdf", 1024).Value;
+        TicketAttachment attachment = CreateAttachment();
 
         // Act
         Result<TicketHistoryEntry> result = attachment.Delete(UploaderId, canDeleteAny: false, UploadedAtUtc.AddHours(1));
@@ -176,8 +222,7 @@ public sealed class TicketAttachmentTests
     public void Delete_Should_ReturnUnauthorizedAndChangeNothing_WhenCallerIsNotUploaderAndCannotDeleteAny()
     {
         // Arrange
-        TicketAttachment attachment = Create("report.pdf", "application/pdf", 1024).Value;
-        attachment.ClearDomainEvents();
+        TicketAttachment attachment = CreateAttachment();
 
         // Act
         Result<TicketHistoryEntry> result = attachment.Delete(Guid.NewGuid(), canDeleteAny: false, UploadedAtUtc.AddHours(1));
@@ -189,18 +234,62 @@ public sealed class TicketAttachmentTests
     }
 
     [Fact]
-    public void MarkPurged_Should_RecordWhenFileWasRemovedFromStorage()
+    public void RecordFilePurge_Should_RecordPurgeAndReturnTrue_WhenAttachmentIsDeletedAndNotPurged()
     {
         // Arrange
-        TicketAttachment attachment = Create("report.pdf", "application/pdf", 1024).Value;
+        TicketAttachment attachment = CreateAttachment();
+        attachment.Delete(UploaderId, canDeleteAny: false, UploadedAtUtc.AddHours(1));
 
         // Act
-        attachment.MarkPurged(UploadedAtUtc.AddDays(1));
+        bool recorded = attachment.RecordFilePurge(UploadedAtUtc.AddDays(1));
 
         // Assert
+        recorded.ShouldBeTrue();
         attachment.PurgedAtUtc.ShouldBe(UploadedAtUtc.AddDays(1));
     }
 
-    private static Result<TicketAttachment> Create(string fileName, string contentType, long fileSizeBytes) =>
-        TicketAttachment.Create(Ticket, UploaderId, fileName, contentType, fileSizeBytes, "chave", 0, 0, UploadedAtUtc);
+    [Fact]
+    public void RecordFilePurge_Should_ReturnFalseAndChangeNothing_WhenAttachmentIsNotDeleted()
+    {
+        // Arrange
+        TicketAttachment attachment = CreateAttachment();
+
+        // Act
+        bool recorded = attachment.RecordFilePurge(UploadedAtUtc.AddDays(1));
+
+        // Assert
+        recorded.ShouldBeFalse();
+        attachment.PurgedAtUtc.ShouldBeNull();
+    }
+
+    [Fact]
+    public void RecordFilePurge_Should_ReturnFalseAndKeepFirstPurge_WhenPurgeWasAlreadyRecorded()
+    {
+        // Arrange
+        TicketAttachment attachment = CreateAttachment();
+        attachment.Delete(UploaderId, canDeleteAny: false, UploadedAtUtc.AddHours(1));
+        attachment.RecordFilePurge(UploadedAtUtc.AddDays(1));
+
+        // Act
+        bool recorded = attachment.RecordFilePurge(UploadedAtUtc.AddDays(2));
+
+        // Assert
+        recorded.ShouldBeFalse();
+        attachment.PurgedAtUtc.ShouldBe(UploadedAtUtc.AddDays(1));
+    }
+
+    private static Result<TicketAttachmentUpload> AddAttachment(
+        string fileName,
+        string contentType,
+        long fileSizeBytes,
+        bool contentMatches = true) =>
+        Ticket.AddAttachment(UploaderId, fileName, contentType, fileSizeBytes, "chave", contentMatches, 0, 0, UploadedAtUtc);
+
+    private static TicketAttachment CreateAttachment()
+    {
+        TicketAttachment attachment = AddAttachment("report.pdf", "application/pdf", 1024).Value.Attachment;
+        attachment.ClearDomainEvents();
+
+        return attachment;
+    }
 }

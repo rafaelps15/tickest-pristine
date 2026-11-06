@@ -724,64 +724,46 @@ public sealed class TicketTests
         ticket.LastActivityAtUtc.ShouldBe(OpenedAtUtc);
     }
 
-    [Fact]
-    public void RecordAttachmentActivity_Should_NeverMoveLastActivityBack_WhenEntryIsOlder()
-    {
-        // Arrange
-        Ticket ticket = CreateTicket();
-        ticket.Assign(new User { Id = AgentId }, AgentId, OccurredAtUtc);
-        TicketHistoryEntry olderEntry = TicketTestData.CreateAttachment(ticket.Id, AgentId, OpenedAtUtc.AddMinutes(5)).RecordUpload();
-
-        // Act
-        ticket.RecordAttachmentActivity(olderEntry);
-
-        // Assert
-        ticket.LastActivityAtUtc.ShouldBe(OccurredAtUtc);
-    }
-
     [Theory]
     [InlineData(true, TicketWaitingOn.Requester)]
     [InlineData(false, TicketWaitingOn.Agent)]
-    public void RecordMessageActivity_Should_MoveLastActivityAndRecalculateWaitingOn_WhenTicketIsActive(
+    public void WaitingOnAfter_Should_FollowLastMessageWithoutChangingTicket_WhenTicketIsActive(
         bool lastMessageIsFromAgent,
         TicketWaitingOn expected)
     {
         // Arrange
         Ticket ticket = CreateTicket();
-        TicketHistoryEntry posting = TicketTestData.CreateMessage(ticket.Id, AgentId, "Resposta", OpenedAtUtc)
-            .Edit("Resposta corrigida", AgentId, OccurredAtUtc).Value;
 
         // Act
-        ticket.RecordMessageActivity(posting, lastMessageIsFromAgent);
+        TicketWaitingOn? waitingOn = ticket.WaitingOnAfter(lastMessageIsFromAgent);
 
         // Assert
-        ticket.LastActivityAtUtc.ShouldBe(OccurredAtUtc);
-        ticket.WaitingOn.ShouldBe(expected);
+        waitingOn.ShouldBe(expected);
+        ticket.WaitingOn.ShouldBe(TicketWaitingOn.Agent);
+        ticket.LastActivityAtUtc.ShouldBe(OpenedAtUtc);
     }
 
     [Fact]
-    public void RecordMessageActivity_Should_KeepWaitingOnEmpty_WhenTicketIsInactive()
+    public void WaitingOnAfter_Should_BeNull_WhenTicketIsInactive()
     {
         // Arrange
         Ticket ticket = CreateTicketIn(TicketStatus.Resolved);
-        TicketHistoryEntry posting = TicketTestData.CreateMessage(ticket.Id, AgentId, "Resposta", OpenedAtUtc)
-            .Edit("Resposta corrigida", AgentId, OccurredAtUtc).Value;
 
         // Act
-        ticket.RecordMessageActivity(posting, lastMessageIsFromAgent: true);
+        TicketWaitingOn? waitingOn = ticket.WaitingOnAfter(lastMessageIsFromAgent: true);
 
         // Assert
-        ticket.WaitingOn.ShouldBeNull();
+        waitingOn.ShouldBeNull();
     }
 
     [Fact]
-    public void PostMessage_Should_CreateMessageAndRecordMessageAdded_WhenCalled()
+    public void PostMessage_Should_CreateMessageAndHistoryWithoutChangingTicket_WhenCalled()
     {
         // Arrange
         Ticket ticket = CreateTicket();
 
         // Act
-        (TicketMessage message, TicketHistoryEntry history) = ticket.PostMessage(AgentId, "Verificando", authorIsAgent: true, OccurredAtUtc);
+        (TicketMessage message, TicketHistoryEntry history) = ticket.PostMessage(AgentId, "Verificando", OccurredAtUtc);
 
         // Assert
         message.TicketId.ShouldBe(ticket.Id);
@@ -794,27 +776,68 @@ public sealed class TicketTests
         history.ChangedByUserId.ShouldBe(AgentId);
         history.Action.ShouldBe(TicketHistoryAction.MessageAdded);
         history.OccurredAtUtc.ShouldBe(OccurredAtUtc);
-        ticket.LastActivityAtUtc.ShouldBe(OccurredAtUtc);
+        ticket.LastActivityAtUtc.ShouldBe(OpenedAtUtc);
+        ticket.WaitingOn.ShouldBe(TicketWaitingOn.Agent);
     }
 
     [Theory]
-    [InlineData(true, false, TicketWaitingOn.Requester)]
-    [InlineData(false, false, TicketWaitingOn.Agent)]
-    [InlineData(true, true, TicketWaitingOn.Agent)]
-    public void PostMessage_Should_WaitOnRequesterOnlyWhenAgentWhoIsNotRequesterAnswers(
+    [InlineData(true, false, true)]
+    [InlineData(false, false, false)]
+    [InlineData(true, true, false)]
+    public void IsAgentReply_Should_BeTrueOnlyForAgentWhoIsNotRequester(
         bool authorIsAgent,
         bool authorIsRequester,
-        TicketWaitingOn expected)
+        bool expected)
     {
         // Arrange
         Ticket ticket = CreateTicket();
         Guid authorId = authorIsRequester ? ticket.CreatedByUserId : AgentId;
 
         // Act
-        ticket.PostMessage(authorId, "Mensagem", authorIsAgent, OccurredAtUtc);
+        bool isAgentReply = ticket.IsAgentReply(authorId, authorIsAgent);
 
         // Assert
-        ticket.WaitingOn.ShouldBe(expected);
+        isAgentReply.ShouldBe(expected);
+    }
+
+    [Fact]
+    public void EnsureCanChangeStatusTo_Should_SucceedWithoutChangingTicket_WhenTransitionIsAllowed()
+    {
+        // Arrange
+        Ticket ticket = CreateTicket();
+
+        // Act
+        Result result = ticket.EnsureCanChangeStatusTo(TicketStatus.InProgress);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        ticket.Status.ShouldBe(TicketStatus.Open);
+    }
+
+    [Fact]
+    public void EnsureCanChangeStatusTo_Should_ReturnNotActive_WhenTicketIsInactive()
+    {
+        // Arrange
+        Ticket ticket = CreateTicketIn(TicketStatus.Resolved);
+
+        // Act
+        Result result = ticket.EnsureCanChangeStatusTo(TicketStatus.Canceled);
+
+        // Assert
+        result.Error.ShouldBe(TicketErrors.NotActive(ticket.Id));
+    }
+
+    [Fact]
+    public void EnsureCanChangeStatusTo_Should_ReturnInvalidStatusTransition_WhenTransitionIsNotAllowed()
+    {
+        // Arrange
+        Ticket ticket = CreateTicket();
+
+        // Act
+        Result result = ticket.EnsureCanChangeStatusTo(TicketStatus.Resolved);
+
+        // Assert
+        result.Error.ShouldBe(TicketErrors.InvalidStatusTransition(TicketStatus.Open, TicketStatus.Resolved));
     }
 
     [Fact]

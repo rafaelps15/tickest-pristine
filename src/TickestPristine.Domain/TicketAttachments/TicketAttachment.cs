@@ -1,7 +1,6 @@
 using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
 using TickestPristine.Domain.TicketHistories;
-using TickestPristine.Domain.Tickets;
 
 namespace TickestPristine.Domain.TicketAttachments;
 
@@ -36,51 +35,22 @@ public sealed class TicketAttachment : Entity, IAuditable
     public DateTime? PurgedAtUtc { get; private set; }
 
     /// <summary>
-    /// Cria o anexo, ou devolve o erro quando o tipo não é aceito (os parâmetros do tipo, como o charset, são ignorados),
-    /// quando o nome do arquivo não tem uma extensão do tipo, quando o arquivo passa do tamanho máximo ou quando o chamado
-    /// já tem, nos anexos não excluídos, o máximo de anexos ou de bytes somados.
+    /// Cria o anexo sem conferências, porque o <c>Ticket.AddAttachment</c> confere o envio antes, e dispara o evento do
+    /// envio.
     /// </summary>
-    public static Result<TicketAttachment> Create(
-        Ticket ticket,
+    internal static TicketAttachment Create(
+        Guid ticketId,
         Guid uploadedByUserId,
         string fileName,
         string contentType,
         long fileSizeBytes,
         string storageKey,
-        int currentCount,
-        long currentTotalBytes,
         DateTime utcNow)
     {
-        string[]? extensions = TicketAttachmentPolicy.ExtensionsOf(contentType);
-
-        if (extensions is null)
-        {
-            return Result.Failure<TicketAttachment>(TicketAttachmentErrors.UnsupportedContentType(contentType));
-        }
-
-        if (!extensions.Contains(Path.GetExtension(fileName), StringComparer.OrdinalIgnoreCase))
-        {
-            return Result.Failure<TicketAttachment>(TicketAttachmentErrors.ExtensionMismatch(contentType));
-        }
-
-        if (fileSizeBytes > TicketAttachmentPolicy.MaxFileSizeBytes)
-        {
-            return Result.Failure<TicketAttachment>(
-                TicketAttachmentErrors.FileTooLarge(TicketAttachmentPolicy.MaxFileSizeBytes / (1024 * 1024)));
-        }
-
-        if (currentCount >= TicketAttachmentPolicy.MaxAttachmentsPerTicket ||
-            currentTotalBytes + fileSizeBytes > TicketAttachmentPolicy.MaxTotalBytesPerTicket)
-        {
-            return Result.Failure<TicketAttachment>(TicketAttachmentErrors.TicketLimitReached(
-                TicketAttachmentPolicy.MaxAttachmentsPerTicket,
-                TicketAttachmentPolicy.MaxTotalBytesPerTicket / (1024 * 1024)));
-        }
-
         var attachment = new TicketAttachment
         {
             Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
+            TicketId = ticketId,
             UploadedByUserId = uploadedByUserId,
             FileName = fileName,
             ContentType = contentType,
@@ -97,12 +67,6 @@ public sealed class TicketAttachment : Entity, IAuditable
 
         return attachment;
     }
-
-    /// <summary>
-    /// Entrada do histórico do envio, em nome de quem enviou, com o nome do arquivo e a data do envio.
-    /// </summary>
-    public TicketHistoryEntry RecordUpload() =>
-        TicketHistoryEntry.Create(TicketId, UploadedByUserId, TicketHistoryAction.AttachmentAdded, UploadedAtUtc, newValue: FileName);
 
     /// <summary>
     /// Exclui o anexo logicamente e devolve a entrada do histórico, em nome de quem excluiu; o arquivo é apagado do
@@ -123,5 +87,19 @@ public sealed class TicketAttachment : Entity, IAuditable
         return TicketHistoryEntry.Create(TicketId, deletedByUserId, TicketHistoryAction.AttachmentRemoved, utcNow);
     }
 
-    public void MarkPurged(DateTime utcNow) => PurgedAtUtc = utcNow;
+    /// <summary>
+    /// Registra que o arquivo do anexo excluído saiu do armazenamento. Devolve <c>false</c>, sem mudar nada, quando o
+    /// anexo não está excluído ou quando a purga já foi registrada.
+    /// </summary>
+    public bool RecordFilePurge(DateTime utcNow)
+    {
+        if (DeletedAtUtc is null || PurgedAtUtc is not null)
+        {
+            return false;
+        }
+
+        PurgedAtUtc = utcNow;
+
+        return true;
+    }
 }

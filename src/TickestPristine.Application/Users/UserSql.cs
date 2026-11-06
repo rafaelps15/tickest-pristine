@@ -38,7 +38,7 @@ internal static class UserSql
 
     /// <summary>
     /// Quem atende chamados: conta utilizável com a permissão efetiva <c>tickets:manage</c>, vinda de qualquer uma das
-    /// suas roles, lida das tabelas (sem o cache de permissões), a mesma regra do <c>TicketAgentLookup</c>.
+    /// suas roles, lida das tabelas (sem o cache de permissões), a mesma regra do <c>IAgentDirectory</c>.
     /// </summary>
     internal const string IsTicketAgent =
         $"""

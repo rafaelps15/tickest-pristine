@@ -1037,3 +1037,89 @@ Nenhuma desde 2026-11-04: a DEC-13 foi confirmada pela (a) e passou às decidida
 - **Pendências:** o PR da fase 1, pelo responsável; a fase 2 (T-4 a T-6 e T-304); a skill de desenho de agregados antes da fase 3.
 - **Complemento (DEC-73, opção 2A), 2026-11-06:** `TicketHistoryDescriptions` → `TicketHistoryEntryDescription` (classe, arquivo e teste), sem mudar o texto exibido; build sem avisos; unitários 756 de 756; arquitetura 142 de 142; `TicketHistories` e os testes de histórico do `TicketsTests`, 30 de 30; `SYSTEM_SPECIFICATION.md` com o nome novo. As migrations ficam com o nome antigo nos comentários, porque registram o que foi aplicado.
 - **Entrega:** PR #78 (https://github.com/rafaelps15/tickest-pristine/pull/78), aberto em 2026-11-06 da branch `refactor/SPEC-049-tickest-architecture-reassessment` para a `main`, com o commit `2816596`. O merge é do responsável.
+
+## B.12 Fase 2 da G3-a: T-4 e T-304 (2026-11-06)
+
+**Projeção por evento (DEC-74).**
+
+- Saem o `ITicketActivityWriter` e o `TicketActivityWriter`; entram o `Application/Abstractions/Data/ITicketActivityProjector.cs` e o `Infrastructure/Tickets/TicketActivityProjector.cs`. O projetor abre uma transação e trava a linha do chamado com `FOR NO KEY UPDATE`, a trava do próprio `UPDATE`, que não bloqueia a gravação de mensagens e anexos (as chaves estrangeiras pedem só `FOR KEY SHARE`). Só depois lê o chamado, o maior instante do histórico e o autor da última mensagem válida, aplica `Ticket.IsAgentReply` e `Ticket.WaitingOnAfter` e grava as duas colunas, só quando alguma muda.
+- Cinco handlers `ProjectActivityOn{Evento}DomainEventHandler`, um por evento, em `TicketMessages/TicketMessagePosted`, `TicketMessageEdited` e `TicketMessageDeleted` e em `TicketAttachments/TicketAttachmentUploaded` e `TicketAttachmentDeleted`. A falha da projeção fica no log do despacho, como a do expurgo do arquivo, e não derruba a resposta.
+- Os handlers de publicar, editar e excluir mensagem e de enviar e excluir anexo não gravam mais a projeção; os de editar e excluir mensagem e o de excluir anexo também deixam de carregar o chamado.
+- `Ticket.PostMessage(authorUserId, content, utcNow)` devolve `TicketMessagePosting(Message, History)` e não muda o chamado. O parâmetro `authorIsAgent` sai, porque nada o usa na fase 2; volta na fase 3, com a primeira resposta (DEC-1).
+- Na reabertura com motivo, o "aguardando" passado ao `Reopen` é o `IsAgentReply` de quem reabriu, com o `IAgentDirectory` (REQ-5); sem motivo, vale a última mensagem válida (`TicketAgentLookup`).
+- O `TicketAgentLookup` fica só com o `IsLastValidMessageFromAgentAsync` (atualização e reabertura) e passa a usar o `Ticket.IsAgentReply`; quem atende é do `IAgentDirectory` (`AgentDirectory`), usado pela atribuição, pela publicação, pela reabertura e pelo projetor (DEC-73, 5A).
+
+**Auditoria (REQ-16 e REQ-312).** O `AuditLoggingInterceptor` descarta, na falha e no cancelamento do save, os registros que ele incluiu (o `Post` não desanexa mais nada), usa um só instante por save, audita também o `SavingChanges` síncrono e lê a chave única `Id`, sem o caminho de chave composta. Sai o comentário falso de `Web.Api/Endpoints/AuditLogs/GetHistory.cs`.
+
+**Testes.**
+
+| # | Teste | Projeto | Cobre |
+|---|---|---|---|
+| 1 | `ProjectActivityOn*DomainEventHandlerTests` (5 classes, 1 teste cada) | unitários | cada handler chama o projetor com o id do chamado (AC-8) |
+| 2 | `PostTicketMessageCommandHandlerTests` › `Handle_Should_RaiseMessagePostedWithoutChangingTicket_WhenAgentAnswers` | unitários | AC-8 |
+| 3 | `EditTicketMessageCommandHandlerTests` › `Handle_Should_RaiseMessageEditedWithoutChangingTicket_WhenCallerIsAuthor` e `Handle_Should_NotRecordHistory_WhenCallerIsNotAuthor` | unitários | AC-8 |
+| 4 | `DeleteTicketMessageCommandHandlerTests` › `Handle_Should_RaiseMessageDeletedWithoutChangingTicket_WhenCallerIsAuthor` | unitários | AC-8 |
+| 5 | `DeleteTicketAttachmentCommandHandlerTests` › `Handle_Should_RecordRemovalWithoutChangingTicket_WhenAttachmentIsDeleted` | unitários | AC-8 |
+| 6 | `TicketTests` › `WaitingOnAfter_*` (3 casos), `IsAgentReply_*` (3) e `PostMessage_Should_CreateMessageAndHistoryWithoutChangingTicket_WhenCalled` | unitários | regras puras do `Ticket` (AC-8) |
+| 7 | `Users/AgentDirectoryTests` (os 2 de quem atende, vindos do `TicketAgentLookupTests`) | unitários | DEC-73 (5A) |
+| 8 | `TicketActivityTests` › `WaitingOn_Should_FollowLastValidMessage_When_EarlierMessageWritesLast` | integração | F-23, com gatilho temporário que segura o primeiro `UPDATE` de chamados antes de ele travar a linha (AC-8) |
+| 9 | `AuditLogsTests` › `SaveChanges_Should_DiscardOwnAuditEntries_When_SaveFails` | integração | AC-17 |
+| 10 | `AuditLogsTests` › `SaveChanges_Should_UseSingleTimestamp_WhenSavingSeveralEntities`, `SaveChanges_Should_Audit_WhenSavingSynchronously` e `AssignRoles_Should_AuditRemovedUserRoleWithOldValues` | integração | AC-313 |
+
+Saem os testes do comportamento retirado: `RecordAttachmentActivity_*` e `RecordMessageActivity_*` do `TicketTests`, os de gravador do `Post`, do `Edit`, do `Delete` de mensagem e do `Delete` de anexo e o `Handle_Should_WaitOnAgent_WhenRequesterAnswers`, cuja regra passou à projeção, coberta pelos `WaitingOn_*` de integração.
+
+**Execuções (2026-11-06).** Build sem avisos e sem erros; unitários 759 de 759; arquitetura 142 de 142; a integração roda na verificação da fase.
+
+## B.13 Fase 2 da G3-a: T-5 (2026-11-06)
+
+**Anexo criado pelo chamado (DEC-6, DEC-73 1A e 6A, DEC-75).**
+
+- `Ticket.AddAttachment(uploadedByUserId, fileName, contentType, fileSizeBytes, storageKey, contentMatches, currentCount, currentTotalBytes, utcNow)` recusa, nesta ordem e sem mudar nada: o conteúdo que não confere (`ContentMismatch`), o arquivo fora da política (`EnsureAccepted`: tipo, extensão e tamanho) e o chamado no limite. Cria o anexo pelo `TicketAttachment.Create` `internal`, sem conferências, e devolve `TicketAttachmentUpload(Attachment, History)`; o chamado não muda.
+- Saem o `RecordUpload` e o `Ticket` como parâmetro do `Create`; o `MarkPurged` vira `bool RecordFilePurge(DateTime)`. O handler da purga grava a purga só depois de o arquivo sair do armazenamento.
+- Envio (DEC-75): inspeção do conteúdo, `IFileStorage.CreateKey`, `AddAttachment`, `SaveAsync(content, storageKey)` e o save; na recusa nada é gravado, e o arquivo só é apagado quando o save falha. O `LocalFileStorage.SaveAsync` abre o arquivo com `CreateNew` fora do bloco de limpeza: uma chave já usada falha sem apagar o arquivo dela.
+
+**Política dos anexos, reorganizada a pedido do responsável.** A `TicketAttachmentPolicy` ficou com os parâmetros da política (os três limites e a lista `AllowedTypes`, agora do record `AllowedAttachmentType`, no lugar da tupla com arrays) e duas perguntas: `GetAllowedType(contentType)`, o tipo aceito correspondente ou nulo (substitui `Accepts`, `ExtensionsOf` e `GetMediaType`), e `EnsureAccepted(fileName, contentType, fileSizeBytes)`, o nome da DEC-73, que segue a convenção `Ensure*` com `Result` do próprio `Ticket`. O inspetor de conteúdo usa o `GetAllowedType`.
+
+**Testes.**
+
+| # | Teste | Projeto | Cobre |
+|---|---|---|---|
+| 1 | `TicketAttachmentTests` › `AddAttachment_*` (9 métodos, 15 casos) | unitários | regras, ordem dos erros, limite, sucesso com histórico e evento, chamado intacto (AC-9) |
+| 2 | `TicketAttachmentTests` › `RecordFilePurge_*` (3) | unitários | AC-10 |
+| 3 | `UploadTicketAttachmentCommandHandlerTests` | unitários | o fluxo do envio; os testes de limite, de extensão e de tamanho passam a esperar nenhuma gravação (DEC-75); o de extensão vira `..._ReturnExtensionMismatchAndStoreNothing_...`, e o de limite mantém o nome, citado pelo AC-6 da spec 011 |
+| 4 | `GetTicketAttachmentPolicyQueryHandlerTests` | unitários | todo tipo informado passa no `EnsureAccepted` |
+| 5 | `IntegrationTests/Storage/LocalFileStorageTests` (7) | integração | F-42: chave com a extensão e sem gravar nada, extensão insegura descartada, gravação legível pela chave, chave já usada sem apagar o arquivo dela, cópia interrompida sem arquivo, exclusão repetida, caminho fora da pasta recusado |
+
+**Execuções (2026-11-06).** Build sem avisos e sem erros; unitários 763 de 763; arquitetura 142 de 142; a integração roda na verificação da fase.
+
+## B.14 Fase 2 da G3-a: T-6 e a revisão do interceptor (2026-11-06)
+
+**Conferências em fonte única (DEC-8, DEC-9).**
+
+- O `Ticket` expõe `EnsureCanChangeStatusTo(TicketStatus)` (o antigo `EnsureActiveTransition`, privado), usado pelo `StartProgress`, pelo `Resolve`, pelo `Cancel` e pelo `PUT`; o `EnsureCanReopen(bool)` fica público com o parâmetro de hoje (CT-17).
+- `Close`: sai a pré-conferência idêntica à do `Ticket.Close`.
+- `Reopen`: sai a conferência de transição, inalcançável depois da de "ativo"; a recusa do chamado ativo antes do calendário fica, por precedência, e as demais conferências são do `EnsureCanReopen`, que a reabertura faz antes de calcular o ciclo.
+- `PUT tickets/{id}`: `ResolveIntent` monta a intenção (status, cancelamento, descrição); `HasPermissionToUpdateAsync`, `HasPermissionToEditOwnAsync`, `HasPermissionToManageAsync` e `HasPermissionToCancelAnyAsync` conferem as permissões; `ChangeStatusAsync` confere a transição pelo `EnsureCanChangeStatusTo` e faz a troca. O braço `_ =>` vira `UnreachableException` (REQ-10). A ordem dos erros e o contrato não mudam.
+
+**`AuditLoggingInterceptor` (questionário de 2026-11-06).** Reescrito no desenho de trilha por coluna escolhido: `SavingChanges` e `SavingChangesAsync` chamam o `AddAuditEntries`, que descarta os registros pendentes de um save que falhou (REQ-16), lê o instante uma vez (REQ-312) e cria um registro por entidade auditável incluída, alterada ou excluída, com `SerializeOldValues`, `SerializeNewValues` e `GetModifiedColumns`; a chave é o `Id` (AU-10), e a exclusão de segredos (`IsAudited`, DEC-46) continua. Saem os quatro ganchos de falha e de cancelamento da primeira versão da T-304. Tabela, formato e rota de leitura não mudam; na G4, a DEC-45 continua valendo.
+
+**Execuções (2026-11-06).** Build sem avisos e sem erros; unitários 763 de 763 (as asserções dos handlers de `Close`, `Update` e `Reopen` não mudaram); arquitetura 142 de 142.
+
+## B.15 Verificação da fase 2 da G3-a (2026-11-06)
+
+- **Escopo:** T-4, T-5, T-6 e T-304, com as DEC-74 e DEC-75 e os ajustes do REQ-7 e do REQ-16 pedidos pelo responsável no chat.
+- **Build:** `dotnet build TickestPristine.slnx` sem avisos e sem erros, depois da última mudança de `src/` e `tests/`.
+- **Testes, pelo critério de impacto:** a fase mudou `Application/Abstractions`, a DI e os interceptors, então rodaram os projetos inteiros.
+
+| Projeto | Total | Aprovados | Falhas | Não executados |
+|---|---|---|---|---|
+| Unitários | 766 | 766 | 0 | 0 |
+| Arquitetura | 142 | 142 | 0 | 0 |
+| Integração | 909 | 898 | 0 | 11 (evidências da CT-26, que só rodam quando ligadas) |
+
+- **Testes da rastreabilidade na integração (TRX):** corrida do F-23 1 de 1; `LastActivity_*` 4 de 4; `WaitingOn_*` 4 de 4; `AuditLogsTests` 9 de 9 (os 4 novos); `PostMessage_Should_RecordBothMessagesAndSingleCompletion_WhenTwoAgentsAnswerAtOnce` 1 de 1; `LocalFileStorageTests` 7 de 7; `Update_*` 15 de 15; `Cancel_*` 7 de 7; `TicketAttachmentsTests` 28 de 28; `AttachmentContentInspectorTests` 30 de 30; `GetTicketAssigneesQueryHandlerTests` 4 de 4.
+- **Correção durante a verificação:** a primeira rodada de integração reprovou os testes de "aguardando": o projetor lia o chamado por `FromSql` com `SELECT *`, que não traz o `xmin` do token de concorrência, e a falha ficava no log do despacho. A trava passou a ser um comando próprio (`SELECT 1 … FOR NO KEY UPDATE`), seguido da leitura do chamado pelo EF; a rodada foi interrompida, e a segunda é a desta tabela.
+- **Auditoria:** `python scripts/auditoria_sdd.py .`: 100,0%, CONFORME, código de saída 0, de novo depois da última mudança de `src/`.
+- **Revisão (`ca-review`):** nenhum achado bloqueante. Dois ajustes na própria fase: o `<summary>` do `TicketAttachmentPolicy.AllowedTypes`, que tinha saído com a reorganização, e os testes diretos do `EnsureCanChangeStatusTo`, agora público. Observações sem ação: o `AllowedAttachmentType` é um record de dados da política, e não um objeto de valor; os records de resultado seguem a DEC-6; o projetor grava as duas colunas de projeção por SQL, pela DEC-2 e pela DEC-74.
+- **Documentação:** `SYSTEM_SPECIFICATION.md`, na RN-09, RN-31 e RN-34, na auditoria, nas gravações depois do commit, no fluxo de anexos, na atribuição e nas evidências E-07 e E-27.
+- **Pendências:** o `CLAUDE.md` ainda diz que o `TicketAttachment` cria a entrada do envio, que agora é do `Ticket.AddAttachment`, e cita `TicketHistory` em três trechos; mudar depende de autorização (DEC-14). A DEC-76 fica para o portão da G3-b, e a DEC-47 continua pendente. Depois do PR da fase 2, a diretriz das entidades entra pela `spec-new`, com o anexo F.

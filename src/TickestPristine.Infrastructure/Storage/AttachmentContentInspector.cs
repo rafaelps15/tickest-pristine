@@ -43,7 +43,9 @@ internal sealed class AttachmentContentInspector : IAttachmentContentInspector
     /// </summary>
     public async Task<bool> MatchesAsync(Stream content, string contentType, CancellationToken cancellationToken)
     {
-        if (!TicketAttachmentPolicy.Accepts(contentType))
+        AllowedAttachmentType? allowedType = TicketAttachmentPolicy.GetAllowedType(contentType);
+
+        if (allowedType is null)
         {
             return false;
         }
@@ -56,7 +58,7 @@ internal sealed class AttachmentContentInspector : IAttachmentContentInspector
             int read = await content.ReadAtLeastAsync(sample, SampleSize, throwOnEndOfStream: false, cancellationToken);
             ReadOnlyMemory<byte> header = sample.AsMemory(0, read);
 
-            string mediaType = TicketAttachmentPolicy.GetMediaType(contentType);
+            string mediaType = allowedType.ContentType;
 
             if (Is(mediaType, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
             {

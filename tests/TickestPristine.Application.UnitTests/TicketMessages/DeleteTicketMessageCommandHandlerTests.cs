@@ -6,8 +6,6 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
-using TickestPristine.Application.Abstractions.Data;
-using TickestPristine.Application.Tickets;
 using TickestPristine.Domain.TicketHistories;
 using TickestPristine.Domain.TicketMessages;
 
@@ -27,7 +25,7 @@ public sealed class DeleteTicketMessageCommandHandlerTests : BaseHandlerTest
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
 
-        var handler = new DeleteTicketMessageCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context), Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
+        var handler = new DeleteTicketMessageCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
         var command = new DeleteTicketMessageCommand(Guid.NewGuid());
 
         // Act
@@ -51,7 +49,7 @@ public sealed class DeleteTicketMessageCommandHandlerTests : BaseHandlerTest
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
 
-        var handler = new DeleteTicketMessageCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context), Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
+        var handler = new DeleteTicketMessageCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
         var command = new DeleteTicketMessageCommand(messageId);
 
         // Act
@@ -77,7 +75,7 @@ public sealed class DeleteTicketMessageCommandHandlerTests : BaseHandlerTest
             .Returns(false);
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
 
-        var handler = new DeleteTicketMessageCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context), Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
+        var handler = new DeleteTicketMessageCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
         var command = new DeleteTicketMessageCommand(messageId);
 
         // Act
@@ -101,7 +99,7 @@ public sealed class DeleteTicketMessageCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
 
-        var handler = new DeleteTicketMessageCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context), Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
+        var handler = new DeleteTicketMessageCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
         var command = new DeleteTicketMessageCommand(messageId);
 
         // Act
@@ -132,7 +130,7 @@ public sealed class DeleteTicketMessageCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
 
-        var handler = new DeleteTicketMessageCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context), Substitute.For<ITicketActivityWriter>(), dateTimeProvider);
+        var handler = new DeleteTicketMessageCommandHandler(context, userContext, permissionProvider, dateTimeProvider);
         var command = new DeleteTicketMessageCommand(messageId);
 
         // Act
@@ -146,32 +144,31 @@ public sealed class DeleteTicketMessageCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_WriteLastActivityAndWaitOnAgentAfterSaving_WhenOnlyMessageIsDeleted()
+    public async Task Handle_Should_RaiseMessageDeletedWithoutChangingTicket_WhenCallerIsAuthor()
     {
-        // Arrange: a única mensagem é do solicitante; sem mensagem válida, o chamado aguarda quem atende.
-        // Depois da abertura dos chamados do arranjo, que usam a hora real.
+        // Arrange: depois da abertura dos chamados do arranjo, que usam a hora real.
         DateTime nowUtc = DateTime.UtcNow.AddHours(1);
         await using TestDbContext context = CreateDbContext();
         Guid messageId = await SeedMessageAsync(context);
+        Ticket before = await context.Tickets.AsNoTracking().SingleAsync();
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(AuthorId);
-        ITicketActivityWriter activityWriter = Substitute.For<ITicketActivityWriter>();
         var handler = new DeleteTicketMessageCommandHandler(
             context,
             userContext,
             Substitute.For<IPermissionProvider>(),
-            new TicketAgentLookup(context),
-            activityWriter,
             CreateClock(nowUtc));
 
         // Act
         Result result = await handler.Handle(new DeleteTicketMessageCommand(messageId), CancellationToken.None);
 
-        // Assert
+        // Assert: a última atividade e quem o chamado aguarda ficam para a projeção, que o evento dispara depois do commit.
         result.IsSuccess.ShouldBeTrue();
-        await activityWriter.Received(1).WriteLastActivityAndWaitingOnAsync(
-            Arg.Is<Ticket>(t => t.LastActivityAtUtc == nowUtc && t.WaitingOn == TicketWaitingOn.Agent),
-            Arg.Any<CancellationToken>());
+        TicketMessage message = await context.TicketMessages.IgnoreQueryFilters().SingleAsync(m => m.Id == messageId);
+        message.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketMessageDeletedDomainEvent);
+        Ticket stored = await context.Tickets.AsNoTracking().SingleAsync();
+        stored.LastActivityAtUtc.ShouldBe(before.LastActivityAtUtc);
+        stored.WaitingOn.ShouldBe(before.WaitingOn);
     }
 
     private static async Task<Guid> SeedMessageAsync(TestDbContext context, bool ticketDeleted = false)

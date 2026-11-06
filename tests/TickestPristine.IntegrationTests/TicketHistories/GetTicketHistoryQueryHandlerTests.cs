@@ -169,7 +169,7 @@ public sealed class GetTicketHistoryQueryHandlerTests(IntegrationTestWebAppFacto
         context.Tickets.Add(ticket);
 
         TicketHistoryEntry created = ticket.RecordOpening(CreatorId);
-        (_, TicketHistoryEntry messageAdded) = ticket.PostMessage(CreatorId, "Mensagem", authorIsAgent: false, ticket.CreatedAtUtc.AddMinutes(1));
+        (_, TicketHistoryEntry messageAdded) = ticket.PostMessage(CreatorId, "Mensagem", ticket.CreatedAtUtc.AddMinutes(1));
         context.TicketHistories.AddRange(created, messageAdded);
 
         await context.SaveChangesAsync();

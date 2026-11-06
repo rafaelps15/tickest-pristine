@@ -17,7 +17,7 @@ public sealed class TicketMessageTests
     public void PostMessage_Should_CreateMessageAndRaisePostedEvent()
     {
         // Act
-        TicketMessage message = Ticket.PostMessage(AuthorId, "Conteúdo", authorIsAgent: false, PostedAtUtc).Message;
+        TicketMessage message = Ticket.PostMessage(AuthorId, "Conteúdo", PostedAtUtc).Message;
 
         // Assert
         message.Id.ShouldNotBe(Guid.Empty);
@@ -118,7 +118,7 @@ public sealed class TicketMessageTests
 
     private static TicketMessage CreateMessage()
     {
-        TicketMessage message = Ticket.PostMessage(AuthorId, "Conteúdo", authorIsAgent: false, PostedAtUtc).Message;
+        TicketMessage message = Ticket.PostMessage(AuthorId, "Conteúdo", PostedAtUtc).Message;
 
         message.ClearDomainEvents();
 

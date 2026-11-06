@@ -1,5 +1,5 @@
+using TickestPristine.Application.Users;
 using TickestPristine.Application.Users.GetAttendants;
-using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Pagination;
@@ -115,7 +115,7 @@ public sealed class GetTicketAssigneesQueryHandlerTests(IntegrationTestWebAppFac
             .Returns(true);
         var assignees = new GetTicketAssigneesQueryHandler(DbConnectionFactory);
         var attendants = new GetBacklogAttendantsQueryHandler(DbConnectionFactory, userContext, permissionProvider);
-        var agentLookup = new TicketAgentLookup(context);
+        var agentDirectory = new AgentDirectory(context);
 
         // Act
         Result<PagedResponse<TicketAssigneeResponse>> assigneePage = await assignees.Handle(
@@ -127,7 +127,7 @@ public sealed class GetTicketAssigneesQueryHandlerTests(IntegrationTestWebAppFac
         List<Guid> lookedUp = [];
         foreach (User user in new[] { ana, beto, caio, davi, eva, fabio })
         {
-            if (await agentLookup.IsAgentAsync(user.Id, CancellationToken.None))
+            if (await agentDirectory.IsAgentAsync(user.Id, CancellationToken.None))
             {
                 lookedUp.Add(user.Id);
             }

@@ -96,7 +96,7 @@ internal static class TicketTestData
         Guid? id = null)
     {
         // O chamado só dá o id: os testes de mensagem não precisam dele gravado.
-        TicketMessage message = Create().PostMessage(authorUserId, content, authorIsAgent: false, createdAtUtc).Message
+        TicketMessage message = Create().PostMessage(authorUserId, content, createdAtUtc).Message
             .With(nameof(TicketMessage.TicketId), ticketId);
 
         if (deletedAtUtc is { } deletedAt)
@@ -127,16 +127,16 @@ internal static class TicketTestData
         DateTime? deletedAtUtc = null,
         DateTime? purgedAtUtc = null)
     {
-        TicketAttachment attachment = TicketAttachment.Create(
-            Create(),
+        TicketAttachment attachment = Create().AddAttachment(
             uploadedByUserId,
             fileName,
             "application/pdf",
             fileSizeBytes: 1,
             storageKey,
+            contentMatches: true,
             currentCount: 0,
             currentTotalBytes: 0,
-            uploadedAtUtc).Value;
+            uploadedAtUtc).Value.Attachment;
 
         attachment
             .With(nameof(TicketAttachment.TicketId), ticketId)
@@ -149,7 +149,7 @@ internal static class TicketTestData
 
         if (purgedAtUtc is { } purgedAt)
         {
-            attachment.MarkPurged(purgedAt);
+            attachment.RecordFilePurge(purgedAt);
         }
 
         attachment.ClearDomainEvents();

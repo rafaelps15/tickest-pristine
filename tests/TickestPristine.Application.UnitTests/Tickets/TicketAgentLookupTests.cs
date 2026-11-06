@@ -3,43 +3,12 @@ using TickestPristine.Application.Tickets;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
+using TickestPristine.Application.Users;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
 public sealed class TicketAgentLookupTests : BaseHandlerTest
 {
-    [Fact]
-    public async Task IsAgentAsync_Should_BeTrue_WhenUserIsActiveWithManagePermission()
-    {
-        // Arrange
-        await using TestDbContext context = CreateDbContext();
-        User agent = await SeedUserAsync(context, PermissionCodes.Tickets.Manage);
-
-        // Act
-        bool isAgent = await new TicketAgentLookup(context).IsAgentAsync(agent.Id, CancellationToken.None);
-
-        // Assert
-        isAgent.ShouldBeTrue();
-    }
-
-    [Fact]
-    public async Task IsAgentAsync_Should_BeFalse_WhenUserLacksManagePermissionOrIsInactive()
-    {
-        // Arrange
-        await using TestDbContext context = CreateDbContext();
-        User collaborator = await SeedUserAsync(context, PermissionCodes.Tickets.UpdateOwn);
-        User inactiveAgent = await SeedUserAsync(context, PermissionCodes.Tickets.Manage, isActive: false);
-        var lookup = new TicketAgentLookup(context);
-
-        // Act
-        bool collaboratorIsAgent = await lookup.IsAgentAsync(collaborator.Id, CancellationToken.None);
-        bool inactiveIsAgent = await lookup.IsAgentAsync(inactiveAgent.Id, CancellationToken.None);
-
-        // Assert
-        collaboratorIsAgent.ShouldBeFalse();
-        inactiveIsAgent.ShouldBeFalse();
-    }
-
     [Fact]
     public async Task IsLastMessageFromAgentAsync_Should_FollowLastValidMessage_WhenMessagesExist()
     {
@@ -56,7 +25,7 @@ public sealed class TicketAgentLookupTests : BaseHandlerTest
         await context.SaveChangesAsync();
 
         // Act
-        bool fromAgent = await new TicketAgentLookup(context).IsLastValidMessageFromAgentAsync(ticket, CancellationToken.None);
+        bool fromAgent = await new TicketAgentLookup(context, new AgentDirectory(context)).IsLastValidMessageFromAgentAsync(ticket, CancellationToken.None);
 
         // Assert
         fromAgent.ShouldBeFalse();
@@ -77,7 +46,7 @@ public sealed class TicketAgentLookupTests : BaseHandlerTest
         await context.SaveChangesAsync();
 
         // Act
-        bool fromAgent = await new TicketAgentLookup(context).IsLastValidMessageFromAgentAsync(ticket, CancellationToken.None);
+        bool fromAgent = await new TicketAgentLookup(context, new AgentDirectory(context)).IsLastValidMessageFromAgentAsync(ticket, CancellationToken.None);
 
         // Assert
         fromAgent.ShouldBeTrue();
@@ -94,7 +63,7 @@ public sealed class TicketAgentLookupTests : BaseHandlerTest
         context.Tickets.AddRange(withoutMessages, ownMessage);
         context.TicketMessages.Add(TicketTestData.CreateMessage(ownMessage.Id, agentRequester.Id, "Abri para mim", DefaultUtcNow));
         await context.SaveChangesAsync();
-        var lookup = new TicketAgentLookup(context);
+        var lookup = new TicketAgentLookup(context, new AgentDirectory(context));
 
         // Act
         bool withoutMessagesFromAgent = await lookup.IsLastValidMessageFromAgentAsync(withoutMessages, CancellationToken.None);

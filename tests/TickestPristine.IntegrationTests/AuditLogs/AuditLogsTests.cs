@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using TickestPristine.Application.Roles;
+using TickestPristine.Domain.Departments;
 using TickestPristine.Infrastructure.Database;
 
 namespace TickestPristine.IntegrationTests.AuditLogs;
@@ -150,6 +152,115 @@ public sealed class AuditLogsTests(IntegrationTestWebAppFactory factory) : BaseI
         ReadValue(added.NewValues, "PasswordHash").ShouldBeNull();
         ReadValue(added.NewValues, "SecurityStamp").ShouldBeNull();
     }
+
+    [Fact]
+    public async Task SaveChanges_Should_UseSingleTimestamp_WhenSavingSeveralEntities()
+    {
+        // Arrange
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Department first = NewDepartment($"Department-{Guid.NewGuid():N}");
+        Department second = NewDepartment($"Department-{Guid.NewGuid():N}");
+        context.Departments.AddRange(first, second);
+
+        // Act
+        await context.SaveChangesAsync();
+
+        // Assert
+        string firstId = first.Id.ToString();
+        string secondId = second.Id.ToString();
+        List<DateTime> timestamps = await context.AuditLogs
+            .Where(a => a.EntityId == firstId || a.EntityId == secondId)
+            .Select(a => a.Timestamp)
+            .ToListAsync();
+        timestamps.Count.ShouldBe(2);
+        timestamps.Distinct().ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public void SaveChanges_Should_Audit_WhenSavingSynchronously()
+    {
+        // Arrange
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Department department = NewDepartment($"Department-{Guid.NewGuid():N}");
+        context.Departments.Add(department);
+
+        // Act
+        context.SaveChanges();
+
+        // Assert
+        string departmentId = department.Id.ToString();
+        string action = context.AuditLogs.Where(a => a.EntityId == departmentId).Select(a => a.Action).Single();
+        action.ShouldBe("Added");
+    }
+
+    [Fact]
+    public async Task SaveChanges_Should_DiscardOwnAuditEntries_When_SaveFails()
+    {
+        // Arrange: o segundo departamento repete o nome de um ativo, e o save falha pelo índice único.
+        string takenName = $"Department-{Guid.NewGuid():N}";
+        using (IServiceScope arrangeScope = Services.CreateScope())
+        {
+            ApplicationDbContext arrangeContext = arrangeScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            arrangeContext.Departments.Add(NewDepartment(takenName));
+            await arrangeContext.SaveChangesAsync();
+        }
+
+        using IServiceScope scope = Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Department kept = NewDepartment($"Department-{Guid.NewGuid():N}");
+        Department duplicate = NewDepartment(takenName);
+        context.Departments.AddRange(kept, duplicate);
+        await Should.ThrowAsync<DbUpdateException>(() => context.SaveChangesAsync());
+        context.Entry(duplicate).State = EntityState.Detached;
+
+        // Act
+        await context.SaveChangesAsync();
+
+        // Assert: a tentativa que falhou não deixa registro; a seguinte grava um só, o do departamento que ficou.
+        string keptId = kept.Id.ToString();
+        string duplicateId = duplicate.Id.ToString();
+        List<string> recorded = await context.AuditLogs
+            .Where(a => a.EntityId == keptId || a.EntityId == duplicateId)
+            .Select(a => a.EntityId)
+            .ToListAsync();
+        recorded.ShouldHaveSingleItem().ShouldBe(keptId);
+    }
+
+    [Fact]
+    public async Task AssignRoles_Should_AuditRemovedUserRoleWithOldValues()
+    {
+        // Arrange: o usuário cadastrado nasce Colaborador; a troca para Atendente remove esse vínculo.
+        Guid userId = await RegisterUserAsync(UniqueEmail());
+        Guid removedUserRoleId;
+
+        using (IServiceScope scope = Services.CreateScope())
+        {
+            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            removedUserRoleId = await context.UserRoles
+                .Where(userRole => userRole.UserId == userId)
+                .Select(userRole => userRole.Id)
+                .SingleAsync();
+        }
+
+        await AuthenticateAsAdminAsync();
+
+        // Act
+        (await HttpClient.PutAsJsonAsync($"users/{userId}/roles", new { roleNames = new[] { RoleNames.Agent } }))
+            .EnsureSuccessStatusCode();
+        List<AuditLogDto> history = await GetHistoryAsync("UserRole", removedUserRoleId);
+
+        // Assert
+        AuditLogDto deleted = history[0];
+        deleted.Action.ShouldBe("Deleted");
+        ReadValue(deleted.OldValues, "UserId").ShouldBe(userId.ToString());
+        ReadValue(deleted.OldValues, "RoleName").ShouldBe(RoleNames.Collaborator);
+        deleted.NewValues.ShouldBeNull();
+    }
+
+    private static Department NewDepartment(string name) =>
+        Department.Create(name, "A department created by tests", responsibleUser: null);
 
     private sealed record AuditLogDto(
         Guid Id,

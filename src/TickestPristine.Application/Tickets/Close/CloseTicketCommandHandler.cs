@@ -27,11 +27,6 @@ internal sealed class CloseTicketCommandHandler(
             return Result.Failure(TicketErrors.NotFound(command.TicketId));
         }
 
-        if (!ticket.CanTransitionTo(TicketStatus.Closed))
-        {
-            return Result.Failure(TicketErrors.InvalidStatusTransition(ticket.Status, TicketStatus.Closed));
-        }
-
         Result<TicketHistoryEntry> closing = ticket.Close(userContext.UserId, dateTimeProvider.UtcNow);
 
         if (closing.IsFailure)

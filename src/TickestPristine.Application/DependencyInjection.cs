@@ -1,9 +1,11 @@
 ﻿using System.Globalization;
+using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Behaviors;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Telemetry;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Tickets.GetSla;
+using TickestPristine.Application.Users;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.SharedKernel;
@@ -43,6 +45,7 @@ public static class DependencyInjection
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly, includeInternalTypes: true);
 
+        services.AddScoped<IAgentDirectory, AgentDirectory>();
         services.AddScoped<TicketAgentLookup>();
         services.AddScoped<TicketViewAccess>();
         services.AddScoped<TicketSlaReader>();

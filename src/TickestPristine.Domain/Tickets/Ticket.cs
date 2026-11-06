@@ -3,6 +3,7 @@ using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.SlaCalendars;
 using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketAttachments;
 using TickestPristine.Domain.TicketHistories;
 using TickestPristine.Domain.TicketMessages;
 
@@ -186,39 +187,81 @@ public sealed class Ticket : Entity, IAuditable
 
     /// <summary>
     /// Publica uma mensagem no chamado e devolve a mensagem e a entrada do histórico, que o handler adiciona antes de
-    /// salvar. Leva a última atividade à data da mensagem e, com o chamado ativo, passa a aguardar o solicitante quando
-    /// quem escreve atende a fila e não é o solicitante, ou quem atende nos demais casos.
+    /// salvar. O chamado não muda: a última atividade e quem ele aguarda saem da projeção, depois do commit.
     /// </summary>
-    public (TicketMessage Message, TicketHistoryEntry History) PostMessage(
-        Guid authorUserId,
-        string content,
-        bool authorIsAgent,
-        DateTime utcNow)
+    public TicketMessagePosting PostMessage(Guid authorUserId, string content, DateTime utcNow)
     {
         var message = TicketMessage.Create(Id, authorUserId, content, utcNow);
+        var history = TicketHistoryEntry.Create(Id, authorUserId, TicketHistoryAction.MessageAdded, utcNow);
 
-        RecalculateWaitingOn(authorIsAgent && authorUserId != CreatedByUserId);
-
-        TicketHistoryEntry history = RecordHistory(authorUserId, TicketHistoryAction.MessageAdded, utcNow);
-
-        return (message, history);
+        return new TicketMessagePosting(message, history);
     }
 
     /// <summary>
-    /// Leva a última atividade à data de uma entrada do histórico de anexo, sem nunca diminuí-la.
+    /// Anexa um arquivo ao chamado e devolve o anexo e a entrada do histórico, que o handler adiciona antes de salvar.
+    /// Recusa, nesta ordem e sem mudar nada: o conteúdo que não confere com o tipo declarado, o arquivo fora da política
+    /// (<see cref="TicketAttachmentPolicy.EnsureAccepted"/>) e o chamado que já tem, nos anexos não excluídos, o máximo de
+    /// anexos ou de bytes somados. O chamado não muda: a última atividade sai da projeção, depois do commit.
     /// </summary>
-    public void RecordAttachmentActivity(TicketHistoryEntry entry) => AdvanceLastActivityTo(entry.OccurredAtUtc);
+    public Result<TicketAttachmentUpload> AddAttachment(
+        Guid uploadedByUserId,
+        string fileName,
+        string contentType,
+        long fileSizeBytes,
+        string storageKey,
+        bool contentMatches,
+        int currentCount,
+        long currentTotalBytes,
+        DateTime utcNow)
+    {
+        if (!contentMatches)
+        {
+            return Result.Failure<TicketAttachmentUpload>(TicketAttachmentErrors.ContentMismatch);
+        }
+
+        Result accepted = TicketAttachmentPolicy.EnsureAccepted(fileName, contentType, fileSizeBytes);
+
+        if (accepted.IsFailure)
+        {
+            return Result.Failure<TicketAttachmentUpload>(accepted.Error);
+        }
+
+        if (currentCount >= TicketAttachmentPolicy.MaxAttachmentsPerTicket ||
+            currentTotalBytes + fileSizeBytes > TicketAttachmentPolicy.MaxTotalBytesPerTicket)
+        {
+            return Result.Failure<TicketAttachmentUpload>(TicketAttachmentErrors.TicketLimitReached(
+                TicketAttachmentPolicy.MaxAttachmentsPerTicket,
+                TicketAttachmentPolicy.MaxTotalBytesPerTicket / (1024 * 1024)));
+        }
+
+        var attachment = TicketAttachment.Create(Id, uploadedByUserId, fileName, contentType, fileSizeBytes, storageKey, utcNow);
+        var history = TicketHistoryEntry.Create(
+            Id,
+            uploadedByUserId,
+            TicketHistoryAction.AttachmentAdded,
+            utcNow,
+            newValue: fileName);
+
+        return new TicketAttachmentUpload(attachment, history);
+    }
 
     /// <summary>
-    /// Leva a última atividade à data de uma entrada do histórico de mensagem editada ou excluída, sem nunca
-    /// diminuí-la, e recalcula quem o chamado ativo aguarda: o solicitante quando a última mensagem válida é de quem
-    /// atende, quem atende nos demais casos.
+    /// Se a mensagem do autor conta como resposta de quem atende: ele atende a fila e não é o solicitante.
     /// </summary>
-    public void RecordMessageActivity(TicketHistoryEntry entry, bool lastMessageIsFromAgent)
-    {
-        AdvanceLastActivityTo(entry.OccurredAtUtc);
+    public bool IsAgentReply(Guid authorUserId, bool authorIsAgent) => authorIsAgent && authorUserId != CreatedByUserId;
 
-        RecalculateWaitingOn(lastMessageIsFromAgent);
+    /// <summary>
+    /// Quem o chamado aguarda depois da última mensagem válida, sem mudar o chamado: ninguém (nulo) com o chamado
+    /// inativo; o solicitante quando a mensagem é de quem atende; quem atende nos demais casos.
+    /// </summary>
+    public TicketWaitingOn? WaitingOnAfter(bool lastMessageIsFromAgent)
+    {
+        if (!IsActive)
+        {
+            return null;
+        }
+
+        return lastMessageIsFromAgent ? TicketWaitingOn.Requester : TicketWaitingOn.Agent;
     }
 
     /// <summary>
@@ -228,7 +271,7 @@ public sealed class Ticket : Entity, IAuditable
     /// </summary>
     public Result<TicketHistoryEntry> StartProgress(bool lastMessageIsFromAgent, Guid changedByUserId, DateTime utcNow)
     {
-        Result transition = EnsureActiveTransition(TicketStatus.InProgress);
+        Result transition = EnsureCanChangeStatusTo(TicketStatus.InProgress);
 
         if (transition.IsFailure)
         {
@@ -250,7 +293,7 @@ public sealed class Ticket : Entity, IAuditable
     /// </summary>
     internal Result<TicketHistoryEntry> Resolve(Guid resolvedByUserId, DateTime utcNow)
     {
-        Result transition = EnsureActiveTransition(TicketStatus.Resolved);
+        Result transition = EnsureCanChangeStatusTo(TicketStatus.Resolved);
 
         if (transition.IsFailure)
         {
@@ -287,7 +330,7 @@ public sealed class Ticket : Entity, IAuditable
     /// </summary>
     internal Result<TicketHistoryEntry> Cancel(bool canCancelAny, bool isOwnerWhoCanEdit, Guid canceledByUserId, DateTime utcNow)
     {
-        Result transition = EnsureActiveTransition(TicketStatus.Canceled);
+        Result transition = EnsureCanChangeStatusTo(TicketStatus.Canceled);
 
         if (transition.IsFailure)
         {
@@ -309,7 +352,7 @@ public sealed class Ticket : Entity, IAuditable
     /// <see cref="TicketErrors.InvalidStatusTransition"/> e <see cref="TicketErrors.ResolutionCycleAlreadyOpen"/>. O
     /// <see cref="TicketSlaCycleService"/> as consulta antes de calcular o novo ciclo, que pode lançar exceção.
     /// </summary>
-    internal Result EnsureCanReopen(bool hasOpenResolutionCycle)
+    public Result EnsureCanReopen(bool hasOpenResolutionCycle)
     {
         if (IsActive)
         {
@@ -401,6 +444,22 @@ public sealed class Ticket : Entity, IAuditable
         };
     }
 
+    /// <summary>
+    /// Se o chamado pode ir para <paramref name="status"/>, sem mudar nada: falha com <see cref="TicketErrors.NotActive"/>
+    /// para o chamado inativo e com <see cref="TicketErrors.InvalidStatusTransition"/> quando a transição não é permitida.
+    /// </summary>
+    public Result EnsureCanChangeStatusTo(TicketStatus status)
+    {
+        if (!IsActive)
+        {
+            return Result.Failure(TicketErrors.NotActive(Id));
+        }
+
+        return CanTransitionTo(status)
+            ? Result.Success()
+            : Result.Failure(TicketErrors.InvalidStatusTransition(Status, status));
+    }
+
     public bool IsAssignedTo(Guid userId) => AssignedToUserId == userId;
 
     public bool IsParticipant(Guid userId) => CreatedByUserId == userId || IsAssignedTo(userId);
@@ -454,19 +513,6 @@ public sealed class Ticket : Entity, IAuditable
         status is TicketStatus.Open or TicketStatus.InProgress &&
         (canCancelAny || isOwnerWhoCanEdit && utcNow <= OwnerCancelDeadline(createdAtUtc));
 
-    // A ordem das conferências é a dos handlers: primeiro o chamado ativo, depois a transição.
-    private Result EnsureActiveTransition(TicketStatus status)
-    {
-        if (!IsActive)
-        {
-            return Result.Failure(TicketErrors.NotActive(Id));
-        }
-
-        return CanTransitionTo(status)
-            ? Result.Success()
-            : Result.Failure(TicketErrors.InvalidStatusTransition(Status, status));
-    }
-
     // Chamado depois das conferências: troca o status, dispara o evento e grava o histórico. O chamado que fica inativo
     // deixa de aguardar alguém; quem leva a um status ativo recalcula quem ele aguarda.
     private TicketHistoryEntry ChangeStatus(TicketStatus status, Guid changedByUserId, DateTime utcNow)
@@ -490,19 +536,8 @@ public sealed class Ticket : Entity, IAuditable
             status.ToString());
     }
 
-    // Só o chamado ativo aguarda alguém: o solicitante quando a última mensagem é de quem atende, quem atende nos demais
-    // casos.
-    private void RecalculateWaitingOn(bool lastMessageIsFromAgent)
-    {
-        if (!IsActive)
-        {
-            WaitingOn = null;
-
-            return;
-        }
-
-        WaitingOn = lastMessageIsFromAgent ? TicketWaitingOn.Requester : TicketWaitingOn.Agent;
-    }
+    // A mesma regra que o WaitingOnAfter responde, agora gravada no próprio chamado.
+    private void RecalculateWaitingOn(bool lastMessageIsFromAgent) => WaitingOn = WaitingOnAfter(lastMessageIsFromAgent);
 
     // A última atividade só avança: uma data anterior à atual não a muda.
     private void AdvanceLastActivityTo(DateTime occurredAtUtc)
