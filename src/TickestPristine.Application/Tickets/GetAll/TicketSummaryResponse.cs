@@ -22,7 +22,7 @@ public sealed class TicketSummaryResponse
     public TicketSlaStatus SlaStatus { get; set; }
 
     /// <summary>
-    /// Quem o chamado ativo está aguardando; nulo enquanto o chamado está inativo (spec 029).
+    /// Quem o chamado ativo está aguardando; nulo enquanto o chamado está inativo.
     /// </summary>
     public TicketWaitingOn? WaitingOn { get; set; }
 }

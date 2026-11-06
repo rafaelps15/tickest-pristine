@@ -19,6 +19,7 @@ internal sealed class GetVolume : IEndpoint
         app.MapGet("tickets/stats/volume", async (
             TicketVolumeGrouping? groupBy,
             [FromQuery(Name = "sectorId")] Guid[]? sectorIds,
+            Guid? departmentId,
             TicketPriority? priority,
             Guid? requesterId,
             Guid? assignedToUserId,
@@ -30,6 +31,7 @@ internal sealed class GetVolume : IEndpoint
         {
             var scope = new TicketScopeFilter(
                 sectorIds ?? [],
+                departmentId,
                 priority,
                 requesterId,
                 assignedToUserId,

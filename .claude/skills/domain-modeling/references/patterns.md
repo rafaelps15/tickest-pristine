@@ -376,7 +376,7 @@ public bool IsOverdue(DateTime utcNow) => !IsCompleted && DueDate < utcNow;
 ```
 
 - Usada numa entidade já carregada: pelos métodos dela e pelos command handlers. Nenhuma classe estática responde perguntas sobre uma entidade.
-- Uma consulta não pode chamá-la: o EF Core não traduz métodos da entidade para SQL. A consulta escreve o predicado nela mesma, ou usa um `Expression<Func<T, bool>>` na entidade quando várias consultas o compartilham (`TodoItem.OverdueAt(utcNow)`, `query-slice.md` da `add-feature`).
+- Uma consulta não pode chamá-la: o SQL dela não chama métodos da entidade. A consulta escreve a condição no SQL, ou usa um trecho de SQL com nome quando várias consultas a compartilham (`TodoItemSql.IsOverdue`, `query-slice.md` da `add-feature`); um command que lê pelo EF Core usa um `Expression<Func<T, bool>>` na entidade (`TodoItem.OverdueAt(utcNow)`).
 
 ## 10. Eventos de domínio levam ids
 

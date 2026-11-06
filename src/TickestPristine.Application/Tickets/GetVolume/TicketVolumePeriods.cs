@@ -8,7 +8,7 @@ namespace TickestPristine.Application.Tickets.GetVolume;
 /// Inícios dos períodos do gráfico de volume, do mais antigo para o mais recente, em datas locais de São Paulo: o
 /// próprio dia, a segunda-feira da semana ou o dia 1º do mês. Com período, os pontos vão do período do início ao do fim;
 /// sem fim, ele é hoje; sem início, vale a janela padrão terminando no fim (30 dias, 12 semanas ou 12 meses). Mais de
-/// <see cref="MaxPoints"/> pontos ou início depois do fim são recusados (spec 028, DEC-3, DEC-5 e DEC-6).
+/// <see cref="MaxPoints"/> pontos ou início depois do fim são recusados.
 /// </summary>
 internal static class TicketVolumePeriods
 {

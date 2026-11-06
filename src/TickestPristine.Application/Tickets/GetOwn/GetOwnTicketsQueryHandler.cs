@@ -1,3 +1,4 @@
+using System.Data.Common;
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
@@ -10,90 +11,93 @@ using TickestPristine.SharedKernel;
 namespace TickestPristine.Application.Tickets.GetOwn;
 
 internal sealed class GetOwnTicketsQueryHandler(
-    IApplicationDbContext context,
+    IDbConnectionFactory dbConnectionFactory,
     IUserContext userContext,
     IPermissionProvider permissionProvider,
     IDateTimeProvider dateTimeProvider)
     : IQueryHandler<GetOwnTicketsQuery, PagedResponse<OwnTicketResponse>>
 {
-    private static readonly TicketStatus[] ActiveStatuses = [TicketStatus.Open, TicketStatus.InProgress];
-
-    private static readonly TicketStatus[] FinishedStatuses =
-        [TicketStatus.Resolved, TicketStatus.Closed, TicketStatus.Canceled];
-
-    public async Task<Result<PagedResponse<OwnTicketResponse>>> Handle(GetOwnTicketsQuery query, CancellationToken cancellationToken)
+    public async Task<Result<PagedResponse<OwnTicketResponse>>> Handle(
+        GetOwnTicketsQuery request,
+        CancellationToken cancellationToken)
     {
-        Guid userId = userContext.UserId;
-        DateTime nowUtc = dateTimeProvider.UtcNow;
-
         // Uma consulta de permissão por requisição, e não por item: todos os chamados da lista são de quem consulta.
-        bool canCancelAny = await permissionProvider.HasPermissionAsync(userId, PermissionCodes.Tickets.Cancel, cancellationToken);
-        bool canEditOwn = await permissionProvider.HasPermissionAsync(userId, PermissionCodes.Tickets.UpdateOwn, cancellationToken);
-        string? search = string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim();
-        TicketStatus[]? statuses = query.StatusGroup switch
-        {
-            OwnTicketStatusGroup.Active => ActiveStatuses,
-            OwnTicketStatusGroup.Finished => FinishedStatuses,
-            _ => null
-        };
+        bool canCancelAny = await permissionProvider.HasPermissionAsync(
+            userContext.UserId, PermissionCodes.Tickets.Cancel, cancellationToken);
+        bool canEditOwn = await permissionProvider.HasPermissionAsync(
+            userContext.UserId, PermissionCodes.Tickets.UpdateOwn, cancellationToken);
 
-        // O ciclo vigente da resolução é o cronômetro de maior ciclo: a reabertura cria um novo, enquanto o prazo e a
-        // situação do próprio chamado continuam os do primeiro ciclo.
-        IQueryable<TicketSlaTimer> resolutionTimers = context.TicketSlaTimers.Where(timer => timer.Metric == SlaMetric.Resolution);
+        await using DbConnection connection = await dbConnectionFactory.OpenConnectionAsync(cancellationToken);
 
-        // Título e descrição são citext: a busca não diferencia maiúsculas, como na listagem geral (spec 019).
-        PagedResponse<OwnTicketResponse> tickets = await context.Tickets
-            .Where(t =>
-                t.CreatedByUserId == userId &&
-                (statuses == null || statuses.Contains(t.Status)) &&
-                (search == null || t.Title.Contains(search) || t.Description.Contains(search)))
-            .OrderByDescending(t => t.LastActivityAtUtc)
-            .ThenByDescending(t => t.Id)
-            .Select(t => new OwnTicketResponse
+        // O grupo de status sai do trecho com nome do chamado ativo: finalizado é o que não está ativo (hoje, Resolvido,
+        // Fechado e Cancelado), e sem grupo, ou com um grupo desconhecido, a lista traz todos os status. Título e descrição
+        // são citext: a busca não diferencia maiúsculas, como na listagem geral.
+        const string filter =
+            $"""
+             t.deleted_at_utc IS NULL
+               AND t.created_by_user_id = @UserId
+               AND (@StatusGroup::text IS NULL
+                    OR (@StatusGroup::text = '{nameof(OwnTicketStatusGroup.Active)}' AND {TicketSql.IsActive})
+                    OR (@StatusGroup::text = '{nameof(OwnTicketStatusGroup.Finished)}' AND NOT ({TicketSql.IsActive}))
+                    OR @StatusGroup::text NOT IN ('{nameof(OwnTicketStatusGroup.Active)}', '{nameof(OwnTicketStatusGroup.Finished)}'))
+               AND (@SearchPattern::text IS NULL
+                    OR t.title LIKE @SearchPattern::text
+                    OR t.description LIKE @SearchPattern::text)
+             """;
+
+        // O prazo e a situação do próprio chamado continuam os do primeiro ciclo; o prazo e a situação atuais são os do
+        // ciclo vigente da resolução e, sem cronômetro de resolução (plano legado), os do chamado.
+        const string sql =
+            $"""
+             SELECT COUNT(*)::int
+             FROM public.tickets t
+             WHERE {filter};
+
+             SELECT
+                 t.id AS {nameof(OwnTicketResponse.Id)},
+                 t.title AS {nameof(OwnTicketResponse.Title)},
+                 t.description AS {nameof(OwnTicketResponse.Description)},
+                 t.priority AS {nameof(OwnTicketResponse.Priority)},
+                 t.status AS {nameof(OwnTicketResponse.Status)},
+                 t.created_by_user_id AS {nameof(OwnTicketResponse.OpenedByUserId)},
+                 t.assigned_to_user_id AS {nameof(OwnTicketResponse.AssignedToUserId)},
+                 assignee.first_name || ' ' || assignee.last_name AS {nameof(OwnTicketResponse.AssignedToName)},
+                 t.sector_id AS {nameof(OwnTicketResponse.SectorId)},
+                 s.name AS {nameof(OwnTicketResponse.SectorName)},
+                 t.created_at_utc AS {nameof(OwnTicketResponse.CreatedAtUtc)},
+                 t.due_at_utc AS {nameof(OwnTicketResponse.DueAtUtc)},
+                 {TicketSql.SlaStatus} AS {nameof(OwnTicketResponse.SlaStatus)},
+                 COALESCE(current_timer.due_on_utc, t.due_at_utc) AS {nameof(OwnTicketResponse.CurrentDueAtUtc)},
+                 COALESCE({TicketSql.CurrentResolutionSlaStatus}, {TicketSql.SlaStatus}) AS {nameof(OwnTicketResponse.CurrentSlaStatus)},
+                 t.last_activity_at_utc AS {nameof(OwnTicketResponse.LastActivityAtUtc)},
+                 {TicketSql.CanBeCanceled} AS {nameof(OwnTicketResponse.CanCancel)},
+                 {TicketSql.OwnerCancelDeadline} AS {nameof(OwnTicketResponse.OwnerCancelDeadlineUtc)}
+             FROM public.tickets t
+             LEFT JOIN public.users assignee ON assignee.id = t.assigned_to_user_id
+             LEFT JOIN public.sectors s ON s.id = t.sector_id
+             {TicketSql.CurrentResolutionTimer}
+             WHERE {filter}
+             ORDER BY t.last_activity_at_utc DESC, t.id DESC
+             LIMIT @Limit OFFSET @Offset
+             """;
+
+        string? search = string.IsNullOrWhiteSpace(request.Search) ? null : request.Search.Trim();
+
+        PagedResponse<OwnTicketResponse> tickets = await connection.QueryPagedAsync<OwnTicketResponse>(
+            sql,
+            new
             {
-                Id = t.Id,
-                Title = t.Title,
-                Description = t.Description,
-                Priority = t.Priority,
-                Status = t.Status,
-                OpenedByUserId = t.CreatedByUserId,
-                AssignedToUserId = t.AssignedToUserId,
-                AssignedToName = context.Users
-                    .Where(u => u.Id == t.AssignedToUserId)
-                    .Select(u => u.FirstName + " " + u.LastName)
-                    .FirstOrDefault(),
-                SectorId = t.SectorId,
-                SectorName = context.Sectors
-                    .Where(s => s.Id == t.SectorId)
-                    .Select(s => s.Name)
-                    .FirstOrDefault()!,
-                CreatedAtUtc = t.CreatedAtUtc,
-                DueAtUtc = t.DueAtUtc,
-                // Regras do Ticket, com o mesmo instante da listagem geral, calculadas na projeção final.
-                SlaStatus = Ticket.GetSlaStatus(t.Status, t.DueAtUtc, t.SlaWarningAtUtc, t.ResolvedAtUtc, nowUtc),
-                // A situação do ciclo vigente repete a regra do TicketSlaTimer.GetState, já como TicketSlaStatus (parado
-                // vira NotApplicable), escrita aqui para o banco calculá-la: uma regra por linha, na mesma ordem, e vale a
-                // primeira que se aplica. Sem cronômetro de resolução (plano legado), valem o prazo e a situação do chamado.
-                CurrentDueAtUtc = resolutionTimers
-                    .Where(timer => timer.TicketId == t.Id)
-                    .OrderByDescending(timer => timer.Cycle)
-                    .Select(timer => (DateTime?)timer.DueOnUtc)
-                    .FirstOrDefault() ?? t.DueAtUtc,
-                CurrentSlaStatus = resolutionTimers
-                    .Where(timer => timer.TicketId == t.Id)
-                    .OrderByDescending(timer => timer.Cycle)
-                    .Select(timer => (TicketSlaStatus?)(
-                        (timer.CompletedOnUtc <= timer.DueOnUtc ? TicketSlaStatus.Met : (TicketSlaStatus?)null) ??
-                        (timer.CompletedOnUtc != null ? TicketSlaStatus.Missed : (TicketSlaStatus?)null) ??
-                        (timer.StoppedOnUtc != null ? TicketSlaStatus.NotApplicable : (TicketSlaStatus?)null) ??
-                        (nowUtc >= timer.DueOnUtc ? TicketSlaStatus.Breached : (TicketSlaStatus?)null) ??
-                        (nowUtc >= timer.WarningOnUtc ? TicketSlaStatus.AtRisk : TicketSlaStatus.OnTime)))
-                    .FirstOrDefault() ?? Ticket.GetSlaStatus(t.Status, t.DueAtUtc, t.SlaWarningAtUtc, t.ResolvedAtUtc, nowUtc),
-                LastActivityAtUtc = t.LastActivityAtUtc,
-                CanCancel = Ticket.CanBeCanceled(t.Status, t.CreatedAtUtc, canCancelAny, canEditOwn, nowUtc),
-                OwnerCancelDeadlineUtc = Ticket.OwnerCancelDeadline(t.CreatedAtUtc)
-            })
-            .ToPagedListAsync(query.Paging, cancellationToken);
+                userContext.UserId,
+                StatusGroup = request.StatusGroup?.ToString(),
+                SearchPattern = search is null ? null : SqlLikePattern.Containing(search),
+                NowUtc = dateTimeProvider.UtcNow,
+                CallerId = userContext.UserId,
+                CanCancelAny = canCancelAny,
+                CanEditOwn = canEditOwn,
+                Ticket.OwnerCancelWindowMinutes
+            },
+            request.Paging,
+            cancellationToken);
 
         return tickets;
     }

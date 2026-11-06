@@ -1,40 +1,42 @@
-using Microsoft.EntityFrameworkCore;
+using System.Data.Common;
+using Dapper;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Domain.Tickets;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Tickets.GetSlaSummary;
 
-internal sealed class GetTicketSlaSummaryQueryHandler(IApplicationDbContext context, IDateTimeProvider dateTimeProvider)
+internal sealed class GetTicketSlaSummaryQueryHandler(IDbConnectionFactory dbConnectionFactory, IDateTimeProvider dateTimeProvider)
     : IQueryHandler<GetTicketSlaSummaryQuery, TicketSlaSummaryResponse>
 {
-    public async Task<Result<TicketSlaSummaryResponse>> Handle(GetTicketSlaSummaryQuery query, CancellationToken cancellationToken)
+    public async Task<Result<TicketSlaSummaryResponse>> Handle(
+        GetTicketSlaSummaryQuery request,
+        CancellationToken cancellationToken)
     {
-        DateTime nowUtc = dateTimeProvider.UtcNow;
+        await using DbConnection connection = await dbConnectionFactory.OpenConnectionAsync(cancellationToken);
 
-        IQueryable<Ticket> activeTickets = context.Tickets
-            .WhereActive()
-            .Where(t => query.SectorId == null || t.SectorId == query.SectorId);
+        // Uma consulta só: as quatro contagens e o instante usado nelas saem do mesmo comando, sem um chamado mudar entre
+        // uma e outra. Sem nenhum chamado ativo, as contagens saem zeradas.
+        const string sql =
+            $"""
+             SELECT
+                 COUNT(*)::int AS {nameof(TicketSlaSummaryResponse.ActiveCount)},
+                 COUNT(*) FILTER (WHERE {TicketSql.IsSlaOnTime})::int AS {nameof(TicketSlaSummaryResponse.OnTimeCount)},
+                 COUNT(*) FILTER (WHERE {TicketSql.IsSlaAtRisk})::int AS {nameof(TicketSlaSummaryResponse.AtRiskCount)},
+                 COUNT(*) FILTER (WHERE {TicketSql.IsSlaBreached})::int AS {nameof(TicketSlaSummaryResponse.BreachedCount)},
+                 @NowUtc::timestamptz AS {nameof(TicketSlaSummaryResponse.ServerNowUtc)}
+             FROM public.tickets t
+             WHERE t.deleted_at_utc IS NULL
+               AND {TicketSql.IsActive}
+               AND (@SectorId::uuid IS NULL OR t.sector_id = @SectorId::uuid)
+             """;
 
-        IQueryable<Ticket> onTimeTickets = activeTickets.WhereSlaStatus(TicketSlaStatus.OnTime, nowUtc);
-        IQueryable<Ticket> atRiskTickets = activeTickets.WhereSlaStatus(TicketSlaStatus.AtRisk, nowUtc);
-        IQueryable<Ticket> breachedTickets = activeTickets.WhereSlaStatus(TicketSlaStatus.Breached, nowUtc);
+        TicketSlaSummaryResponse summary = await connection.QuerySingleAsync<TicketSlaSummaryResponse>(
+            new CommandDefinition(
+                sql,
+                new { request.SectorId, NowUtc = dateTimeProvider.UtcNow },
+                cancellationToken: cancellationToken));
 
-        // Uma consulta só: as quatro contagens saem do mesmo instante do banco, sem um chamado mudar entre uma e outra.
-        // Sem nenhum chamado ativo não há grupo, e o resumo sai zerado.
-        TicketSlaSummaryResponse? summary = await activeTickets
-            .GroupBy(t => 1)
-            .Select(g => new TicketSlaSummaryResponse
-            {
-                ActiveCount = g.Count(),
-                OnTimeCount = onTimeTickets.Count(),
-                AtRiskCount = atRiskTickets.Count(),
-                BreachedCount = breachedTickets.Count(),
-                ServerNowUtc = nowUtc
-            })
-            .SingleOrDefaultAsync(cancellationToken);
-
-        return summary ?? new TicketSlaSummaryResponse { ServerNowUtc = nowUtc };
+        return summary;
     }
 }

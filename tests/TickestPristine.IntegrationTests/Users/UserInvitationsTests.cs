@@ -396,6 +396,52 @@ public sealed partial class UserInvitationsTests(IntegrationTestWebAppFactory fa
     }
 
     [Fact]
+    public async Task Situation_Should_AgreeAcrossListDetailAndStatusCounts_WhenAccountsAreInEveryState()
+    {
+        // Arrange: os quatro e-mails têm o mesmo marcador, para a listagem encontrar só eles; as contagens são da base
+        // toda, então valem as diferenças de antes para depois
+        string marker = Guid.NewGuid().ToString("N")[..12];
+        await AuthenticateAsAdminAsync();
+        UserStatusCountsDto before = (await HttpClient.GetFromJsonAsync<UserStatusCountsDto>("users/stats/status"))!;
+
+        Guid activeId = await RegisterUserAsync($"ativo.{marker}@example.com");
+        (Guid validInvitationId, _) = await RegisterPendingUserAsync($"pendente.{marker}@example.com");
+        (Guid expiredInvitationId, _) = await RegisterPendingUserAsync($"vencido.{marker}@example.com");
+        await ExecuteAsync(context => context.UserInvitations
+            .Where(i => i.UserId == expiredInvitationId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(i => i.ExpiresAtUtc, DateTime.UtcNow.AddHours(-1))));
+        (Guid deactivatedId, _) = await RegisterPendingUserAsync($"desativado.{marker}@example.com");
+        (await HttpClient.PutAsync($"users/{deactivatedId}/deactivate", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        var expected = new Dictionary<Guid, bool>
+        {
+            [activeId] = false,
+            [validInvitationId] = true,
+            [expiredInvitationId] = true,
+            [deactivatedId] = false
+        };
+
+        // Act
+        PagedUsersDto? page = await HttpClient.GetFromJsonAsync<PagedUsersDto>($"users?search={marker}");
+        Dictionary<Guid, bool> details = [];
+        foreach (Guid userId in expected.Keys)
+        {
+            UserPendingDto? user = await HttpClient.GetFromJsonAsync<UserPendingDto>($"users/{userId}");
+            details[userId] = user!.PendingActivation;
+        }
+
+        UserStatusCountsDto after = (await HttpClient.GetFromJsonAsync<UserStatusCountsDto>("users/stats/status"))!;
+
+        // Assert
+        page!.Items.ToDictionary(user => user.Id, user => user.PendingActivation).ShouldBe(expected, ignoreOrder: true);
+        details.ShouldBe(expected, ignoreOrder: true);
+        (after.ActiveCount - before.ActiveCount).ShouldBe(1);
+        (after.PendingActivationCount - before.PendingActivationCount).ShouldBe(2);
+        (after.InactiveCount - before.InactiveCount).ShouldBe(1);
+        (after.TotalCount - before.TotalCount).ShouldBe(4);
+    }
+
+    [Fact]
     public async Task Invitations_Should_BeAuditedOnIssueRevocationAndUse_WithoutTokenHash()
     {
         // Arrange
@@ -470,6 +516,8 @@ public sealed partial class UserInvitationsTests(IntegrationTestWebAppFactory fa
     private sealed record UserPendingDto(Guid Id, bool PendingActivation, DateTime? InvitationExpiresAtUtc);
 
     private sealed record PagedUsersDto(List<UserPendingDto> Items, int TotalCount);
+
+    private sealed record UserStatusCountsDto(int TotalCount, int ActiveCount, int InactiveCount, int PendingActivationCount);
 
     [GeneratedRegex("^[0-9A-F]{64}$")]
     private static partial Regex Sha256HexRegex();

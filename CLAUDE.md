@@ -53,8 +53,8 @@ A Web.Api referencia diretamente só a Infrastructure e chega à Application de 
 
 - **SharedKernel** — peças básicas de DDD, sem dependência de nenhum outro projeto da solução: `Entity` (classe base que guarda os eventos de domínio disparados), `Result`/`Result<T>` (a convenção de tratamento de erro — veja abaixo), `Error`/`ErrorType`, `IDomainEvent`, `IDateTimeProvider`.
 - **Domain** — entidades, eventos de domínio e uma classe estática `*Errors` por agregado (ex.: `TodoItemErrors`, `UserErrors`). Sem dependência de frameworks. Organizado por pasta de agregado (`Todos/`, `Users/`), e não por tipo técnico.
-- **Application** — casos de uso, um por pasta de slice vertical (ex.: `Todos/Create/`, `Todos/Complete/`), mais `Abstractions/` com as interfaces transversais (`Messaging`, `Behaviors`, `Data`, `Authentication`). Sem MediatR — commands e queries são tratados por interfaces próprias `ICommandHandler`/`IQueryHandler`, resolvidas pela DI com varredura de assembly do `Scrutor`.
-- **Infrastructure** — EF Core (`ApplicationDbContext`, PostgreSQL, nomes em snake_case, migrations), autenticação JWT com rotação de refresh tokens, autorização por permissões, `HybridCache`, Serilog e despacho dos eventos de domínio.
+- **Application** — casos de uso, um por pasta de slice vertical (ex.: `Todos/Create/`, `Todos/Complete/`), mais `Abstractions/` com as interfaces transversais (`Messaging`, `Behaviors`, `Data`, `Authentication`). Sem MediatR — commands e queries são tratados por interfaces próprias `ICommandHandler`/`IQueryHandler`, resolvidas pela DI com varredura de assembly do `Scrutor`. Os commands acessam os dados pelo `IApplicationDbContext`; as queries leem com Dapper pela `IDbConnectionFactory`, com o SQL no handler.
+- **Infrastructure** — EF Core nos commands (`ApplicationDbContext`, PostgreSQL, nomes em snake_case, migrations), a `IDbConnectionFactory` das consultas em Dapper, com os leitores de tipo registrados uma vez, autenticação JWT com rotação de refresh tokens, autorização por permissões, `HybridCache`, Serilog e despacho dos eventos de domínio.
 - **Web.Api** — endpoints de minimal API (uma classe por endpoint implementando `IEndpoint`, registrada automaticamente pela varredura de assembly em `EndpointExtensions`), rate limiting, OpenTelemetry, tratamento global de exceções → `ProblemDetails` e Swagger/OpenAPI com JWT.
 
 ### Organização dos slices verticais
@@ -64,9 +64,11 @@ Cada caso de uso fica em `Application/{Aggregate}/{UseCase}/` como um slice inde
 - `CreateTodoCommandHandler.cs` — `internal sealed class ... : ICommandHandler<TCommand, TResponse>`. Dependências injetadas pelo construtor primário (`IApplicationDbContext`, `IUserContext`, `IDateTimeProvider` etc.). Retorna `Result<T>` e nunca lança exceção para falhas esperadas.
 - `CreateTodoCommandValidator.cs` — `AbstractValidator<TCommand>` do FluentValidation, carregado automaticamente pelo `AddValidatorsFromAssembly`.
 
+Um slice de query tem a query, o handler e o DTO de resposta, sem validator; o handler lê com Dapper pela `IDbConnectionFactory`, nos modelos da skill `add-feature` (`references/query-slice.md` e `references/pagination.md`).
+
 O endpoint correspondente fica em `Web.Api/Endpoints/{Aggregate}/{Verb}.cs`, como uma `internal sealed class : IEndpoint` com um DTO `Request` aninhado. Ele mapeia a requisição para o command/query, chama o handler e converte o `Result` em HTTP com `result.Match(Results.Ok, CustomResults.Problem)`.
 
-Os testes seguem a mesma estrutura: `tests/TickestPristine.Application.UnitTests/{Aggregate}/{UseCase}HandlerTests.cs` para os testes unitários dos handlers, mais os testes de validator, e `tests/TickestPristine.IntegrationTests/{Aggregate}/{Aggregate}Tests.cs` para os testes de ponta a ponta por HTTP contra uma instância de PostgreSQL do Testcontainers.
+Os testes seguem a mesma estrutura: `tests/TickestPristine.Application.UnitTests/{Aggregate}/{UseCase}HandlerTests.cs` para os testes unitários dos command handlers, mais os testes de validator; `tests/TickestPristine.IntegrationTests/{Aggregate}/{UseCase}QueryHandlerTests.cs` para os de query handler, contra o banco; e `tests/TickestPristine.IntegrationTests/{Aggregate}/{Aggregate}Tests.cs` para os testes de ponta a ponta por HTTP contra uma instância de PostgreSQL do Testcontainers.
 
 ### Comportamentos transversais com decorators
 
@@ -92,7 +94,7 @@ As entidades herdam de `Entity` e guardam as próprias regras (domínio rico): o
 
 ### Stack
 
-.NET 10 (minimal APIs), EF Core 10 com Npgsql e PostgreSQL 17, FluentValidation, Scrutor, Dapper (só em consultas de relatório), JWT, `HybridCache` (Redis opcional), Serilog + Seq, OpenTelemetry. Testes: xUnit, NSubstitute, Shouldly, Testcontainers e NetArchTest. Versões dos pacotes em `Directory.Packages.props`.
+.NET 10 (minimal APIs), EF Core 10 com Npgsql e PostgreSQL 17, FluentValidation, Scrutor, Dapper nas consultas (o EF Core fica nos commands e nas migrations), JWT, `HybridCache` (Redis opcional), Serilog + Seq, OpenTelemetry. Testes: xUnit, NSubstitute, Shouldly, Testcontainers e NetArchTest. Versões dos pacotes em `Directory.Packages.props`.
 
 ### Mapa do repositório
 
@@ -100,8 +102,9 @@ As entidades herdam de `Entity` e guardam as próprias regras (domínio rico): o
 |---|---|
 | Slices de caso de uso | `src/TickestPristine.Application/{Aggregate}/{UseCase}/` |
 | Abstrações transversais | `src/TickestPristine.Application/Abstractions/` (`Authentication`, `Authorization`, `Behaviors`, `Data`, `Messaging`, `Pagination`, `Storage`) |
-| Guards de autorização (legado, em migração) | `src/TickestPristine.Application/Authorization/` (`TicketAccessGuard`, `PrivilegeEscalationGuard`, `AdministratorGuard`); código novo usa a forma híbrida da skill `add-feature` (`references/authorization.md`) |
+| Guards de autorização (legado, em migração) | `src/TickestPristine.Application/Authorization/` (`PrivilegeEscalationGuard`, `AdministratorGuard`); código novo usa a forma híbrida da skill `add-feature` (`references/authorization.md`) |
 | Catálogo de permissões | `src/TickestPristine.Application/Permissions/` (`PermissionCodes`, `PermissionCatalog`) |
+| Trechos de SQL com nome | `src/TickestPristine.Application/{Aggregate}/{Aggregate}Sql.cs` (`TicketSql`, `UserSql`), só constantes, com o teste de concordância em `tests/TickestPristine.IntegrationTests/{Aggregate}/` |
 | Entidades, erros e eventos | `src/TickestPristine.Domain/{Aggregate}/` |
 | Configurações EF | `src/TickestPristine.Infrastructure/{Aggregate}/{Entity}Configuration.cs` |
 | Migrations e seed | `src/TickestPristine.Infrastructure/Database/Migrations/` e `Database/Seeding/` |
@@ -119,9 +122,9 @@ dotnet ef migrations add Nome_Da_Migration --project src/TickestPristine.Infrast
 Antes de criar algo, siga o slice real mais parecido (caminhos a partir de `src/TickestPristine.Application/` e `tests/`) na estrutura — pastas, nomes, endpoint, validator, paginação, testes. Os slices de `Departments/` e `Sectors/` e os commands de `Tickets/` que alteram o próprio chamado (criar, atualizar, atribuir, remover responsável, fechar, reabrir e excluir) já estão no domínio rico; os demais ainda são do modelo anêmico (ver [Em migração](#em-migração)), e neles o modelo da entidade, da mudança de estado e da autorização por recurso vem das skills (`add-entity/references/rich-entity.md`, `domain-modeling`, `add-feature/references/authorization.md`), e não do slice.
 
 - Command com retorno: `Tickets/Create/` · sem retorno, com permissão na rota: `Tickets/Close/` · com conferência por recurso (hoje por guard estático, legado): `Tickets/Reopen/`
-- Query com conferência por recurso (guard estático, legado): `Tickets/GetById/` · dados do próprio usuário, paginada por offset: `Tickets/GetOwn/` · paginada por cursor: `TicketMessages/GetAll/` · relatório em SQL (Dapper): `Tickets/GetVolume/`
+- Query com conferência por recurso (peça injetada `TicketViewAccess`): `Tickets/GetById/` · dados do próprio usuário, paginada por offset: `Tickets/GetOwn/` · paginada por cursor: `TicketMessages/GetAll/` · com coleção filha (multi-mapping): `Departments/GetAll/` · relatório: `Tickets/GetVolume/`
 - Entidade e configuração EF: `Domain/Departments/Department.cs` e `Infrastructure/Departments/DepartmentConfiguration.cs`
-- Testes: `Tickets/CloseTicketCommandHandlerTests.cs`, `Tickets/TicketValidatorsTests.cs` (unitários) e `Tickets/TicketsTests.cs` (integração)
+- Testes: `Tickets/CloseTicketCommandHandlerTests.cs`, `Tickets/TicketValidatorsTests.cs` (unitários), `Tickets/GetTicketByIdQueryHandlerTests.cs` (query handler, na integração) e `Tickets/TicketsTests.cs` (integração por HTTP)
 
 ### Desvios em relação aos exemplos das skills
 
@@ -130,10 +133,22 @@ Antes de criar algo, siga o slice real mais parecido (caminhos a partir de `src/
   1. permissão na rota com `.HasPermission(Permissions.X)`, que recebe uma única permissão;
   2. `.RequireAuthorization()` na rota e, para regras por recurso (dono, participante, privilégio), a forma híbrida: a regra sobre o próprio estado no método da entidade, as permissões efetivas pelo `IPermissionProvider` e a conferência que precisa de consulta num método privado do handler (os guards estáticos atuais estão em [Em migração](#em-migração));
   3. filtro por `IUserContext.UserId` só nas consultas de dados do próprio usuário (`Tickets/GetOwn`, `Tickets/GetOwnSummary`).
-  Permissão nova entra em `PermissionCodes` e em `PermissionCatalog`.
+  Permissão nova entra em `PermissionCodes` e em `PermissionCatalog`. Exceção à permissão fixa na rota: `Users/GetAttendants` confere `users:read` no handler, pelo `IPermissionProvider`, para o 403 levar a mensagem de negócio (`UserErrors.ReadForbidden`); a rota exige só usuário ativo.
 - **Cache:** nenhuma query da Application usa cache; o único uso de `HybridCache` é o `PermissionProvider` (Infrastructure), invalidado com `IPermissionProvider.InvalidateAsync` depois do commit. O padrão de cache dos exemplos de Todo não se aplica aqui sem uma decisão explícita.
 - **Histórico de chamados:** todo command que altera um chamado, uma mensagem ou um anexo grava um `TicketHistory` no mesmo `SaveChangesAsync`; no modelo rico, o método do agregado cria a entrada e o handler a adiciona (o `Ticket` cria as do chamado, inclusive a da mensagem publicada pelo `PostMessage`; o `TicketMessage`, as da edição e da exclusão; o `TicketAttachment`, as do envio e da exclusão).
-- **Exclusão lógica** (`DeletedAtUtc` + filtro global) em `Ticket`, `TicketMessage` e `TicketAttachment`.
+- **Exclusão lógica** (`DeletedAtUtc` + filtro global) em `Ticket`, `TicketMessage` e `TicketAttachment`; nas consultas em SQL, o filtro é `deleted_at_utc IS NULL`, escrito em cada SQL que lê `tickets`, `ticket_messages` ou `ticket_attachments`.
+- **Consultas em Dapper:**
+  - os modelos das skills abrem a conexão e chamam o Dapper sem o token; aqui o handler repassa o `CancellationToken` ao `OpenConnectionAsync` (a `IDbConnectionFactory` do projeto o recebe) e ao Dapper pelo `CommandDefinition`;
+  - as tabelas levam o esquema (`public.tickets`);
+  - igualdade com coluna `citext` leva o cast no parâmetro (`email = @Email::citext`), e a busca usa `LIKE` com o padrão de `Abstractions/Data/SqlLikePattern` (o termo escapado, como o EF montava);
+  - o plano de SLA (jsonb) é lido pelo `TicketSlaPlanTypeHandler`, registrado com a `IDbConnectionFactory`, no mesmo formato da configuração do EF;
+  - as regras que se repetem entre consultas (chamado ativo, situação do SLA, cancelamento e prazo do dono, conta pendente, conta utilizável, quem atende) e o recorte comum à listagem e às estatísticas (`TicketSql.MatchesScope`, com os parâmetros no objeto anônimo de cada handler) ficam em `TicketSql` e `UserSql`; os trechos do chamado espelham as regras do `Ticket` (`GetSlaStatus`, `CanBeCanceled`, `OwnerCancelDeadline`), com teste de concordância;
+  - o SQL preenche o próprio DTO de resposta, sem classe intermediária; o que não sai do SQL entra no DTO depois da leitura, como no `Departments/GetAll`: o bloco `sla` do detalhe (`TicketSlaReader`, que segue o calendário útil), as roles da página de usuários, as permissões do usuário atual, a descrição do histórico (montada no multi-mapping da página, `QueryCursorPagedAsync<TFirst, TSecond, TResult>`, com os nomes lidos na própria consulta da página) e o conteúdo do anexo baixado;
+  - a query de resumo (uma linha de contagens) lê com `QuerySingleAsync` direto no DTO, porque a contagem sempre devolve uma linha; a resposta aninhada do painel (`Tickets/GetOverview`) sai por multi-mapping;
+  - a ordenação escolhida pelo usuário (`Tickets/GetAll`, `Users/GetAll`) é uma constante de SQL completa por ordenação, escolhida pela ordem pedida, cada uma acompanhada do seu índice;
+  - as conferências que não usam a conexão (a validação da entrada, porque query não tem validator, e as permissões pelo `IPermissionProvider`) vêm antes de abrir a conexão;
+  - as consultas que usam regras do cronômetro de SLA leem os `TicketSlaTimer` pelo Dapper, com as colunas de `TicketSql.SlaTimerColumns`.
+- **Testes de query handler:** ficam na integração, sobre o `BaseQueryHandlerTest`: cada teste ganha um banco próprio, copiado de um modelo migrado e vazio, e grava o cenário sem as chaves estrangeiras (`session_replication_role = replica` na sessão do arranjo), como no banco em memória dos testes unitários de antes. Os testes de handler sem banco (`Permissions/GetAll`, `TicketAttachments/GetPolicy` e os caminhos de validação de `Tickets/GetOverview` e `Tickets/GetVolume`) continuam unitários.
 - **Textos em pt-BR:** mensagens de `{Entity}Errors`, `.WithMessage(...)` dos validators e textos escritos à mão nos `ProblemDetails` (`GlobalExceptionHandler`, `CustomResults`). Os nomes exibidos das propriedades validadas ficam em `Abstractions/Behaviors/ValidationDisplayNames.cs`.
 - **Testes de integração:** o cadastro de usuários exige `users:create`, então os testes cadastram pelo administrador (`BaseIntegrationTest.RegisterUserAsync` / `PostRegisterAsAdminAsync`).
 - **Colunas `citext` com limite:** o nome de departamento e de setor, o título e a descrição do chamado e o nome, o sobrenome e o e-mail do usuário são `citext` (busca e unicidade sem diferenciar maiúsculas), e o `citext` não guarda tamanho; o limite vale no banco pela check constraint da configuração (`ck_departments_name_length`, `ck_sectors_name_length`, `ck_tickets_title_length`, `ck_tickets_description_length`, que também exige o mínimo de 10 caracteres, e `ck_users_*_length`). A recusa do banco responde 400 "Texto fora do tamanho permitido" pelo `GlobalExceptionHandler`.
@@ -186,7 +201,7 @@ Código que ainda segue o modelo anêmico. Ele continua valendo e funcionando at
 
 - **Entidades com `{ get; set; }`:** todas as do Domain, exceto as do agregado de chamados, `Department` e `Sector` (`User`, `UserCredential`, `UserInvitation`, `UserRole`, `RefreshToken`, `Role`, `Permission`, `RolePermission`, `SlaCalendar`, `SlaCalendarHoliday`, `AuditLogEntry`).
 - **Regras em classes estáticas da Application:** `Users/UserCodes.cs`.
-- **Guards estáticos de autorização:** `Authorization/TicketAccessGuard.cs`, `Authorization/PrivilegeEscalationGuard.cs` e `Authorization/AdministratorGuard.cs`.
+- **Guards estáticos de autorização:** `Authorization/PrivilegeEscalationGuard.cs` e `Authorization/AdministratorGuard.cs`.
 - **Eventos disparados pelos handlers** (`entity.Raise(...)` na Application) e propriedades atribuídas pelos handlers.
 - **Seeders** em `src/TickestPristine.Infrastructure/Database/Seeding/` (`DatabaseSeeder`, `AdminUserSeeder`, `DefaultOrganizationSeeder`, `SampleDataSeeder`), que montam as entidades pelos setters, exceto `Department` e `Sector`, já criados pelo `Create`, e o `Ticket` do `SampleDataSeeder`, com o histórico e os cronômetros, montados pelos métodos do `Ticket` e pelo `TicketSlaCycleService`; a estratégia de seed para o modelo rico é de uma spec própria.
 

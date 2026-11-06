@@ -1,61 +1,66 @@
+using System.Data.Common;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Pagination;
+using TickestPristine.Application.Users;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Tickets.GetAssignees;
 
 /// <summary>
-/// Lista os responsáveis elegíveis pela mesma regra da atribuição (<see cref="TicketAssigneeEligibility"/>), para a
-/// lista e a atribuição nunca discordarem. O endpoint exige <c>tickets:manage</c>.
+/// Lista os responsáveis elegíveis pela mesma regra da atribuição (<see cref="UserSql.IsTicketAgent"/>), para a lista e
+/// a atribuição nunca discordarem. O endpoint exige <c>tickets:manage</c>.
 /// </summary>
-internal sealed class GetTicketAssigneesQueryHandler(IApplicationDbContext context)
+internal sealed class GetTicketAssigneesQueryHandler(IDbConnectionFactory dbConnectionFactory)
     : IQueryHandler<GetTicketAssigneesQuery, PagedResponse<TicketAssigneeResponse>>
 {
     // Palavras do termo de busca que entram no filtro; as demais são ignoradas, como na busca de atendentes.
     private const int SearchTermMaxWords = 5;
 
     public async Task<Result<PagedResponse<TicketAssigneeResponse>>> Handle(
-        GetTicketAssigneesQuery query,
+        GetTicketAssigneesQuery request,
         CancellationToken cancellationToken)
     {
-        // O setor é opcional: a junção à esquerda mantém quem não tem setor, e aí o nome vem nulo do banco (o "!" só
-        // existe para o compilador; operador "?." não é permitido em expressões do EF).
-        var assignees =
-            from user in context.Users.WhereEligibleAssignee(context)
-            join sector in context.Sectors on user.SectorId equals (Guid?)sector.Id into userSectors
-            from sector in userSectors.DefaultIfEmpty()
-            select new { User = user, SectorName = (string?)sector!.Name };
+        await using DbConnection connection = await dbConnectionFactory.OpenConnectionAsync(cancellationToken);
 
-        if (query.SectorId is Guid sectorId)
-        {
-            assignees = assignees.Where(x => x.User.SectorId == sectorId);
-        }
+        // Cada palavra precisa estar no nome ou no sobrenome. As colunas são citext, então o LIKE não diferencia
+        // maiúsculas, e cada palavra vai como padrão escapado (%, _ e \ contam como texto).
+        const string filter =
+            $"""
+             {UserSql.IsTicketAgent}
+               AND (@SectorId::uuid IS NULL OR u.sector_id = @SectorId::uuid)
+               AND NOT EXISTS (
+                   SELECT 1
+                   FROM unnest(@SearchPatterns::text[]) AS w(pattern)
+                   WHERE NOT (u.first_name LIKE w.pattern OR u.last_name LIKE w.pattern))
+             """;
 
-        // Cada palavra precisa estar no nome ou no sobrenome. As colunas são citext, então o Contains não diferencia
-        // maiúsculas, e o termo vai como parâmetro (%, _ e \ contam como texto).
-        IEnumerable<string> words = (query.Search ?? string.Empty)
-            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-            .Take(SearchTermMaxWords);
+        // O setor é opcional: a junção à esquerda mantém quem não tem setor, e aí o nome vem nulo.
+        const string sql =
+            $"""
+             SELECT COUNT(*)::int
+             FROM public.users u
+             LEFT JOIN public.sectors s ON s.id = u.sector_id
+             WHERE {filter};
 
-        foreach (string word in words)
-        {
-            assignees = assignees.Where(x => x.User.FirstName.Contains(word) || x.User.LastName.Contains(word));
-        }
+             SELECT
+                 u.id AS {nameof(TicketAssigneeResponse.Id)},
+                 u.first_name || ' ' || u.last_name AS {nameof(TicketAssigneeResponse.FullName)},
+                 u.sector_id AS {nameof(TicketAssigneeResponse.SectorId)},
+                 s.name AS {nameof(TicketAssigneeResponse.SectorName)}
+             FROM public.users u
+             LEFT JOIN public.sectors s ON s.id = u.sector_id
+             WHERE {filter}
+             ORDER BY u.first_name, u.last_name, u.id
+             LIMIT @Limit OFFSET @Offset
+             """;
 
-        PagedResponse<TicketAssigneeResponse> page = await assignees
-            .OrderBy(x => x.User.FirstName)
-            .ThenBy(x => x.User.LastName)
-            .ThenBy(x => x.User.Id)
-            .Select(x => new TicketAssigneeResponse
-            {
-                Id = x.User.Id,
-                FullName = x.User.FirstName + " " + x.User.LastName,
-                SectorId = x.User.SectorId,
-                SectorName = x.SectorName
-            })
-            .ToPagedListAsync(query.Paging, cancellationToken);
+        PagedResponse<TicketAssigneeResponse> assignees = await connection.QueryPagedAsync<TicketAssigneeResponse>(
+            sql,
+            new { request.SectorId, SearchPatterns = SqlLikePattern.ForWords(request.Search, SearchTermMaxWords) },
+            request.Paging,
+            cancellationToken);
 
-        return page;
+        return assignees;
     }
 }

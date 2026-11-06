@@ -1,8 +1,8 @@
 namespace TickestPristine.Application.Tickets.GetOverview;
 
 /// <summary>
-/// Cada contador é igual ao <c>totalCount</c> de <c>GET tickets</c> com o mesmo recorte e o filtro correspondente
-/// (spec 026, REQ-3). <see cref="ServerNowUtc"/> é o instante usado para a situação de SLA.
+/// Cada contador é igual ao <c>totalCount</c> de <c>GET tickets</c> com o mesmo recorte e o filtro correspondente.
+/// <see cref="ServerNowUtc"/> é o instante usado para a situação de SLA.
 /// </summary>
 public sealed class TicketOverviewResponse
 {
@@ -42,7 +42,7 @@ public sealed class TicketOverviewSlaResponse
 
 /// <summary>
 /// Pontos de atenção: atrasados (a situação de SLA "atrasado"), críticos (Urgentes ainda ativos), ativos sem
-/// responsável e ativos aguardando o solicitante ou quem atende (spec 029).
+/// responsável e ativos aguardando o solicitante ou quem atende.
 /// </summary>
 public sealed class TicketOverviewAttentionResponse
 {

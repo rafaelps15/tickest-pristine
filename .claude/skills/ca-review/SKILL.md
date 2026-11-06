@@ -18,7 +18,7 @@ Revise o escopo informado (padrão: `git diff` + arquivos não rastreados) contr
 
 ### Limites entre camadas (violações são bloqueantes)
 - O Domain referencia só o `SharedKernel` — sem EF Core, sem tipos de Application/Infrastructure/Web.Api.
-- A Application referencia só Domain + SharedKernel; acesso a dados exclusivamente pelo `IApplicationDbContext`; nenhum `using Infrastructure.*` na Application.
+- A Application referencia só Domain + SharedKernel; acesso a dados pelo `IApplicationDbContext` nos commands e pela `IDbConnectionFactory` (Dapper) nas queries; nenhum `using Infrastructure.*` na Application.
 - Os detalhes de persistência (chaves, conversões, relacionamentos, mapeamento por campo) ficam nas classes `IEntityTypeConfiguration<>` da Infrastructure, não nas entidades.
 - Os endpoints da Web.Api não têm lógica de negócio — só o mapeamento requisição→command e o match do resultado.
 
@@ -30,7 +30,7 @@ Revise o escopo informado (padrão: `git diff` + arquivos não rastreados) contr
 - Nenhum handler atribui as propriedades de uma entidade nem chama `Raise` por ela (bloqueante para código novo). O contexto preenche `CreatedOnUtc` / `ModifiedOnUtc` / `DeletedOnUtc`.
 - Registros filho, de histórico ou de auditoria são criados pelo método do agregado e adicionados pelo handler antes do único `SaveChangesAsync` — nunca num handler de evento de domínio, nunca montados por uma classe estática.
 - Nenhuma classe estática, `*Service`, `*Helper`, `*Manager` ou `*Clock` na Application muda ou inspeciona o estado de uma entidade: o comportamento vira membro da entidade (bloqueante para código novo). Trabalho técnico (hash, arquivos, bytes, ZIP) é uma interface em `Application/Abstractions/` com implementação `internal sealed` na Infrastructure.
-- As queries nunca chamam um método da entidade dentro de `Where` ou `Select`; usam um predicado escrito na consulta ou um `Expression<Func<T, bool>>`.
+- As queries leem com Dapper, nos modelos da `query-slice.md`, e nunca chamam um método da entidade; a regra fica no SQL ou num trecho de SQL com nome, com teste de concordância.
 - Objetos de valor herdam `ValueObject` e são criados por `Create(...)` devolvendo `Result<T>`.
 - Eventos de domínio são `sealed record` com ids (mais o valor anterior numa alteração), sem `OccurredOnUtc`. Handlers de evento: um por reação, `{Action}On{Event}DomainEventHandler`, numa pasta com o nome do evento.
 
@@ -38,7 +38,7 @@ Revise o escopo informado (padrão: `git diff` + arquivos não rastreados) contr
 - Uma pasta por caso de uso em `src/Application/{Feature}/{UseCase}/`; o endpoint espelha em `src/Web.Api/Endpoints/{Feature}/{UseCase}.cs`.
 - Nomes: `{Verb}{Entity}Command` / `Get{X}Query` / `...Handler` / `...Validator` / `{X}Response`.
 - Handlers são `internal sealed` com construtor primário, implementando os `ICommandHandler<>`/`IQueryHandler<>` próprios — sem MediatR, sem registro manual na DI para handlers/validators/endpoints.
-- Os DTOs de resposta são por slice; as queries projetam com `.Select(...)` e nunca devolvem entidades de domínio.
+- Os DTOs de resposta são por slice; as queries projetam pelos aliases do SQL e nunca devolvem entidades de domínio.
 - Uma entidade que o `Create` referencia é carregada pelo handler e passada a ele, com `NotFound` quando falta; uma pergunta sim ou não é um `AnyAsync` direto no `if`; nenhuma classe estática faz essas consultas.
 
 ### Tratamento de erro
@@ -62,7 +62,7 @@ Revise o escopo informado (padrão: `git diff` + arquivos não rastreados) contr
 ### Testes
 - Entidades: invariante na construção, cada transição válida, cada transição inválida com estado e eventos inalterados.
 - Handlers: todo caminho `Result.Failure` mais o caminho feliz (estado gravado + eventos de domínio). Validators: testes `TestValidate` por regra.
-- Endpoints: testes de integração por HTTP real, com a persistência conferida por um GET e todo predicado de consulta coberto por um teste de tradução.
+- Endpoints: testes de integração por HTTP real, com a persistência conferida por um GET e todo query handler coberto por testes de integração contra o banco.
 - Os nomes dos testes e a estrutura Arrange/Act/Assert seguem os testes existentes.
 
 ### Desvios e regras do projeto

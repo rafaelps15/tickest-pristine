@@ -13,15 +13,11 @@ public class ApplicationFolderTests : BaseTest
     private static readonly string[] SharedFolders = ["Abstractions", "Permissions"];
 
     // Classes estáticas com regra que outras pastas ainda usam, até a migração que as converte: os guards de privilégio e
-    // de último administrador viram peças injetadas com o modelo rico de usuários e funções; o de acesso ao chamado, os
-    // filtros de chamado ativo e a elegibilidade de quem atende saem com as consultas em SQL.
+    // de último administrador viram peças injetadas com o modelo rico de usuários e funções.
     private static readonly string[] LegacyCrossFolderStaticClasses =
     [
         "TickestPristine.Application.Authorization.AdministratorGuard",
-        "TickestPristine.Application.Authorization.PrivilegeEscalationGuard",
-        "TickestPristine.Application.Authorization.TicketAccessGuard",
-        "TickestPristine.Application.Tickets.TicketAssigneeEligibility",
-        "TickestPristine.Application.Tickets.TicketSlaFilters"
+        "TickestPristine.Application.Authorization.PrivilegeEscalationGuard"
     ];
 
     [Fact]

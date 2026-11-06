@@ -2,7 +2,7 @@ namespace TickestPristine.Application.Tickets.GetTimes;
 
 /// <summary>
 /// Média e mediana de uma amostra de tempos, com uma casa decimal. Abaixo de <see cref="MinimumSampleSize"/> elementos,
-/// média e mediana ficam nulas (spec 027, DEC-2); com amostra de tamanho par, a mediana é a média dos dois do meio.
+/// média e mediana ficam nulas; com amostra de tamanho par, a mediana é a média dos dois do meio.
 /// </summary>
 internal static class TicketTimeStatistics
 {

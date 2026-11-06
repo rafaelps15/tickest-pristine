@@ -16,7 +16,7 @@ namespace TickestPristine.Application.UnitTests.Tickets;
 public sealed class GetTicketVolumeQueryHandlerTests : BaseHandlerTest
 {
     private static readonly Guid CallerId = Guid.NewGuid();
-    private static readonly TicketScopeFilter NoScope = new([], null, null, null, false, null, null, null, null);
+    private static readonly TicketScopeFilter NoScope = new([], null, null, null, null, false, null, null, null, null);
 
     [Fact]
     public async Task Handle_Should_ReturnInvalidPeriod_WhenStartIsAfterEnd()

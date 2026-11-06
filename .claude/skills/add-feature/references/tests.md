@@ -88,7 +88,7 @@ public sealed class TodoItemTests
 
 ## Testes unitários de handler
 
-`tests/Application.UnitTests/{Feature}/{UseCase}{Command|Query}HandlerTests.cs`. Herde `BaseHandlerTest` — ele fornece `CreateDbContext()` (um `TestDbContext` em memória que implementa `IApplicationDbContext`) e `CreateCache()` (um `HybridCache` real). Substitua só interfaces (`IUserContext`, `IDateTimeProvider`) com NSubstitute.
+`tests/Application.UnitTests/{Feature}/{UseCase}CommandHandlerTests.cs`. Herde `BaseHandlerTest` — ele fornece `CreateDbContext()` (um `TestDbContext` em memória que implementa `IApplicationDbContext`) e `CreateCache()` (um `HybridCache` real). Substitua só interfaces (`IUserContext`, `IDateTimeProvider`) com NSubstitute. Um query handler lê com Dapper, então os testes dele são de integração: `tests/IntegrationTests/{Feature}/{UseCase}QueryHandlerTests.cs`, herdando `BaseQueryHandlerTest(factory)` (acrescente-o uma vez, se não existir), que dá a cada teste um banco próprio, vazio e copiado de um modelo migrado; o teste grava o cenário pelo `CreateDbContext()`, cria o handler com a `DbConnectionFactory`, substitui só interfaces e cobre cada caminho de falha e o caminho feliz.
 
 Cubra: cada caminho de falha do handler (não encontrado, permissão, a falha devolvida pelo método da entidade) e o caminho feliz, com o estado gravado e os eventos de domínio disparados. As regras da própria entidade já estão cobertas pelos testes dela.
 
@@ -192,7 +192,7 @@ Cubra a falha de cada regra mais um command totalmente válido (`ShouldNotHaveAn
 
 ## Testes de integração
 
-`tests/IntegrationTests/{Feature}/{Feature}Tests.cs` (estenda o arquivo existente, se houver). Herde `BaseIntegrationTest(factory)` — ele roda a API real contra um Postgres do Testcontainers e fornece `HttpClient`, `RegisterAndLoginAsync()` e `Authenticate(token)`. Os testes passam pelo HTTP real e nunca chamam handlers direto.
+`tests/IntegrationTests/{Feature}/{Feature}Tests.cs` (estenda o arquivo existente, se houver). Herde `BaseIntegrationTest(factory)` — ele roda a API real contra um Postgres do Testcontainers e fornece `HttpClient`, `RegisterAndLoginAsync()` e `Authenticate(token)`. Os testes de endpoint passam pelo HTTP real e nunca chamam handlers direto; só os testes de query handler acima criam um handler.
 
 Persistência — a mudança sobrevive à ida e volta ao banco:
 
@@ -218,7 +218,7 @@ public async Task ArchiveTodo_Should_MarkTodoAsArchived()
 }
 ```
 
-Tradução da consulta — o predicado roda no banco e filtra o que deve:
+Filtro da consulta — o SQL roda no banco e filtra o que deve:
 
 ```csharp
 [Fact]
@@ -241,9 +241,9 @@ public async Task GetOverdue_Should_ReturnOnlyOverdueTodos()
 ```
 
 - `InsertAsync` adiciona entidades por um `ApplicationDbContext` com escopo da factory, para estados que a API não cria na hora (um prazo já no passado). Acrescente-o ao `BaseIntegrationTest` uma vez, se não existir.
-- Este é o teste que prova que o `Expression<Func<T, bool>>` é traduzido para SQL; um teste unitário em memória não prova isso.
+- Este teste prova que o SQL da consulta filtra no banco; um trecho de SQL com nome ganha também um teste de concordância com o método da entidade que ele espelha.
 
-Cobertura mínima por endpoint: um teste sem autorização (sem token → 401) se for uma família de rotas nova, um teste do caminho feliz conferindo o estado observável por um GET seguinte e um teste de tradução de falha (ex.: id desconhecido → 404) quando o handler tiver caminhos de falha. Toda query com predicado tem pelo menos um teste de tradução.
+Cobertura mínima por endpoint: um teste sem autorização (sem token → 401) se for uma família de rotas nova, um teste do caminho feliz conferindo o estado observável por um GET seguinte e um teste de tradução de falha (ex.: id desconhecido → 404) quando o handler tiver caminhos de falha. Toda query com filtro tem pelo menos um teste contra o banco.
 
 ## Rodar
 

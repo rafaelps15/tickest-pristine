@@ -977,6 +977,14 @@
           },
           {
             "in": "query",
+            "name": "departmentId",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "requesterId",
             "schema": {
               "format": "uuid",
@@ -1274,6 +1282,14 @@
           },
           {
             "in": "query",
+            "name": "departmentId",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "priority",
             "schema": {
               "$ref": "#/components/schemas/TickestPristine.Domain.Tickets.TicketPriority"
@@ -1383,6 +1399,14 @@
           },
           {
             "in": "query",
+            "name": "departmentId",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "priority",
             "schema": {
               "$ref": "#/components/schemas/TickestPristine.Domain.Tickets.TicketPriority"
@@ -1478,6 +1502,14 @@
                 "type": "string"
               },
               "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "departmentId",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
             }
           },
           {

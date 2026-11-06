@@ -1,26 +1,29 @@
-﻿using TickestPristine.Application.Abstractions.Authentication;
+﻿using System.Data.Common;
+using Dapper;
+using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Users;
-using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Users.GetById;
 
 internal sealed class GetUserByIdQueryHandler(
-    IApplicationDbContext context,
+    IDbConnectionFactory dbConnectionFactory,
     IUserContext userContext,
     IPermissionProvider permissionProvider,
     IDateTimeProvider dateTimeProvider)
     : IQueryHandler<GetUserByIdQuery, UserResponse>
 {
-    public async Task<Result<UserResponse>> Handle(GetUserByIdQuery query, CancellationToken cancellationToken)
+    public async Task<Result<UserResponse>> Handle(
+        GetUserByIdQuery request,
+        CancellationToken cancellationToken)
     {
         bool canReadUsers = await permissionProvider.IsSelfOrHasPermissionAsync(
             userContext.UserId,
-            query.UserId,
+            request.UserId,
             PermissionCodes.Users.Read,
             cancellationToken);
 
@@ -29,45 +32,38 @@ internal sealed class GetUserByIdQueryHandler(
             return Result.Failure<UserResponse>(UserErrors.Unauthorized());
         }
 
-        DateTime nowUtc = dateTimeProvider.UtcNow;
+        await using DbConnection connection = await dbConnectionFactory.OpenConnectionAsync(cancellationToken);
 
-        UserResponse? user = await context.Users
-            .Where(u => u.Id == query.UserId)
-            .Select(u => new UserResponse
-            {
-                Id = u.Id,
-                FirstName = u.FirstName,
-                LastName = u.LastName,
-                Email = u.Email,
-                // Setor opcional: sem setor, as subconsultas não encontram nada e os campos vêm nulos; o setor
-                // desativado continua aparecendo, com SectorIsActive = false.
-                SectorId = u.SectorId,
-                SectorName = context.Sectors
-                    .Where(s => s.Id == u.SectorId)
-                    .Select(s => s.Name)
-                    .FirstOrDefault(),
-                DepartmentName = context.Departments
-                    .Where(d => context.Sectors.Any(s => s.Id == u.SectorId && s.DepartmentId == d.Id))
-                    .Select(d => d.Name)
-                    .FirstOrDefault(),
-                SectorIsActive = context.Sectors
-                    .Where(s => s.Id == u.SectorId)
-                    .Select(s => (bool?)s.IsActive)
-                    .FirstOrDefault(),
-                // Conta pendente de ativação (spec 008): usuário ativo que ainda não definiu a senha. A expiração é a do
-                // convite ainda utilizável; nula quando ele expirou ou foi revogado.
-                PendingActivation = u.IsActive && !context.UserCredentials.Any(c => c.UserId == u.Id),
-                InvitationExpiresAtUtc = u.IsActive && !context.UserCredentials.Any(c => c.UserId == u.Id)
-                    ? context.UserInvitations
-                        .Where(i => i.UserId == u.Id && i.UsedAtUtc == null && i.RevokedAtUtc == null && i.ExpiresAtUtc > nowUtc)
-                        .Max(i => (DateTime?)i.ExpiresAtUtc)
-                    : null
-            })
-            .SingleOrDefaultAsync(cancellationToken);
+        // Setor opcional: sem setor, as junções à esquerda trazem os campos nulos; o setor desativado continua
+        // aparecendo, com SectorIsActive = false.
+        const string sql =
+            $"""
+             SELECT
+                 u.id AS {nameof(UserResponse.Id)},
+                 u.first_name AS {nameof(UserResponse.FirstName)},
+                 u.last_name AS {nameof(UserResponse.LastName)},
+                 u.email AS {nameof(UserResponse.Email)},
+                 u.sector_id AS {nameof(UserResponse.SectorId)},
+                 s.name AS {nameof(UserResponse.SectorName)},
+                 d.name AS {nameof(UserResponse.DepartmentName)},
+                 s.is_active AS {nameof(UserResponse.SectorIsActive)},
+                 {UserSql.IsPendingActivation} AS {nameof(UserResponse.PendingActivation)},
+                 {UserSql.PendingInvitationExpiresAtUtc} AS {nameof(UserResponse.InvitationExpiresAtUtc)}
+             FROM public.users u
+             LEFT JOIN public.sectors s ON s.id = u.sector_id
+             LEFT JOIN public.departments d ON d.id = s.department_id
+             WHERE u.id = @UserId
+             """;
+
+        UserResponse? user = await connection.QuerySingleOrDefaultAsync<UserResponse>(
+            new CommandDefinition(
+                sql,
+                new { request.UserId, NowUtc = dateTimeProvider.UtcNow },
+                cancellationToken: cancellationToken));
 
         if (user is null)
         {
-            return Result.Failure<UserResponse>(UserErrors.NotFound(query.UserId));
+            return Result.Failure<UserResponse>(UserErrors.NotFound(request.UserId));
         }
 
         return user;

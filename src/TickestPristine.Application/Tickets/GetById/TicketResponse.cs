@@ -23,7 +23,7 @@ public sealed class TicketResponse
     public TicketSlaStatus SlaStatus { get; set; }
 
     /// <summary>
-    /// Se quem consulta pode cancelar o chamado agora (spec 016).
+    /// Se quem consulta pode cancelar o chamado agora.
     /// </summary>
     public bool CanCancel { get; set; }
 

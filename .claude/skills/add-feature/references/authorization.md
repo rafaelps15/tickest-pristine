@@ -63,15 +63,17 @@ Result result = canArchiveAny
 
 ```csharp
 internal sealed class GetProjectTodosQueryHandler(
-    IApplicationDbContext context,
+    IDbConnectionFactory dbConnectionFactory,
     IUserContext userContext)
     : IQueryHandler<GetProjectTodosQuery, List<TodoResponse>>
 {
     public async Task<Result<List<TodoResponse>>> Handle(
-        GetProjectTodosQuery query,
+        GetProjectTodosQuery request,
         CancellationToken cancellationToken)
     {
-        if (!await HasPermissionToQueryProject(query.ProjectId, cancellationToken))
+        await using DbConnection connection = await dbConnectionFactory.OpenConnectionAsync();
+
+        if (!await HasPermissionToQueryProject(connection, request.ProjectId))
         {
             return Result.Failure<List<TodoResponse>>(UserErrors.Unauthorized());
         }
@@ -79,12 +81,20 @@ internal sealed class GetProjectTodosQueryHandler(
         // ... consulta projetando para TodoResponse
     }
 
-    private async Task<bool> HasPermissionToQueryProject(Guid projectId, CancellationToken cancellationToken) =>
-        await context.Projects.AnyAsync(
-            p => p.Id == projectId &&
-                 (p.OwnerId == userContext.UserId ||
-                  context.ProjectMembers.Any(m => m.ProjectId == p.Id && m.UserId == userContext.UserId)),
-            cancellationToken);
+    private async Task<bool> HasPermissionToQueryProject(DbConnection connection, Guid projectId)
+    {
+        const string sql =
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM projects p
+                WHERE p.id = @ProjectId
+                  AND (p.owner_id = @UserId
+                       OR EXISTS (SELECT 1 FROM project_members m WHERE m.project_id = p.id AND m.user_id = @UserId)))
+            """;
+
+        return await connection.ExecuteScalarAsync<bool>(sql, new { ProjectId = projectId, userContext.UserId });
+    }
 }
 ```
 

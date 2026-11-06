@@ -1,4 +1,3 @@
-using System.Text.Json;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
@@ -9,9 +8,6 @@ namespace TickestPristine.Infrastructure.Tickets;
 
 internal sealed class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 {
-    // Nomes das propriedades como no C# (ex.: "ResolutionMinutes"); a migration dos chamados existentes monta o mesmo JSON.
-    private static readonly JsonSerializerOptions SlaPlanJsonOptions = new(JsonSerializerDefaults.General);
-
     public void Configure(EntityTypeBuilder<Ticket> builder)
     {
         builder.HasKey(t => t.Id);
@@ -43,8 +39,8 @@ internal sealed class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(t => t.SlaPlan)
             .HasColumnType("jsonb")
             .HasConversion(
-                plan => JsonSerializer.Serialize(plan, SlaPlanJsonOptions),
-                json => JsonSerializer.Deserialize<TicketSlaPlan>(json, SlaPlanJsonOptions)!);
+                plan => TicketSlaPlanJson.Serialize(plan),
+                json => TicketSlaPlanJson.Deserialize(json));
 
         builder.HasQueryFilter(t => t.DeletedAtUtc == null);
 

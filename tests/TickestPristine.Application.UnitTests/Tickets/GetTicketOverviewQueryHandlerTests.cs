@@ -27,6 +27,7 @@ public sealed class GetTicketOverviewQueryHandlerTests : BaseHandlerTest
             null,
             null,
             null,
+            null,
             false,
             createdPeriod ? start : null,
             createdPeriod ? end : null,

@@ -1,29 +1,54 @@
+using System.Data.Common;
+using Dapper;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Permissions;
-using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Roles.GetAll;
 
-internal sealed class GetRolesQueryHandler(IApplicationDbContext context)
+internal sealed class GetRolesQueryHandler(IDbConnectionFactory dbConnectionFactory)
     : IQueryHandler<GetRolesQuery, List<RoleResponse>>
 {
-    public async Task<Result<List<RoleResponse>>> Handle(GetRolesQuery query, CancellationToken cancellationToken)
+    public async Task<Result<List<RoleResponse>>> Handle(
+        GetRolesQuery request,
+        CancellationToken cancellationToken)
     {
-        List<RoleResponse> roles = await context.Roles
-            .OrderBy(r => r.Name)
-            .Select(r => new RoleResponse
+        await using DbConnection connection = await dbConnectionFactory.OpenConnectionAsync(cancellationToken);
+
+        const string permissionCodeColumn = "PermissionCode";
+
+        // Uma linha por permissão da role, com a role repetida; sem permissão, a linha vem sem código.
+        const string sql =
+            $"""
+             SELECT
+                 r.name AS {nameof(RoleResponse.Name)},
+                 r.name = '{RoleNames.Collaborator}' AS {nameof(RoleResponse.IsDefault)},
+                 r.name = '{RoleNames.Administrator}' AS {nameof(RoleResponse.IsAdministrator)},
+                 rp.permission_code AS {permissionCodeColumn}
+             FROM public.roles r
+             LEFT JOIN public.role_permissions rp ON rp.role_name = r.name
+             ORDER BY r.name, r.id
+             """;
+
+        var roles = new List<RoleResponse>();
+
+        await connection.QueryAsync<RoleResponse, string?, RoleResponse>(
+            new CommandDefinition(sql, cancellationToken: cancellationToken),
+            (role, permissionCode) =>
             {
-                Name = r.Name,
-                IsDefault = r.Name == RoleNames.Collaborator,
-                IsAdministrator = r.Name == RoleNames.Administrator,
-                PermissionCodes = context.RolePermissions
-                    .Where(p => p.RoleName == r.Name)
-                    .Select(p => p.PermissionCode)
-                    .ToList()
-            })
-            .ToListAsync(cancellationToken);
+                if (roles.Count == 0 || roles[^1].Name != role.Name)
+                {
+                    roles.Add(role);
+                }
+
+                if (permissionCode is not null)
+                {
+                    roles[^1].PermissionCodes.Add(permissionCode);
+                }
+
+                return role;
+            },
+            splitOn: permissionCodeColumn);
 
         return roles;
     }
