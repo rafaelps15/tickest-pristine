@@ -1,10 +1,13 @@
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketAttachments;
+using TickestPristine.Domain.TicketMessages;
+using TickestPristine.Domain.Tickets;
 
-namespace TickestPristine.Domain.Tickets;
+namespace TickestPristine.Domain.TicketHistories;
 
-public sealed class TicketHistory : Entity
+public sealed class TicketHistoryEntry : Entity
 {
-    private TicketHistory()
+    private TicketHistoryEntry()
     {
     }
 
@@ -26,7 +29,7 @@ public sealed class TicketHistory : Entity
     /// Cria a entrada; chamado só por quem muda o chamado, uma mensagem ou um anexo (<see cref="Ticket"/>,
     /// <see cref="TicketMessage"/> e <see cref="TicketAttachment"/>), por isso é interno.
     /// </summary>
-    internal static TicketHistory Create(
+    internal static TicketHistoryEntry Create(
         Guid ticketId,
         Guid changedByUserId,
         TicketHistoryAction action,
@@ -34,7 +37,7 @@ public sealed class TicketHistory : Entity
         string? oldValue = null,
         string? newValue = null)
     {
-        return new TicketHistory
+        return new TicketHistoryEntry
         {
             Id = Guid.NewGuid(),
             TicketId = ticketId,

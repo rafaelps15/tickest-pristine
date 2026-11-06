@@ -5,6 +5,8 @@ using TickestPristine.Application.Tickets;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketHistories;
+using TickestPristine.Domain.TicketMessages;
 
 namespace TickestPristine.Application.TicketMessages.Edit;
 
@@ -29,7 +31,7 @@ internal sealed class EditTicketMessageCommandHandler(
             return Result.Failure(TicketMessageErrors.NotFound(command.MessageId));
         }
 
-        Result<TicketHistory> edition = message.Edit(command.Content, userContext.UserId, dateTimeProvider.UtcNow);
+        Result<TicketHistoryEntry> edition = message.Edit(command.Content, userContext.UserId, dateTimeProvider.UtcNow);
 
         if (edition.IsFailure)
         {
@@ -43,7 +45,7 @@ internal sealed class EditTicketMessageCommandHandler(
 
         await context.SaveChangesAsync(cancellationToken);
 
-        ticket.RecordMessageActivity(edition.Value, await agentLookup.IsLastMessageFromAgentAsync(ticket, cancellationToken));
+        ticket.RecordMessageActivity(edition.Value, await agentLookup.IsLastValidMessageFromAgentAsync(ticket, cancellationToken));
 
         await activityWriter.WriteLastActivityAndWaitingOnAsync(ticket, cancellationToken);
 

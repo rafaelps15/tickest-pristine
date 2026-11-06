@@ -26,6 +26,8 @@ using TickestPristine.Infrastructure.Tickets.SlaMonitoring;
 using System.Diagnostics.Metrics;
 using TickestPristine.Application.Abstractions.Telemetry;
 using TickestPristine.Domain.SlaCalendars;
+using TickestPristine.Domain.TicketHistories;
+using TickestPristine.Domain.TicketMessages;
 
 namespace TickestPristine.IntegrationTests.Tickets;
 
@@ -1459,8 +1461,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
-        List<TicketHistory> newEntries = GetHistoryAfterCreation(ticketId);
-        TicketHistory history = newEntries.ShouldHaveSingleItem();
+        List<TicketHistoryEntry> newEntries = GetHistoryAfterCreation(ticketId);
+        TicketHistoryEntry history = newEntries.ShouldHaveSingleItem();
         history.Action.ShouldBe(TicketHistoryAction.DescriptionChanged);
         history.OldValue.ShouldBe(OriginalDescription);
         history.NewValue.ShouldBe(ChangedDescription);
@@ -1486,14 +1488,14 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
-        List<TicketHistory> newEntries = GetHistoryAfterCreation(ticketId);
+        List<TicketHistoryEntry> newEntries = GetHistoryAfterCreation(ticketId);
         newEntries.Count.ShouldBe(2);
 
-        TicketHistory statusChanged = newEntries.Single(h => h.Action == TicketHistoryAction.StatusChanged);
+        TicketHistoryEntry statusChanged = newEntries.Single(h => h.Action == TicketHistoryAction.StatusChanged);
         statusChanged.OldValue.ShouldBe(nameof(TicketStatus.Open));
         statusChanged.NewValue.ShouldBe(nameof(TicketStatus.InProgress));
 
-        TicketHistory descriptionChanged = newEntries.Single(h => h.Action == TicketHistoryAction.DescriptionChanged);
+        TicketHistoryEntry descriptionChanged = newEntries.Single(h => h.Action == TicketHistoryAction.DescriptionChanged);
         descriptionChanged.OldValue.ShouldBe(OriginalDescription);
         descriptionChanged.NewValue.ShouldBe(ChangedDescription);
     }
@@ -1821,7 +1823,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        TicketHistory history = await context.TicketHistories
+        TicketHistoryEntry history = await context.TicketHistories
             .SingleAsync(h => h.TicketId == ticketId && h.Action == TicketHistoryAction.Assigned);
         history.OldValue.ShouldBeNull();
         history.NewValue.ShouldBe(adminId.ToString());
@@ -1882,7 +1884,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         TicketDetailDto? ticket = await HttpClient.GetFromJsonAsync<TicketDetailDto>($"tickets/{ticketId}");
         ticket!.AssignedToUserId.ShouldBeNull();
 
-        TicketHistory history = GetUnassignedHistory(ticketId).ShouldHaveSingleItem();
+        TicketHistoryEntry history = GetUnassignedHistory(ticketId).ShouldHaveSingleItem();
         history.OldValue.ShouldBe(adminId.ToString());
         history.NewValue.ShouldBeNull();
         history.ChangedByUserId.ShouldBe(adminId);
@@ -2570,7 +2572,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     private const string ChangedDescription = "The printer on the 3rd floor is not working after the toner change";
 
     // Registros do histórico do chamado, menos o da abertura (que todo chamado criado pela API tem).
-    private List<TicketHistory> GetHistoryAfterCreation(Guid ticketId)
+    private List<TicketHistoryEntry> GetHistoryAfterCreation(Guid ticketId)
     {
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -2580,7 +2582,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             .ToList();
     }
 
-    private List<TicketHistory> GetUnassignedHistory(Guid ticketId)
+    private List<TicketHistoryEntry> GetUnassignedHistory(Guid ticketId)
     {
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -3909,13 +3911,13 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         // Sem autor, como um registro antigo: montado direto, fora do caminho do chamado.
-        context.TicketHistories.Add(EntityTestState.New<TicketHistory>()
-            .With(nameof(TicketHistory.Id), Guid.NewGuid())
-            .With(nameof(TicketHistory.TicketId), ticketId)
-            .With(nameof(TicketHistory.Action), TicketHistoryAction.StatusChanged)
-            .With(nameof(TicketHistory.OldValue), nameof(TicketStatus.InProgress))
-            .With(nameof(TicketHistory.NewValue), nameof(TicketStatus.Resolved))
-            .With(nameof(TicketHistory.OccurredAtUtc), occurredAtUtc));
+        context.TicketHistories.Add(EntityTestState.New<TicketHistoryEntry>()
+            .With(nameof(TicketHistoryEntry.Id), Guid.NewGuid())
+            .With(nameof(TicketHistoryEntry.TicketId), ticketId)
+            .With(nameof(TicketHistoryEntry.Action), TicketHistoryAction.StatusChanged)
+            .With(nameof(TicketHistoryEntry.OldValue), nameof(TicketStatus.InProgress))
+            .With(nameof(TicketHistoryEntry.NewValue), nameof(TicketStatus.Resolved))
+            .With(nameof(TicketHistoryEntry.OccurredAtUtc), occurredAtUtc));
         await context.SaveChangesAsync();
     }
 
@@ -5180,7 +5182,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         Ticket ticket = await context.Tickets.AsNoTracking().SingleAsync(t => t.Id == ticketId);
-        List<TicketHistory> history = await context.TicketHistories.AsNoTracking().Where(h => h.TicketId == ticketId).ToListAsync();
+        List<TicketHistoryEntry> history = await context.TicketHistories.AsNoTracking().Where(h => h.TicketId == ticketId).ToListAsync();
 
         List<TicketSlaTimer> timers = GetTimers(ticketId);
         TicketSlaTimer resolution = timers.Single(t => t.Metric == SlaMetric.Resolution && t.Cycle == 1);

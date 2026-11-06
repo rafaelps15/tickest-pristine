@@ -3,6 +3,7 @@ using TickestPristine.Application.Tickets.Unassign;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -109,7 +110,7 @@ public sealed class UnassignTicketCommandHandlerTests : BaseHandlerTest
         unassigned.PreviousAssignedToUserId.ShouldBe(previousAssigneeId);
         unassigned.ChangedByUserId.ShouldBe(AgentId);
 
-        TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticketId);
+        TicketHistoryEntry history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticketId);
         history.Action.ShouldBe(TicketHistoryAction.Unassigned);
         history.ChangedByUserId.ShouldBe(AgentId);
         history.OldValue.ShouldBe(previousAssigneeId.ToString());

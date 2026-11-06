@@ -9,6 +9,8 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketHistories;
+using TickestPristine.Domain.TicketMessages;
 
 namespace TickestPristine.Application.TicketMessages.Post;
 
@@ -44,7 +46,7 @@ internal sealed class PostTicketMessageCommandHandler(
 
         bool authorIsAgent = await agentLookup.IsAgentAsync(userContext.UserId, cancellationToken);
 
-        (TicketMessage message, TicketHistory posting) = ticket.PostMessage(
+        (TicketMessage message, TicketHistoryEntry posting) = ticket.PostMessage(
             userContext.UserId,
             command.Content,
             authorIsAgent,

@@ -1,5 +1,5 @@
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.TicketAttachments.Download;
+using TickestPristine.Application.TicketAttachments.GetContent;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
 using TickestPristine.Web.Api.Infrastructure;

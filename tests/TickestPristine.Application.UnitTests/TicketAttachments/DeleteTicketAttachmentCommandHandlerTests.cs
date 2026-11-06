@@ -7,6 +7,8 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Domain.TicketAttachments;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.UnitTests.TicketAttachments;
 
@@ -173,7 +175,7 @@ public sealed class DeleteTicketAttachmentCommandHandlerTests : BaseHandlerTest
         await activityWriter.Received(1).WriteLastActivityAsync(
             Arg.Is<Ticket>(t => t.LastActivityAtUtc == nowUtc),
             Arg.Any<CancellationToken>());
-        TicketHistory removal = await context.TicketHistories.SingleAsync();
+        TicketHistoryEntry removal = await context.TicketHistories.SingleAsync();
         removal.Action.ShouldBe(TicketHistoryAction.AttachmentRemoved);
         removal.ChangedByUserId.ShouldBe(UploaderId);
     }

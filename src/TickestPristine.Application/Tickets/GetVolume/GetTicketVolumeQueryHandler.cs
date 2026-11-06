@@ -8,6 +8,7 @@ using TickestPristine.Application.Permissions;
 using TickestPristine.Application.SlaCalendars;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.Tickets.GetVolume;
 

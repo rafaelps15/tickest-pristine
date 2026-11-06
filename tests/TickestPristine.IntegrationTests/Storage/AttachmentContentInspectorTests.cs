@@ -1,7 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 using TickestPristine.Infrastructure.Storage;
-using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.TicketAttachments;
 
 namespace TickestPristine.IntegrationTests.Storage;
 
@@ -47,7 +47,7 @@ public sealed class AttachmentContentInspectorTests
     };
 
     [Fact]
-    public async Task MatchesAsync_Should_RecognizeExactlyTheTypesAcceptedByTicketAttachment()
+    public async Task MatchesAsync_Should_RecognizeExactlyTheTypesAcceptedByThePolicy()
     {
         // Arrange: uma amostra válida de cada tipo conhecido pelo inspetor.
         var inspector = new AttachmentContentInspector();
@@ -64,10 +64,26 @@ public sealed class AttachmentContentInspectorTests
         }
 
         // Act
-        string[] acceptedByEntity = [.. TicketAttachment.AllowedTypes.Select(t => t.ContentType)];
+        string[] acceptedByPolicy = [.. TicketAttachmentPolicy.AllowedTypes.Select(t => t.ContentType)];
 
         // Assert
-        recognized.ShouldBe(acceptedByEntity, ignoreOrder: true);
+        recognized.ShouldBe(acceptedByPolicy, ignoreOrder: true);
+    }
+
+    [Theory]
+    [InlineData("application/x-msdownload")]
+    [InlineData("image/svg+xml")]
+    public async Task MatchesAsync_Should_ReturnFalse_WhenPolicyDoesNotAcceptContentType(string contentType)
+    {
+        // Arrange: um PNG válido, declarado com um tipo fora da política
+        using var stream = new MemoryStream([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00]);
+
+        // Act
+        bool matches = await new AttachmentContentInspector().MatchesAsync(stream, contentType, CancellationToken.None);
+
+        // Assert
+        matches.ShouldBeFalse();
+        stream.Position.ShouldBe(0);
     }
 
     [Theory]

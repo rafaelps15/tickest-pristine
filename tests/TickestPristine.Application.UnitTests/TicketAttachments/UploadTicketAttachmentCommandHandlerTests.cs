@@ -11,6 +11,8 @@ using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.Application.TicketAttachments;
 using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Domain.TicketAttachments;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.UnitTests.TicketAttachments;
 
@@ -98,7 +100,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         attachment.StorageKey.ShouldBe("generated-storage-key.pdf");
         attachment.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketAttachmentUploadedDomainEvent);
 
-        TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == attachment.TicketId);
+        TicketHistoryEntry history = await context.TicketHistories.SingleAsync(h => h.TicketId == attachment.TicketId);
         history.Action.ShouldBe(TicketHistoryAction.AttachmentAdded);
         history.NewValue.ShouldBe(command.FileName);
     }
@@ -203,7 +205,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
         Guid ticketId = await SeedTicketAsync(context);
-        await SeedAttachmentsAsync(context, ticketId, TicketAttachment.MaxAttachmentsPerTicket, sizeBytes: 1024);
+        await SeedAttachmentsAsync(context, ticketId, TicketAttachmentPolicy.MaxAttachmentsPerTicket, sizeBytes: 1024);
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
         fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("key.pdf");
         UploadTicketAttachmentCommandHandler handler = CreateHandler(context, fileStorage);
@@ -214,11 +216,11 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(TicketAttachmentErrors.TicketLimitReached(
-            TicketAttachment.MaxAttachmentsPerTicket,
-            TicketAttachment.MaxTotalBytesPerTicket / (1024 * 1024)));
+            TicketAttachmentPolicy.MaxAttachmentsPerTicket,
+            TicketAttachmentPolicy.MaxTotalBytesPerTicket / (1024 * 1024)));
         // O arquivo é gravado para obter a chave e apagado quando o anexo é recusado.
         await fileStorage.Received(1).DeleteAsync("key.pdf", Arg.Any<CancellationToken>());
-        (await context.TicketAttachments.CountAsync()).ShouldBe(TicketAttachment.MaxAttachmentsPerTicket);
+        (await context.TicketAttachments.CountAsync()).ShouldBe(TicketAttachmentPolicy.MaxAttachmentsPerTicket);
     }
 
     [Fact]
@@ -227,7 +229,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         // Arrange: faltam 1.023 bytes para o limite do chamado, e o anexo novo tem 1.024
         await using TestDbContext context = CreateDbContext();
         Guid ticketId = await SeedTicketAsync(context);
-        await SeedAttachmentsAsync(context, ticketId, 1, sizeBytes: TicketAttachment.MaxTotalBytesPerTicket - 1023);
+        await SeedAttachmentsAsync(context, ticketId, 1, sizeBytes: TicketAttachmentPolicy.MaxTotalBytesPerTicket - 1023);
         UploadTicketAttachmentCommandHandler handler = CreateHandler(context, Substitute.For<IFileStorage>());
 
         // Act
@@ -236,8 +238,8 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(TicketAttachmentErrors.TicketLimitReached(
-            TicketAttachment.MaxAttachmentsPerTicket,
-            TicketAttachment.MaxTotalBytesPerTicket / (1024 * 1024)));
+            TicketAttachmentPolicy.MaxAttachmentsPerTicket,
+            TicketAttachmentPolicy.MaxTotalBytesPerTicket / (1024 * 1024)));
     }
 
     [Fact]
@@ -246,7 +248,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         // Arrange: o anexo novo completa exatamente o limite do chamado
         await using TestDbContext context = CreateDbContext();
         Guid ticketId = await SeedTicketAsync(context);
-        await SeedAttachmentsAsync(context, ticketId, 1, sizeBytes: TicketAttachment.MaxTotalBytesPerTicket - 1024);
+        await SeedAttachmentsAsync(context, ticketId, 1, sizeBytes: TicketAttachmentPolicy.MaxTotalBytesPerTicket - 1024);
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
         fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("key.pdf");
         UploadTicketAttachmentCommandHandler handler = CreateHandler(context, fileStorage);
@@ -264,7 +266,7 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         // Arrange: o chamado tem o máximo de anexos, mas um deles foi excluído
         await using TestDbContext context = CreateDbContext();
         Guid ticketId = await SeedTicketAsync(context);
-        await SeedAttachmentsAsync(context, ticketId, TicketAttachment.MaxAttachmentsPerTicket - 1, sizeBytes: 1024);
+        await SeedAttachmentsAsync(context, ticketId, TicketAttachmentPolicy.MaxAttachmentsPerTicket - 1, sizeBytes: 1024);
         await SeedAttachmentsAsync(context, ticketId, 1, sizeBytes: 1024, deleted: true);
         IFileStorage fileStorage = Substitute.For<IFileStorage>();
         fileStorage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("key.pdf");

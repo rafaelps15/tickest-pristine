@@ -56,7 +56,7 @@ public sealed class TicketAgentLookupTests : BaseHandlerTest
         await context.SaveChangesAsync();
 
         // Act
-        bool fromAgent = await new TicketAgentLookup(context).IsLastMessageFromAgentAsync(ticket, CancellationToken.None);
+        bool fromAgent = await new TicketAgentLookup(context).IsLastValidMessageFromAgentAsync(ticket, CancellationToken.None);
 
         // Assert
         fromAgent.ShouldBeFalse();
@@ -77,7 +77,7 @@ public sealed class TicketAgentLookupTests : BaseHandlerTest
         await context.SaveChangesAsync();
 
         // Act
-        bool fromAgent = await new TicketAgentLookup(context).IsLastMessageFromAgentAsync(ticket, CancellationToken.None);
+        bool fromAgent = await new TicketAgentLookup(context).IsLastValidMessageFromAgentAsync(ticket, CancellationToken.None);
 
         // Assert
         fromAgent.ShouldBeTrue();
@@ -97,8 +97,8 @@ public sealed class TicketAgentLookupTests : BaseHandlerTest
         var lookup = new TicketAgentLookup(context);
 
         // Act
-        bool withoutMessagesFromAgent = await lookup.IsLastMessageFromAgentAsync(withoutMessages, CancellationToken.None);
-        bool ownMessageFromAgent = await lookup.IsLastMessageFromAgentAsync(ownMessage, CancellationToken.None);
+        bool withoutMessagesFromAgent = await lookup.IsLastValidMessageFromAgentAsync(withoutMessages, CancellationToken.None);
+        bool ownMessageFromAgent = await lookup.IsLastValidMessageFromAgentAsync(ownMessage, CancellationToken.None);
 
         // Assert
         withoutMessagesFromAgent.ShouldBeFalse();

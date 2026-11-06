@@ -7,6 +7,7 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.Tickets.Assign;
 
@@ -70,7 +71,7 @@ internal sealed class AssignTicketCommandHandler(
             return Result.Success();
         }
 
-        Result<TicketHistory> assignment = ticket.Assign(assignee, userContext.UserId, dateTimeProvider.UtcNow);
+        Result<TicketHistoryEntry> assignment = ticket.Assign(assignee, userContext.UserId, dateTimeProvider.UtcNow);
 
         if (assignment.IsFailure)
         {

@@ -9,6 +9,8 @@ using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 using TickestPristine.Domain.SlaCalendars;
+using TickestPristine.Domain.TicketHistories;
+using TickestPristine.Domain.TicketMessages;
 
 namespace TickestPristine.Application.Tickets.Reopen;
 
@@ -68,7 +70,7 @@ internal sealed class ReopenTicketCommandHandler(
 
         // Com motivo, a mensagem de quem reabriu passa a ser a última e decide quem o chamado aguarda (abaixo).
         bool lastMessageIsFromAgent = !hasReason &&
-            await agentLookup.IsLastMessageFromAgentAsync(ticket, cancellationToken);
+            await agentLookup.IsLastValidMessageFromAgentAsync(ticket, cancellationToken);
 
         // A reabertura abre um novo ciclo de resolução com a meta integral do plano; os ciclos anteriores e a primeira
         // resposta não mudam.
@@ -93,7 +95,7 @@ internal sealed class ReopenTicketCommandHandler(
         {
             bool callerIsAgent = await agentLookup.IsAgentAsync(callerId, cancellationToken);
 
-            (TicketMessage message, TicketHistory posting) = ticket.PostMessage(callerId, reason!, callerIsAgent, nowUtc);
+            (TicketMessage message, TicketHistoryEntry posting) = ticket.PostMessage(callerId, reason!, callerIsAgent, nowUtc);
 
             context.TicketMessages.Add(message);
             context.TicketHistories.Add(posting);

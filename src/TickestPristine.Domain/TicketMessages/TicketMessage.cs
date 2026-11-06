@@ -1,7 +1,9 @@
 using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketHistories;
+using TickestPristine.Domain.Tickets;
 
-namespace TickestPristine.Domain.Tickets;
+namespace TickestPristine.Domain.TicketMessages;
 
 public sealed class TicketMessage : Entity, IAuditable
 {
@@ -47,11 +49,11 @@ public sealed class TicketMessage : Entity, IAuditable
     /// Troca o conteúdo e devolve a entrada do histórico; só o autor edita. Em falha, nada muda e nenhum evento é
     /// disparado.
     /// </summary>
-    public Result<TicketHistory> Edit(string content, Guid editorUserId, DateTime utcNow)
+    public Result<TicketHistoryEntry> Edit(string content, Guid editorUserId, DateTime utcNow)
     {
         if (editorUserId != AuthorUserId)
         {
-            return Result.Failure<TicketHistory>(UserErrors.Unauthorized());
+            return Result.Failure<TicketHistoryEntry>(UserErrors.Unauthorized());
         }
 
         string previousContent = Content;
@@ -61,7 +63,7 @@ public sealed class TicketMessage : Entity, IAuditable
 
         Raise(new TicketMessageEditedDomainEvent(Id, TicketId, AuthorUserId, previousContent));
 
-        return TicketHistory.Create(TicketId, AuthorUserId, TicketHistoryAction.MessageEdited, utcNow);
+        return TicketHistoryEntry.Create(TicketId, AuthorUserId, TicketHistoryAction.MessageEdited, utcNow);
     }
 
     /// <summary>
@@ -69,17 +71,17 @@ public sealed class TicketMessage : Entity, IAuditable
     /// os demais, só com <paramref name="canDeleteAny"/> (quem atende a fila). Em falha, nada muda e nenhum evento é
     /// disparado.
     /// </summary>
-    public Result<TicketHistory> Delete(Guid deletedByUserId, bool canDeleteAny, DateTime utcNow)
+    public Result<TicketHistoryEntry> Delete(Guid deletedByUserId, bool canDeleteAny, DateTime utcNow)
     {
         if (deletedByUserId != AuthorUserId && !canDeleteAny)
         {
-            return Result.Failure<TicketHistory>(UserErrors.Unauthorized());
+            return Result.Failure<TicketHistoryEntry>(UserErrors.Unauthorized());
         }
 
         DeletedAtUtc = utcNow;
 
         Raise(new TicketMessageDeletedDomainEvent(Id, TicketId));
 
-        return TicketHistory.Create(TicketId, deletedByUserId, TicketHistoryAction.MessageRemoved, utcNow);
+        return TicketHistoryEntry.Create(TicketId, deletedByUserId, TicketHistoryAction.MessageRemoved, utcNow);
     }
 }

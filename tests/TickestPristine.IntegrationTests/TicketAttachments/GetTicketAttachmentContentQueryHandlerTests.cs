@@ -3,7 +3,7 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Storage;
 using TickestPristine.Application.Permissions;
-using TickestPristine.Application.TicketAttachments.Download;
+using TickestPristine.Application.TicketAttachments.GetContent;
 using TickestPristine.IntegrationTests.Abstractions;
 using TickestPristine.Infrastructure.Database;
 using TickestPristine.Domain.Tickets;
@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketAttachments;
 
 namespace TickestPristine.IntegrationTests.TicketAttachments;
 

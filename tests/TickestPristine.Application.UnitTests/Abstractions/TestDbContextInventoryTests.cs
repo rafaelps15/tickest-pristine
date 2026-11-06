@@ -1,5 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using TickestPristine.Domain.TicketAttachments;
+using TickestPristine.Domain.TicketHistories;
+using TickestPristine.Domain.TicketMessages;
 
 namespace TickestPristine.Application.UnitTests.Abstractions;
 
@@ -10,7 +13,7 @@ public sealed class TestDbContextInventoryTests : BaseHandlerTest
     // tradução de SQL) vai para a integração.
     private static readonly string[] ApprovedInventory =
     [
-        "DbSets: AuditLogs=AuditLogEntry, Departments=Department, Permissions=Permission, RefreshTokens=RefreshToken, RolePermissions=RolePermission, Roles=Role, Sectors=Sector, SlaCalendarHolidays=SlaCalendarHoliday, SlaCalendars=SlaCalendar, TicketAttachments=TicketAttachment, TicketHistories=TicketHistory, TicketMessages=TicketMessage, TicketSlaTimers=TicketSlaTimer, Tickets=Ticket, UserCredentials=UserCredential, UserInvitations=UserInvitation, UserRoles=UserRole, Users=User",
+        "DbSets: AuditLogs=AuditLogEntry, Departments=Department, Permissions=Permission, RefreshTokens=RefreshToken, RolePermissions=RolePermission, Roles=Role, Sectors=Sector, SlaCalendarHolidays=SlaCalendarHoliday, SlaCalendars=SlaCalendar, TicketAttachments=TicketAttachment, TicketHistories=TicketHistoryEntry, TicketMessages=TicketMessage, TicketSlaTimers=TicketSlaTimer, Tickets=Ticket, UserCredentials=UserCredential, UserInvitations=UserInvitation, UserRoles=UserRole, Users=User",
         "AuditLogEntry: key(Id); props(Action,AffectedColumns,EntityId,EntityName,Id,NewValues,OldValues,Timestamp,UserId)",
         "Department: key(Id); props(Description,Id,IsActive,Name,ResponsibleUserId)",
         "Permission: alt(Code); key(Id); props(Code,Description,Group,Id,IsAdministrative,Name)",
@@ -22,7 +25,7 @@ public sealed class TestDbContextInventoryTests : BaseHandlerTest
         "SlaCalendarHoliday: key(Id); props(Date,Description,Id,SlaCalendarId)",
         "Ticket: conversion(SlaPlan); filter; key(Id); props(AssignedToUserId,CreatedAtUtc,CreatedByUserId,DeletedAtUtc,Description,DueAtUtc,Id,LastActivityAtUtc,Priority,ResolvedAtUtc,SectorId,SlaPlan,SlaWarningAtUtc,Status,Title,WaitingOn)",
         "TicketAttachment: filter; key(Id); props(ContentType,DeletedAtUtc,FileName,FileSizeBytes,Id,PurgedAtUtc,StorageKey,TicketId,UploadedAtUtc,UploadedByUserId)",
-        "TicketHistory: key(Id); props(Action,ChangedByUserId,Id,NewValue,OccurredAtUtc,OldValue,TicketId)",
+        "TicketHistoryEntry: key(Id); props(Action,ChangedByUserId,Id,NewValue,OccurredAtUtc,OldValue,TicketId)",
         "TicketMessage: filter; key(Id); props(AuthorUserId,Content,CreatedAtUtc,DeletedAtUtc,EditedAtUtc,Id,TicketId)",
         "TicketSlaTimer: key(Id); props(BreachedOnUtc,CalendarId,CompletedOnUtc,CompletionCause,Cycle,DueOnUtc,Id,Metric,NextActionOnUtc,StartedAtUtc,StoppedOnUtc,TargetMinutes,TicketId,WarningOnUtc)",
         "User: key(Id); props(Code,CreatedAtUtc,DeactivatedAtUtc,Email,FirstName,Id,IsActive,LastName,SectorId)",

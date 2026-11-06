@@ -2,12 +2,13 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using TickestPristine.Domain.TicketHistories;
 
-namespace TickestPristine.Infrastructure.Tickets;
+namespace TickestPristine.Infrastructure.TicketHistories;
 
-internal sealed class TicketHistoryConfiguration : IEntityTypeConfiguration<TicketHistory>
+internal sealed class TicketHistoryEntryConfiguration : IEntityTypeConfiguration<TicketHistoryEntry>
 {
-    public void Configure(EntityTypeBuilder<TicketHistory> builder)
+    public void Configure(EntityTypeBuilder<TicketHistoryEntry> builder)
     {
         builder.HasKey(h => h.Id);
 

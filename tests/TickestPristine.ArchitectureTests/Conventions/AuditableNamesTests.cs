@@ -1,5 +1,7 @@
 using Shouldly;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketAttachments;
+using TickestPristine.Domain.TicketMessages;
 
 namespace TickestPristine.ArchitectureTests.Conventions;
 

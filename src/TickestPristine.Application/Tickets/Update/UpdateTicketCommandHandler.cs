@@ -7,6 +7,7 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.Tickets.Update;
 
@@ -73,21 +74,21 @@ internal sealed class UpdateTicketCommandHandler(
             ? await context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id).ToListAsync(cancellationToken)
             : [];
 
-        bool lastMessageIsFromAgent = changesStatus && await agentLookup.IsLastMessageFromAgentAsync(ticket, cancellationToken);
+        bool lastMessageIsFromAgent = changesStatus && await agentLookup.IsLastValidMessageFromAgentAsync(ticket, cancellationToken);
 
-        var historyEntries = new List<TicketHistory>();
+        var historyEntries = new List<TicketHistoryEntry>();
 
         // O status antes da descrição, como no histórico de antes; uma falha não muda nada.
         if (changesStatus)
         {
             var slaCycle = new TicketSlaCycleService();
 
-            Result<TicketHistory> statusChange = command.Status switch
+            Result<TicketHistoryEntry> statusChange = command.Status switch
             {
                 TicketStatus.InProgress => ticket.StartProgress(lastMessageIsFromAgent, callerId, nowUtc),
                 TicketStatus.Resolved => slaCycle.Resolve(ticket, slaTimers, callerId, nowUtc),
                 TicketStatus.Canceled => slaCycle.Cancel(ticket, slaTimers, canCancelAny, isOwnerWhoCanEdit, callerId, nowUtc),
-                _ => Result.Failure<TicketHistory>(TicketErrors.InvalidStatusTransition(ticket.Status, command.Status))
+                _ => Result.Failure<TicketHistoryEntry>(TicketErrors.InvalidStatusTransition(ticket.Status, command.Status))
             };
 
             if (statusChange.IsFailure)

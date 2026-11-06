@@ -47,9 +47,9 @@ public class TicketSlaAggregateTests : BaseTest
         methods.ShouldBe(
         [
             nameof(TicketSlaTimer.CompleteFirstResponse),
-            nameof(TicketSlaTimer.GetConsumed),
-            nameof(TicketSlaTimer.GetState),
-            nameof(TicketSlaTimer.ProcessDue)
+            nameof(TicketSlaTimer.ConsumedBusinessTime),
+            nameof(TicketSlaTimer.ProcessDue),
+            nameof(TicketSlaTimer.StateAt)
         ]);
         computedProperties.ShouldBe([nameof(TicketSlaTimer.IsOpen)]);
     }

@@ -27,7 +27,7 @@ internal sealed class TicketAgentLookup(IApplicationDbContext context)
     /// Indica se a última mensagem válida do chamado (a mais recente não excluída) é de quem atende e não do
     /// solicitante; sem mensagens, devolve <c>false</c>.
     /// </summary>
-    public async Task<bool> IsLastMessageFromAgentAsync(Ticket ticket, CancellationToken cancellationToken)
+    public async Task<bool> IsLastValidMessageFromAgentAsync(Ticket ticket, CancellationToken cancellationToken)
     {
         Guid? authorUserId = await context.TicketMessages
             .Where(m => m.TicketId == ticket.Id)

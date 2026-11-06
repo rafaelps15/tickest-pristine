@@ -1,9 +1,10 @@
 using TickestPristine.Application.TicketHistories;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.UnitTests.TicketHistories;
 
-public sealed class TicketHistoryDescriptionsTests
+public sealed class TicketHistoryEntryDescriptionTests
 {
     [Theory]
     [InlineData(TicketHistoryAction.Created, "Chamado criado")]
@@ -20,7 +21,7 @@ public sealed class TicketHistoryDescriptionsTests
         const string? noValue = null;
 
         // Act
-        string description = TicketHistoryDescriptions.For(action, noValue, noValue);
+        string description = TicketHistoryEntryDescription.For(action, noValue, noValue);
 
         // Assert
         description.ShouldBe(expected);
@@ -34,7 +35,7 @@ public sealed class TicketHistoryDescriptionsTests
         string newValue = nameof(TicketStatus.InProgress);
 
         // Act
-        string description = TicketHistoryDescriptions.For(TicketHistoryAction.StatusChanged, oldValue, newValue);
+        string description = TicketHistoryEntryDescription.For(TicketHistoryAction.StatusChanged, oldValue, newValue);
 
         // Assert
         description.ShouldBe("Status alterado de Aberto para Em andamento");
@@ -47,7 +48,7 @@ public sealed class TicketHistoryDescriptionsTests
         const string unknownStatus = "Archived";
 
         // Act
-        string description = TicketHistoryDescriptions.For(
+        string description = TicketHistoryEntryDescription.For(
             TicketHistoryAction.StatusChanged,
             unknownStatus,
             nameof(TicketStatus.Open));
@@ -63,7 +64,7 @@ public sealed class TicketHistoryDescriptionsTests
         const string fileName = "comprovante.pdf";
 
         // Act
-        string description = TicketHistoryDescriptions.For(TicketHistoryAction.AttachmentAdded, null, fileName);
+        string description = TicketHistoryEntryDescription.For(TicketHistoryAction.AttachmentAdded, null, fileName);
 
         // Assert
         description.ShouldBe("Anexo 'comprovante.pdf' adicionado");
@@ -77,7 +78,7 @@ public sealed class TicketHistoryDescriptionsTests
         string betoId = Guid.NewGuid().ToString();
 
         // Act
-        string description = TicketHistoryDescriptions.For(
+        string description = TicketHistoryEntryDescription.For(
             TicketHistoryAction.Reassigned,
             anaId,
             betoId,
@@ -95,8 +96,8 @@ public sealed class TicketHistoryDescriptionsTests
         string anaId = Guid.NewGuid().ToString();
 
         // Act
-        string assigned = TicketHistoryDescriptions.For(TicketHistoryAction.Assigned, null, anaId, newUserName: "Ana Souza");
-        string legacyFirstAssignment = TicketHistoryDescriptions.For(
+        string assigned = TicketHistoryEntryDescription.For(TicketHistoryAction.Assigned, null, anaId, newUserName: "Ana Souza");
+        string legacyFirstAssignment = TicketHistoryEntryDescription.For(
             TicketHistoryAction.Reassigned,
             null,
             anaId,
@@ -114,7 +115,7 @@ public sealed class TicketHistoryDescriptionsTests
         string anaId = Guid.NewGuid().ToString();
 
         // Act
-        string description = TicketHistoryDescriptions.For(TicketHistoryAction.Unassigned, anaId, null, oldUserName: "Ana Souza");
+        string description = TicketHistoryEntryDescription.For(TicketHistoryAction.Unassigned, anaId, null, oldUserName: "Ana Souza");
 
         // Assert
         description.ShouldBe("Responsável removido: Ana Souza");
@@ -127,8 +128,8 @@ public sealed class TicketHistoryDescriptionsTests
         string unknownUserId = Guid.NewGuid().ToString();
 
         // Act
-        string unassigned = TicketHistoryDescriptions.For(TicketHistoryAction.Unassigned, unknownUserId, null);
-        string reassigned = TicketHistoryDescriptions.For(
+        string unassigned = TicketHistoryEntryDescription.For(TicketHistoryAction.Unassigned, unknownUserId, null);
+        string reassigned = TicketHistoryEntryDescription.For(
             TicketHistoryAction.Reassigned,
             unknownUserId,
             Guid.NewGuid().ToString(),

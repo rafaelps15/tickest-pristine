@@ -1,11 +1,11 @@
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.TicketAttachments;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.TicketAttachments.GetPolicy;
 
 /// <summary>
-/// Lê as mesmas constantes usadas na validação do envio: a política informada nunca diverge da aplicada.
+/// Lê a <see cref="TicketAttachmentPolicy"/>, a mesma que confere o envio: a política informada nunca diverge da aplicada.
 /// </summary>
 internal sealed class GetTicketAttachmentPolicyQueryHandler
     : IQueryHandler<GetTicketAttachmentPolicyQuery, TicketAttachmentPolicyResponse>
@@ -16,10 +16,10 @@ internal sealed class GetTicketAttachmentPolicyQueryHandler
     {
         var policy = new TicketAttachmentPolicyResponse
         {
-            MaxFileSizeBytes = TicketAttachment.MaxFileSizeBytes,
-            MaxAttachmentsPerTicket = TicketAttachment.MaxAttachmentsPerTicket,
-            MaxTotalBytesPerTicket = TicketAttachment.MaxTotalBytesPerTicket,
-            AllowedTypes = TicketAttachment.AllowedTypes
+            MaxFileSizeBytes = TicketAttachmentPolicy.MaxFileSizeBytes,
+            MaxAttachmentsPerTicket = TicketAttachmentPolicy.MaxAttachmentsPerTicket,
+            MaxTotalBytesPerTicket = TicketAttachmentPolicy.MaxTotalBytesPerTicket,
+            AllowedTypes = TicketAttachmentPolicy.AllowedTypes
                 .Select(type => new AllowedAttachmentTypeResponse
                 {
                     ContentType = type.ContentType,

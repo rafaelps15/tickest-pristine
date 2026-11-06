@@ -6,6 +6,8 @@ using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Tickets;
+using TickestPristine.Domain.TicketHistories;
+using TickestPristine.Domain.TicketMessages;
 
 namespace TickestPristine.Application.UnitTests.TicketMessages;
 

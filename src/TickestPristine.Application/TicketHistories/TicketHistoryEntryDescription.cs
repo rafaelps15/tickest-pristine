@@ -1,4 +1,5 @@
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.TicketHistories;
 
@@ -6,7 +7,7 @@ namespace TickestPristine.Application.TicketHistories;
 /// Texto exibido ao usuário para cada registro do histórico de chamados, montado na leitura a partir da ação e dos
 /// valores gravados. O banco guarda só os fatos, então mudar um texto aqui vale também para os registros antigos.
 /// </summary>
-internal static class TicketHistoryDescriptions
+internal static class TicketHistoryEntryDescription
 {
     /// <summary>
     /// Nome exibido no lugar de um responsável que não corresponde a nenhum usuário.

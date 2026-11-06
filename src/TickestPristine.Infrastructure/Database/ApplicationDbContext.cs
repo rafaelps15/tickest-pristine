@@ -7,6 +7,9 @@ using TickestPristine.Domain.SlaCalendars;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
+using TickestPristine.Domain.TicketAttachments;
+using TickestPristine.Domain.TicketHistories;
+using TickestPristine.Domain.TicketMessages;
 
 namespace TickestPristine.Infrastructure.Database;
 
@@ -31,7 +34,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<TicketMessage> TicketMessages { get; set; }
 
-    public DbSet<TicketHistory> TicketHistories { get; set; }
+    public DbSet<TicketHistoryEntry> TicketHistories { get; set; }
 
     public DbSet<TicketSlaTimer> TicketSlaTimers { get; set; }
 

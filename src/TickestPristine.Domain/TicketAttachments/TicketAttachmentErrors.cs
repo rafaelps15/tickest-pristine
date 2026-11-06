@@ -1,6 +1,6 @@
 using TickestPristine.SharedKernel;
 
-namespace TickestPristine.Domain.Tickets;
+namespace TickestPristine.Domain.TicketAttachments;
 
 public static class TicketAttachmentErrors
 {

@@ -6,6 +6,7 @@ using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -165,7 +166,7 @@ public sealed class DeleteTicketCommandHandlerTests : BaseHandlerTest
         ticket.DomainEvents.ShouldContain(domainEvent => domainEvent is TicketDeletedDomainEvent);
 
         // O histórico registra quem excluiu, não o dono.
-        TicketHistory history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id);
+        TicketHistoryEntry history = await context.TicketHistories.SingleAsync(h => h.TicketId == ticket.Id);
         history.Action.ShouldBe(TicketHistoryAction.Deleted);
         history.ChangedByUserId.ShouldBe(administratorId);
     }

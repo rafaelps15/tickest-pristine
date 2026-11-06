@@ -10,6 +10,7 @@ using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 using TickestPristine.Domain.SlaCalendars;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.Tickets.Create;
 
@@ -82,7 +83,7 @@ internal sealed class CreateTicketCommandHandler(
             userContext.UserId,
             createdAtUtc);
 
-        TicketHistory opening = ticket.RecordOpening(userContext.UserId);
+        TicketHistoryEntry opening = ticket.RecordOpening(userContext.UserId);
         IReadOnlyList<TicketSlaTimer> slaTimers = new TicketSlaCycleService().Start(ticket, calendar.Value);
 
         context.Tickets.Add(ticket);

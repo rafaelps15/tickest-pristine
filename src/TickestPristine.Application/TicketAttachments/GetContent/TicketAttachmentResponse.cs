@@ -1,4 +1,4 @@
-namespace TickestPristine.Application.TicketAttachments.Download;
+namespace TickestPristine.Application.TicketAttachments.GetContent;
 
 public sealed class TicketAttachmentResponse
 {

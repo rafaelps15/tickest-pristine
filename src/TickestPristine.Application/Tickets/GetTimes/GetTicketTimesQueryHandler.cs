@@ -14,7 +14,7 @@ namespace TickestPristine.Application.Tickets.GetTimes;
 /// A primeira resposta conta só os cronômetros concluídos por mensagem de quem atende; a resolução conta o ciclo 1
 /// (abertura até a primeira resolução). Cronômetros parados (cancelamento) ficam fora, porque não têm conclusão. Os
 /// minutos úteis de cada cronômetro saem da mesma regra do <c>GET tickets/{id}/sla</c>
-/// (<see cref="TicketSlaTimer.GetConsumed"/>), com o calendário do próprio cronômetro, e o cálculo é feito em memória
+/// (<see cref="TicketSlaTimer.ConsumedBusinessTime"/>), com o calendário do próprio cronômetro, e o cálculo é feito em memória
 /// sobre os cronômetros do recorte.
 /// </summary>
 internal sealed class GetTicketTimesQueryHandler(IDbConnectionFactory dbConnectionFactory, ISlaCalendarProvider slaCalendarProvider)
@@ -90,7 +90,7 @@ internal sealed class GetTicketTimesQueryHandler(IDbConnectionFactory dbConnecti
             .. timers
                 .Where(t => t.Metric == metric)
                 // Minutos inteiros: a fração de minuto é descartada.
-                .Select(t => (int)(t.GetConsumed(calendars[t.CalendarId], t.CompletedOnUtc!.Value).Ticks / TimeSpan.TicksPerMinute))
+                .Select(t => (int)(t.ConsumedBusinessTime(calendars[t.CalendarId], t.CompletedOnUtc!.Value).Ticks / TimeSpan.TicksPerMinute))
         ];
 
         return new TicketTimesResponse

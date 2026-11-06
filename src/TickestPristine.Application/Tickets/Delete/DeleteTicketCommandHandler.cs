@@ -7,6 +7,7 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.Tickets.Delete;
 
@@ -47,7 +48,7 @@ internal sealed class DeleteTicketCommandHandler(
             .Where(t => t.TicketId == ticket.Id)
             .ToListAsync(cancellationToken);
 
-        Result<TicketHistory> deletion = new TicketSlaCycleService().Delete(
+        Result<TicketHistoryEntry> deletion = new TicketSlaCycleService().Delete(
             ticket,
             slaTimers,
             userContext.UserId,

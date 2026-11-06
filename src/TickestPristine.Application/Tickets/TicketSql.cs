@@ -131,7 +131,7 @@ internal static class TicketSql
          """;
 
     /// <summary>
-    /// Situação do ciclo vigente, a regra de <see cref="TicketSlaTimer.GetState"/> já como <see cref="TicketSlaStatus"/>
+    /// Situação do ciclo vigente, a regra de <see cref="TicketSlaTimer.StateAt"/> já como <see cref="TicketSlaStatus"/>
     /// (parado vira NotApplicable), sobre a junção de <see cref="CurrentResolutionTimer"/>: vale a primeira regra que se
     /// aplica, e sem cronômetro a situação vem nula.
     /// </summary>

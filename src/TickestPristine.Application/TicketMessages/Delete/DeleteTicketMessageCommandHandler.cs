@@ -8,6 +8,8 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketHistories;
+using TickestPristine.Domain.TicketMessages;
 
 namespace TickestPristine.Application.TicketMessages.Delete;
 
@@ -38,7 +40,7 @@ internal sealed class DeleteTicketMessageCommandHandler(
             PermissionCodes.Tickets.Manage,
             cancellationToken);
 
-        Result<TicketHistory> removal = message.Delete(userContext.UserId, canDeleteAny, dateTimeProvider.UtcNow);
+        Result<TicketHistoryEntry> removal = message.Delete(userContext.UserId, canDeleteAny, dateTimeProvider.UtcNow);
 
         if (removal.IsFailure)
         {
@@ -52,7 +54,7 @@ internal sealed class DeleteTicketMessageCommandHandler(
 
         await context.SaveChangesAsync(cancellationToken);
 
-        ticket.RecordMessageActivity(removal.Value, await agentLookup.IsLastMessageFromAgentAsync(ticket, cancellationToken));
+        ticket.RecordMessageActivity(removal.Value, await agentLookup.IsLastValidMessageFromAgentAsync(ticket, cancellationToken));
 
         await activityWriter.WriteLastActivityAndWaitingOnAsync(ticket, cancellationToken);
 

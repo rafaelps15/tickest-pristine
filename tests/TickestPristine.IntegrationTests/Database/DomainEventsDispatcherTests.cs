@@ -2,9 +2,9 @@ using System.Diagnostics.Metrics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TickestPristine.Application.Abstractions.Telemetry;
-using TickestPristine.Domain.Tickets;
 using TickestPristine.Infrastructure.DomainEvents;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketAttachments;
 
 namespace TickestPristine.IntegrationTests.Database;
 

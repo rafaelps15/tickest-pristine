@@ -3,6 +3,7 @@ using TickestPristine.Domain.SlaCalendars;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -113,7 +114,7 @@ public sealed class TicketSlaCycleServiceTests
         (_, List<TicketSlaTimer> otherTimers) = Open();
 
         // Act
-        Result<TicketHistory> result = _slaCycle.Resolve(ticket, [.. timers, .. otherTimers], AgentId, OccurredAtUtc);
+        Result<TicketHistoryEntry> result = _slaCycle.Resolve(ticket, [.. timers, .. otherTimers], AgentId, OccurredAtUtc);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();
@@ -131,7 +132,7 @@ public sealed class TicketSlaCycleServiceTests
         (_, List<TicketSlaTimer> otherTimers) = Open();
 
         // Act
-        Result<TicketHistory> result = _slaCycle.Cancel(
+        Result<TicketHistoryEntry> result = _slaCycle.Cancel(
             ticket,
             [.. timers, .. otherTimers],
             canCancelAny: true,
@@ -256,7 +257,7 @@ public sealed class TicketSlaCycleServiceTests
         TimerState[] otherTimersBefore = Capture(otherTimers);
 
         // Act
-        Result<TicketHistory> result = _slaCycle.Delete(ticket, [.. timers, .. otherTimers], AgentId, OccurredAtUtc);
+        Result<TicketHistoryEntry> result = _slaCycle.Delete(ticket, [.. timers, .. otherTimers], AgentId, OccurredAtUtc);
 
         // Assert
         result.IsSuccess.ShouldBeTrue();

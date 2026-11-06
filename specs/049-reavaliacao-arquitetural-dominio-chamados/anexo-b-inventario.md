@@ -1013,3 +1013,27 @@ Nenhuma desde 2026-11-04: a DEC-13 foi confirmada pela (a) e passou às decidida
 | 1 | DEC-48 | Sem objeto | Branches 022 e 023 |
 
 **Total:** 37 (decididas) + 17 (pendentes) + 0 (a confirmar) + 15 (recomendações) + 1 (sem objeto) = 70.
+
+## B.11 Verificação da fase 1 da G3-a (2026-11-06)
+
+> Evidências da `spec-verify` da fase 1 (T-2, T-3 e a pasta da DEC-72), escritas aqui pelo limite de tamanho do `spec.md`, que tem o ponteiro na seção 10.
+
+- **Escopo:**
+  - Domain com `TicketMessages/`, `TicketAttachments/` e `TicketHistories/` (18 arquivos movidos) e o `TicketHistoryRecordedDomainEvent` apagado (DEC-10); as configurações espelhadas na Infrastructure;
+  - `TicketHistory` → `TicketHistoryEntry`, `TicketReassignedDomainEvent` → `TicketAssignedDomainEvent`, `GetState` → `StateAt`, `GetConsumed` → `ConsumedBusinessTime` e `IsLastMessageFromAgentAsync` → `IsLastValidMessageFromAgentAsync`;
+  - a `TicketAttachmentPolicy` (limites, tipos com as extensões, `GetMediaType`, `Accepts` e `ExtensionsOf`), lida pela entidade, pelo inspetor, pelo `GetPolicy` e pelo limite do corpo do `Upload`, que continua em 11 MB;
+  - a pasta `Application/TicketAttachments/GetContent` no lugar de `Download` (DEC-72);
+  - nenhuma rota, tabela, `DbSet` ou migration mudou.
+- **Build:** `dotnet build TickestPristine.slnx`: 0 avisos, 0 erros, também depois dos dois ajustes da revisão.
+- **Testes:**
+  - unitários 756 de 756 e arquitetura 142 de 142, do projeto inteiro, porque os namespaces mudaram em vários agregados;
+  - integração inteira: 886 aprovados, 0 falhas e 11 não executados (as evidências da CT-26), de 897, em 8 min 34 s (`tests/artifacts/resultados/integracao-049-g3a-fase1.trx`), com o `Model_Should_HaveNoPendingChanges` (AC-15) e os testes da política (AC-11);
+  - depois da limpeza dos `using`: `TicketAttachments`, `TicketHistories`, `PaginationExtensionsTests` e `DomainEventsDispatcherTests`, 70 de 70; depois do `Accepts`: `Storage` e `TicketAttachments`, 68 de 68;
+  - testes de `scripts` 14 de 14.
+- **Buscas (AC-12 e AC-14, parte da fase 1):** nenhum `TicketHistory`, `TicketHistoryConfiguration`, `TicketReassignedDomainEvent`, `GetState`, `GetConsumed`, `IsLastMessageFromAgentAsync` nem `TicketHistoryRecordedDomainEvent` em `src/` e `tests/`, fora das migrations; os tipos movidos nos namespaces novos; a lista de tipos aceitos só na política. `ProcessSlaBreaches` e `ProcessDue` ficam para a T-9 (DEC-1).
+- **Auditoria:** `python scripts/auditoria_sdd.py .`: 100,0%, CONFORME, código de saída 0, de novo depois da última mudança de `src/`.
+- **Revisão (`ca-review`):** nenhum achado bloqueante. Dois ajustes na própria fase: o `using` de `Domain.Tickets` que sobrou em 10 arquivos (o IDE0005 está desligado, e o build não acusava) e o `Accepts` no lugar de `ExtensionsOf(...) is null` no inspetor. O teste dos membros do cronômetro só mudou a ordem da lista, pelos nomes novos.
+- **Documentação:** `SYSTEM_SPECIFICATION.md`, nos 12 trechos que citavam os nomes e os caminhos trocados (entidades, eventos, histórico, auditoria, envio de anexos e reabertura). O `CLAUDE.md` ainda cita `TicketHistory` em três trechos; mudar depende de autorização (DEC-14).
+- **Pendências:** o PR da fase 1, pelo responsável; a fase 2 (T-4 a T-6 e T-304); a skill de desenho de agregados antes da fase 3.
+- **Complemento (DEC-73, opção 2A), 2026-11-06:** `TicketHistoryDescriptions` → `TicketHistoryEntryDescription` (classe, arquivo e teste), sem mudar o texto exibido; build sem avisos; unitários 756 de 756; arquitetura 142 de 142; `TicketHistories` e os testes de histórico do `TicketsTests`, 30 de 30; `SYSTEM_SPECIFICATION.md` com o nome novo. As migrations ficam com o nome antigo nos comentários, porque registram o que foi aplicado.
+- **Entrega:** PR #78 (https://github.com/rafaelps15/tickest-pristine/pull/78), aberto em 2026-11-06 da branch `refactor/SPEC-049-tickest-architecture-reassessment` para a `main`, com o commit `2816596`. O merge é do responsável.

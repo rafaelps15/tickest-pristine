@@ -4,6 +4,7 @@ using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.Tickets.Close;
 
@@ -31,7 +32,7 @@ internal sealed class CloseTicketCommandHandler(
             return Result.Failure(TicketErrors.InvalidStatusTransition(ticket.Status, TicketStatus.Closed));
         }
 
-        Result<TicketHistory> closing = ticket.Close(userContext.UserId, dateTimeProvider.UtcNow);
+        Result<TicketHistoryEntry> closing = ticket.Close(userContext.UserId, dateTimeProvider.UtcNow);
 
         if (closing.IsFailure)
         {

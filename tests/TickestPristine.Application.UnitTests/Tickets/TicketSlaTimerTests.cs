@@ -120,8 +120,8 @@ public sealed class TicketSlaTimerTests
         DateTime nowUtc = SaoPaulo(11, 15);
 
         // Act
-        SlaObjectiveState state = resolution.GetState(nowUtc);
-        TimeSpan consumed = resolution.GetConsumed(Calendar, nowUtc);
+        SlaObjectiveState state = resolution.StateAt(nowUtc);
+        TimeSpan consumed = resolution.ConsumedBusinessTime(Calendar, nowUtc);
 
         // Assert
         state.ShouldBe(SlaObjectiveState.AtRisk);
@@ -136,8 +136,8 @@ public sealed class TicketSlaTimerTests
         DateTime nowUtc = SaoPaulo(12, 20);
 
         // Act
-        SlaObjectiveState state = resolution.GetState(nowUtc);
-        TimeSpan consumed = resolution.GetConsumed(Calendar, nowUtc);
+        SlaObjectiveState state = resolution.StateAt(nowUtc);
+        TimeSpan consumed = resolution.ConsumedBusinessTime(Calendar, nowUtc);
 
         // Assert
         state.ShouldBe(SlaObjectiveState.Breached);
@@ -148,7 +148,7 @@ public sealed class TicketSlaTimerTests
     public void GetState_Should_ReturnRunning_WhenBeforeWarning()
     {
         // Act
-        SlaObjectiveState state = UrgentResolution().GetState(SaoPaulo(11, 9, 59));
+        SlaObjectiveState state = UrgentResolution().StateAt(SaoPaulo(11, 9, 59));
 
         // Assert
         state.ShouldBe(SlaObjectiveState.Running);
@@ -162,7 +162,7 @@ public sealed class TicketSlaTimerTests
         firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(8, 40));
 
         // Act
-        SlaObjectiveState state = firstResponse.GetState(SaoPaulo(13, 0));
+        SlaObjectiveState state = firstResponse.StateAt(SaoPaulo(13, 0));
 
         // Assert
         state.ShouldBe(SlaObjectiveState.Met);
@@ -176,7 +176,7 @@ public sealed class TicketSlaTimerTests
         firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(9, 0));
 
         // Act
-        SlaObjectiveState state = firstResponse.GetState(SaoPaulo(13, 0));
+        SlaObjectiveState state = firstResponse.StateAt(SaoPaulo(13, 0));
 
         // Assert
         state.ShouldBe(SlaObjectiveState.Missed);
@@ -191,8 +191,8 @@ public sealed class TicketSlaTimerTests
         new TicketSlaCycleService().Cancel(ticket, timers, canCancelAny: true, isOwnerWhoCanEdit: false, ticket.CreatedByUserId, SaoPaulo(9, 0));
 
         // Act
-        SlaObjectiveState state = resolution.GetState(SaoPaulo(17, 0));
-        TimeSpan consumed = resolution.GetConsumed(Calendar, SaoPaulo(17, 0));
+        SlaObjectiveState state = resolution.StateAt(SaoPaulo(17, 0));
+        TimeSpan consumed = resolution.ConsumedBusinessTime(Calendar, SaoPaulo(17, 0));
 
         // Assert
         state.ShouldBe(SlaObjectiveState.Stopped);
@@ -298,11 +298,11 @@ public sealed class TicketSlaTimerTests
         DateTime nowUtc = SaoPaulo(8, 32, 30);
 
         // Act
-        TimeSpan consumed = firstResponse.GetConsumed(Calendar, nowUtc);
+        TimeSpan consumed = firstResponse.ConsumedBusinessTime(Calendar, nowUtc);
 
         // Assert
         consumed.ShouldBe(new TimeSpan(0, 22, 30));
-        firstResponse.GetState(nowUtc).ShouldBe(SlaObjectiveState.AtRisk);
+        firstResponse.StateAt(nowUtc).ShouldBe(SlaObjectiveState.AtRisk);
     }
 
     [Fact]

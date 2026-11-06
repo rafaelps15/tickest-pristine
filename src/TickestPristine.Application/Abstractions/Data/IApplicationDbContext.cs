@@ -7,6 +7,9 @@ using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using TickestPristine.Domain.TicketAttachments;
+using TickestPristine.Domain.TicketHistories;
+using TickestPristine.Domain.TicketMessages;
 
 namespace TickestPristine.Application.Abstractions.Data;
 
@@ -25,7 +28,7 @@ public interface IApplicationDbContext
     DbSet<Ticket> Tickets { get; }
     DbSet<TicketAttachment> TicketAttachments { get; }
     DbSet<TicketMessage> TicketMessages { get; }
-    DbSet<TicketHistory> TicketHistories { get; }
+    DbSet<TicketHistoryEntry> TicketHistories { get; }
     DbSet<TicketSlaTimer> TicketSlaTimers { get; }
     DbSet<Role> Roles { get; }
     DbSet<Permission> Permissions { get; }
