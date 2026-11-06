@@ -28,7 +28,7 @@ Critérios da skill `add-entity` (`SKILL.md`, passos 1 a 5, e `references/rich-e
 | C9 | `DbSet` no `IApplicationDbContext`, no `ApplicationDbContext` e no `TestDbContext` |
 | C10 | nenhum handler ou classe estática atribui as propriedades da entidade nem dispara os eventos dela |
 
-Pela diretriz, o que o modelo não tem sai: membros estáticos públicos além do `Create`, constantes públicas e retornos fora de `Result`, `bool`, `void`, da própria entidade ou do filho.
+Única exceção: o marcador `IAuditable`, da auditoria (DEC-80). Pela diretriz, o que o modelo não tem sai: membros estáticos públicos além do `Create`, constantes públicas e retornos fora de `Result`, `bool`, `void`, da própria entidade ou do filho.
 
 ## F.3 Inventário (2026-11-06)
 
@@ -36,14 +36,14 @@ Conferido no código da branch depois do commit `21144e1`. As configurações do
 
 | # | Entidade | Situação | Desvios | Etapa que remove |
 |---|---|---|---|---|
-| 1 | `Ticket` | rica, com desvios | estáticos públicos `GetSlaStatus`, `CanBeCanceled`, `OwnerCancelDeadline` e a expressão `Active`; constante pública `OwnerCancelWindowMinutes`; `PostMessage`, `ChangeDescription`, `RecordOpening`, `AddAttachment` e as transições devolvem entradas de histórico ou records de resultado; `Resolve`, `Cancel`, `Reopen` e `Delete` `internal`, chamados pelo `TicketSlaCycleService` | G3-a, fase 3 |
-| 2 | `TicketSlaTimer` | filho, com desvios | `Complete`, `Stop`, `Dequeue` e `BelongsTo` `internal`, chamados pelo serviço; mudanças de estado sem evento; `CompleteFirstResponse` recebe o `Ticket` | G3-a, fase 3 (DEC-1 (b)) |
+| 1 | `Ticket` | rica, com desvios | estáticos públicos `GetSlaStatus`, `CanBeCanceled`, `OwnerCancelDeadline` e a expressão `Active`; constante pública `OwnerCancelWindowMinutes`; `PostMessage`, `ChangeDescription`, `RecordOpening`, `AddAttachment` e as transições devolvem entradas de histórico ou records de resultado; `WaitingOnAfter` devolve `TicketWaitingOn?`; `IsActive` é propriedade calculada, sem `private set` (C3); a configuração não tem `ValueGeneratedNever` no `Id` (C8); título e descrição em `citext`, com o tamanho por check constraint, e não `HasMaxLength` (C8); `SlaPlan` gravado como jsonb por conversão, e não como objeto de valor com `OwnsOne` (C8); `Resolve`, `Cancel`, `Reopen` e `Delete` `internal`, chamados pelo `TicketSlaCycleService` | G3-a, fase 3 |
+| 2 | `TicketSlaTimer` | filho, com desvios | `Complete`, `Stop`, `Dequeue` e `BelongsTo` `internal`, chamados pelo serviço; mudanças de estado sem evento; `CompleteFirstResponse` recebe o `Ticket`; `StateAt` devolve `SlaObjectiveState` e `ConsumedBusinessTime` devolve `TimeSpan`; `IsOpen` é propriedade calculada, sem `private set` (C3) | G3-a, fase 3 (DEC-1 (b)) |
 | 3 | `TicketMessage` | filho, com desvio | o evento de publicação sai do `Create` do filho, e não do método do agregado (padrão 7) | G3-a, fase 3 |
 | 4 | `TicketAttachment` | filho, com desvios | o evento de envio sai do `Create` do filho; `RecordFilePurge` muda o estado sem evento | G3-a, fase 3 |
 | 5 | `TicketHistoryEntry` | filho, no modelo | — | — |
-| 6 | `Department` | rica, com desvio | `Update` dispara o evento mesmo sem mudança (desvio declarado no `CLAUDE.md`) | G3-c, OA-2 (REQ-303) |
-| 7 | `Sector` | rica, com desvio | o mesmo do `Department` | G3-c, OA-2 (REQ-303) |
-| 8 | `User` | anêmica | 9 `{ get; set; }`, sem construtor privado, sem `Create` e sem eventos próprios | G3-b, U1 e U2 (DEC-20) |
+| 6 | `Department` | rica, com desvios | `Update` dispara o evento mesmo sem mudança (desvio declarado no `CLAUDE.md`); sem `ValueGeneratedNever` no `Id`; nome em `citext`, com o tamanho por check constraint (C8) | G3-c, OA-2 (REQ-303) |
+| 7 | `Sector` | rica, com desvios | os mesmos do `Department` | G3-c, OA-2 (REQ-303) |
+| 8 | `User` | anêmica | 9 `{ get; set; }`, sem construtor privado, sem `Create` e sem eventos próprios; nome, sobrenome e e-mail em `citext`, com o tamanho por check constraint (C8) | G3-b, U1 e U2 (DEC-20) |
 | 9 | `UserCredential` | anêmica | 7 `{ get; set; }`; interna do `User` (DEC-20) | G3-b, U2 |
 | 10 | `UserInvitation` | anêmica | 7 `{ get; set; }`; interna do `User` (DEC-20) | G3-b, U2 |
 | 11 | `UserRole` | anêmica | 3 `{ get; set; }`; vínculo interno do `User` (DEC-20) | G3-b, U1 |
@@ -51,11 +51,11 @@ Conferido no código da branch depois do commit `21144e1`. As configurações do
 | 13 | `Role` | anêmica | 2 `{ get; set; }`; raiz com `RolePermission` interna (DEC-31) | G3-b, AZ-2 e AZ-3 |
 | 14 | `RolePermission` | anêmica | 3 `{ get; set; }`; interna do `Role` (DEC-31) | G3-b, AZ-2 e AZ-3 |
 | 15 | `Permission` | anêmica | 6 `{ get; set; }` | G3-b, AZ-2 |
-| 16 | `SlaCalendar` | anêmica | 5 `{ get; set; }`; tabela só lida | **sem etapa** (Q-09: manter ou remover a capacidade) |
-| 17 | `SlaCalendarHoliday` | anêmica | 4 `{ get; set; }`; tabela só lida | **sem etapa** (Q-09) |
+| 16 | `SlaCalendar` | anêmica | 5 `{ get; set; }`; tabela só lida; grade gravada como jsonb por conversão (C8) | G3-a, fase 3 (DEC-79) |
+| 17 | `SlaCalendarHoliday` | anêmica | 4 `{ get; set; }`; tabela só lida | G3-a, fase 3 (DEC-79) |
 | 18 | `AuditLogEntry` | anêmica | 9 `{ get; set; }`; só a Infrastructure a cria, e não é entidade de domínio | G3-c, OA-3 (DEC-47 (b): sai do Domain) |
 
-Contagem: 1 no modelo, 6 ricas com desvios e 11 anêmicas.
+Contagem: 1 no modelo, 6 ricas com desvios e 11 anêmicas. Conferido também por varredura dos membros públicos das 7 ricas e das 18 configurações do EF em 2026-11-06. As anêmicas raiz também não têm `ValueGeneratedNever` no `Id` e entram no modelo inteiro na etapa delas. As propriedades calculadas viram métodos de consulta, como o `IsOverdue` do modelo.
 
 ## F.4 Dúvidas resolvidas pelas referências
 
@@ -65,16 +65,18 @@ Contagem: 1 no modelo, 6 ricas com desvios e 11 anêmicas.
 | D2 | Constante pública `OwnerCancelWindowMinutes` | o valor fica dentro da regra ou do agregado, sem contrato público | idem | vira constante privada do `Ticket`; o SQL do prazo usa o mesmo valor, conferido pelo teste de concordância |
 | D3 | Mudança de estado sem evento (`RecordFilePurge`, cronômetros) | toda mudança de estado do agregado dispara um evento | idem | cada mudança de estado dispara o próprio evento, mesmo sem consumidor (C5) |
 | D4 | Transições `internal` e o `TicketSlaCycleService` | a raiz controla as entidades internas, sem serviço de domínio para regra de um agregado só | idem | já decidido pela DEC-1 (b): o serviço sai, e as transições ficam públicas no `Ticket` |
-| D5 | Marcador `IAuditable` | sem trilha de auditoria | `IAuditable` vazio nas entidades auditadas, lido pelo interceptor | fica, na semântica do Milan (desvio de persistência já declarado no `CLAUDE.md`) |
+| D5 | Marcador `IAuditable` | sem trilha de auditoria | `IAuditable` vazio nas entidades auditadas, lido pelo interceptor | fica: a única exceção ao modelo (DEC-80) |
 | D6 | `AuditLogEntry` no Domain | registros técnicos fora do domínio (o `OutboxMessage` fica em `BuildingBlocks/Application/Outbox`) | o registro de auditoria nasce no interceptor da persistência | sai do Domain, como propõe a DEC-47 (b); decisão no portão da G3-c |
+| D8 | Consultas que devolvem valor (`Ticket.WaitingOnAfter`, `TicketSlaTimer.StateAt` e `ConsumedBusinessTime`) | a leitura calcula no modelo de leitura (SQL e views), e o agregado só responde ao próprio comportamento | o mesmo | o cálculo do estado e do tempo útil vai para o cálculo puro da DEC-73 (3A), usado pela leitura; o `WaitingOnAfter` fica privado das transições, e a projeção usa uma pergunta `bool` do `Ticket`. Detalhe no plano da fase 3 |
 | D7 | Evento disparado pelo `Create` do filho | o `MeetingComment` dispara o `MeetingCommentAddedDomainEvent` no próprio construtor | — | vale a skill, que prevalece sobre as referências: o método do agregado dispara o evento (padrão 7) |
 
-## F.5 Pontos para a aprovação
+## F.5 Pontos da revisão (2026-11-06)
 
-Pontos que as referências não resolvem e que dependem do responsável; a spec não volta para `Aprovada` sem eles.
+Pontos que as referências não resolvem, decididos por Rafael Santos no questionário:
 
-1. **Dois filhos no mesmo método.** O `PostMessage` e o `AddAttachment` criam o filho e a entrada do histórico. O padrão 7 devolve um filho só, e as duas referências não têm histórico como registro: o Kamil projetaria os eventos, o que a DEC-73 (2A) descartou. Opções para a fase 3: (a) o histórico vira coleção interna do `Ticket` (campo privado e `IReadOnlyCollection`, C3), gravado com ele, e os métodos devolvem só o filho; (b) dois métodos, um para o filho e outro para a entrada; (c) manter os records de resultado como desvio declarado.
-2. **`SlaCalendar` e `SlaCalendarHoliday`.** Não têm etapa: a Q-09 deixou aberto manter ou remover a capacidade. Com a diretriz, ou as duas entram numa etapa (G3-a fase 3, junto do SLA, ou G3-c), ou a capacidade sai.
+1. **Dois filhos no mesmo método (DEC-78):** cada método do `Ticket` devolve um filho só, como no padrão 7, com o evento disparado pelo agregado; por exemplo, `PostMessage` devolve o `TicketMessage`, e um segundo método (`RecordMessagePosting`) devolve a `TicketHistoryEntry`. O handler adiciona os dois antes do único save. Na fase 3 saem o `TicketMessagePosting` e o `TicketAttachmentUpload`. Descartadas: o histórico como coleção interna do `Ticket`, que contraria o C8, e os records como desvio declarado.
+2. **`SlaCalendar` e `SlaCalendarHoliday` (DEC-79):** entram no modelo na fase 3 da G3-a, junto do SLA; a capacidade fica, e a Q-09 passa a tratar só do caminho de escrita.
+3. **Colunas `citext` e conversões para jsonb (DEC-81):** seguem a skill. As colunas `citext` viram `varchar` com `HasMaxLength`, e a unicidade e a busca sem diferenciar maiúsculas passam a índice em `lower(...)` e `ILIKE`; o plano de SLA e a grade do calendário viram objetos de valor com `OwnsOne`. As migrations entram na etapa de cada entidade, e os testes de hoje conferem que o comportamento não muda.
 
 ## F.6 Critério por etapa (AC-33, T-19)
 
