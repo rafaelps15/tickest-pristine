@@ -14,7 +14,7 @@ public static class UserErrors
 
     public static Error CannotManagePrivilegedUser(IEnumerable<string> permissionNames) => Error.Forbidden(
         "Users.CannotManagePrivilegedUser",
-        $"Você não pode desativar nem reativar quem tem permissões administrativas que você não possui: {string.Join(", ", permissionNames)}");
+        $"Você não pode gerenciar quem tem permissões administrativas que você não possui: {string.Join(", ", permissionNames)}");
 
     public static readonly Error ReadForbidden = Error.Forbidden(
         "Users.ReadForbidden",

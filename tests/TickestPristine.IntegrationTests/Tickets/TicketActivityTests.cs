@@ -98,7 +98,7 @@ public sealed class TicketActivityTests(IntegrationTestWebAppFactory factory) : 
             ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             Ticket ticket = await context.Tickets.AsNoTracking().SingleAsync(t => t.Id == ticketId);
             context.TicketHistories.Add(ticket
-                .PostMessage(GetUserId(requesterTokens), "Mensagem antiga", authorIsAgent: false, before.AddHours(-1))
+                .PostMessage(GetUserId(requesterTokens), "Mensagem antiga", before.AddHours(-1))
                 .History);
             await context.SaveChangesAsync();
         }
@@ -107,6 +107,45 @@ public sealed class TicketActivityTests(IntegrationTestWebAppFactory factory) : 
 
         // Assert
         after.ShouldBe(before);
+    }
+
+    [Fact]
+    public async Task WaitingOn_Should_FollowLastValidMessage_When_EarlierMessageWritesLast()
+    {
+        // Arrange: o chamado de Maria; quem atende responde, e Maria responde enquanto a projeção da resposta de quem
+        // atende ainda não gravou.
+        (Guid ticketId, AccessTokens requesterTokens) = await CreateTicketAsRequesterAsync();
+        AccessTokens adminTokens = await LoginAsync(AdminEmail, AdminPassword);
+
+        // Gatilho temporário que segura por dois segundos o primeiro UPDATE de chamados, antes de ele travar a linha: sem a
+        // trava da projeção, a resposta de Maria gravaria antes, e a de quem atende, calculada sem ela, por cima.
+        await ExecuteAsync(context => context.Database.ExecuteSqlRawAsync(HoldFirstTicketUpdateSql));
+
+        HttpResponseMessage[] responses;
+
+        try
+        {
+            // Act
+            Task<HttpResponseMessage> agentAnswer = SendMessageAsAsync(adminTokens, ticketId, "Estamos verificando.");
+            await WaitForMessageAsync(ticketId);
+            Task<HttpResponseMessage> requesterAnswer = SendMessageAsAsync(requesterTokens, ticketId, "Ainda não funciona.");
+            responses = await Task.WhenAll(agentAnswer, requesterAnswer);
+        }
+        finally
+        {
+            await ExecuteAsync(context => context.Database.ExecuteSqlRawAsync(DropHoldFirstTicketUpdateSql));
+        }
+
+        // Assert: a última mensagem válida é de Maria, então o chamado aguarda quem atende.
+        responses.ShouldAllBe(response => response.IsSuccessStatusCode);
+        DateTime lastMessageAtUtc = await GetLatestHistoryAtAsync(ticketId, TicketHistoryAction.MessageAdded);
+
+        await ExecuteAsync(async context =>
+        {
+            Ticket stored = await context.Tickets.AsNoTracking().SingleAsync(t => t.Id == ticketId);
+            stored.WaitingOn.ShouldBe(TicketWaitingOn.Agent);
+            stored.LastActivityAtUtc.ShouldBe(lastMessageAtUtc);
+        });
     }
 
     [Fact]
@@ -274,6 +313,57 @@ public sealed class TicketActivityTests(IntegrationTestWebAppFactory factory) : 
 
         return ticket.Id;
     }
+
+    private async Task<HttpResponseMessage> SendMessageAsAsync(AccessTokens tokens, Guid ticketId, string content)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"tickets/{ticketId}/messages")
+        {
+            Content = JsonContent.Create(new { content })
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
+
+        return await HttpClient.SendAsync(request);
+    }
+
+    // A mensagem aparece no banco no commit, antes da projeção dela.
+    private async Task WaitForMessageAsync(Guid ticketId)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        bool posted = false;
+
+        while (!posted)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(20), timeout.Token);
+            await ExecuteAsync(async context => posted = await context.TicketMessages.AnyAsync(m => m.TicketId == ticketId));
+        }
+    }
+
+    // Só o primeiro UPDATE de chamados espera, antes de travar a linha; a sequência não bloqueia os seguintes.
+    private const string HoldFirstTicketUpdateSql =
+        """
+        CREATE SEQUENCE public.test_hold_first_ticket_update;
+
+        CREATE OR REPLACE FUNCTION public.test_hold_first_ticket_update() RETURNS trigger AS $$
+        BEGIN
+            IF nextval('public.test_hold_first_ticket_update') = 1 THEN
+                PERFORM pg_sleep(2);
+            END IF;
+            RETURN NULL;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        CREATE TRIGGER test_hold_first_ticket_update
+            BEFORE UPDATE ON public.tickets
+            FOR EACH STATEMENT
+            EXECUTE FUNCTION public.test_hold_first_ticket_update();
+        """;
+
+    private const string DropHoldFirstTicketUpdateSql =
+        """
+        DROP TRIGGER IF EXISTS test_hold_first_ticket_update ON public.tickets;
+        DROP FUNCTION IF EXISTS public.test_hold_first_ticket_update();
+        DROP SEQUENCE IF EXISTS public.test_hold_first_ticket_update;
+        """;
 
     private async Task ExecuteAsync(Func<ApplicationDbContext, Task> action)
     {

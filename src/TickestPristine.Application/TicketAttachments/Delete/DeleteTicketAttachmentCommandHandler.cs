@@ -3,7 +3,6 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Permissions;
-using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -16,7 +15,6 @@ internal sealed class DeleteTicketAttachmentCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IPermissionProvider permissionProvider,
-    ITicketActivityWriter activityWriter,
     IDateTimeProvider dateTimeProvider)
     : ICommandHandler<DeleteTicketAttachmentCommand>
 {
@@ -45,16 +43,9 @@ internal sealed class DeleteTicketAttachmentCommandHandler(
             return removal;
         }
 
-        // Sem rastreio: a última atividade é gravada depois do commit, sem a versão do chamado.
-        Ticket ticket = await context.Tickets.AsNoTracking().SingleAsync(t => t.Id == attachment.TicketId, cancellationToken);
-
         context.TicketHistories.Add(removal.Value);
 
         await context.SaveChangesAsync(cancellationToken);
-
-        ticket.RecordAttachmentActivity(removal.Value);
-
-        await activityWriter.WriteLastActivityAsync(ticket, cancellationToken);
 
         return Result.Success();
     }

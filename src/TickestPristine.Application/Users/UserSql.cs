@@ -38,14 +38,14 @@ internal static class UserSql
 
     /// <summary>
     /// Quem atende chamados: conta utilizável com a permissão efetiva <c>tickets:manage</c>, vinda de qualquer uma das
-    /// suas roles, lida das tabelas (sem o cache de permissões), a mesma regra do <c>TicketAgentLookup</c>.
+    /// suas roles, lida da view <c>public.user_permissions</c> (sem o cache de permissões), a mesma regra do
+    /// <c>IAgentDirectory</c>.
     /// </summary>
     internal const string IsTicketAgent =
         $"""
          {IsUsable} AND EXISTS (
              SELECT 1
-             FROM public.user_roles ur
-             JOIN public.role_permissions rp ON rp.role_name = ur.role_name
-             WHERE ur.user_id = u.id AND rp.permission_code = '{PermissionCodes.Tickets.Manage}')
+             FROM public.user_permissions up
+             WHERE up.user_id = u.id AND up.permission_code = '{PermissionCodes.Tickets.Manage}')
          """;
 }

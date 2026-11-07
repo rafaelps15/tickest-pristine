@@ -2,7 +2,6 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
@@ -11,10 +10,17 @@ using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Users.AssignRoles;
 
+/// <summary>
+/// Define as funções do usuário (o endpoint exige <c>users:assign-roles</c>) no lugar das atuais. Quem chama não concede
+/// nem remove permissões administrativas que não possui, e o último administrador não perde a função. Informar as funções
+/// atuais não muda nada.
+/// </summary>
 internal sealed class AssignUserRolesCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IPermissionProvider permissionProvider)
+    IPermissionProvider permissionProvider,
+    PrivilegeEscalationCheck privilegeEscalationCheck,
+    LastAdministratorCheck lastAdministratorCheck)
     : ICommandHandler<AssignUserRolesCommand>
 {
     public async Task<Result> Handle(AssignUserRolesCommand command, CancellationToken cancellationToken)
@@ -28,63 +34,61 @@ internal sealed class AssignUserRolesCommandHandler(
 
         HashSet<string> requestedRoleNames = [.. command.RoleNames];
 
-        List<string> existingRoleNames = await context.Roles
+        List<string> foundRoleNames = await context.Roles
             .Where(r => requestedRoleNames.Contains(r.Name))
             .Select(r => r.Name)
             .ToListAsync(cancellationToken);
 
-        string? missingRoleName = requestedRoleNames.Except(existingRoleNames).FirstOrDefault();
+        string? unknownRoleName = requestedRoleNames.Except(foundRoleNames).FirstOrDefault();
 
-        if (missingRoleName is not null)
+        if (unknownRoleName is not null)
         {
-            return Result.Failure(RoleErrors.NotFound(missingRoleName));
+            return Result.Failure(RoleErrors.NotFound(unknownRoleName));
         }
 
-        List<UserRole> existingUserRoles = await context.UserRoles
+        List<UserRole> currentUserRoles = await context.UserRoles
             .Where(ur => ur.UserId == user.Id)
             .ToListAsync(cancellationToken);
 
-        HashSet<string> currentRoleNames = [.. existingUserRoles.Select(ur => ur.RoleName)];
+        HashSet<string> currentRoleNames = [.. currentUserRoles.Select(ur => ur.RoleName)];
 
-        // Considera tanto as roles adicionadas quanto as removidas.
+        // As funções que entram e as que saem.
         HashSet<string> changedRoleNames = [.. currentRoleNames];
         changedRoleNames.SymmetricExceptWith(requestedRoleNames);
+
+        if (changedRoleNames.Count == 0)
+        {
+            return Result.Success();
+        }
 
         List<string> changedPermissions = await context.RolePermissions
             .Where(p => changedRoleNames.Contains(p.RoleName))
             .Select(p => p.PermissionCode)
             .ToListAsync(cancellationToken);
 
-        Result escalationCheck = await PrivilegeEscalationGuard.EnsureCallerCanChangeAsync(
-            permissionProvider,
+        List<string> missingPermissions = await privilegeEscalationCheck.GetMissingPermissionsToChangeAsync(
             userContext.UserId,
             changedPermissions,
             cancellationToken);
 
-        if (escalationCheck.IsFailure)
+        if (missingPermissions.Count > 0)
         {
-            return escalationCheck;
+            return Result.Failure(RoleErrors.PrivilegeEscalation(missingPermissions));
         }
 
-        if (currentRoleNames.Contains(RoleNames.Administrator) && !requestedRoleNames.Contains(RoleNames.Administrator))
-        {
-            Result administratorCheck = await AdministratorGuard.EnsureNotLastAdministratorAsync(
-                context,
-                user.Id,
-                cancellationToken);
+        bool removesAdministratorRole =
+            currentRoleNames.Contains(RoleNames.Administrator) && !requestedRoleNames.Contains(RoleNames.Administrator);
 
-            if (administratorCheck.IsFailure)
-            {
-                return administratorCheck;
-            }
+        if (removesAdministratorRole &&
+            await lastAdministratorCheck.IsLastAdministratorWithLockAsync(user.Id, cancellationToken))
+        {
+            return Result.Failure(RoleErrors.LastAdministrator);
         }
 
-        context.UserRoles.RemoveRange(existingUserRoles.Where(ur => !requestedRoleNames.Contains(ur.RoleName)));
-
-        foreach (string addedRoleName in requestedRoleNames.Except(currentRoleNames))
-        {
-            context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = addedRoleName });
-        }
+        context.UserRoles.RemoveRange(currentUserRoles.Where(ur => !requestedRoleNames.Contains(ur.RoleName)));
+        context.UserRoles.AddRange(requestedRoleNames
+            .Except(currentRoleNames)
+            .Select(roleName => new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = roleName }));
 
         user.Raise(new UserRolesAssignedDomainEvent(user.Id));
 

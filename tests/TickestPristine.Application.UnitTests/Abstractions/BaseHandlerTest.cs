@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Application.Users;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Abstractions.Sla;
+using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.SlaCalendars;
 
@@ -121,6 +122,38 @@ public abstract class BaseHandlerTest
 
     // Role com qualquer nome, como as que já existem no banco além das fixas de RoleNames.
     protected static Role CreateRole(string name) => new() { Id = Guid.NewGuid(), Name = name };
+
+    // Provedor de permissões em que ninguém tem permissão: o teste define só as do usuário que interessa.
+    protected static IPermissionProvider CreatePermissionProvider()
+    {
+        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        permissionProvider.GetForUserIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns([]);
+        permissionProvider.GetCurrentForUserIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns([]);
+        permissionProvider.GetGrantedByRolesAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns([]);
+
+        return permissionProvider;
+    }
+
+    // Diretório de atendentes sobre as roles gravadas no banco em memória, como a leitura sem cache do provedor de
+    // permissões: usuário ativo com tickets:manage em alguma das suas roles.
+    protected static IAgentDirectory CreateAgentDirectory(TestDbContext context)
+    {
+        IPermissionProvider permissionProvider = CreatePermissionProvider();
+        permissionProvider.GetCurrentForUserIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(call => ActivePermissionsOf(context, call.Arg<Guid>()));
+
+        return new AgentDirectory(permissionProvider);
+    }
+
+    private static HashSet<string> ActivePermissionsOf(TestDbContext context, Guid userId) =>
+    [
+        .. from userRole in context.UserRoles
+           where userRole.UserId == userId
+           join user in context.Users on userRole.UserId equals user.Id
+           where user.IsActive
+           join rolePermission in context.RolePermissions on userRole.RoleName equals rolePermission.RoleName
+           select rolePermission.PermissionCode
+    ];
 
     // Setor num departamento novo, gravados no banco, para os testes que leem o setor do usuário.
     protected static async Task<Sector> SeedSectorAsync(

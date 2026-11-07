@@ -24,7 +24,7 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
     /// <summary>
     /// Senha provisória com que o seed cria o administrador; o primeiro acesso troca para <see cref="AdminPassword"/>.
     /// </summary>
-    private const string AdminInitialPassword = "ChangeMe123!";
+    internal const string AdminInitialPassword = "ChangeMe123!";
 
     private readonly PostgreSqlContainer _dbContainer = new PostgreSqlBuilder(PostgresImage)
         .WithDatabase("tickestpristine")

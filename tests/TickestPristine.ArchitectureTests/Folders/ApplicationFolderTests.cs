@@ -2,6 +2,8 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using NetArchTest.Rules;
 using Shouldly;
+using TickestPristine.Application.Abstractions.Authorization;
+using TickestPristine.Application.Abstractions.Data;
 
 namespace TickestPristine.ArchitectureTests.Folders;
 
@@ -12,13 +14,21 @@ public class ApplicationFolderTests : BaseTest
     // Pastas cujas classes estáticas qualquer outra pasta pode usar.
     private static readonly string[] SharedFolders = ["Abstractions", "Permissions"];
 
-    // Classes estáticas com regra que outras pastas ainda usam, até a migração que as converte: os guards de privilégio e
-    // de último administrador viram peças injetadas com o modelo rico de usuários e funções.
-    private static readonly string[] LegacyCrossFolderStaticClasses =
+    // Classes estáticas com regra que outras pastas ainda usam, até a migração que as converte. A lista só diminui e está
+    // vazia desde que os guards de privilégio e de último administrador viraram peças injetadas.
+    private static readonly string[] LegacyCrossFolderStaticClasses = [];
+
+    // Classes estáticas que ainda recebem o contexto ou o provedor de permissões, até a migração do agregado de usuários,
+    // que as converte em peças injetadas. A lista só diminui.
+    private static readonly string[] LegacyStaticClassesWithDependencies =
     [
-        "TickestPristine.Application.Authorization.AdministratorGuard",
-        "TickestPristine.Application.Authorization.PrivilegeEscalationGuard"
+        "TickestPristine.Application.Users.UserCredentialsVerifier",
+        "TickestPristine.Application.Users.UserInvitations",
+        "TickestPristine.Application.Users.UserPasswords",
+        "TickestPristine.Application.Users.UserSessions"
     ];
+
+    private static readonly Type[] InjectedDependencies = [typeof(IApplicationDbContext), typeof(IPermissionProvider)];
 
     [Fact]
     public void ApplicationFolders_Should_NotUseStaticClassesWithRulesOfOtherFolders()
@@ -44,6 +54,39 @@ public class ApplicationFolderTests : BaseTest
 
         // Assert
         LegacyCrossFolderStaticClasses.ShouldAllBe(name => violations.Any(violation => violation.EndsWith($"usa {name}", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void ApplicationStaticClasses_Should_NotReceiveContextOrPermissionProvider()
+    {
+        // Act
+        List<string> violations = [.. FindStaticClassesReceiving(ApplicationAssembly, ApplicationNamespace, InjectedDependencies)
+            .Where(name => !LegacyStaticClassesWithDependencies.Contains(name))];
+
+        // Assert
+        violations.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void LegacyStaticClassesWithDependencies_Should_StillReceiveThem()
+    {
+        // Act
+        List<string> receiving = FindStaticClassesReceiving(ApplicationAssembly, ApplicationNamespace, InjectedDependencies);
+
+        // Assert: a classe que deixou de receber o contexto ou o provedor sai da lista
+        LegacyStaticClassesWithDependencies.ShouldAllBe(name => receiving.Contains(name));
+    }
+
+    [Fact]
+    public void Application_Should_NotHaveAuthorizationFolder()
+    {
+        // Act
+        string[] types = [.. ApplicationAssembly.GetTypes()
+            .Where(type => type.Namespace == $"{ApplicationNamespace}.Authorization")
+            .Select(type => type.FullName!)];
+
+        // Assert
+        types.ShouldBeEmpty();
     }
 
     [Fact]
@@ -120,6 +163,22 @@ public class ApplicationFolderTests : BaseTest
 
         return [.. violations.Distinct().Order(StringComparer.Ordinal)];
     }
+
+    // Classes estáticas de primeiro nível, fora de Abstractions, com algum método que recebe um dos tipos informados.
+    private static List<string> FindStaticClassesReceiving(
+        Assembly assembly,
+        string rootNamespace,
+        IReadOnlyCollection<Type> dependencies) =>
+        [.. assembly.GetTypes()
+            .Where(type => type.IsAbstract && type.IsSealed && !type.IsNested)
+            .Where(type => type.Namespace?.StartsWith(rootNamespace, StringComparison.Ordinal) == true)
+            .Where(type => FolderOf(type, rootNamespace) != "Abstractions")
+            .Where(type => type
+                .GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
+                .SelectMany(method => method.GetParameters())
+                .Any(parameter => dependencies.Contains(parameter.ParameterType)))
+            .Select(type => type.FullName!)
+            .Order(StringComparer.Ordinal)];
 
     private static bool HasMethods(Type type) =>
         type.GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)

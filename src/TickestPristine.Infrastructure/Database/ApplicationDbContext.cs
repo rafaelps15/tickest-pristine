@@ -6,6 +6,7 @@ using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.SlaCalendars;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
+using TickestPristine.Infrastructure.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.Domain.TicketAttachments;
 using TickestPristine.Domain.TicketHistories;
@@ -51,6 +52,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<SlaCalendar> SlaCalendars { get; set; }
 
     public DbSet<SlaCalendarHoliday> SlaCalendarHolidays { get; set; }
+
+    internal DbSet<UserPermission> UserPermissions => Set<UserPermission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

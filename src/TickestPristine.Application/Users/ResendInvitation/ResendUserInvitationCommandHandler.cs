@@ -1,9 +1,8 @@
 using TickestPristine.Application.Abstractions.Authentication;
-using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Notifications;
-using TickestPristine.Application.Authorization;
+using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -19,7 +18,7 @@ namespace TickestPristine.Application.Users.ResendInvitation;
 internal sealed class ResendUserInvitationCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IPermissionProvider permissionProvider,
+    PrivilegeEscalationCheck privilegeEscalationCheck,
     IEmailSender emailSender,
     IActivationLinkBuilder activationLinkBuilder,
     IDateTimeProvider dateTimeProvider,
@@ -45,16 +44,14 @@ internal sealed class ResendUserInvitationCommandHandler(
             return Result.Failure(UserErrors.AlreadyActivated);
         }
 
-        Result privilegeCheck = await PrivilegeEscalationGuard.EnsureCallerCanManageUserAsync(
-            context,
-            permissionProvider,
+        List<string> missingPermissions = await privilegeEscalationCheck.GetMissingPermissionsToManageAsync(
             userContext.UserId,
             user.Id,
             cancellationToken);
 
-        if (privilegeCheck.IsFailure)
+        if (missingPermissions.Count > 0)
         {
-            return privilegeCheck;
+            return Result.Failure(UserErrors.CannotManagePrivilegedUser(missingPermissions));
         }
 
         DateTime nowUtc = dateTimeProvider.UtcNow;

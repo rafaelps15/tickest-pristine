@@ -10,82 +10,95 @@ namespace TickestPristine.Infrastructure.Audit;
 
 /// <summary>
 /// Grava um registro de auditoria para cada entidade <see cref="IAuditable"/> incluída, alterada ou excluída, no
-/// mesmo SaveChanges (e, portanto, na mesma transação) da mudança.
+/// mesmo SaveChanges (e, portanto, na mesma transação) da mudança, com um só instante por save. Os registros de um save
+/// que falhou ficam pendentes no contexto; a nova tentativa os descarta e grava os dela.
 /// </summary>
-internal sealed class AuditLoggingInterceptor(IUserContext currentUser, IDateTimeProvider dateTimeProvider)
+internal sealed class AuditLoggingInterceptor(IUserContext userContext, IDateTimeProvider dateTimeProvider)
     : SaveChangesInterceptor
 {
+    public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
+    {
+        AddAuditEntries(eventData.Context);
+
+        return base.SavingChanges(eventData, result);
+    }
+
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData,
         InterceptionResult<int> result,
         CancellationToken cancellationToken = default)
     {
-        if (eventData.Context is not null)
-        {
-            AuditChanges(eventData.Context);
-        }
+        AddAuditEntries(eventData.Context);
 
         return base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 
-    private void AuditChanges(DbContext context)
+    private void AddAuditEntries(DbContext? context)
     {
-        context.ChangeTracker.DetectChanges();
+        if (context is null)
+        {
+            return;
+        }
 
-        AuditLogEntry[] auditLogEntries = [.. context.ChangeTracker
+        DetachPendingAuditEntries(context);
+
+        DateTime timestamp = dateTimeProvider.UtcNow;
+
+        AuditLogEntry[] auditEntries = [.. context.ChangeTracker
             .Entries<IAuditable>()
-            .Where(IsChanged)
-            .Select(ToAuditLogEntry)];
+            .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            .Select(entry => new AuditLogEntry
+            {
+                Id = Guid.NewGuid(),
+                EntityName = entry.Entity.GetType().Name,
+                EntityId = entry.Property("Id").CurrentValue!.ToString()!,
+                Action = entry.State.ToString(),
+                UserId = userContext.UserIdOrDefault,
+                Timestamp = timestamp,
+                OldValues = SerializeOldValues(entry),
+                NewValues = SerializeNewValues(entry),
+                AffectedColumns = GetModifiedColumns(entry)
+            })];
 
-        context.Set<AuditLogEntry>().AddRange(auditLogEntries);
+        context.Set<AuditLogEntry>().AddRange(auditEntries);
     }
 
-    private AuditLogEntry ToAuditLogEntry(EntityEntry<IAuditable> entry) => new()
+    // Só este interceptor inclui registros de auditoria: os que ainda estão como incluídos são de um save que falhou.
+    private static void DetachPendingAuditEntries(DbContext context)
     {
-        Id = Guid.NewGuid(),
-        EntityName = entry.Entity.GetType().Name,
-        EntityId = PrimaryKeyOf(entry),
-        Action = entry.State.ToString(),
-        UserId = currentUser.UserIdOrDefault,
-        Timestamp = dateTimeProvider.UtcNow,
-        OldValues = OldValuesOf(entry),
-        NewValues = NewValuesOf(entry),
-        AffectedColumns = AffectedColumnsOf(entry)
-    };
+        foreach (EntityEntry<AuditLogEntry> pending in context.ChangeTracker
+            .Entries<AuditLogEntry>()
+            .Where(entry => entry.State == EntityState.Added)
+            .ToList())
+        {
+            pending.State = EntityState.Detached;
+        }
+    }
 
-    private static bool IsChanged(EntityEntry entry) =>
-        entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted;
-
-    private static string? OldValuesOf(EntityEntry entry) => entry.State switch
+    private static string? SerializeOldValues(EntityEntry entry) => entry.State switch
     {
-        EntityState.Modified => ToJson(ModifiedProperties(entry), property => property.OriginalValue),
-        EntityState.Deleted => ToJson(entry.Properties, property => property.CurrentValue),
+        EntityState.Modified => Serialize(ModifiedProperties(entry), property => property.OriginalValue),
+        EntityState.Deleted => Serialize(entry.Properties, property => property.CurrentValue),
         _ => null
     };
 
-    private static string? NewValuesOf(EntityEntry entry) => entry.State switch
+    private static string? SerializeNewValues(EntityEntry entry) => entry.State switch
     {
-        EntityState.Added => ToJson(entry.Properties, property => property.CurrentValue),
-        EntityState.Modified => ToJson(ModifiedProperties(entry), property => property.CurrentValue),
+        EntityState.Added => Serialize(entry.Properties, property => property.CurrentValue),
+        EntityState.Modified => Serialize(ModifiedProperties(entry), property => property.CurrentValue),
         _ => null
     };
 
     // O nome da coluna alterada entra mesmo quando o valor dela fica fora do log.
-    private static string? AffectedColumnsOf(EntityEntry entry) =>
-        entry.State is EntityState.Modified
+    private static string? GetModifiedColumns(EntityEntry entry) =>
+        entry.State == EntityState.Modified
             ? string.Join(",", ModifiedProperties(entry).Select(property => property.Metadata.Name))
             : null;
 
     private static IEnumerable<PropertyEntry> ModifiedProperties(EntityEntry entry) =>
         entry.Properties.Where(property => property.IsModified);
 
-    // Chaves compostas viram as partes separadas por vírgula.
-    private static string PrimaryKeyOf(EntityEntry entry) =>
-        string.Join(",", entry.Properties
-            .Where(property => property.Metadata.IsPrimaryKey())
-            .Select(property => property.CurrentValue?.ToString() ?? "null"));
-
-    private static string ToJson(IEnumerable<PropertyEntry> properties, Func<PropertyEntry, object?> value) =>
+    private static string Serialize(IEnumerable<PropertyEntry> properties, Func<PropertyEntry, object?> value) =>
         JsonSerializer.Serialize(properties
             .Where(property => property.Metadata.IsAudited())
             .ToDictionary(property => property.Metadata.Name, value));

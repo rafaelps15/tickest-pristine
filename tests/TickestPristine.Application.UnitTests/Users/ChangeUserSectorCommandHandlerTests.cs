@@ -1,6 +1,7 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Permissions;
+using TickestPristine.Application.Roles;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Users.ChangeSector;
 using TickestPristine.Domain.Departments;
@@ -20,7 +21,7 @@ public sealed class ChangeUserSectorCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
         Sector sector = await SeedSectorAsync(context);
-        ChangeUserSectorCommandHandler handler = CreateHandler(context, Substitute.For<IPermissionProvider>());
+        ChangeUserSectorCommandHandler handler = CreateHandler(context, CreatePermissionProvider());
         var command = new ChangeUserSectorCommand(Guid.NewGuid(), sector.Id);
 
         // Act
@@ -38,7 +39,7 @@ public sealed class ChangeUserSectorCommandHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         User user = await SeedUserAsync(context);
         Sector sector = await SeedSectorAsync(context);
-        ChangeUserSectorCommandHandler handler = CreateHandler(context, Substitute.For<IPermissionProvider>());
+        ChangeUserSectorCommandHandler handler = CreateHandler(context, CreatePermissionProvider());
 
         // Act
         Result result = await handler.Handle(new ChangeUserSectorCommand(user.Id, sector.Id), CancellationToken.None);
@@ -60,7 +61,7 @@ public sealed class ChangeUserSectorCommandHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         Sector sector = await SeedSectorAsync(context);
         User user = await SeedUserAsync(context, sector.Id);
-        ChangeUserSectorCommandHandler handler = CreateHandler(context, Substitute.For<IPermissionProvider>());
+        ChangeUserSectorCommandHandler handler = CreateHandler(context, CreatePermissionProvider());
 
         // Act
         Result result = await handler.Handle(new ChangeUserSectorCommand(user.Id, null), CancellationToken.None);
@@ -79,7 +80,7 @@ public sealed class ChangeUserSectorCommandHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         Sector sector = await SeedSectorAsync(context);
         User user = await SeedUserAsync(context, sector.Id);
-        ChangeUserSectorCommandHandler handler = CreateHandler(context, Substitute.For<IPermissionProvider>());
+        ChangeUserSectorCommandHandler handler = CreateHandler(context, CreatePermissionProvider());
         var missingSectorId = Guid.NewGuid();
 
         // Act
@@ -99,7 +100,7 @@ public sealed class ChangeUserSectorCommandHandlerTests : BaseHandlerTest
         Sector currentSector = await SeedSectorAsync(context);
         Sector deactivatedSector = await SeedSectorAsync(context, isActive: false);
         User user = await SeedUserAsync(context, currentSector.Id);
-        ChangeUserSectorCommandHandler handler = CreateHandler(context, Substitute.For<IPermissionProvider>());
+        ChangeUserSectorCommandHandler handler = CreateHandler(context, CreatePermissionProvider());
 
         // Act
         Result result = await handler.Handle(
@@ -119,7 +120,7 @@ public sealed class ChangeUserSectorCommandHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         Sector sector = await SeedSectorAsync(context);
         User user = await SeedUserAsync(context, sector.Id);
-        ChangeUserSectorCommandHandler handler = CreateHandler(context, Substitute.For<IPermissionProvider>());
+        ChangeUserSectorCommandHandler handler = CreateHandler(context, CreatePermissionProvider());
 
         // Act
         Result result = await handler.Handle(new ChangeUserSectorCommand(user.Id, sector.Id), CancellationToken.None);
@@ -135,11 +136,12 @@ public sealed class ChangeUserSectorCommandHandlerTests : BaseHandlerTest
         // Arrange: quem chama só edita usuários; o alvo também gerencia funções
         await using TestDbContext context = CreateDbContext();
         User user = await SeedUserAsync(context);
-        await GrantPermissionsAsync(context, user.Id, PermissionCodes.Roles.Manage);
         Sector sector = await SeedSectorAsync(context);
 
-        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        permissionProvider.GetForUserIdAsync(CallerId, Arg.Any<CancellationToken>())
+        IPermissionProvider permissionProvider = CreatePermissionProvider();
+        permissionProvider.GetGrantedByRolesAsync(user.Id, Arg.Any<CancellationToken>())
+            .Returns([PermissionCodes.Roles.Manage]);
+        permissionProvider.GetCurrentForUserIdAsync(CallerId, Arg.Any<CancellationToken>())
             .Returns([PermissionCodes.Users.Update]);
         ChangeUserSectorCommandHandler handler = CreateHandler(context, permissionProvider);
 
@@ -157,7 +159,7 @@ public sealed class ChangeUserSectorCommandHandlerTests : BaseHandlerTest
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(CallerId);
 
-        return new ChangeUserSectorCommandHandler(context, userContext, permissionProvider);
+        return new ChangeUserSectorCommandHandler(context, userContext, new PrivilegeEscalationCheck(permissionProvider));
     }
 
     private static async Task<User> SeedUserAsync(TestDbContext context, Guid? sectorId = null)

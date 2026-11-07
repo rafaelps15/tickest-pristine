@@ -24,8 +24,8 @@ public sealed class RoleConcurrencyTests(IntegrationTestWebAppFactory factory) :
         Role firstCopy = await firstContext.Roles.SingleAsync(r => r.Name == RoleNames.Administrator);
         Role secondCopy = await secondContext.Roles.SingleAsync(r => r.Name == RoleNames.Administrator);
 
-        firstContext.Entry(firstCopy).Property<int>("Version").CurrentValue++;
-        secondContext.Entry(secondCopy).Property<int>("Version").CurrentValue++;
+        firstContext.Entry(firstCopy).Property<int>(RoleConcurrencyToken.PropertyName).CurrentValue++;
+        secondContext.Entry(secondCopy).Property<int>(RoleConcurrencyToken.PropertyName).CurrentValue++;
 
         // Act
         await firstContext.SaveChangesAsync();

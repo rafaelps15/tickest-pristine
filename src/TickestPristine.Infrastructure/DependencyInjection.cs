@@ -91,7 +91,7 @@ public static class DependencyInjection
 
         services.AddSingleton<IAttachmentContentInspector, AttachmentContentInspector>();
 
-        services.AddScoped<ITicketActivityWriter, TicketActivityWriter>();
+        services.AddScoped<ITicketActivityProjector, TicketActivityProjector>();
 
         services.AddScoped<ISlaCalendarProvider, SlaCalendarProvider>();
 

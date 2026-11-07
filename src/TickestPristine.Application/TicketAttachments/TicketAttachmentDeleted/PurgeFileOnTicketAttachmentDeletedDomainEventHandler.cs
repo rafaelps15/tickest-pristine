@@ -24,14 +24,13 @@ internal sealed class PurgeFileOnTicketAttachmentDeletedDomainEventHandler(
             .IgnoreQueryFilters()
             .SingleOrDefaultAsync(a => a.Id == domainEvent.AttachmentId, cancellationToken);
 
-        if (attachment is null || attachment.PurgedAtUtc is not null)
+        // A purga só é gravada depois de o arquivo sair do armazenamento: se a remoção falha, nada é salvo.
+        if (attachment is null || !attachment.RecordFilePurge(dateTimeProvider.UtcNow))
         {
             return;
         }
 
         await fileStorage.DeleteAsync(attachment.StorageKey, cancellationToken);
-
-        attachment.MarkPurged(dateTimeProvider.UtcNow);
 
         await context.SaveChangesAsync(cancellationToken);
     }

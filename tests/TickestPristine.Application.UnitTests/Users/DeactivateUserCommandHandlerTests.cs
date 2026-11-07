@@ -17,8 +17,8 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
-        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        var handler = new DeactivateUserCommandHandler(context, CallerContext(), permissionProvider, Substitute.For<IDateTimeProvider>());
+        IPermissionProvider permissionProvider = CreatePermissionProvider();
+        DeactivateUserCommandHandler handler = CreateHandler(context, CallerContext(), permissionProvider, Substitute.For<IDateTimeProvider>());
         var command = new DeactivateUserCommand(Guid.NewGuid());
 
         // Act
@@ -36,8 +36,8 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
         Guid userId = await SeedUserAsync(context, isActive: false);
-        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        var handler = new DeactivateUserCommandHandler(context, CallerContext(), permissionProvider, Substitute.For<IDateTimeProvider>());
+        IPermissionProvider permissionProvider = CreatePermissionProvider();
+        DeactivateUserCommandHandler handler = CreateHandler(context, CallerContext(), permissionProvider, Substitute.For<IDateTimeProvider>());
 
         // Act
         Result result = await handler.Handle(new DeactivateUserCommand(userId), CancellationToken.None);
@@ -54,11 +54,11 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
         Guid userId = await SeedUserAsync(context, isActive: true);
-        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
+        IPermissionProvider permissionProvider = CreatePermissionProvider();
         var deactivatedAtUtc = new DateTime(2026, 10, 2, 12, 0, 0, DateTimeKind.Utc);
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(deactivatedAtUtc);
-        var handler = new DeactivateUserCommandHandler(context, CallerContext(), permissionProvider, dateTimeProvider);
+        DeactivateUserCommandHandler handler = CreateHandler(context, CallerContext(), permissionProvider, dateTimeProvider);
 
         using var requestCancellation = new CancellationTokenSource();
 
@@ -88,7 +88,7 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         context.RefreshTokens.Add(new RefreshToken { Id = Guid.NewGuid(), TokenHash = "other-hash", UserId = otherUserId, ExpiresOnUtc = DateTime.UtcNow.AddDays(7) });
         await context.SaveChangesAsync();
 
-        var handler = new DeactivateUserCommandHandler(context, CallerContext(), Substitute.For<IPermissionProvider>(), Substitute.For<IDateTimeProvider>());
+        DeactivateUserCommandHandler handler = CreateHandler(context, CallerContext(), CreatePermissionProvider(), Substitute.For<IDateTimeProvider>());
 
         // Act
         Result result = await handler.Handle(new DeactivateUserCommand(userId), CancellationToken.None);
@@ -106,8 +106,8 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
         Guid userId = await SeedUserAsync(context, isActive: true);
-        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        var handler = new DeactivateUserCommandHandler(
+        IPermissionProvider permissionProvider = CreatePermissionProvider();
+        DeactivateUserCommandHandler handler = CreateHandler(
             context,
             CallerContext(userId),
             permissionProvider,
@@ -137,8 +137,8 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
             await SeedUserAsync(context, isActive, administratorRole);
         }
 
-        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        var handler = new DeactivateUserCommandHandler(context, CallerContext(), permissionProvider, Substitute.For<IDateTimeProvider>());
+        IPermissionProvider permissionProvider = CreatePermissionProvider();
+        DeactivateUserCommandHandler handler = CreateHandler(context, CallerContext(), permissionProvider, Substitute.For<IDateTimeProvider>());
 
         // Act
         Result result = await handler.Handle(new DeactivateUserCommand(administratorId), CancellationToken.None);
@@ -146,7 +146,7 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(RoleErrors.LastAdministrator);
-        context.Entry(await context.Roles.SingleAsync(r => r.Name == administratorRole.Name)).Property<int>("Version").CurrentValue.ShouldBe(0);
+        context.Entry(await context.Roles.SingleAsync(r => r.Name == administratorRole.Name)).Property<int>(RoleConcurrencyToken.PropertyName).CurrentValue.ShouldBe(0);
         await permissionProvider.DidNotReceive().InvalidateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
@@ -159,10 +159,10 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         Guid administratorId = await SeedUserAsync(context, isActive: true, administratorRole);
         await SeedUserAsync(context, isActive: true, administratorRole);
 
-        var handler = new DeactivateUserCommandHandler(
+        DeactivateUserCommandHandler handler = CreateHandler(
             context,
             CallerContext(),
-            Substitute.For<IPermissionProvider>(),
+            CreatePermissionProvider(),
             Substitute.For<IDateTimeProvider>());
 
         // Act
@@ -171,7 +171,7 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsSuccess.ShouldBeTrue();
         (await context.Users.SingleAsync(u => u.Id == administratorId)).IsActive.ShouldBeFalse();
-        context.Entry(await context.Roles.SingleAsync(r => r.Name == administratorRole.Name)).Property<int>("Version").CurrentValue.ShouldBe(1);
+        context.Entry(await context.Roles.SingleAsync(r => r.Name == administratorRole.Name)).Property<int>(RoleConcurrencyToken.PropertyName).CurrentValue.ShouldBe(1);
     }
 
     [Fact]
@@ -180,13 +180,14 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         // Arrange: quem chama só pode desativar; o alvo também gerencia funções
         await using TestDbContext context = CreateDbContext();
         Guid userId = await SeedUserAsync(context, isActive: true);
-        await GrantPermissionAsync(context, userId, PermissionCodes.Roles.Manage);
 
         var callerId = Guid.NewGuid();
-        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        permissionProvider.GetForUserIdAsync(callerId, Arg.Any<CancellationToken>())
+        IPermissionProvider permissionProvider = CreatePermissionProvider();
+        permissionProvider.GetGrantedByRolesAsync(userId, Arg.Any<CancellationToken>())
+            .Returns([PermissionCodes.Roles.Manage]);
+        permissionProvider.GetCurrentForUserIdAsync(callerId, Arg.Any<CancellationToken>())
             .Returns([PermissionCodes.Users.Deactivate]);
-        var handler = new DeactivateUserCommandHandler(
+        DeactivateUserCommandHandler handler = CreateHandler(
             context,
             CallerContext(callerId),
             permissionProvider,
@@ -208,13 +209,14 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         // Arrange
         await using TestDbContext context = CreateDbContext();
         Guid userId = await SeedUserAsync(context, isActive: true);
-        await GrantPermissionAsync(context, userId, PermissionCodes.Users.Deactivate);
 
         var callerId = Guid.NewGuid();
-        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        permissionProvider.GetForUserIdAsync(callerId, Arg.Any<CancellationToken>())
+        IPermissionProvider permissionProvider = CreatePermissionProvider();
+        permissionProvider.GetGrantedByRolesAsync(userId, Arg.Any<CancellationToken>())
             .Returns([PermissionCodes.Users.Deactivate]);
-        var handler = new DeactivateUserCommandHandler(
+        permissionProvider.GetCurrentForUserIdAsync(callerId, Arg.Any<CancellationToken>())
+            .Returns([PermissionCodes.Users.Deactivate]);
+        DeactivateUserCommandHandler handler = CreateHandler(
             context,
             CallerContext(callerId),
             permissionProvider,
@@ -237,10 +239,10 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         UserInvitation invitation = await ResendUserInvitationCommandHandlerTests.SeedInvitationAsync(
             context, userId, "token-do-convite", DefaultUtcNow.AddHours(-1));
 
-        var handler = new DeactivateUserCommandHandler(
+        DeactivateUserCommandHandler handler = CreateHandler(
             context,
             CallerContext(),
-            Substitute.For<IPermissionProvider>(),
+            CreatePermissionProvider(),
             CreateClock());
 
         // Act
@@ -251,14 +253,18 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         (await context.UserInvitations.SingleAsync(i => i.Id == invitation.Id)).RevokedAtUtc.ShouldBe(DefaultUtcNow);
     }
 
-    private static async Task GrantPermissionAsync(TestDbContext context, Guid userId, string permissionCode)
-    {
-        string roleName = $"Role-{Guid.NewGuid():N}";
-        context.Roles.Add(CreateRole(roleName));
-        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = roleName, PermissionCode = permissionCode });
-        context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = userId, RoleName = roleName });
-        await context.SaveChangesAsync();
-    }
+    private static DeactivateUserCommandHandler CreateHandler(
+        TestDbContext context,
+        IUserContext userContext,
+        IPermissionProvider permissionProvider,
+        IDateTimeProvider dateTimeProvider) =>
+        new(
+            context,
+            userContext,
+            permissionProvider,
+            new PrivilegeEscalationCheck(permissionProvider),
+            new LastAdministratorCheck(context),
+            dateTimeProvider);
 
     private static IUserContext CallerContext(Guid? callerId = null)
     {
@@ -287,10 +293,12 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         return user.Id;
     }
 
+    // Usuário com a role e com a senha já definida: o último administrador só conta conta utilizável.
     private static async Task<Guid> SeedUserAsync(TestDbContext context, bool isActive, Role role)
     {
         Guid userId = await SeedUserAsync(context, isActive);
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = userId, RoleName = role.Name });
+        context.UserCredentials.Add(new UserCredential { Id = Guid.NewGuid(), UserId = userId, PasswordHash = "hash" });
         await context.SaveChangesAsync();
 
         return userId;

@@ -26,17 +26,8 @@ public sealed class GetTicketAttachmentPolicyQueryHandlerTests
         result.Value.AllowedTypes.Count.ShouldBe(11);
         result.Value.AllowedTypes.Single(t => t.ContentType == "image/jpeg").Extensions.ShouldBe([".jpg", ".jpeg"]);
 
-        // Todo tipo informado é aceito pelo anexo, com cada uma das extensões informadas.
+        // Todo tipo informado é aceito pela política que confere o envio, com cada uma das extensões informadas.
         result.Value.AllowedTypes.ShouldAllBe(type => type.Extensions.All(extension =>
-            TicketAttachment.Create(
-                TicketTestData.Create(),
-                Guid.NewGuid(),
-                $"arquivo{extension}",
-                type.ContentType,
-                1,
-                "chave",
-                0,
-                0,
-                DateTime.UtcNow).IsSuccess));
+            TicketAttachmentPolicy.EnsureAccepted($"arquivo{extension}", type.ContentType, 1).IsSuccess));
     }
 }
