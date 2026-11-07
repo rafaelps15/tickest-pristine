@@ -1,8 +1,7 @@
 using TickestPristine.Application.Abstractions.Authentication;
-using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Authorization;
+using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -17,7 +16,7 @@ namespace TickestPristine.Application.Users.ChangeSector;
 internal sealed class ChangeUserSectorCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IPermissionProvider permissionProvider)
+    PrivilegeEscalationCheck privilegeEscalationCheck)
     : ICommandHandler<ChangeUserSectorCommand>
 {
     public async Task<Result> Handle(ChangeUserSectorCommand command, CancellationToken cancellationToken)
@@ -29,16 +28,14 @@ internal sealed class ChangeUserSectorCommandHandler(
             return Result.Failure(UserErrors.NotFound(command.UserId));
         }
 
-        Result privilegeCheck = await PrivilegeEscalationGuard.EnsureCallerCanManageUserAsync(
-            context,
-            permissionProvider,
+        List<string> missingPermissions = await privilegeEscalationCheck.GetMissingPermissionsToManageAsync(
             userContext.UserId,
             user.Id,
             cancellationToken);
 
-        if (privilegeCheck.IsFailure)
+        if (missingPermissions.Count > 0)
         {
-            return privilegeCheck;
+            return Result.Failure(UserErrors.CannotManagePrivilegedUser(missingPermissions));
         }
 
         if (command.SectorId is Guid sectorId)

@@ -29,7 +29,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         userContext.UserId.Returns(OwnerId);
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
 
-        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, new AgentDirectory(context)), Substitute.For<IDateTimeProvider>());
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, CreateAgentDirectory(context)), Substitute.For<IDateTimeProvider>());
         var command = new UpdateTicketCommand { TicketId = Guid.NewGuid(), Description = "Updated description", Status = TicketStatus.Open };
 
         // Act
@@ -53,7 +53,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, new AgentDirectory(context)), Substitute.For<IDateTimeProvider>());
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, CreateAgentDirectory(context)), Substitute.For<IDateTimeProvider>());
         var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.Open };
 
         // Act
@@ -77,7 +77,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, new AgentDirectory(context)), Substitute.For<IDateTimeProvider>());
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, CreateAgentDirectory(context)), Substitute.For<IDateTimeProvider>());
         var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.InProgress };
 
         // Act
@@ -120,7 +120,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(outsiderId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, new AgentDirectory(context)), Substitute.For<IDateTimeProvider>());
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, CreateAgentDirectory(context)), Substitute.For<IDateTimeProvider>());
         var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.Closed };
 
         // Act
@@ -144,7 +144,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, new AgentDirectory(context)), Substitute.For<IDateTimeProvider>());
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, CreateAgentDirectory(context)), Substitute.For<IDateTimeProvider>());
         var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.Closed };
 
         // Act
@@ -169,7 +169,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, new AgentDirectory(context)), Substitute.For<IDateTimeProvider>());
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, CreateAgentDirectory(context)), Substitute.For<IDateTimeProvider>());
         var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.Open };
 
         // Act
@@ -276,7 +276,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
             .Returns(true);
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(true);
-        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, new AgentDirectory(context)), CreateClock(NineAmUtc.AddMinutes(16)));
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, CreateAgentDirectory(context)), CreateClock(NineAmUtc.AddMinutes(16)));
 
         // Act
         Result result = await handler.Handle(CancelCommand(ticketId), CancellationToken.None);
@@ -298,7 +298,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.Cancel, Arg.Any<CancellationToken>())
             .Returns(true);
-        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, new AgentDirectory(context)), CreateClock(NineAmUtc.AddHours(2)));
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, CreateAgentDirectory(context)), CreateClock(NineAmUtc.AddHours(2)));
 
         // Act
         Result result = await handler.Handle(CancelCommand(ticketId), CancellationToken.None);
@@ -388,7 +388,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, new AgentDirectory(context)), Substitute.For<IDateTimeProvider>());
+        var handler = new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, CreateAgentDirectory(context)), Substitute.For<IDateTimeProvider>());
         var command = new UpdateTicketCommand { TicketId = ticketId, Description = "Updated description", Status = TicketStatus.Open };
 
         // Act
@@ -561,7 +561,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        return new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, new AgentDirectory(context)), Substitute.For<IDateTimeProvider>());
+        return new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, CreateAgentDirectory(context)), Substitute.For<IDateTimeProvider>());
     }
 
     private static UpdateTicketCommandHandler CreateManagerHandler(TestDbContext context, DateTime nowUtc)
@@ -574,7 +574,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(nowUtc);
 
-        return new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, new AgentDirectory(context)), dateTimeProvider);
+        return new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, CreateAgentDirectory(context)), dateTimeProvider);
     }
 
     // Quem tem só tickets:cancel: não é o dono nem atende a fila.
@@ -586,7 +586,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Cancel, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        return new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, new AgentDirectory(context)), CreateClock(nowUtc));
+        return new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, CreateAgentDirectory(context)), CreateClock(nowUtc));
     }
 
     private static async Task<Guid> SeedTicketAsync(
@@ -618,7 +618,7 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(OwnerId, PermissionCodes.Tickets.UpdateOwn, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        return new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, new AgentDirectory(context)), CreateClock(nowUtc));
+        return new UpdateTicketCommandHandler(context, userContext, permissionProvider, new TicketAgentLookup(context, CreateAgentDirectory(context)), CreateClock(nowUtc));
     }
 
     // Cancela o chamado sem mudar a descrição gravada por SeedTicketAsync.

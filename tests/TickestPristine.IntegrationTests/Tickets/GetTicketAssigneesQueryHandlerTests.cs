@@ -9,6 +9,10 @@ using TickestPristine.IntegrationTests.Abstractions;
 using TickestPristine.Infrastructure.Database;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Users;
+using TickestPristine.Infrastructure.Authorization;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using TickestPristine.SharedKernel;
 
@@ -16,6 +20,8 @@ namespace TickestPristine.IntegrationTests.Tickets;
 
 public sealed class GetTicketAssigneesQueryHandlerTests(IntegrationTestWebAppFactory factory) : BaseQueryHandlerTest(factory)
 {
+    private readonly IntegrationTestWebAppFactory _factory = factory;
+
     [Fact]
     public async Task Handle_Should_ReturnOnlyActiveUsersWithManagePermission_WhenSomeUsersAreNotEligible()
     {
@@ -94,8 +100,8 @@ public sealed class GetTicketAssigneesQueryHandlerTests(IntegrationTestWebAppFac
     public async Task Handle_Should_ListTheSameAgentsAsAttendantsAndAgentLookup_WhenUsersHaveEveryKindOfAccess()
     {
         // Arrange: Ana com uma role de tickets:manage, Beto com duas roles (só uma com tickets:manage), Caio inativo com
-        // tickets:manage, Davi com role sem tickets:manage, Eva com uma role sem permissões e Fábio pendente (sem senha) com
-        // tickets:manage, que hoje também atende
+        // tickets:manage, Davi com role sem tickets:manage, Eva com uma role sem permissões, Fábio pendente (sem senha) com
+        // tickets:manage, que hoje também atende, e Gabi, que perdeu tickets:manage com o cache de permissões ainda válido
         await using ApplicationDbContext context = CreateDbContext();
         Sector sector = await SeedSectorAsync(context, "Helpdesk", "Tecnologia");
         User ana = await AddUserAsync(context, "Ana", sector.Id, isActive: true, PermissionCodes.Tickets.Manage);
@@ -105,9 +111,16 @@ public sealed class GetTicketAssigneesQueryHandlerTests(IntegrationTestWebAppFac
         User davi = await AddUserAsync(context, "Davi", sector.Id, isActive: true, PermissionCodes.Tickets.Create);
         User eva = await AddUserAsync(context, "Eva", null, isActive: true);
         User fabio = await AddUserAsync(context, "Fábio", sector.Id, isActive: true, PermissionCodes.Tickets.Manage);
+        User gabi = await AddUserAsync(context, "Gabi", sector.Id, isActive: true, PermissionCodes.Tickets.Manage);
         context.UserCredentials.AddRange(
-            new[] { ana, beto, caio, davi, eva }.Select(user => new UserCredential { Id = Guid.NewGuid(), UserId = user.Id, PasswordHash = "hash" }));
+            new[] { ana, beto, caio, davi, eva, gabi }.Select(user => new UserCredential { Id = Guid.NewGuid(), UserId = user.Id, PasswordHash = "hash" }));
         await context.SaveChangesAsync();
+
+        var provider = new PermissionProvider(context, _factory.Services.GetRequiredService<HybridCache>());
+        _ = await provider.GetForUserIdAsync(gabi.Id, CancellationToken.None);
+        await context.RolePermissions
+            .Where(rolePermission => context.UserRoles.Any(userRole => userRole.UserId == gabi.Id && userRole.RoleName == rolePermission.RoleName))
+            .ExecuteDeleteAsync();
 
         IUserContext userContext = Substitute.For<IUserContext>();
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
@@ -115,7 +128,7 @@ public sealed class GetTicketAssigneesQueryHandlerTests(IntegrationTestWebAppFac
             .Returns(true);
         var assignees = new GetTicketAssigneesQueryHandler(DbConnectionFactory);
         var attendants = new GetBacklogAttendantsQueryHandler(DbConnectionFactory, userContext, permissionProvider);
-        var agentDirectory = new AgentDirectory(context);
+        var agentDirectory = new AgentDirectory(provider);
 
         // Act
         Result<PagedResponse<TicketAssigneeResponse>> assigneePage = await assignees.Handle(
@@ -125,19 +138,29 @@ public sealed class GetTicketAssigneesQueryHandlerTests(IntegrationTestWebAppFac
             new GetBacklogAttendantsQuery(null, null, null, new PageRequest(1, 100)),
             CancellationToken.None);
         List<Guid> lookedUp = [];
-        foreach (User user in new[] { ana, beto, caio, davi, eva, fabio })
+        List<Guid> readWithoutCache = [];
+        foreach (User user in new[] { ana, beto, caio, davi, eva, fabio, gabi })
         {
             if (await agentDirectory.IsAgentAsync(user.Id, CancellationToken.None))
             {
                 lookedUp.Add(user.Id);
             }
+
+            if ((await provider.GetCurrentForUserIdAsync(user.Id, CancellationToken.None)).Contains(PermissionCodes.Tickets.Manage))
+            {
+                readWithoutCache.Add(user.Id);
+            }
         }
+
+        HashSet<string> gabiCachedPermissions = await provider.GetForUserIdAsync(gabi.Id, CancellationToken.None);
 
         // Assert
         Guid[] expected = [ana.Id, beto.Id, fabio.Id];
         assigneePage.Value.Items.Select(user => user.Id).ShouldBe(expected, ignoreOrder: true);
         attendantPage.Value.Items.Select(user => user.Id).ShouldBe(expected, ignoreOrder: true);
         lookedUp.ShouldBe(expected, ignoreOrder: true);
+        readWithoutCache.ShouldBe(expected, ignoreOrder: true);
+        gabiCachedPermissions.ShouldContain(PermissionCodes.Tickets.Manage);
     }
 
     private static GetTicketAssigneesQuery CreateQuery(string? search = null, Guid? sectorId = null) =>

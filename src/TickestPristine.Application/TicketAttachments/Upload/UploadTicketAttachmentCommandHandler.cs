@@ -38,9 +38,12 @@ internal sealed class UploadTicketAttachmentCommandHandler(
             return Result.Failure<Guid>(TicketErrors.NotFound(command.TicketId));
         }
 
-        // Participantes (solicitante e responsável) sempre podem; os demais precisam de tickets:manage.
-        if (!ticket.IsParticipant(userContext.UserId) &&
-            !await permissionProvider.HasPermissionAsync(userContext.UserId, PermissionCodes.Tickets.Manage, cancellationToken))
+        bool canManageTickets = await permissionProvider.HasPermissionAsync(
+            userContext.UserId,
+            PermissionCodes.Tickets.Manage,
+            cancellationToken);
+
+        if (!ticket.CanBeViewedBy(userContext.UserId, canManageTickets))
         {
             return Result.Failure<Guid>(UserErrors.Unauthorized());
         }

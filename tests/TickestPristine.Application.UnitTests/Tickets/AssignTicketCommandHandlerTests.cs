@@ -246,7 +246,7 @@ public sealed class AssignTicketCommandHandlerTests : BaseHandlerTest
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(AgentId);
 
-        return new AssignTicketCommandHandler(context, userContext, permissionProvider, new AgentDirectory(context), CreateClock());
+        return new AssignTicketCommandHandler(context, userContext, permissionProvider, CreateAgentDirectory(context), CreateClock());
     }
 
     private static async Task<User> SeedUserAsync(TestDbContext context, bool isActive = true, Guid? id = null)

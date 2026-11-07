@@ -467,3 +467,198 @@ As outras 26 decisões pendentes (as 25 da rodada anterior e a DEC-11, que volto
 | 2026-11-04 | Em implementação | Sem transição de estado. T-14, parte da G1: regra de pastas (AC-25), entidades por reflexão e `.Raise(` fora do Domain, cada uma com a lista de exceções nomeadas e o teste que a faz encolher (arquitetura 134 verdes). A T-14 continua aberta: o AC-23 entra na G3-a e o AC-26 fecha no fim da última fase de domínio. |
 | 2026-11-04 | Em implementação | Sem transição de estado. T-16 feita, por delegação: na 043, DEC-9 (b), DEC-10 (b), DEC-11 (b) e DEC-12 (a) decididas e as entradas da parte 2 registradas (5.1); a 043 voltou para `Em descoberta` e aguarda a aprovação de Rafael Santos. Nesta spec, DEC-12, DEC-33 e DEC-41 decididas pela (b), por delegação (anexo E, E.2). Ficam 36 decididas, 18 pendentes e 15 recomendações. |
 | 2026-11-04 | Em implementação | Sem transição de estado. Verificação da etapa G1 (back): build sem avisos, unitários 940, arquitetura 134, integração 658 aprovados e 0 falhas, auditoria 100%, revisão sem bloqueante (duas violações de convenção corrigidas no primeiro ciclo) e `SYSTEM_SPECIFICATION.md` atualizado (seção 10). Pendências: workflow no PR, `docker compose up`, o front da FE-0 e a aprovação da 043. |
+
+## E.4 Evidências da G1 e da FE-0 (seção 10 do `spec.md`, movidas em 2026-11-06)
+
+Os três blocos da seção 10 do `spec.md`, movidos sem mudança de conteúdo, com a autorização de Rafael Santos no questionário de 2026-11-06, para abrir espaço às respostas do portão da G3-b. Ficou um ponteiro para cada um na seção 10.
+
+- **Verificação da etapa G1 (back), 2026-11-04, pela `spec-verify`:**
+  - **Build:** `dotnet build TickestPristine.slnx`: 0 avisos, 0 erros.
+  - **Testes:** unitários 940 de 940; arquitetura 134 de 134; integração 669 no total, com 658 aprovados, 0 falhas e 11 não executados (as evidências da CT-26 da SPEC-050, que só rodam quando ligadas); os 86 métodos citados na 9.1 rodaram e passaram.
+  - **Auditoria:** `python -I scripts/auditoria_sdd.py .`: 100,0%, CONFORME, código de saída 0.
+  - **Revisão (`ca-review`):** nenhum achado bloqueante. Duas violações de convenção corrigidas no primeiro ciclo, sem mudar asserção: comentários de teste que citavam ids de spec (em quatro arquivos) e testes da regra de pastas sem `// Arrange`. Observações sem ação: o `ApplicationTelemetry` é classe concreta na Application, como o REQ-406 manda (tipos do BCL, sem infraestrutura), e as rotas de saúde não têm tag, porque não entram no OpenAPI.
+  - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md`, seções 4.3.1, 4.6, 4.8, 6.2, 6.4, 6.6 e 6.8.
+  - **Pendências da etapa:** o workflow no PR da G1 (AC-419); `docker compose up` (AC-421), que aplica migrations no banco local e depende de autorização; o front da FE-0, feito em 2026-11-05 (abaixo); a 043 revista foi aprovada por Rafael Santos em 2026-11-05, o que libera a G2.
+  - **Situação:** a spec continua `Em implementação`, porque as etapas G2 a G6 seguem; commit, push e PR são do responsável.
+
+- **FE-0 (front, repositório `tickest-pristine-front`), 2026-11-05, por delegação:**
+  - **Tarefas:** T-500, T-512, T-514, T-517, T-518 e T-519 feitas; T-504 na parte da FE-0. A troca de nome do guard (T-512) foi feita com a autorização de Rafael Santos no chat.
+  - **Build e testes:** `tsc` do app e dos specs sem erro; `ng build` sem erro nem aviso; `ng test`: 1439 de 1439 (1381 antes da FE-0), com todos os testes do front citados na 9.1.
+  - **Contrato:** as 55 chamadas dos Data Services batem com o `openapi-v1.approved.json` (verbo, rota, nomes de query e campos do corpo); nenhuma divergência.
+  - **Revisão (`ca-review` do front):** nenhum bloqueante: fronteiras de pasta respeitadas, Stores com `rxResource`, componentes sem Data Service e specs ao lado do código. Corrigidos na própria tarefa: o comentário de `showMyTickets` separado da propriedade (T-512), os comentários de flag desatualizados e o atalho `filteredAvailable`, igual a `showOperation` sem a flag (T-517). O teste de hierarquia de títulos do Início passou a conferir "sem pulo de nível", como o nome dele diz: com os tempos sempre ligados, o `h3` dos cards de tempo fica sob o `h2` do bloco.
+  - **Documentação do front:** `DESIGN.md` (Início sem a flag `companyStatsForAll`) e `docs/audit/AUDITORIA.md` (A-21, A-22, DIV-5 e pendência 7).
+  - **Observação sem ação:** o estado `unavailable` dos widgets do Início (`dashboard-overview.ts`, `dashboard-hero-chart` e `dashboard-notice`) ficou sem quem o produza na página; a remoção em cascata fica fora da T-517, porque o AC-520 só trata das flags.
+  - **Entrega do front:** commit na branch `fix/SPEC-049-fe0-front-alignment`, a pedido de Rafael Santos, e PR #5 para a `main` do repositório do front, mergeado em 2026-11-05 (merge `5cd3dce`), também a pedido dele.
+  - **Pendências:** a parte do back do AC-507 (T-503); o `CLAUDE.md` do front ainda cita o `admin-master.guard.ts` como exemplo de comentário, e mudá-lo depende de autorização.
+
+- **Revisão da G1 por Rafael Santos, 2026-11-05 (questionário; anexo E, E.2):**
+  - **Mudanças:** interceptor e dispatcher de eventos na forma simples (T-402); `JwtOptions` só com as propriedades e `JwtOptionsValidator` em FluentValidation (T-202); `Tests.Shared` refeito como projeto de teste no padrão dos outros (T-416); auditoria com `IsNotAudited()` na configuração do EF e interceptor em passos com nome, com a migration vazia `Mark_Secret_Columns_Not_Audited` (T-303, DEC-59); `appsettings.Development.json` montado pelo override do compose (T-414).
+  - **AC-421:** depois da troca da chave no user-secrets pelo responsável (`Jwt:Secret` → `Jwt:SecurityKey`), o `docker compose up -d --build --wait` passou: API `healthy`, `health/live` e `health/ready` 200, imagem sem o `appsettings.Development.json`, `tests/` e `specs/`, e a migration nova aplicada no banco local.
+  - **Build e testes:** build sem avisos; unitários 940 de 940; arquitetura 134 de 134; integração 674, com 663 aprovados, 0 falhas e 11 não executados (evidências da CT-26), numa saída isolada (`tests/artifacts`, ignorada pelo git). Duas execuções anteriores não contam: o Visual Studio aberto regravou os csproj e tirou o `TickestPristine.Web.Api.deps.json` da `bin` no meio delas.
+  - **Auditoria:** 100,0%, CONFORME.
+  - **Revisão (`ca-review`):** nenhum bloqueante nem violação nas linhas alteradas; dois comentários antigos da `main` citam specs (`DomainEventsDispatcherTests.cs:13`, `IntegrationTestWebAppFactory.cs:73`), fora das linhas alteradas.
+  - **Documentação:** `SYSTEM_SPECIFICATION.md` (despacho de eventos, JWT, configuração, testes, 6.5, 6.6, GAP-14 e E-05).
+
+## E.5 Portão da G3-b: questionário de 2026-11-06
+
+Três rodadas de quatro perguntas, depois da T-19, e uma quarta, de duas, no começo da AZ-2, com as opções da tabela de decisões. Respostas de Rafael Santos,
+todas na opção recomendada; na DEC-26, a recomendação mudou pela D3 do anexo F.
+
+| Rodada | Pergunta | Resposta | Motivo apresentado |
+|---|---|---|---|
+| 1 | Mover os três blocos antigos da seção 10 (5.205 B) para o anexo E, com um ponteiro para cada | mover os três | margem do `spec.md` de 907 B, com o limite da auditoria em 500.000 B |
+| 1 | DEC-76: a junção usuário → funções → permissões escrita quatro vezes | (a) view única `public.user_permissions` | uma definição só da união das funções, lida pela consulta de permissões; hoje, quatro cópias presas por teste de concordância |
+| 1 | DEC-30: `PrivilegeEscalationGuard` (6 handlers) e `AdministratorGuard` (2); o `TicketAccessGuard` já virou o `TicketViewAccess` na 043 | (b) instâncias injetadas, com os mesmos erros, códigos, status e ordem | a skill de autorização: a conferência repetida vira instância injetada, e a regra que precisa de consulta recebe a dependência pela DI |
+| 1 | DEC-39: nome e lugar das peças | (a) `Application/Roles/PrivilegeEscalationCheck.cs` e `Application/Roles/LastAdministratorCheck.cs`, sem a pasta `Authorization/` | pasta por agregado do `CLAUDE.md`: a regra fica na pasta da área dona |
+| 2 | DEC-35: RN-17 no perfil e no cadastro, e a regra do `PUT tickets/{id}/assignee` na abertura com responsável | (b) corrigir nesta spec (muda comportamento: 403 ou 400 em casos hoje aceitos) | a mesma regra já aplicada na operação vizinha |
+| 2 | DEC-69: `GET users/attendants`, `GET users/by-email`, `GET sectors` e `GET sectors/{id}`, sem consumidor no front | (b) obsoletas no OpenAPI, com a remoção numa spec de limpeza; `GET tickets/sla-summary` fica | a orientação de 2026-11-01 (CT-15): nenhuma rota sai só porque o front não a usa |
+| 2 | DEC-27: `Users/Reactivate`, `GetAttendantsQuery` e a sessão em `Domain/RefreshTokens/` | (a) o pacote, com rotas, payloads e códigos de erro iguais | pasta por agregado; a sessão é agregado próprio |
+| 2 | DEC-25: hash dos tokens e token do convite em estáticas da Application | (b) `ITokenHasher` e o token do convite no `ITokenProvider`, com implementação na Infrastructure; `IPasswordHashChecker` no Domain | a skill: trabalho técnico (hash e tokens) em interface da Application, com implementação `internal sealed` na Infrastructure |
+| 3 | DEC-24: envio do e-mail do convite, com o token em claro | (b) peça injetada, chamada pelo cadastro e pelo reenvio depois do commit; a exceção à skill do handler de evento vai para o `CLAUDE.md` pela DEC-14 | o token em claro não pode ir num evento que só leva ids nem ser gravado no outbox |
+| 3 | DEC-26: eventos sem consumidor; o de revogação nunca chega ao despachante | (a) manter os três da sessão e os do `User`, disparados pelos métodos | a D3 do anexo F: toda mudança de estado dispara o próprio evento; a recomendação anterior da spec era a (b) |
+| 3 | DEC-23: a troca autenticada de senha não conta tentativas | (b) o mesmo contador do login, com bloqueio na 5ª errada seguida (403 `Users.LockedOut`) | um token roubado deixa de virar força bruta da senha; a (a) é o comportamento comum dos frameworks de identidade, que não contam tentativa na troca |
+| 3 | DEC-28: `SecureSocketOptions.Auto` com `UseTls` ligado | (b) exigir TLS: `SslOnConnect` na porta 465 e `StartTls` nas demais | o e-mail leva o token de ativação |
+| 4 | DEC-76: o texto aprovado tira o `IsTicketAgent` e o `IsUsable` do `UserSql`, o que conflita com a DEC-21 (b), o REQ-108, a T-108 e o `CLAUDE.md` | os dois trechos ficam, e o `IsTicketAgent` lê a view | a conta utilizável tem trecho com nome (DEC-21 (b)), e o `CLAUDE.md` lista "conta utilizável" e "quem atende" no `UserSql` |
+| 4 | REQ-209: texto do 403 `Users.CannotManagePrivilegedUser`, que hoje cita só desativar e reativar | "Você não pode gerenciar quem tem permissões administrativas que você não possui: {permissões}" | vale para as quatro operações e para uma nova que devolver o mesmo erro; código e status não mudam |
+
+## E.6 Revisão das peças da RN-17 e da RN-18 (2026-11-06, DEC-82)
+
+Pedido de Rafael Santos em 2026-11-06, por prompt colado: revisar `LastAdministratorCheck` e `PrivilegeEscalationCheck` no fluxo inteiro, comparar com as referências técnicas do projeto e corrigir. As decisões foram delegadas ("vc assume o papel como senior e siga os devs referencias quando tiver qualquer duvida"). Base: a working tree da AZ-2, sobre `7ae10a3`.
+
+**Natureza e camada de cada regra**
+
+- **RN-18 (`LastAdministratorCheck`):**
+  - É uma invariante de negócio da área de acesso, e não uma regra de autorização: vale para qualquer autor, até para um administrador com todas as permissões.
+  - Envolve vários agregados (os administradores são usuários diferentes). Por isso precisa de uma consulta ao estado gravado e de um controle de concorrência, que nenhum agregado sozinho garante.
+  - Fica na Application, como peça injetada, porque dois handlers a usam (desativar e atribuir funções) e porque `User` e `Role` seguem anêmicos até a U2 e a AZ-3.
+  - Com o agregado `User` (U2), o método da entidade passa a receber a contagem dos outros administradores, e o handler mantém o controle de concorrência.
+  - O token `Version` fica até a trava da DEC-33 (b), na 043p2.
+- **RN-17 (`PrivilegeEscalationCheck`):**
+  - É uma regra de autorização contra a escalada de privilégio. Depende de quem chama e das permissões efetivas dele.
+  - Fica na Application e lê as permissões pelo `IPermissionProvider`, como manda a skill de autorização.
+  - É uma peça injetada, porque seis handlers a usam.
+
+**Falhas encontradas e corrigidas na T-206**
+
+1. **A RN-18 contava a conta pendente como administrador ativo** (usuário ativo, sem senha).
+   - O caminho: o único administrador com senha dá a função de administrador a um convidado e tira a própria. A operação passava.
+   - Se o convite do convidado vencesse, ninguém poderia reenviá-lo, porque o reenvio exige `users:create`. A recuperação seria pelo banco.
+   - A DEC-21 (b) já decidia contar só conta utilizável (ativa e com credencial), na U3. A parte da RN-18 entra agora: é o primeiro caso do AC-111. O seed e a elegibilidade seguem na U3.
+2. **A RN-17 lia pelo cache as permissões de quem chama.**
+   - Um administrador rebaixado segue com o conjunto antigo na memória local das outras instâncias, por até 1 min. Nesse intervalo, ele ainda poderia conceder permissões administrativas.
+   - Pela DEC-32 (b), as decisões que gravam leem sem cache. A RN-17 passa a usar a leitura sem cache do provedor, só de usuário ativo.
+   - O custo é uma consulta, e só quando a mudança envolve permissão administrativa.
+3. **Nome:** `EnsureCallerCanChangeAsync` passa a `EnsureCallerCanChangePermissionsAsync`.
+4. **Nome do token:** o nome `Version` aparecia literal nos testes. Passa a vir da constante (AC-207).
+
+**Conferido e mantido**
+
+- **Corrida:** a função de administrador é lida antes da contagem dos outros administradores. Quando duas remoções passam pela conferência ao mesmo tempo, o `UPDATE … WHERE version = @v` da segunda gravação não encontra a linha e responde 409. Isso agora tem teste pela API (AC-207).
+- **Regras vizinhas:**
+  - a função de administrador não é editável (`Roles.AdministratorRoleIsManaged`);
+  - ninguém desativa a si mesmo (`Users.CannotDeactivateSelf`);
+  - tirar a própria função de administrador vale quando resta outro administrador utilizável.
+- **Escalada para si mesmo:**
+  - a rota exige `users:assign-roles`;
+  - a RN-17 recusa a função que traz permissão administrativa que quem chama não tem, tanto ao conceder quanto ao remover.
+- **Permissões não administrativas:** ficam livres para quem tem a permissão da rota, por desenho do catálogo.
+
+**Riscos que ficam**
+
+- **Janela entre a conferência da RN-17 e o commit:** o autor pode ser rebaixado no meio, ou uma permissão administrativa pode entrar na função no mesmo instante em que alguém sem ela atribui essa função. Os dois casos exigem a ação concorrente de outro administrador. Travar as permissões das funções em toda atribuição seria desproporcional.
+- **Rota:** a autorização da rota segue com cache, pela DEC-32 (b).
+- **Token:** usa a API do EF na Application até a 043p2 (exceção nomeada do `EfApiUsageChecker`).
+- **Função Administrador:** a RN-18 conta só os membros dela, como diz o texto da regra. Uma função com todas as permissões administrativas não conta.
+
+**Alternativas avaliadas**
+
+- **(b) Trava `SELECT … FOR UPDATE` já** (a DEC-33 adiantada): abre transação nos dois handlers e tira a coluna `Version` por migration. Fica com a 043p2, que reescreve os dois commands.
+- **(c) Regras no domínio já:** antecipa a U2 e a AZ-3, com `User` e `Role` ainda anêmicos.
+
+**Ajuste de 2026-11-06, pedido de Rafael Santos no chat:** seguir a semântica dos handlers da referência. As duas peças passam a só responder, e o handler decide e devolve o erro com `if (…) return Result.Failure(…)`.
+- `PrivilegeEscalationCheck.GetMissingPermissionsToChangeAsync` e `GetMissingPermissionsToManageAsync` devolvem os nomes das permissões administrativas que faltam, e vazio quando quem chama pode. A resposta é uma lista, e não um `bool`, porque a mensagem do 403 lista essas permissões (REQ-209).
+- `LastAdministratorCheck.IsLastAdministratorWithLockAsync` devolve `bool`, e o nome diz que a conferência trava a função de administrador pelo token de concorrência, como o método de leitura com trava da referência.
+- Erros, códigos, status e ordem não mudam (DEC-30 (b)); as classes e as pastas são as da DEC-39.
+- Ficam de fora do código da referência, pelas regras do projeto: a transação aberta no handler por uma unidade de trabalho e o repositório com trava (`CLAUDE.md`; a trava fica com a 043p2, pela DEC-33), e a conferência copiada em cada handler (a skill de autorização manda extrair, como instância injetada, a que se repete).
+
+**Elevação do `AssignUserRolesCommandHandler` (2026-11-06, pedido de Rafael Santos: seguir a skill à risca e a semântica da referência):**
+- `<summary>` do comportamento que não é óbvio, como no `ChangeUserSectorCommandHandler`;
+- nomes sem ambiguidade: `foundRoleNames`, `unknownRoleName` e `currentUserRoles`;
+- informar as funções atuais não muda nada: sem evento, sem gravação e sem invalidação, pelo padrão da skill para a operação que pode não mudar nada.
+- Fica como legado até a U2 e a T-209, com `User` e `UserRole` anêmicos (`CLAUDE.md`, "Em migração"): o handler monta os `UserRole` e dispara o `UserRolesAssignedDomainEvent`.
+
+## E.7 AZ-2: rastreabilidade e evidências (2026-11-06)
+
+As tarefas T-205, T-206 e T-207 estão feitas, com a DEC-82 (E.6). Esta é a tabela de rastreabilidade da etapa, por critério. A seção 9.1 do `spec.md` aponta para cá, por causa do limite de tamanho do arquivo.
+
+| AC | Testes (arquivo › método) | Como cobre |
+|---|---|---|
+| AC-202 | `ArchitectureTests/Folders/ApplicationFolderTests` › `ApplicationStaticClasses_Should_NotReceiveContextOrPermissionProvider`, `LegacyStaticClassesWithDependencies_Should_StillReceiveThem` e `Application_Should_NotHaveAuthorizationFolder`; `EfApiUsageTests`, com o caminho novo da exceção; os testes unitários de RN-07, RN-17 e RN-18: `DeactivateUserCommandHandlerTests`, `ActivateUserCommandHandlerTests`, `ChangeUserSectorCommandHandlerTests`, `ResendUserInvitationCommandHandlerTests`, `AssignUserRolesCommandHandlerTests`, `AssignRolePermissionsCommandHandlerTests`, `Roles/LastAdministratorCheckTests` e os de mensagem e de anexo | Nenhuma classe estática da Application recebe o contexto ou o provedor, fora das quatro de `Users`, que saem na U2 (a lista só diminui). A pasta `Application/Authorization/` não existe. Os testes antigos passam com o mesmo erro, código e status; mudou só o arranjo: peças injetadas e permissões pelo provedor. |
+| AC-203 | `IntegrationTests/Tickets/GetTicketAssigneesQueryHandlerTests` › `Handle_Should_ListTheSameAgentsAsAttendantsAndAgentLookup_WhenUsersHaveEveryKindOfAccess`; `UnitTests/Users/AgentDirectoryTests` (2 testes); `IntegrationTests/Users/UsersTests` › `ChangeSector_Should_ReturnForbidden_WhenDeactivatedTargetHasAdministrativePermissionsCallerLacks` e `Activate_Should_ReturnForbidden_WhenTargetHasAdministrativePermissionsCallerLacks` | As quatro fontes dão o mesmo conjunto: a lista de responsáveis, a de atendentes, o `AgentDirectory` sobre o provedor real e a leitura sem cache do provedor. O cenário tem funções diferentes, conta inativa, conta pendente e uma usuária que perdeu `tickets:manage` com o cache ainda válido: o cache segue com a permissão, e as quatro fontes não. Mudar o setor e reativar um alvo desativado que gerencia funções, sem ter essa permissão, responde 403 `Users.CannotManagePrivilegedUser`: as permissões do alvo são lidas mesmo com a conta inativa. Na busca, `RolePermissions` só aparece nos slices de funções e na atribuição de funções. |
+| AC-207 | `IntegrationTests/Users/LastAdministratorConcurrencyTests` › `Deactivate_Should_KeepOneActiveAdministrator_WhenTwoAdministratorsDeactivateEachOtherConcurrently` e `AssignRoles_Should_KeepOneActiveAdministrator_WhenRoleRemovalRacesWithDeactivation`; `Database/RoleConcurrencyTests`; `UnitTests/Roles/LastAdministratorCheckTests` › `IsLastAdministratorWithLockAsync_Should_RejectSecondSave_WhenLastTwoAdministratorsAreRemovedConcurrently` | São 20 rodadas pela API, num banco próprio. Em cada uma, uma requisição responde 204, a outra responde 409 ou 403, e resta exatamente um administrador ativo. O nome do token vem de `RoleConcurrencyToken.PropertyName` na configuração do EF, na peça e nos testes. |
+| AC-208 | `UnitTests/Roles/AssignRolePermissionsCommandHandlerTests` › `Handle_Should_InvalidateCacheOfMemberAddedDuringSave_WhenRoleGainsMemberConcurrently` | Um interceptor inclui um membro na função, por outro contexto, no instante da gravação, e o handler invalida o cache dele também. Com os membros lidos antes do commit, o teste falharia. |
+| AC-209 | Os quatro `Handle_Should_ReturnCannotManagePrivilegedUser_WhenUserHasAdministrativePermissionCallerLacks` (desativar, reativar, mudar o setor e reenviar o convite); `UsersTests` › `Deactivate_Should_ReturnForbidden_WhenTargetHasAdministrativePermissionsCallerLacks` e `Activate_Should_ReturnForbidden_WhenTargetHasAdministrativePermissionsCallerLacks` | O erro é comparado inteiro (código, texto novo e status) nas quatro operações, e o texto sai de uma fábrica só, `UserErrors.CannotManagePrivilegedUser`. A RN-17 do estado lista as quatro operações (`SYSTEM_SPECIFICATION.md`). |
+| AC-111 (caso da RN-18) | `UnitTests/Roles/LastAdministratorCheckTests` › `IsLastAdministratorWithLockAsync_Should_BeTrueWithoutLock_WhenOtherAdministratorIsPendingActivation`; `UnitTests/Users/AssignUserRolesCommandHandlerTests` › `Handle_Should_ReturnLastAdministrator_WhenOtherAdministratorIsPendingActivation`; `IntegrationTests/Users/LastAdministratorConcurrencyTests` › `AssignRoles_Should_ReturnLastAdministrator_WhenTheOnlyOtherAdministratorIsPendingActivation` | Com o outro administrador pendente, a peça responde que o usuário é o último, sem tocar o token; o handler devolve `Roles.LastAdministrator`, e a API responde 409 com esse erro. O seed e a elegibilidade seguem na U3. |
+| T-207 (AC-202) | `UnitTests/Tickets/TicketTests` › `CanBeViewedBy_Should_AllowParticipantsAlwaysAndOthersOnlyWithManagePermission_WhenTicketIsAssigned`; os testes de RN-07 de `PostTicketMessageCommandHandlerTests` e de `UploadTicketAttachmentCommandHandlerTests` | Os participantes sempre podem; os demais, só com `tickets:manage`. Os dois commands continuam com o mesmo erro. |
+
+**Evidências das tarefas (2026-11-06):**
+- build sem avisos;
+- unitários 769 de 769;
+- arquitetura 157 de 157.
+
+Os testes de integração rodam na verificação da etapa.
+
+**Verificação da etapa (2026-11-06):**
+- **Verificação 1:**
+  - build sem avisos; unitários 769 de 769; arquitetura 157 de 157;
+  - integração: 912 testes, com 901 aprovados, 0 falhas e 11 não executados (as evidências da CT-26, que só rodam quando ligadas), em 8 min 33 s;
+  - auditoria 100%, CONFORME, código de saída 0;
+  - revisão (`ca-review`) sem achado bloqueante nem violação de convenção.
+  - Reprovada pela lacuna do AC-203: faltava o teste da troca de setor de alvo privilegiado inativo.
+- **Ciclo de correção 1:** o teste `UsersTests` › `ChangeSector_Should_ReturnForbidden_WhenDeactivatedTargetHasAdministrativePermissionsCallerLacks`; build sem avisos; `UsersTests` 124 de 124.
+- **Verificação 2:** aprovada em código e testes. Foram reaproveitados os unitários, a arquitetura, a integração fora do `UsersTests` e a auditoria, porque a correção só mudou um `.cs` em `tests/`.
+- **Documentação, autorizada por Rafael Santos no questionário de 2026-11-06:** o `SYSTEM_SPECIFICATION.md` ganhou:
+  - as regras RN-07, RN-17, RN-18 e RN-28;
+  - a estratégia de invalidação do cache de permissões, num item novo junto do estado em memória (AC-203);
+  - a RN-17 com as quatro operações (AC-209);
+  - os caminhos das peças novas no lugar dos guards: a função Administrador, as permissões administrativas, o diagrama de componentes, as regras de funções e o componente E-22.
+  - Depois da mudança, a auditoria deu 100%, com código de saída 0.
+- **`CLAUDE.md`, autorizado por Rafael Santos no questionário de 2026-11-06:** os quatro pontos que citavam os guards removidos (o mapa do repositório, as referências vivas, o desvio de autorização e a lista "Em migração"). Depois da mudança: testes de scripts 14 de 14; testes do portão SDD 39 de 39; auditoria 100%, com código de saída 0.
+- **Observações da revisão, sem ação:**
+  - a RN-07 tem duas formas, pela DEC-9 da 043 e pela DEC-30 (b): o `TicketViewAccess` nas consultas, que lê só os ids, e o `Ticket.CanBeViewedBy` nos commands;
+  - o `LastAdministratorCheck` usa o `Entry` do EF na Application, exceção nomeada até a trava da DEC-33 (043p2).
+- **Ajuste da semântica (E.6):**
+  - build sem avisos; unitários 770 de 770; arquitetura 157 de 157;
+  - integração das pastas `Users` e `Roles`: 219 de 219;
+  - auditoria 100%, código de saída 0.
+  - A integração fora dessas pastas foi reaproveitada da verificação 1, porque o ajuste só mudou as duas peças e os seis handlers de `Users` e `Roles`.
+- **Elevação do `AssignUserRolesCommandHandler` (E.6):**
+  - build sem avisos; unitários 771 de 771, com `Handle_Should_ChangeNothing_WhenRolesAreAlreadyTheCurrentOnes`; arquitetura 157 de 157;
+  - integração inteira, porque a mudança alcança quem chama a rota: 913 testes, com 902 aprovados, 0 falhas e 11 não executados, em 8 min 22 s.
+
+## E.8 DEC-83: RN-17 e RN-18 como regras do agregado (2026-11-06)
+
+Pedido de Rafael Santos no chat: trazer para o Tickest a forma da regra da referência que confere, dentro do agregado, quem pode mudar os papéis dos membros (`OnlyMeetingOrGroupOrganizerCanSetMeetingMemberRolesRule`), "idêntica e adaptada". Pelo questionário, ele decidiu registrar a mudança para a AZ-3 e a U2, em vez de fazê-la agora.
+
+**Forma:**
+- Uma classe de regra por invariante, em `Domain/{Agregado}/Rules/`.
+- A classe recebe pelo construtor o que a regra precisa e expõe `IsBroken()` e o `Error`, que ocupa o lugar da mensagem.
+- O método do agregado confere a regra antes da primeira mudança e devolve `Result.Failure(rule.Error)`.
+- É idêntica à da referência, menos a exceção: lá, o `CheckRule` lança `BusinessRuleValidationException`; aqui, falha esperada é `Result` (`CLAUDE.md`).
+
+**Onde:**
+- **RN-17:** no `Role.ReplacePermissions` (T-208, AZ-3) e nos métodos do `User` que atribuem funções e gerenciam a conta (T-104, U2). As permissões de quem chama são lidas pelo provedor e passadas pelo handler.
+- **RN-18:** na forma da regra de "pelo menos um" da referência (`MeetingMustHaveAtLeastOneHostRule`). A contagem dos outros administradores utilizáveis é passada pelo handler, que mantém o controle de concorrência: hoje o token e, na 043p2, a trava da DEC-33.
+
+**Depende de:**
+- o padrão entrar antes na skill de agregados, numa spec própria e com autorização de mudança de skill;
+- a marca "administrativa" do catálogo de permissões ir para o Domain, com a T-210.
+
+**Consequência:** o `PrivilegeEscalationCheck` e o `LastAdministratorCheck` saem nessas etapas.
+
+**Alternativa recusada:** (b) fazer já, com as entidades anêmicas. Seria provisória, sem a entidade que chama a regra, e com o padrão fora da skill.
+
+**Nomes das regras (Rafael Santos, 2026-11-06, questionário):** o mesmo padrão de nome da referência, `Only{Quem}Can{Ação}Rule` e `{Algo}MustHaveAtLeastOne{Coisa}Rule`, com os termos do Tickest, uma classe por invariante. O nome literal da referência fala de reunião e de organizador, conceitos que o sistema não tem.
+- `OnlyPermissionHolderCanGrantOrRemoveAdministrativePermissionRule`: RN-17, conceder ou remover permissão administrativa;
+- `OnlyHolderOfTargetAdministrativePermissionsCanManageUserRule`: RN-17, gerenciar usuário com permissão administrativa;
+- `SystemMustHaveAtLeastOneAdministratorRule`: RN-18.

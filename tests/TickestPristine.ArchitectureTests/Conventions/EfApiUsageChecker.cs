@@ -12,7 +12,7 @@ internal static partial class EfApiUsageChecker
 {
     public static readonly string[] AllowedFiles =
     [
-        "src/TickestPristine.Application/Authorization/AdministratorGuard.cs",
+        "src/TickestPristine.Application/Roles/LastAdministratorCheck.cs",
         "src/TickestPristine.Application/TicketAttachments/TicketAttachmentDeleted/PurgeFileOnTicketAttachmentDeletedDomainEventHandler.cs",
         "src/TickestPristine.Application/TicketMessages/Post/PostTicketMessageCommandHandler.cs"
     ];

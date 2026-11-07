@@ -3,7 +3,6 @@ using TickestPristine.Application.Tickets;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
-using TickestPristine.Application.Users;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -25,7 +24,7 @@ public sealed class TicketAgentLookupTests : BaseHandlerTest
         await context.SaveChangesAsync();
 
         // Act
-        bool fromAgent = await new TicketAgentLookup(context, new AgentDirectory(context)).IsLastValidMessageFromAgentAsync(ticket, CancellationToken.None);
+        bool fromAgent = await new TicketAgentLookup(context, CreateAgentDirectory(context)).IsLastValidMessageFromAgentAsync(ticket, CancellationToken.None);
 
         // Assert
         fromAgent.ShouldBeFalse();
@@ -46,7 +45,7 @@ public sealed class TicketAgentLookupTests : BaseHandlerTest
         await context.SaveChangesAsync();
 
         // Act
-        bool fromAgent = await new TicketAgentLookup(context, new AgentDirectory(context)).IsLastValidMessageFromAgentAsync(ticket, CancellationToken.None);
+        bool fromAgent = await new TicketAgentLookup(context, CreateAgentDirectory(context)).IsLastValidMessageFromAgentAsync(ticket, CancellationToken.None);
 
         // Assert
         fromAgent.ShouldBeTrue();
@@ -63,7 +62,7 @@ public sealed class TicketAgentLookupTests : BaseHandlerTest
         context.Tickets.AddRange(withoutMessages, ownMessage);
         context.TicketMessages.Add(TicketTestData.CreateMessage(ownMessage.Id, agentRequester.Id, "Abri para mim", DefaultUtcNow));
         await context.SaveChangesAsync();
-        var lookup = new TicketAgentLookup(context, new AgentDirectory(context));
+        var lookup = new TicketAgentLookup(context, CreateAgentDirectory(context));
 
         // Act
         bool withoutMessagesFromAgent = await lookup.IsLastValidMessageFromAgentAsync(withoutMessages, CancellationToken.None);

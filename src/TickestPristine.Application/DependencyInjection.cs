@@ -3,6 +3,7 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Behaviors;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Telemetry;
+using TickestPristine.Application.Roles;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Tickets.GetSla;
 using TickestPristine.Application.Users;
@@ -48,6 +49,8 @@ public static class DependencyInjection
         services.AddScoped<IAgentDirectory, AgentDirectory>();
         services.AddScoped<TicketAgentLookup>();
         services.AddScoped<TicketViewAccess>();
+        services.AddScoped<PrivilegeEscalationCheck>();
+        services.AddScoped<LastAdministratorCheck>();
         services.AddScoped<TicketSlaReader>();
 
         // O IMeterFactory vem do host (registrado pelo ASP.NET Core).

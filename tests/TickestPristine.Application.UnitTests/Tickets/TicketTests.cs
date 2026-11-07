@@ -853,6 +853,21 @@ public sealed class TicketTests
         ticket.IsParticipant(Guid.NewGuid()).ShouldBeFalse();
     }
 
+    [Fact]
+    public void CanBeViewedBy_Should_AllowParticipantsAlwaysAndOthersOnlyWithManagePermission_WhenTicketIsAssigned()
+    {
+        // Arrange
+        var assignee = new User { Id = Guid.NewGuid() };
+        Ticket ticket = CreateTicket(assignee);
+        var outsiderId = Guid.NewGuid();
+
+        // Act & Assert
+        ticket.CanBeViewedBy(ticket.CreatedByUserId, canManageTickets: false).ShouldBeTrue();
+        ticket.CanBeViewedBy(assignee.Id, canManageTickets: false).ShouldBeTrue();
+        ticket.CanBeViewedBy(outsiderId, canManageTickets: true).ShouldBeTrue();
+        ticket.CanBeViewedBy(outsiderId, canManageTickets: false).ShouldBeFalse();
+    }
+
     [Theory]
     [InlineData(0, TicketSlaStatus.OnTime)]
     [InlineData(179, TicketSlaStatus.OnTime)]

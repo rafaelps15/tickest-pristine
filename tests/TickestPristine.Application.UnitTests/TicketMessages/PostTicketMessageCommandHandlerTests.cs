@@ -27,7 +27,7 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
         IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
 
-        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, new AgentDirectory(context), dateTimeProvider);
+        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, CreateAgentDirectory(context), dateTimeProvider);
         var command = new PostTicketMessageCommand { TicketId = Guid.NewGuid(), Content = "Hello" };
 
         // Act
@@ -53,7 +53,7 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
             .Returns(false);
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
 
-        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, new AgentDirectory(context), dateTimeProvider);
+        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, CreateAgentDirectory(context), dateTimeProvider);
         var command = new PostTicketMessageCommand { TicketId = ticketId, Content = "Hello" };
 
         // Act
@@ -77,7 +77,7 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
 
-        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, new AgentDirectory(context), dateTimeProvider);
+        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, CreateAgentDirectory(context), dateTimeProvider);
         var command = new PostTicketMessageCommand { TicketId = ticketId, Content = "Hello there" };
 
         // Act
@@ -107,7 +107,7 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
 
-        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, new AgentDirectory(context), dateTimeProvider);
+        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, CreateAgentDirectory(context), dateTimeProvider);
         var command = new PostTicketMessageCommand { TicketId = ticketId, Content = "On it" };
 
         // Act
@@ -138,7 +138,7 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
 
-        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, new AgentDirectory(context), dateTimeProvider);
+        var handler = new PostTicketMessageCommandHandler(context, userContext, permissionProvider, CreateAgentDirectory(context), dateTimeProvider);
         var command = new PostTicketMessageCommand { TicketId = ticketId, Content = "Escalating this" };
 
         // Act
@@ -204,7 +204,7 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
         permissionProvider.HasPermissionAsync(authorId, PermissionCodes.Tickets.Manage, Arg.Any<CancellationToken>())
             .Returns(canManage);
 
-        return new PostTicketMessageCommandHandler(context, userContext, permissionProvider, new AgentDirectory(context), CreateClock(nowUtc));
+        return new PostTicketMessageCommandHandler(context, userContext, permissionProvider, CreateAgentDirectory(context), CreateClock(nowUtc));
     }
 
     private static Task<TicketSlaTimer> GetFirstResponseAsync(TestDbContext context, Guid ticketId) =>

@@ -2018,6 +2018,38 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     }
 
     [Fact]
+    public async Task ChangeSector_Should_ReturnForbidden_WhenDeactivatedTargetHasAdministrativePermissionsCallerLacks()
+    {
+        // Arrange: quem chama só edita usuários; o alvo, desativado pelo administrador, também gerencia funções, e as
+        // permissões das funções dele valem para a conferência mesmo com a conta inativa
+        await AuthenticateAsAdminAsync();
+        string token = NewToken();
+        Guid itSectorId = await InsertSectorAsync("TI", $"Tecnologia-{token}");
+        string editorRole = await CreateRoleWithPermissionsAsync(PermissionCodes.Users.Update);
+        string rolesManagerRole = await CreateRoleWithPermissionsAsync(PermissionCodes.Roles.Manage);
+
+        string callerEmail = UniqueEmail();
+        Guid callerId = await RegisterUserAsync(callerEmail);
+        (await HttpClient.PutAsJsonAsync($"users/{callerId}/roles", new { roleNames = new[] { editorRole } }))
+            .EnsureSuccessStatusCode();
+
+        Guid targetId = await RegisterUserAsync(UniqueEmail());
+        (await HttpClient.PutAsJsonAsync($"users/{targetId}/roles", new { roleNames = new[] { rolesManagerRole } }))
+            .EnsureSuccessStatusCode();
+        (await HttpClient.PutAsync($"users/{targetId}/deactivate", null)).EnsureSuccessStatusCode();
+
+        Authenticate((await LoginAsync(callerEmail)).AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"users/{targetId}/sector", new { sectorId = itSectorId });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await response.Content.ReadFromJsonAsync<ProblemDto>())!.Title.ShouldBe("Users.CannotManagePrivilegedUser");
+        (await GetSectorIdAsync(targetId)).ShouldBeNull();
+    }
+
+    [Fact]
     public async Task GetAttendants_Should_ReturnReadForbidden_WhenCallerManagesTicketsButLacksReadPermission()
     {
         // Arrange

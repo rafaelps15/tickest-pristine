@@ -18,6 +18,12 @@ internal sealed class RecordingPermissionProvider(IEnumerable<string> permission
         return Task.FromResult<HashSet<string>>([.. _permissions]);
     }
 
+    public Task<HashSet<string>> GetCurrentForUserIdAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        GetForUserIdAsync(userId, cancellationToken);
+
+    public Task<HashSet<string>> GetGrantedByRolesAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        GetForUserIdAsync(userId, cancellationToken);
+
     public Task<bool> HasPermissionAsync(Guid userId, string permission, CancellationToken cancellationToken = default)
     {
         Record(cancellationToken);

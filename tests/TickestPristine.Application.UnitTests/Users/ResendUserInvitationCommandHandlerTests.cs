@@ -2,6 +2,7 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Notifications;
 using TickestPristine.Application.Permissions;
+using TickestPristine.Application.Roles;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Users;
 using TickestPristine.Application.Users.ResendInvitation;
@@ -67,10 +68,11 @@ public sealed class ResendUserInvitationCommandHandlerTests : BaseHandlerTest
         // Arrange: quem chama só cadastra; o alvo também gerencia funções
         await using TestDbContext context = CreateDbContext();
         User user = await SeedUserAsync(context);
-        await GrantPermissionsAsync(context, user.Id, PermissionCodes.Roles.Manage);
 
-        IPermissionProvider permissionProvider = Substitute.For<IPermissionProvider>();
-        permissionProvider.GetForUserIdAsync(CallerId, Arg.Any<CancellationToken>())
+        IPermissionProvider permissionProvider = CreatePermissionProvider();
+        permissionProvider.GetGrantedByRolesAsync(user.Id, Arg.Any<CancellationToken>())
+            .Returns([PermissionCodes.Roles.Manage]);
+        permissionProvider.GetCurrentForUserIdAsync(CallerId, Arg.Any<CancellationToken>())
             .Returns([PermissionCodes.Users.Create]);
         IEmailSender emailSender = Substitute.For<IEmailSender>();
         ResendUserInvitationCommandHandler handler = CreateHandler(context, emailSender, permissionProvider);
@@ -162,7 +164,7 @@ public sealed class ResendUserInvitationCommandHandlerTests : BaseHandlerTest
         return new ResendUserInvitationCommandHandler(
             context,
             userContext,
-            permissionProvider ?? Substitute.For<IPermissionProvider>(),
+            new PrivilegeEscalationCheck(permissionProvider ?? CreatePermissionProvider()),
             emailSender,
             RegisterUserCommandHandlerTests.CreateLinkBuilder(),
             CreateClock(),

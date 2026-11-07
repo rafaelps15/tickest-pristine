@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Audit;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Roles;
@@ -65,7 +66,7 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
         {
             role.HasKey(r => r.Id);
             role.HasAlternateKey(r => r.Name);
-            role.Property<int>("Version").IsConcurrencyToken();
+            role.Property<int>(RoleConcurrencyToken.PropertyName).IsConcurrencyToken();
         });
         modelBuilder.Entity<Permission>(permission =>
         {

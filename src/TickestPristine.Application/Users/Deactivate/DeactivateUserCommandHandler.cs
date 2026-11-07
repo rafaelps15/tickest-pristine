@@ -2,7 +2,8 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Authorization;
+using TickestPristine.Application.Roles;
+using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -13,6 +14,8 @@ internal sealed class DeactivateUserCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IPermissionProvider permissionProvider,
+    PrivilegeEscalationCheck privilegeEscalationCheck,
+    LastAdministratorCheck lastAdministratorCheck,
     IDateTimeProvider dateTimeProvider)
     : ICommandHandler<DeactivateUserCommand>
 {
@@ -35,26 +38,19 @@ internal sealed class DeactivateUserCommandHandler(
             return Result.Failure(UserErrors.AlreadyDeactivated);
         }
 
-        Result privilegeCheck = await PrivilegeEscalationGuard.EnsureCallerCanManageUserAsync(
-            context,
-            permissionProvider,
+        List<string> missingPermissions = await privilegeEscalationCheck.GetMissingPermissionsToManageAsync(
             userContext.UserId,
             user.Id,
             cancellationToken);
 
-        if (privilegeCheck.IsFailure)
+        if (missingPermissions.Count > 0)
         {
-            return privilegeCheck;
+            return Result.Failure(UserErrors.CannotManagePrivilegedUser(missingPermissions));
         }
 
-        Result administratorCheck = await AdministratorGuard.EnsureNotLastAdministratorAsync(
-            context,
-            user.Id,
-            cancellationToken);
-
-        if (administratorCheck.IsFailure)
+        if (await lastAdministratorCheck.IsLastAdministratorWithLockAsync(user.Id, cancellationToken))
         {
-            return administratorCheck;
+            return Result.Failure(RoleErrors.LastAdministrator);
         }
 
         user.IsActive = false;

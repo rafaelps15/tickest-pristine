@@ -2,7 +2,6 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Authorization;
 using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Roles;
 using Microsoft.EntityFrameworkCore;
@@ -13,7 +12,8 @@ namespace TickestPristine.Application.Roles.AssignPermissions;
 internal sealed class AssignRolePermissionsCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IPermissionProvider permissionProvider)
+    IPermissionProvider permissionProvider,
+    PrivilegeEscalationCheck privilegeEscalationCheck)
     : ICommandHandler<AssignRolePermissionsCommand>
 {
     public async Task<Result> Handle(AssignRolePermissionsCommand command, CancellationToken cancellationToken)
@@ -42,15 +42,14 @@ internal sealed class AssignRolePermissionsCommandHandler(
         HashSet<string> changedCodes = [.. currentCodes];
         changedCodes.SymmetricExceptWith(requestedCodes);
 
-        Result escalationCheck = await PrivilegeEscalationGuard.EnsureCallerCanChangeAsync(
-            permissionProvider,
+        List<string> missingPermissions = await privilegeEscalationCheck.GetMissingPermissionsToChangeAsync(
             userContext.UserId,
             changedCodes,
             cancellationToken);
 
-        if (escalationCheck.IsFailure)
+        if (missingPermissions.Count > 0)
         {
-            return escalationCheck;
+            return Result.Failure(RoleErrors.PrivilegeEscalation(missingPermissions));
         }
 
         // O par (RoleName, PermissionCode) é único: remove só as que saíram e inclui só as que entraram.
@@ -68,14 +67,15 @@ internal sealed class AssignRolePermissionsCommandHandler(
 
         role.Raise(new RolePermissionsAssignedDomainEvent(role.Id));
 
+        await context.SaveChangesAsync(cancellationToken);
+
+        // Os membros são lidos depois do commit, para quem entrou na função durante a gravação também perder o cache.
+        // Depois do commit, nem a leitura nem a invalidação podem ser canceladas junto com a requisição.
         List<Guid> affectedUserIds = await context.UserRoles
             .Where(userRole => userRole.RoleName == role.Name)
             .Select(userRole => userRole.UserId)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(CancellationToken.None);
 
-        await context.SaveChangesAsync(cancellationToken);
-
-        // Depois do commit, a invalidação não pode ser cancelada junto com a requisição: o banco já mudou.
         foreach (Guid userId in affectedUserIds)
         {
             await permissionProvider.InvalidateAsync(userId, CancellationToken.None);

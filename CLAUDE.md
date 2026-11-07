@@ -102,7 +102,7 @@ As entidades herdam de `Entity` e guardam as próprias regras (domínio rico): o
 |---|---|
 | Slices de caso de uso | `src/TickestPristine.Application/{Aggregate}/{UseCase}/` |
 | Abstrações transversais | `src/TickestPristine.Application/Abstractions/` (`Authentication`, `Authorization`, `Behaviors`, `Data`, `Messaging`, `Pagination`, `Storage`) |
-| Guards de autorização (legado, em migração) | `src/TickestPristine.Application/Authorization/` (`PrivilegeEscalationGuard`, `AdministratorGuard`); código novo usa a forma híbrida da skill `add-feature` (`references/authorization.md`) |
+| Conferências de autorização compartilhadas | `src/TickestPristine.Application/Roles/` (`PrivilegeEscalationCheck`, `LastAdministratorCheck`: peças injetadas que respondem e deixam o erro com o handler) e `Tickets/TicketViewAccess.cs`; código novo usa a forma híbrida da skill `add-feature` (`references/authorization.md`) |
 | Catálogo de permissões | `src/TickestPristine.Application/Permissions/` (`PermissionCodes`, `PermissionCatalog`) |
 | Trechos de SQL com nome | `src/TickestPristine.Application/{Aggregate}/{Aggregate}Sql.cs` (`TicketSql`, `UserSql`), só constantes, com o teste de concordância em `tests/TickestPristine.IntegrationTests/{Aggregate}/` |
 | Entidades, erros e eventos | `src/TickestPristine.Domain/{Aggregate}/` |
@@ -121,7 +121,7 @@ dotnet ef migrations add Nome_Da_Migration --project src/TickestPristine.Infrast
 
 Antes de criar algo, siga o slice real mais parecido (caminhos a partir de `src/TickestPristine.Application/` e `tests/`) na estrutura — pastas, nomes, endpoint, validator, paginação, testes. Os slices de `Departments/` e `Sectors/` e os commands de `Tickets/` que alteram o próprio chamado (criar, atualizar, atribuir, remover responsável, fechar, reabrir e excluir) já estão no domínio rico; os demais ainda são do modelo anêmico (ver [Em migração](#em-migração)), e neles o modelo da entidade, da mudança de estado e da autorização por recurso vem das skills (`add-entity/references/rich-entity.md`, `domain-modeling`, `add-feature/references/authorization.md`), e não do slice.
 
-- Command com retorno: `Tickets/Create/` · sem retorno, com permissão na rota: `Tickets/Close/` · com conferência por recurso (hoje por guard estático, legado): `Tickets/Reopen/`
+- Command com retorno: `Tickets/Create/` · sem retorno, com permissão na rota: `Tickets/Close/` · com conferência por recurso: `Tickets/Reopen/`
 - Query com conferência por recurso (peça injetada `TicketViewAccess`): `Tickets/GetById/` · dados do próprio usuário, paginada por offset: `Tickets/GetOwn/` · paginada por cursor: `TicketMessages/GetAll/` · com coleção filha (multi-mapping): `Departments/GetAll/` · relatório: `Tickets/GetVolume/`
 - Entidade e configuração EF: `Domain/Departments/Department.cs` e `Infrastructure/Departments/DepartmentConfiguration.cs`
 - Testes: `Tickets/CloseTicketCommandHandlerTests.cs`, `Tickets/TicketValidatorsTests.cs` (unitários), `Tickets/GetTicketByIdQueryHandlerTests.cs` (query handler, na integração) e `Tickets/TicketsTests.cs` (integração por HTTP)
@@ -131,7 +131,7 @@ Antes de criar algo, siga o slice real mais parecido (caminhos a partir de `src/
 - **Caminhos e namespaces** têm o prefixo `TickestPristine.` (ex.: `src/TickestPristine.Application`, não `src/Application`).
 - **Autorização** tem três formas, conforme o caso:
   1. permissão na rota com `.HasPermission(Permissions.X)`, que recebe uma única permissão;
-  2. `.RequireAuthorization()` na rota e, para regras por recurso (dono, participante, privilégio), a forma híbrida: a regra sobre o próprio estado no método da entidade, as permissões efetivas pelo `IPermissionProvider` e a conferência que precisa de consulta num método privado do handler (os guards estáticos atuais estão em [Em migração](#em-migração));
+  2. `.RequireAuthorization()` na rota e, para regras por recurso (dono, participante, privilégio), a forma híbrida: a regra sobre o próprio estado no método da entidade, as permissões efetivas pelo `IPermissionProvider` e a conferência que precisa de consulta num método privado do handler (as conferências compartilhadas de funções ficam em `Application/Roles/`, como peças injetadas);
   3. filtro por `IUserContext.UserId` só nas consultas de dados do próprio usuário (`Tickets/GetOwn`, `Tickets/GetOwnSummary`).
   Permissão nova entra em `PermissionCodes` e em `PermissionCatalog`. Exceção à permissão fixa na rota: `Users/GetAttendants` confere `users:read` no handler, pelo `IPermissionProvider`, para o 403 levar a mensagem de negócio (`UserErrors.ReadForbidden`); a rota exige só usuário ativo.
 - **Cache:** nenhuma query da Application usa cache; o único uso de `HybridCache` é o `PermissionProvider` (Infrastructure), invalidado com `IPermissionProvider.InvalidateAsync` depois do commit. O padrão de cache dos exemplos de Todo não se aplica aqui sem uma decisão explícita.
@@ -201,7 +201,6 @@ Código que ainda segue o modelo anêmico. Ele continua valendo e funcionando at
 
 - **Entidades com `{ get; set; }`:** todas as do Domain, exceto as do agregado de chamados, `Department` e `Sector` (`User`, `UserCredential`, `UserInvitation`, `UserRole`, `RefreshToken`, `Role`, `Permission`, `RolePermission`, `SlaCalendar`, `SlaCalendarHoliday`, `AuditLogEntry`).
 - **Regras em classes estáticas da Application:** `Users/UserCodes.cs`.
-- **Guards estáticos de autorização:** `Authorization/PrivilegeEscalationGuard.cs` e `Authorization/AdministratorGuard.cs`.
 - **Eventos disparados pelos handlers** (`entity.Raise(...)` na Application) e propriedades atribuídas pelos handlers.
 - **Seeders** em `src/TickestPristine.Infrastructure/Database/Seeding/` (`DatabaseSeeder`, `AdminUserSeeder`, `DefaultOrganizationSeeder`, `SampleDataSeeder`), que montam as entidades pelos setters, exceto `Department` e `Sector`, já criados pelo `Create`, e o `Ticket` do `SampleDataSeeder`, com o histórico e os cronômetros, montados pelos métodos do `Ticket` e pelo `TicketSlaCycleService`; a estratégia de seed para o modelo rico é de uma spec própria.
 

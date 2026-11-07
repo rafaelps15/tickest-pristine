@@ -465,6 +465,12 @@ public sealed class Ticket : Entity, IAuditable
     public bool IsParticipant(Guid userId) => CreatedByUserId == userId || IsAssignedTo(userId);
 
     /// <summary>
+    /// Se o usuário pode ver o chamado e agir nele: os participantes (solicitante e responsável) sempre podem; os
+    /// demais, só com <c>tickets:manage</c>, que o handler confere e passa em <paramref name="canManageTickets"/>.
+    /// </summary>
+    public bool CanBeViewedBy(Guid userId, bool canManageTickets) => canManageTickets || IsParticipant(userId);
+
+    /// <summary>
     /// Situação do SLA de resolução no instante informado, sobre as colunas do chamado, para as consultas que não
     /// carregam a entidade. A primeira resolução decide o resultado (cumprido ou violado), mesmo depois de uma
     /// reabertura; chamado cancelado sem ter sido resolvido fica fora do SLA.

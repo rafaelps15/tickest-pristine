@@ -1,29 +1,30 @@
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 
 namespace TickestPristine.Infrastructure.Authorization;
 
-internal sealed class PermissionProvider(IApplicationDbContext context, HybridCache cache) : IPermissionProvider
+internal sealed class PermissionProvider(ApplicationDbContext context, HybridCache cache) : IPermissionProvider
 {
     public async Task<HashSet<string>> GetForUserIdAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         List<string> permissions = await cache.GetOrCreateAsync(
             PermissionCacheKeys.ForUser(userId),
-            async cancellation => await (
-                from userRole in context.UserRoles
-                where userRole.UserId == userId
-                join user in context.Users on userRole.UserId equals user.Id
-                where user.IsActive
-                join rolePermission in context.RolePermissions on userRole.RoleName equals rolePermission.RoleName
-                select rolePermission.PermissionCode)
-                .Distinct()
-                .ToListAsync(cancellation),
+            async cancellation => await ActiveUserPermissions(userId).ToListAsync(cancellation),
             cancellationToken: cancellationToken);
 
         return [.. permissions];
     }
+
+    public async Task<HashSet<string>> GetCurrentForUserIdAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        [.. await ActiveUserPermissions(userId).ToListAsync(cancellationToken)];
+
+    public async Task<HashSet<string>> GetGrantedByRolesAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        [.. await context.UserPermissions
+            .Where(permission => permission.UserId == userId)
+            .Select(permission => permission.PermissionCode)
+            .ToListAsync(cancellationToken)];
 
     public async Task<bool> HasPermissionAsync(Guid userId, string permission, CancellationToken cancellationToken = default)
     {
@@ -46,4 +47,12 @@ internal sealed class PermissionProvider(IApplicationDbContext context, HybridCa
         await cache.RemoveAsync(PermissionCacheKeys.ForUser(userId), cancellationToken);
         await cache.RemoveAsync(PermissionCacheKeys.ActiveForUser(userId), cancellationToken);
     }
+
+    // A união das funções vem da view; aqui entra só a situação do usuário, que a view não olha.
+    private IQueryable<string> ActiveUserPermissions(Guid userId) =>
+        from permission in context.UserPermissions
+        where permission.UserId == userId
+        join user in context.Users on permission.UserId equals user.Id
+        where user.IsActive
+        select permission.PermissionCode;
 }

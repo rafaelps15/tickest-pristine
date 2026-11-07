@@ -17,8 +17,8 @@ internal sealed class RoleConfiguration : IEntityTypeConfiguration<Role>
 
         builder.Property(r => r.Name).HasMaxLength(50);
 
-        // Token de concorrência só no banco, incrementado pelo AdministratorGuard quando um administrador perde o acesso.
-        builder.Property<int>("Version").IsConcurrencyToken().HasDefaultValue(0);
+        // Token de concorrência só no banco, incrementado pelo LastAdministratorCheck quando um administrador perde o acesso.
+        builder.Property<int>(RoleConcurrencyToken.PropertyName).IsConcurrencyToken().HasDefaultValue(0);
 
         builder.HasData(
             Create(RoleNames.Administrator),

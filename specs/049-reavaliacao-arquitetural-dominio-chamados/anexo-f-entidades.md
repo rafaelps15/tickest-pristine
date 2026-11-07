@@ -83,6 +83,9 @@ Pontos que as referências não resolvem, decididos por Rafael Santos no questio
 - A T-19 cria um teste de arquitetura que confere C1 a C5 por reflexão em todo tipo que herda `Entity`: `sealed`, um único construtor privado sem parâmetros, nenhum `set` público ou interno, um `Create` estático, nenhum membro estático público além dele e nenhuma constante pública.
 - O teste começa com a lista de exceções da F.3, uma entrada por entidade e desvio, e cada etapa tira as suas; ao fim do programa, a lista está vazia.
 - Nenhuma etapa termina com entrada dela na lista (REQ-29).
+- **Feita em 2026-11-06 (T-19):** o `EntityModelChecker` e, no `RichEntityTests`, o `Entities_Should_FollowTheEntityModel` (nenhum desvio fora da lista), o `ModelExceptions_Should_StillBeViolated` (nenhuma entrada já corrigida) e os `ModelChecker_*` (o verificador aceita a entidade no modelo e acusa cada critério violado sozinho, em 9 casos). As 18 entidades vêm da reflexão, e uma entidade nova entra sozinha. Build sem avisos e arquitetura 154/154 em 2026-11-06.
+- **A lista de hoje:** 37 entradas, 92 desvios por membro: o construtor, os setters e o `Create` das 11 anêmicas (linhas 8 a 18 da F.3, com as mesmas contagens de setters); os estáticos públicos, a constante e o `IsActive` do `Ticket`; o `IsOpen` do `TicketSlaTimer`. A propriedade calculada entra no C3 pela F.3.
+- **Fora da reflexão:** os retornos, os eventos, os métodos `internal` e a configuração do EF (C6 a C10) seguem conferidos contra a F.3 na revisão de cada etapa.
 
 ## F.7 Portão da G3-b
 
@@ -92,13 +95,13 @@ Situação em 2026-11-06, pela 7.15.1:
 |---|---|---|
 | 1 | G2 entregue (043 parte 1) | feito (PR #77) |
 | 2 | DEC-20, DEC-21, DEC-22, DEC-29, DEC-31, DEC-32, DEC-59 e DEC-70 | decididas |
-| 3 | DEC-23, DEC-26, DEC-35 e DEC-69 | **pendentes** |
-| 4 | DEC-24, DEC-25, DEC-27, DEC-28, DEC-30 e DEC-39 | **recomendação a confirmar no portão** |
-| 5 | DEC-76 (view de permissões efetivas) | **pendente no portão**, recomendada (a) |
+| 3 | DEC-23, DEC-26, DEC-35 e DEC-69 | decididas em 2026-11-06 (anexo E, E.5) |
+| 4 | DEC-24, DEC-25, DEC-27, DEC-28, DEC-30 e DEC-39 | decididas em 2026-11-06 (anexo E, E.5) |
+| 5 | DEC-76 (view de permissões efetivas) | decidida em 2026-11-06: (a) |
 | 6 | Spec 036, revista pela `spec-new` e entregue antes da U1 | **não está na `main`** |
 | 7 | Spec 037, revista pela `spec-new` e entregue antes da U2 | **não está na `main`** |
 | 8 | Skill de desenho de agregados, antes da AZ-3 e da U2 | **não existe**; precisa de spec própria e de autorização para mudar skills |
 | 9 | REQ-29: as 8 entidades de identidade (8 a 15 da F.3) terminam a G3-b no modelo | critério novo (DEC-77) |
-| 10 | T-19 ativa antes da primeira tarefa da G3-b | a fazer |
+| 10 | T-19 ativa antes da primeira tarefa da G3-b | feita em 2026-11-06 (F.6) |
 
-O primeiro passo da trilha de funções (AZ-2: T-205, T-206 e a T-207 com a DEC-9 da 043) começa depois dos itens 3 a 5 e da T-19; a 036, a 037 e a skill de agregados seguem a ordem da 7.15.4.
+O primeiro passo da trilha de funções (AZ-2: T-205, T-206 e a T-207 com a DEC-9 da 043) começa depois dos itens 3 a 5 e da T-19, feitos em 2026-11-06; a 036, a 037 e a skill de agregados seguem a ordem da 7.15.4.
