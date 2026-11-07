@@ -33,6 +33,7 @@ Revise o escopo informado (padrão: `git diff` + arquivos não rastreados) contr
 - As queries leem com Dapper, nos modelos da `query-slice.md`, e nunca chamam um método da entidade; a regra fica no SQL ou num trecho de SQL com nome, com teste de concordância.
 - Objetos de valor herdam `ValueObject` e são criados por `Create(...)` devolvendo `Result<T>`.
 - Eventos de domínio são `sealed record` com ids (mais o valor anterior numa alteração), sem `OccurredOnUtc`. Handlers de evento: um por reação, `{Action}On{Event}DomainEventHandler`, numa pasta com o nome do evento.
+- A regra com nome de negócio próprio que recebe dados de fora ou se repete entre métodos é uma classe de regra (`{Name}Rule : IBusinessRule` em `Domain/{Feature}/Rules/`, `internal sealed`), conferida pelo método do agregado com `CheckRule`, que devolve `Result`; nenhuma regra lança exceção, consulta nada ou muda estado, e a conferência simples do próprio estado da entidade continua um `if` (`aggregate-design`).
 
 ### Estrutura do slice
 - Uma pasta por caso de uso em `src/Application/{Feature}/{UseCase}/`; o endpoint espelha em `src/Web.Api/Endpoints/{Feature}/{UseCase}.cs`.
@@ -61,6 +62,7 @@ Revise o escopo informado (padrão: `git diff` + arquivos não rastreados) contr
 
 ### Testes
 - Entidades: invariante na construção, cada transição válida, cada transição inválida com estado e eventos inalterados.
+- Classes de regra: testadas pelo método do agregado que as confere, com o `Error` conferido e o estado e os eventos inalterados; sem teste próprio da classe.
 - Handlers: todo caminho `Result.Failure` mais o caminho feliz (estado gravado + eventos de domínio). Validators: testes `TestValidate` por regra.
 - Endpoints: testes de integração por HTTP real, com a persistência conferida por um GET e todo query handler coberto por testes de integração contra o banco.
 - Os nomes dos testes e a estrutura Arrange/Act/Assert seguem os testes existentes.
@@ -70,7 +72,7 @@ Revise o escopo informado (padrão: `git diff` + arquivos não rastreados) contr
 - Quando a revisão for de uma spec, o escopo são os arquivos do plano técnico e das tarefas dela; liste à parte as mudanças pendentes fora desse escopo, sem revisá-las.
 
 ### Não pode aparecer
-- Repositórios, `IUnitOfWork`, um behavior de transação, MediatR, `Maybe<T>`, controllers, uma classe central `DomainErrors`.
+- Repositórios, `IUnitOfWork`, um behavior de transação, MediatR, `Maybe<T>`, controllers, uma classe central `DomainErrors`, uma regra de negócio que lança exceção.
 
 ## Formato da saída
 

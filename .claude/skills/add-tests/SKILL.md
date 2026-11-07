@@ -36,6 +36,7 @@ Complete os tipos de teste de que toda entidade e todo slice precisam. Leia prim
 
 - **Frameworks:** xUnit + Shouldly + NSubstitute; `FluentValidation.TestHelper` para validators. Os global usings já cobrem `Xunit`, `NSubstitute`, `Shouldly`, `SharedKernel`.
 - **Testes da entidade:** `{Entity}Tests`, sem banco e sem substitutos; a entidade é criada pelo próprio `Create`.
+- **Classes de regra:** testadas pelo método do agregado que as confere — quebre a regra e confira o `Error` exato, o estado e os eventos intactos; a classe de regra não tem teste próprio ([../aggregate-design/references/rules.md](../aggregate-design/references/rules.md)).
 - **Base dos testes unitários:** herde `BaseHandlerTest`; use `CreateDbContext()` para um `TestDbContext` novo em memória e `CreateCache()` para um `HybridCache` real. Substitua só interfaces (`IUserContext`, `IDateTimeProvider`, `IPasswordHasher`, `ITokenProvider`) — nunca faça mock do DbContext.
 - **Monte pelo domínio:** crie as entidades com `Create` e os métodos delas, nunca atribuindo propriedades.
 - **Base dos testes de integração:** herde `BaseIntegrationTest(factory)` com a collection fixture `IntegrationTestWebAppFactory`; use `RegisterAndLoginAsync()` + `Authenticate(token)` nas chamadas autenticadas. Defina records privados de resposta dentro da classe de teste (veja `TodosTests.TodoDto`).
