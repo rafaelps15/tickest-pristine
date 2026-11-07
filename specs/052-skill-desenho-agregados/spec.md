@@ -5,7 +5,7 @@ status: Verificada       # Rascunho | Em descoberta | Bloqueada | Aprovada | Em 
 responsavel: Rafael Santos
 aprovada-em: 2026-11-06
 branch: chore/SPEC-052-aggregate-design-skill                 # <tipo>/SPEC-NNN-<slug>, com tipo em feat, fix, bugfix, chore, docs, test ou refactor, conforme o CLAUDE.md
-pr:                     # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
+pr: 80                  # número do PR (#n), preenchido num commit do próprio PR; depois do merge, o /spec-status mostra Entregue
 ---
 
 # 052 — Skill de desenho de agregados
@@ -128,8 +128,10 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
   4. **`boundaries.md`:** expunha a coleção como cópia (`[.. _maintainers]`). Passou à forma do `rich-entity.md` (`=> _maintainers`), que o teste c2 confere.
   5. **`concurrency.md`:** descrevia o 409 como comportamento existente do tratador global, que nenhum modelo da biblioteca tem. Passou a mandar acrescentar a conversão, uma vez, onde ela faltar. No Tickest, ela já existe (`src/TickestPristine.Web.Api/Infrastructure/DatabaseFailures.cs:26`).
 - **Documentação atualizada:** `SYSTEM_SPECIFICATION.md`, seção 6.9 (a lista das skills de código e o número de pares da paridade).
-- **CI:** a preencher.
-- **Entrega:** biblioteca no commit `a0772de` (2026-11-07), só com os trechos da 052, validado antes do commit pelo conteúdo exportado do índice (validador com 430 verificações, código de saída 0; 23 de 23). Tickest: a preencher com o PR.
+- **CI:** roda no PR #80 (job `build`).
+- **Entrega:**
+  - **Biblioteca:** commit `a0772de` (2026-11-07), só com os trechos da 052. Antes do commit, o conteúdo exportado do índice passou no validador (430 verificações, código de saída 0) e nos testes (23 de 23).
+  - **Tickest:** PR #80 (https://github.com/rafaelps15/tickest-pristine/pull/80), aberto em 2026-11-07 da branch `chore/SPEC-052-aggregate-design-skill` para a `main`, o mesmo do campo `pr:`. Merge pelo responsável.
 
 ## 10. Histórico
 | Data | Status | Observação |
@@ -144,3 +146,4 @@ pr:                     # número do PR (#n), preenchido num commit do próprio 
 | 2026-11-07 | Em implementação | T-6 feita (DEC-9) e T-5 executada. A revisão encontrou 5 desvios de convenção, nenhum bloqueante, nos modelos da skill nova; foram corrigidos dentro do plano, e as verificações foram refeitas depois. |
 | 2026-11-07 | Verificada | Verificação aprovada: biblioteca verde (validador 478, código de saída 0; 23 de 23); Tickest com 14 de 14 em `scripts` e 39 de 39 no portão; auditoria 100%, código de saída 0; todos os ACs cobertos; revisão sem achado bloqueante. `SYSTEM_SPECIFICATION.md` 6.9 atualizada. O commit é do responsável ("nao faça commit"). |
 | 2026-11-07 | Verificada | Commit da 052 na biblioteca, `a0772de`, feito pelo agente com a autorização do responsável: "autorizo o commit da 052 na biblioteca". As mudanças pendentes da 043 e da 049 e o teste c8 ficam para o commit delas; o commit do Tickest fica para depois do merge do PR #79. |
+| 2026-11-07 | Verificada | No Tickest: commit `a887126` na branch `chore/SPEC-052-aggregate-design-skill`, criada da `origin/main` depois do merge do PR #79 (`b7d96f7`), a pedido do responsável ("faça o commit da 052 no tickest"). O push foi feito pelo responsável. O PR #80 foi aberto pelo agente com a autorização dele, no questionário. Campo `pr:` preenchido. |
