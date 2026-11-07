@@ -9,6 +9,7 @@ Um pacote de skills que ensina ao Claude Code as convenções do TickestPristine
 | **add-feature** | `/add-feature archive a todo item` | Cria um slice vertical completo: command/query, handler, validator, endpoint e testes unitários, de validator e de integração. |
 | **add-entity** | `/add-entity Project with a name and owner` | Adiciona uma entidade de domínio de ponta a ponta: entidade, catálogo de erros, eventos de domínio, configuração do EF, ligação no DbContext e migration. |
 | **add-tests** | `/add-tests CopyTodoCommand` | Completa os testes de handler, de validator e de integração de casos de uso existentes. |
+| **aggregate-design** | `/aggregate-design project maintainers` | Decide a fronteira do agregado, onde cada regra mora e como ela vale na concorrência; escreve a regra com nome de negócio próprio como classe de regra. |
 | **ca-review** | `/ca-review` | Revisa as mudanças pendentes contra as convenções do TickestPristine: limites entre camadas, tratamento de erro, segurança, cache e cobertura de testes. |
 | **domain-modeling** | `/domain-modeling todo item completion` | Leva as regras de handlers e classes estáticas para as entidades, os objetos de valor e os serviços de domínio. |
 | **spec-new** | `/spec-new permitir remover o responsável de um chamado` | Escreve a spec de uma mudança (requisitos, critérios de aceitação, decisões, plano e tarefas) e para à espera da aprovação. |
@@ -32,6 +33,7 @@ your-project/
         ├── add-feature/
         ├── add-entity/
         ├── add-tests/
+        ├── aggregate-design/
         ├── ca-review/
         ├── spec-new/
         ├── spec-implement/

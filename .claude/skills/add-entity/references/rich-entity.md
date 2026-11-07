@@ -121,6 +121,35 @@ public sealed class ProjectMember : Entity
 
 - `internal static Create`: só `Project.AddMember(userId)` o cria (padrão 7 da `domain-modeling`).
 
+## Configuração do filho
+
+O filho criado pelo agregado tem o `Id` gerado pelo código e um índice único para o par que não pode repetir:
+
+```csharp
+using Domain.Projects;
+using Domain.Users;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+namespace Infrastructure.Projects;
+
+internal sealed class ProjectMemberConfiguration : IEntityTypeConfiguration<ProjectMember>
+{
+    public void Configure(EntityTypeBuilder<ProjectMember> builder)
+    {
+        builder.HasKey(m => m.Id);
+
+        builder.Property(m => m.Id).ValueGeneratedNever();
+
+        builder.HasOne<Project>().WithMany().HasForeignKey(m => m.ProjectId);
+
+        builder.HasOne<User>().WithMany().HasForeignKey(m => m.UserId);
+
+        builder.HasIndex(m => new { m.ProjectId, m.UserId }).IsUnique();
+    }
+}
+```
+
 ## Configuração do objeto de valor
 
 ```csharp
