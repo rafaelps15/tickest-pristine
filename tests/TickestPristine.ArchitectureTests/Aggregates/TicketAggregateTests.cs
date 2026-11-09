@@ -4,7 +4,7 @@ using TickestPristine.Domain.Tickets;
 
 namespace TickestPristine.ArchitectureTests.Aggregates;
 
-public class TicketSlaAggregateTests : BaseTest
+public class TicketAggregateTests : BaseTest
 {
     private const BindingFlags PublicDeclared =
         BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
@@ -26,6 +26,30 @@ public class TicketSlaAggregateTests : BaseTest
 
         // Assert
         receivers.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Ticket_Should_ExposeTimersAsReadOnlyCollection()
+    {
+        // Arrange & Act
+        PropertyInfo timers = typeof(Ticket).GetProperty(nameof(Ticket.SlaTimers))!;
+
+        // Assert
+        timers.PropertyType.ShouldBe(typeof(IReadOnlyCollection<TicketSlaTimer>));
+        timers.SetMethod.ShouldBeNull();
+    }
+
+    [Fact]
+    public void TicketDomain_Should_NotContainRemovedSlaCoordinationServices()
+    {
+        // Arrange & Act
+        string[] removedTypes = typeof(Ticket).Assembly.GetTypes()
+            .Select(type => type.Name)
+            .Where(name => name is "TicketSlaCycleService" or "TicketReopening")
+            .ToArray();
+
+        // Assert
+        removedTypes.ShouldBeEmpty();
     }
 
     [Fact]

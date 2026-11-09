@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Application.TicketHistories;
 using TickestPristine.Application.Tickets;
+using TickestPristine.Application.Tickets.SettleDueSlaDeadlines;
+using TickestPristine.SharedKernel;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
@@ -5129,7 +5131,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
     {
         using SlaMonitorBackgroundService monitor = CreateSlaMonitor(batchSize, logger);
 
-        await monitor.ProcessSlaBreachesAsync(CancellationToken.None);
+        await monitor.SettleDueSlaDeadlinesAsync(CancellationToken.None);
     }
 
     // Leva para o passado os instantes dos cronômetros do chamado (início, alerta, prazo e próxima ação), como se ele
@@ -5289,8 +5291,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         afterFirstRun.ShouldAllBe(t => t.BreachedOnUtc == t.DueOnUtc && t.NextActionOnUtc == null);
 
         List<TicketSlaBreachedDomainEvent> events = BreachEvents.For(ticketId);
-        events.Select(e => e.Metric).ShouldBe([SlaMetric.FirstResponse, SlaMetric.Resolution]);
-        events.Select(e => e.DueOnUtc).ShouldBe(afterFirstRun.OrderBy(t => t.Metric).Select(t => t.DueOnUtc));
+        events.OrderBy(e => e.DueOnUtc).Select(e => e.Metric).ShouldBe([SlaMetric.FirstResponse, SlaMetric.Resolution]);
+        events.OrderBy(e => e.DueOnUtc).Select(e => e.DueOnUtc).ShouldBe(afterFirstRun.OrderBy(t => t.Metric).Select(t => t.DueOnUtc));
 
         GetTimers(ticketId).Select(t => (t.BreachedOnUtc, t.NextActionOnUtc))
             .ShouldBe(afterFirstRun.Select(t => (t.BreachedOnUtc, t.NextActionOnUtc)));
@@ -5505,7 +5507,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         """;
 
     [Fact]
-    public async Task SlaMonitor_Should_RollBackBatchAndLogCritical_WhenSaveConflicts_AndProcessItOnNextRun()
+    public async Task SlaMonitor_Should_RetryDueDeadlineAfterSaveConflict()
     {
         // Arrange
         await DrainSlaQueueAsync();
@@ -5522,14 +5524,14 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         try
         {
-            // Act
+            // Act: o save é revertido pelo gatilho; o prazo deve continuar elegível para a próxima volta.
             await RunSlaMonitorAsync(logger: logger);
             TicketSlaTimer afterFailure = GetTimers(ticketId).Single(t => t.Metric == SlaMetric.FirstResponse);
             int eventsAfterFailure = BreachEvents.For(ticketId).Count;
 
             await RunSlaMonitorAsync(logger: logger);
 
-            // Assert
+            // Assert: a gravação falha sem remover o prazo da fila; a volta seguinte persiste a violação e o evento.
             afterFailure.BreachedOnUtc.ShouldBeNull();
             afterFailure.NextActionOnUtc.ShouldBe(afterFailure.DueOnUtc);
             eventsAfterFailure.ShouldBe(0);
@@ -5537,9 +5539,10 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             TestLogEntry critical = logger.Entries.Where(e => e.Level == LogLevel.Critical).ShouldHaveSingleItem();
             critical.Exception.ShouldBeOfType<DbUpdateConcurrencyException>();
 
-            TicketSlaTimer afterRetry = GetTimers(ticketId).Single(t => t.Metric == SlaMetric.FirstResponse);
-            afterRetry.BreachedOnUtc.ShouldBe(afterRetry.DueOnUtc);
-            BreachEvents.For(ticketId).ShouldHaveSingleItem();
+            TicketSlaTimer afterNextRun = GetTimers(ticketId).Single(t => t.Metric == SlaMetric.FirstResponse);
+            afterNextRun.BreachedOnUtc.ShouldBe(afterNextRun.DueOnUtc);
+            afterNextRun.NextActionOnUtc.ShouldBeNull();
+            BreachEvents.For(ticketId).Count.ShouldBe(1);
         }
         finally
         {

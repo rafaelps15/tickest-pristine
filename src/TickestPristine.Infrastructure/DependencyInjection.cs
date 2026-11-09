@@ -161,7 +161,6 @@ public static class DependencyInjection
         services.AddScoped<AuditLoggingInterceptor>();
 
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
-
         return services;
     }
 

@@ -1132,3 +1132,23 @@ Saem os testes do comportamento retirado: `RecordAttachmentActivity_*` e `Record
 - **Build:** `dotnet build TickestPristine.slnx`, sem avisos e sem erros, depois da última alteração.
 - **Testes da tarefa:** `TickestPristine.Application.UnitTests`, filtro `FullyQualifiedName~Ticket`, 441 aprovados; `TickestPristine.ArchitectureTests`, 156 aprovados. O teste de integração do AC-31 fica para a verificação final da fase, conforme o critério de impacto do projeto.
 - **T-8:** os handlers de abertura, atualização, reabertura, exclusão e publicação de mensagem usam a nova API do `Ticket`. A inspeção do diff dos testes de integração não encontrou mudanças nas asserções. Os 441 testes unitários do recorte passaram; a integração completa fica para a verificação da fase.
+
+## B.17 Verificação da fase 3 da G3-a (2026-11-09)
+
+- **Escopo:** T-7 a T-12; cronômetros internos ao `Ticket`, handlers no padrão-modelo, persistência atômica da liquidação, documentação e revisão.
+- **Build:** `dotnet build TickestPristine.slnx`, 0 avisos e 0 erros, depois da remoção de `IApplicationTransaction`, `ApplicationTransaction` e `BeginTransactionAsync`. O projeto de integração foi recompilado na rodada filtrada final.
+- **Testes da fase:**
+
+| Projeto / recorte | Aprovados | Falhas | Ignorados |
+|---|---:|---:|---:|
+| `TickestPristine.Application.UnitTests` (projeto inteiro) | 744 | 0 | 0 |
+| `TickestPristine.ArchitectureTests` (projeto inteiro) | 158 | 0 | 0 |
+| Integração: `SlaMonitor_*`, `DomainEventsPublishingTests` e `SampleDataSeederTests` | 17 | 0 | 0 |
+
+- **Recuperação AC-7:** `SlaMonitor_Should_RetryDueDeadlineAfterSaveConflict` valida contra PostgreSQL que uma falha da gravação reverte a liquidação sem tirar o prazo da fila; a volta seguinte grava a violação e publica um evento.
+- **Eventos:** o `PublishDomainEventsInterceptor` voltou ao padrão do projeto: coleta e publica eventos depois de um `SaveChangesAsync` bem-sucedido; os testes confirmam publicação no caminho de sucesso e retenção dos eventos quando o save falha. Os testes de transação explícita foram removidos.
+- **Semântica da fila:** removido o `TicketSlaDeadlineQueue` e seu `UPDATE` autocommitado. O handler segue o modelo da skill: carrega o agregado, revalida o cronômetro, chama o domínio e executa um único `SaveChangesAsync`. O EF grava a saída da fila, a violação e a auditoria na transação automática do save; em falha, todos revertem e o prazo pode ser tentado novamente. A resposta do handler é `Result.Success(new SettleDueSlaDeadlinesResponse(...))` em todos os caminhos de sucesso.
+- **Auditoria SDD:** `python scripts/auditoria_sdd.py .`, score 96,6%, CONFORME, código de saída 0. `plan.md` e `tasks.md` são índices; `spec.md` continua sendo a fonte canônica da spec-mãe. RAS-01 segue como recomendação não bloqueante da auditoria.
+- **Revisão (`ca-review`):** sem achados bloqueantes, violações de convenção ou lacunas de teste pendentes após a correção. Revisados limites entre camadas, domínio rico, fluxo de command handler, DI, eventos, documentação e AC-1, AC-6, AC-7, AC-14 e AC-19.
+- **Documentação:** `SYSTEM_SPECIFICATION.md` recebeu RN-36 com o ownership do SLA, persistência atômica do monitor e evento pós-save. `CLAUDE.md` não foi alterado.
+- **Execução ampla:** a suíte completa não foi usada como gate local; a verificação seguiu os recortes por impacto acima. Na primeira rodada ampla, o xUnit rejeitou o segundo construtor público da fábrica; ele passou a `internal`. Uma integração inicial também revelou fila vencida compartilhada no teste de corrida; o teste agora a drena antes da preparação do cenário.

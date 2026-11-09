@@ -33,7 +33,7 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
     {
     }
 
-    public IntegrationTestWebAppFactory(bool enableSampleData)
+    internal IntegrationTestWebAppFactory(bool enableSampleData)
     {
         _enableSampleData = enableSampleData;
     }

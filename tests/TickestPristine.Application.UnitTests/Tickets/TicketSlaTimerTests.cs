@@ -401,7 +401,7 @@ public sealed class TicketSlaTimerTests
     }
 
     [Fact]
-    public void ProcessDue_Should_RecordBreachAtDeadlineAndRaiseEvent_WhenTimerIsOpen()
+    public void SettleDeadline_Should_RecordBreachAtDeadlineAndRaiseEvent_WhenTimerIsOpen()
     {
         // Arrange
         (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
@@ -418,7 +418,7 @@ public sealed class TicketSlaTimerTests
     }
 
     [Fact]
-    public void ProcessDue_Should_RecordBreach_WhenTimerWasCompletedAfterDeadline()
+    public void SettleDeadline_Should_RecordBreach_WhenTimerWasCompletedAfterDeadline()
     {
         // Arrange
         (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
@@ -435,7 +435,7 @@ public sealed class TicketSlaTimerTests
     }
 
     [Fact]
-    public void ProcessDue_Should_OnlyDequeue_WhenTimerWasCompletedOnTimeOrStopped()
+    public void SettleDeadline_Should_OnlyDequeue_WhenTimerWasCompletedOnTimeOrStopped()
     {
         // Arrange: concluído no prazo, mas ainda na fila (lido antes da conclusão), e parado no cancelamento.
         (Ticket answeredTicket, TicketSlaTimer completedOnTime) = OpenFirstResponse();

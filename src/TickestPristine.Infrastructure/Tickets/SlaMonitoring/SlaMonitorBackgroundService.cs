@@ -5,14 +5,14 @@ using Microsoft.Extensions.Options;
 using Npgsql;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Telemetry;
-using TickestPristine.Application.Tickets.ProcessSlaBreaches;
+using TickestPristine.Application.Tickets.SettleDueSlaDeadlines;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Infrastructure.Tickets.SlaMonitoring;
 
 /// <summary>
 /// Serviço em background que processa, a cada volta, um lote de cronômetros de SLA vencidos, pelo
-/// <see cref="ProcessSlaBreachesCommand"/>.
+/// <see cref="SettleDueSlaDeadlinesCommand"/>.
 /// </summary>
 internal sealed class SlaMonitorBackgroundService : BackgroundService
 {
@@ -65,7 +65,7 @@ internal sealed class SlaMonitorBackgroundService : BackgroundService
             {
                 _logger.LogDebug("A tarefa em background do SlaMonitorBackgroundService está processando.");
 
-                await ProcessSlaBreachesAsync(stoppingToken);
+                await SettleDueSlaDeadlinesAsync(stoppingToken);
 
                 await Task.Delay(_slaMonitorSettings.SleepTimeInMilliseconds, stoppingToken);
             }
@@ -83,9 +83,9 @@ internal sealed class SlaMonitorBackgroundService : BackgroundService
     /// </summary>
     /// <param name="stoppingToken">O token de parada.</param>
     /// <returns>A tarefa concluída.</returns>
-    internal async Task ProcessSlaBreachesAsync(CancellationToken stoppingToken)
+    internal async Task SettleDueSlaDeadlinesAsync(CancellationToken stoppingToken)
     {
-#pragma warning disable CA1031 // A falha de um lote é registrada sem derrubar o host; a volta seguinte tenta de novo.
+#pragma warning disable CA1031 // A falha de um lote é registrada sem derrubar o host.
         try
         {
             await using NpgsqlConnection connection = await _dataSource.OpenConnectionAsync(stoppingToken);
@@ -99,11 +99,11 @@ internal sealed class SlaMonitorBackgroundService : BackgroundService
             {
                 using IServiceScope scope = _serviceProvider.CreateScope();
 
-                ICommandHandler<ProcessSlaBreachesCommand, ProcessSlaBreachesResponse> handler = scope.ServiceProvider
-                    .GetRequiredService<ICommandHandler<ProcessSlaBreachesCommand, ProcessSlaBreachesResponse>>();
+                ICommandHandler<SettleDueSlaDeadlinesCommand, SettleDueSlaDeadlinesResponse> handler = scope.ServiceProvider
+                    .GetRequiredService<ICommandHandler<SettleDueSlaDeadlinesCommand, SettleDueSlaDeadlinesResponse>>();
 
-                Result<ProcessSlaBreachesResponse> result =
-                    await handler.Handle(new ProcessSlaBreachesCommand(_slaMonitorSettings.BatchSize), stoppingToken);
+                Result<SettleDueSlaDeadlinesResponse> result =
+                    await handler.Handle(new SettleDueSlaDeadlinesCommand(_slaMonitorSettings.BatchSize), stoppingToken);
 
                 if (result.IsSuccess)
                 {
@@ -112,7 +112,7 @@ internal sealed class SlaMonitorBackgroundService : BackgroundService
             }
             catch (Exception) when (!stoppingToken.IsCancellationRequested)
             {
-                // O lote é tudo ou nada: a falha desfaz o lote inteiro, registrado como Critical logo abaixo.
+                // O SaveChanges desfaz as alterações do agregado; a falha do lote é registrada como Critical abaixo.
                 _telemetry.RecordSlaBatchRolledBack();
 
                 throw;

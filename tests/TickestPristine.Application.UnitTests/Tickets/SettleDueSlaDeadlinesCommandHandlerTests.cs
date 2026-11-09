@@ -1,17 +1,19 @@
 using TickestPristine.Application.Tickets;
-using TickestPristine.Application.Tickets.ProcessSlaBreaches;
+using TickestPristine.Application.Tickets.SettleDueSlaDeadlines;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
-public sealed class ProcessSlaBreachesCommandHandlerTests : BaseHandlerTest
+public sealed class SettleDueSlaDeadlinesCommandHandlerTests : BaseHandlerTest
 {
     // Segunda-feira, 26/10/2026, 08:10 em São Paulo: primeira resposta vence às 08:40 e a resolução às 12:10.
     private static readonly DateTime OpenedAtUtc = new(2026, 10, 26, 11, 10, 0, DateTimeKind.Utc);
 
-    private static ProcessSlaBreachesCommandHandler CreateHandler(TestDbContext context, DateTime nowUtc) =>
+    private static SettleDueSlaDeadlinesCommandHandler CreateHandler(
+        TestDbContext context,
+        DateTime nowUtc) =>
         new(context, CreateClock(nowUtc));
 
     [Fact]
@@ -22,11 +24,11 @@ public sealed class ProcessSlaBreachesCommandHandlerTests : BaseHandlerTest
         Ticket ticket = await SeedTicketWithSlaAsync(context, Guid.NewGuid(), OpenedAtUtc);
 
         // Act: 08:39, antes do primeiro prazo.
-        Result<ProcessSlaBreachesResponse> result = await CreateHandler(context, OpenedAtUtc.AddMinutes(29))
-            .Handle(new ProcessSlaBreachesCommand(200), CancellationToken.None);
+        Result<SettleDueSlaDeadlinesResponse> result = await CreateHandler(context, OpenedAtUtc.AddMinutes(29))
+            .Handle(new SettleDueSlaDeadlinesCommand(200), CancellationToken.None);
 
         // Assert
-        result.Value.ShouldBe(new ProcessSlaBreachesResponse(0, 0));
+        result.Value.ShouldBe(new SettleDueSlaDeadlinesResponse(0, 0));
         (await context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id).ToListAsync())
             .ShouldAllBe(t => t.BreachedOnUtc == null && t.NextActionOnUtc == t.DueOnUtc);
     }
@@ -41,11 +43,11 @@ public sealed class ProcessSlaBreachesCommandHandlerTests : BaseHandlerTest
         DateTime nowUtc = OpenedAtUtc.AddHours(5);
 
         // Act
-        Result<ProcessSlaBreachesResponse> result = await CreateHandler(context, nowUtc)
-            .Handle(new ProcessSlaBreachesCommand(3), CancellationToken.None);
+        Result<SettleDueSlaDeadlinesResponse> result = await CreateHandler(context, nowUtc)
+            .Handle(new SettleDueSlaDeadlinesCommand(3), CancellationToken.None);
 
         // Assert: os 3 com o NextActionOnUtc mais antigo.
-        result.Value.ShouldBe(new ProcessSlaBreachesResponse(3, 3));
+        result.Value.ShouldBe(new SettleDueSlaDeadlinesResponse(3, 3));
 
         List<TicketSlaTimer> timers = await context.TicketSlaTimers.ToListAsync();
         TicketSlaTimer Timer(Ticket ticket, SlaMetric metric) => timers.Single(t => t.TicketId == ticket.Id && t.Metric == metric);
@@ -75,11 +77,11 @@ public sealed class ProcessSlaBreachesCommandHandlerTests : BaseHandlerTest
         await context.SaveChangesAsync();
 
         // Act
-        Result<ProcessSlaBreachesResponse> result = await CreateHandler(context, OpenedAtUtc.AddHours(5))
-            .Handle(new ProcessSlaBreachesCommand(200), CancellationToken.None);
+        Result<SettleDueSlaDeadlinesResponse> result = await CreateHandler(context, OpenedAtUtc.AddHours(5))
+            .Handle(new SettleDueSlaDeadlinesCommand(200), CancellationToken.None);
 
         // Assert
-        result.Value.ShouldBe(new ProcessSlaBreachesResponse(2, 1));
+        result.Value.ShouldBe(new SettleDueSlaDeadlinesResponse(2, 1));
 
         List<TicketSlaTimer> timers = await context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id).ToListAsync();
         TicketSlaTimer firstResponse = timers.Single(t => t.Metric == SlaMetric.FirstResponse);
@@ -91,4 +93,5 @@ public sealed class ProcessSlaBreachesCommandHandlerTests : BaseHandlerTest
         resolved.NextActionOnUtc.ShouldBeNull();
         resolved.DomainEvents.ShouldBeEmpty();
     }
+
 }

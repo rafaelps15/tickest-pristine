@@ -6,7 +6,7 @@ using Npgsql;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Telemetry;
 using TickestPristine.Application.Tickets;
-using TickestPristine.Application.Tickets.ProcessSlaBreaches;
+using TickestPristine.Application.Tickets.SettleDueSlaDeadlines;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Infrastructure.Database;
@@ -33,11 +33,11 @@ public sealed class SlaMonitorBackgroundServiceTests(IntegrationTestWebAppFactor
             Services.GetRequiredService<NpgsqlDataSource>(),
             Services.GetRequiredService<ApplicationTelemetry>());
 
-    private static ServiceProvider CreateProviderWith(ScriptedProcessSlaBreachesHandlerState state)
+    private static ServiceProvider CreateProviderWith(ScriptedSettleDueSlaDeadlinesHandlerState state)
     {
         var services = new ServiceCollection();
         services.AddSingleton(state);
-        services.AddScoped<ICommandHandler<ProcessSlaBreachesCommand, ProcessSlaBreachesResponse>, ScriptedProcessSlaBreachesHandler>();
+        services.AddScoped<ICommandHandler<SettleDueSlaDeadlinesCommand, SettleDueSlaDeadlinesResponse>, ScriptedSettleDueSlaDeadlinesHandler>();
 
         return services.BuildServiceProvider();
     }
@@ -54,7 +54,7 @@ public sealed class SlaMonitorBackgroundServiceTests(IntegrationTestWebAppFactor
     public async Task ExecuteAsync_Should_LogCriticalAndKeepRunning_WhenABatchFails_AndStopWithoutErrors()
     {
         // Arrange: a primeira volta falha; a segunda funciona.
-        var state = new ScriptedProcessSlaBreachesHandlerState(failingCalls: 1);
+        var state = new ScriptedSettleDueSlaDeadlinesHandlerState(failingCalls: 1);
         await using ServiceProvider provider = CreateProviderWith(state);
         var logger = new TestLogger<SlaMonitorBackgroundService>();
         using SlaMonitorBackgroundService service = CreateService(provider, logger);
@@ -78,7 +78,7 @@ public sealed class SlaMonitorBackgroundServiceTests(IntegrationTestWebAppFactor
     public async Task ExecuteAsync_Should_LogOnlyDebugMessagesOfTheLoop_WhenBatchesSucceed()
     {
         // Arrange
-        var state = new ScriptedProcessSlaBreachesHandlerState(failingCalls: 0);
+        var state = new ScriptedSettleDueSlaDeadlinesHandlerState(failingCalls: 0);
         await using ServiceProvider provider = CreateProviderWith(state);
         var logger = new TestLogger<SlaMonitorBackgroundService>();
         using SlaMonitorBackgroundService service = CreateService(provider, logger);
@@ -182,7 +182,7 @@ internal sealed class WebApplicationFactoryWithSetting(IntegrationTestWebAppFact
 }
 
 // Estado do handler de teste: quantas voltas o chamaram e quantas das primeiras devem falhar.
-public sealed class ScriptedProcessSlaBreachesHandlerState(int failingCalls)
+public sealed class ScriptedSettleDueSlaDeadlinesHandlerState(int failingCalls)
 {
     private int _calls;
 
@@ -193,11 +193,11 @@ public sealed class ScriptedProcessSlaBreachesHandlerState(int failingCalls)
     public bool ShouldFail(int call) => call <= failingCalls;
 }
 
-// Handler de teste do ProcessSlaBreachesCommand, para exercitar o laço do serviço sem banco.
-internal sealed class ScriptedProcessSlaBreachesHandler(ScriptedProcessSlaBreachesHandlerState state)
-    : ICommandHandler<ProcessSlaBreachesCommand, ProcessSlaBreachesResponse>
+// Handler de teste do SettleDueSlaDeadlinesCommand, para exercitar o laço do serviço sem banco.
+internal sealed class ScriptedSettleDueSlaDeadlinesHandler(ScriptedSettleDueSlaDeadlinesHandlerState state)
+    : ICommandHandler<SettleDueSlaDeadlinesCommand, SettleDueSlaDeadlinesResponse>
 {
-    public Task<Result<ProcessSlaBreachesResponse>> Handle(ProcessSlaBreachesCommand command, CancellationToken cancellationToken)
+    public Task<Result<SettleDueSlaDeadlinesResponse>> Handle(SettleDueSlaDeadlinesCommand command, CancellationToken cancellationToken)
     {
         int call = state.NextCall();
 
@@ -206,6 +206,6 @@ internal sealed class ScriptedProcessSlaBreachesHandler(ScriptedProcessSlaBreach
             throw new InvalidOperationException($"Falha simulada na volta {call}.");
         }
 
-        return Task.FromResult(Result.Success(new ProcessSlaBreachesResponse(Processed: 1, Breached: 0)));
+        return Task.FromResult(Result.Success(new SettleDueSlaDeadlinesResponse(Processed: 1, Breached: 0)));
     }
 }

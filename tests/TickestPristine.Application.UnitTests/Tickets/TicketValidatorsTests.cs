@@ -7,7 +7,7 @@ using TickestPristine.Application.Tickets.Unassign;
 using TickestPristine.Application.Tickets.Update;
 using TickestPristine.Domain.Tickets;
 using FluentValidation.TestHelper;
-using TickestPristine.Application.Tickets.ProcessSlaBreaches;
+using TickestPristine.Application.Tickets.SettleDueSlaDeadlines;
 
 namespace TickestPristine.Application.UnitTests.Tickets;
 
@@ -20,7 +20,7 @@ public sealed class TicketValidatorsTests
     private readonly CloseTicketCommandValidator _closeValidator = new();
     private readonly AssignTicketCommandValidator _assignValidator = new();
     private readonly UnassignTicketCommandValidator _unassignValidator = new();
-    private readonly ProcessSlaBreachesCommandValidator _processSlaBreachesValidator = new();
+    private readonly SettleDueSlaDeadlinesCommandValidator _settleDueSlaDeadlinesValidator = new();
 
     [Fact]
     public void CreateValidator_Should_HaveError_WhenTitleIsEmpty()
@@ -290,20 +290,20 @@ public sealed class TicketValidatorsTests
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
-    public void ProcessSlaBreachesValidator_Should_HaveError_WhenBatchSizeIsNotPositive(int batchSize)
+    public void SettleDueSlaDeadlinesValidator_Should_HaveError_WhenBatchSizeIsNotPositive(int batchSize)
     {
         // Act
-        TestValidationResult<ProcessSlaBreachesCommand> result = _processSlaBreachesValidator.TestValidate(new ProcessSlaBreachesCommand(batchSize));
+        TestValidationResult<SettleDueSlaDeadlinesCommand> result = _settleDueSlaDeadlinesValidator.TestValidate(new SettleDueSlaDeadlinesCommand(batchSize));
 
         // Assert
         result.ShouldHaveValidationErrorFor(c => c.BatchSize);
     }
 
     [Fact]
-    public void ProcessSlaBreachesValidator_Should_NotHaveErrors_WhenBatchSizeIsPositive()
+    public void SettleDueSlaDeadlinesValidator_Should_NotHaveErrors_WhenBatchSizeIsPositive()
     {
         // Act
-        TestValidationResult<ProcessSlaBreachesCommand> result = _processSlaBreachesValidator.TestValidate(new ProcessSlaBreachesCommand(1));
+        TestValidationResult<SettleDueSlaDeadlinesCommand> result = _settleDueSlaDeadlinesValidator.TestValidate(new SettleDueSlaDeadlinesCommand(1));
 
         // Assert
         result.ShouldNotHaveAnyValidationErrors();
