@@ -126,7 +126,6 @@ public sealed class GetTicketSlaQueryHandlerTests(IntegrationTestWebAppFactory f
             dueAtUtc: OpenedAtUtc.AddHours(4),
             slaWarningAtUtc: OpenedAtUtc.AddHours(3));
         context.Tickets.Add(ticket);
-        context.TicketSlaTimers.AddRange(new TicketSlaCycleService().Start(ticket, ContinuousSlaCalendar.Create()));
         await context.SaveChangesAsync();
 
         // Act
@@ -172,10 +171,7 @@ public sealed class GetTicketSlaQueryHandlerTests(IntegrationTestWebAppFactory f
         ticket
             .With(nameof(Ticket.DueAtUtc), recordedResolution.DueOnUtc)
             .With(nameof(Ticket.SlaWarningAtUtc), recordedResolution.WarningOnUtc);
-        IReadOnlyList<TicketSlaTimer> timers = new TicketSlaCycleService().Start(ticket, DefaultSlaCalendar.Create());
-
         context.Tickets.Add(ticket);
-        context.TicketSlaTimers.AddRange(timers);
         await context.SaveChangesAsync();
 
         // Act

@@ -85,11 +85,14 @@ public class AuditCoverageTests : BaseTest
         IReadOnlyList<AuditableEntity> entities = AuditableModel.Entities;
 
         // Act
-        string[] withoutDbSet = [.. entities.Where(entity => entity.DbSets.Count == 0).Select(entity => entity.Type.Name)];
+        string[] withoutDbSet = [.. entities
+            .Where(entity => entity.DbSets.Count == 0 && entity.Type.Name != "TicketSlaTimer")
+            .Select(entity => entity.Type.Name)];
 
         // Assert
         entities.Count.ShouldBe(13);
         withoutDbSet.ShouldBeEmpty();
+        AuditableModel.Entities.Single(entity => entity.Type.Name == "TicketSlaTimer").DbSets.ShouldBeEmpty();
         AuditableModel.Tables.ShouldContain("departments");
         AuditableModel.DbSets.ShouldContain("Departments");
     }

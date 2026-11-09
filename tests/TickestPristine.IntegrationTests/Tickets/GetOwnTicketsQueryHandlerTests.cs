@@ -28,8 +28,6 @@ public sealed class GetOwnTicketsQueryHandlerTests(IntegrationTestWebAppFactory 
     private static readonly TicketSlaPlan Plan = new(null, "Padrão", 1, SlaCalendarIds.Continuous, 30, 240, IsLegacy: false);
     private static readonly BusinessCalendar Calendar = ContinuousSlaCalendar.Create();
 
-    private readonly TicketSlaCycleService _slaCycle = new();
-
     [Fact]
     public async Task Handle_Should_ReturnOnlyCallerTickets_WhenTicketsHaveDifferentStatuses()
     {
@@ -351,8 +349,8 @@ public sealed class GetOwnTicketsQueryHandlerTests(IntegrationTestWebAppFactory 
     {
         // Arrange: chamado aberto às 8h, consultado às 9h
         await using ApplicationDbContext context = CreateDbContext();
-        (Ticket ticket, List<TicketSlaTimer> timers) = OpenTicketWithSlaTimers();
-        await SaveAsync(context, ticket, timers);
+        Ticket ticket = OpenTicketWithSlaTimers().Ticket;
+        await SaveAsync(context, ticket);
 
         GetOwnTicketsQueryHandler handler = CreateHandler(OwnerId, OpenedAtUtc.AddHours(1));
 
@@ -372,9 +370,9 @@ public sealed class GetOwnTicketsQueryHandlerTests(IntegrationTestWebAppFactory 
     {
         // Arrange: resolvido às 9h, dentro do prazo das 12h, e reaberto às 10h; o ciclo 2 vence às 14h
         await using ApplicationDbContext context = CreateDbContext();
-        (Ticket ticket, List<TicketSlaTimer> timers) = OpenTicketWithSlaTimers();
-        TicketSlaTimer currentCycle = ResolveAndReopen(ticket, timers, OpenedAtUtc.AddHours(1));
-        await SaveAsync(context, ticket, timers);
+        Ticket ticket = OpenTicketWithSlaTimers().Ticket;
+        TicketSlaTimer currentCycle = ResolveAndReopen(ticket, OpenedAtUtc.AddHours(1));
+        await SaveAsync(context, ticket);
 
         GetOwnTicketsQueryHandler handler = CreateHandler(OwnerId, OpenedAtUtc.AddHours(2).AddMinutes(30));
 
@@ -401,9 +399,9 @@ public sealed class GetOwnTicketsQueryHandlerTests(IntegrationTestWebAppFactory 
     {
         // Arrange: reaberto às 10h; o alerta do ciclo 2 é às 13h e o prazo, às 14h
         await using ApplicationDbContext context = CreateDbContext();
-        (Ticket ticket, List<TicketSlaTimer> timers) = OpenTicketWithSlaTimers();
-        TicketSlaTimer currentCycle = ResolveAndReopen(ticket, timers, OpenedAtUtc.AddHours(1));
-        await SaveAsync(context, ticket, timers);
+        Ticket ticket = OpenTicketWithSlaTimers().Ticket;
+        TicketSlaTimer currentCycle = ResolveAndReopen(ticket, OpenedAtUtc.AddHours(1));
+        await SaveAsync(context, ticket);
 
         DateTime nowUtc = OpenedAtUtc.AddHours(2 + hoursAfterReopen);
         GetOwnTicketsQueryHandler handler = CreateHandler(OwnerId, nowUtc);
@@ -423,10 +421,10 @@ public sealed class GetOwnTicketsQueryHandlerTests(IntegrationTestWebAppFactory 
     {
         // Arrange: resolvido às 9h, dentro do prazo, reaberto às 10h e cancelado às 10h30, com o ciclo 2 parado
         await using ApplicationDbContext context = CreateDbContext();
-        (Ticket ticket, List<TicketSlaTimer> timers) = OpenTicketWithSlaTimers();
-        ResolveAndReopen(ticket, timers, OpenedAtUtc.AddHours(1));
-        _slaCycle.Cancel(ticket, timers, canCancelAny: true, isOwnerWhoCanEdit: false, AgentId, OpenedAtUtc.AddHours(2).AddMinutes(30));
-        await SaveAsync(context, ticket, timers);
+        Ticket ticket = OpenTicketWithSlaTimers().Ticket;
+        ResolveAndReopen(ticket, OpenedAtUtc.AddHours(1));
+        ticket.Cancel(canCancelAny: true, isOwnerWhoCanEdit: false, AgentId, OpenedAtUtc.AddHours(2).AddMinutes(30));
+        await SaveAsync(context, ticket);
 
         GetOwnTicketsQueryHandler handler = CreateHandler(OwnerId, OpenedAtUtc.AddHours(3));
 
@@ -445,12 +443,12 @@ public sealed class GetOwnTicketsQueryHandlerTests(IntegrationTestWebAppFactory 
         // Arrange: resolvido às 9h, dentro do prazo, reaberto às 10h e resolvido de novo às 15h, depois do prazo das 14h
         // do ciclo 2
         await using ApplicationDbContext context = CreateDbContext();
-        (Ticket ticket, List<TicketSlaTimer> timers) = OpenTicketWithSlaTimers();
-        ResolveAndReopen(ticket, timers, OpenedAtUtc.AddHours(1));
+        Ticket ticket = OpenTicketWithSlaTimers().Ticket;
+        ResolveAndReopen(ticket, OpenedAtUtc.AddHours(1));
         DateTime resolvedAgainAtUtc = OpenedAtUtc.AddHours(7);
         ticket.StartProgress(lastMessageIsFromAgent: false, AgentId, resolvedAgainAtUtc);
-        _slaCycle.Resolve(ticket, timers, AgentId, resolvedAgainAtUtc);
-        await SaveAsync(context, ticket, timers);
+        ticket.Resolve(AgentId, resolvedAgainAtUtc);
+        await SaveAsync(context, ticket);
 
         GetOwnTicketsQueryHandler handler = CreateHandler(OwnerId, OpenedAtUtc.AddHours(8));
 
@@ -469,11 +467,11 @@ public sealed class GetOwnTicketsQueryHandlerTests(IntegrationTestWebAppFactory 
         // Arrange: a primeira resolução, às 13h, passou do prazo das 12h; reaberto às 14h, o ciclo 2 vence às 18h e é
         // resolvido exatamente às 18h; consultado às 19h, depois desse prazo
         await using ApplicationDbContext context = CreateDbContext();
-        (Ticket ticket, List<TicketSlaTimer> timers) = OpenTicketWithSlaTimers();
-        TicketSlaTimer currentCycle = ResolveAndReopen(ticket, timers, OpenedAtUtc.AddHours(5));
+        Ticket ticket = OpenTicketWithSlaTimers().Ticket;
+        TicketSlaTimer currentCycle = ResolveAndReopen(ticket, OpenedAtUtc.AddHours(5));
         ticket.StartProgress(lastMessageIsFromAgent: false, AgentId, currentCycle.DueOnUtc);
-        _slaCycle.Resolve(ticket, timers, AgentId, currentCycle.DueOnUtc);
-        await SaveAsync(context, ticket, timers);
+        ticket.Resolve(AgentId, currentCycle.DueOnUtc);
+        await SaveAsync(context, ticket);
 
         DateTime nowUtc = OpenedAtUtc.AddHours(11);
         GetOwnTicketsQueryHandler handler = CreateHandler(OwnerId, nowUtc);
@@ -495,10 +493,10 @@ public sealed class GetOwnTicketsQueryHandlerTests(IntegrationTestWebAppFactory 
         // Arrange: reaberto às 10h, com o ciclo 2 vencendo às 14h, e cancelado às 10h30; consultado às 15h, depois do
         // prazo do ciclo parado
         await using ApplicationDbContext context = CreateDbContext();
-        (Ticket ticket, List<TicketSlaTimer> timers) = OpenTicketWithSlaTimers();
-        TicketSlaTimer currentCycle = ResolveAndReopen(ticket, timers, OpenedAtUtc.AddHours(1));
-        _slaCycle.Cancel(ticket, timers, canCancelAny: true, isOwnerWhoCanEdit: false, AgentId, OpenedAtUtc.AddHours(2).AddMinutes(30));
-        await SaveAsync(context, ticket, timers);
+        Ticket ticket = OpenTicketWithSlaTimers().Ticket;
+        TicketSlaTimer currentCycle = ResolveAndReopen(ticket, OpenedAtUtc.AddHours(1));
+        ticket.Cancel(canCancelAny: true, isOwnerWhoCanEdit: false, AgentId, OpenedAtUtc.AddHours(2).AddMinutes(30));
+        await SaveAsync(context, ticket);
 
         DateTime nowUtc = OpenedAtUtc.AddHours(7);
         GetOwnTicketsQueryHandler handler = CreateHandler(OwnerId, nowUtc);
@@ -533,7 +531,7 @@ public sealed class GetOwnTicketsQueryHandlerTests(IntegrationTestWebAppFactory 
     }
 
     // Chamado de quem consulta, aberto às 8h pelo Ticket.Create com o plano de 240 minutos e com os cronômetros do ciclo
-    // 1 criados pelo TicketSlaCycleService, como na abertura pela API.
+    // 1 criados pelo Ticket, como na abertura pela API.
     private (Ticket Ticket, List<TicketSlaTimer> Timers) OpenTicketWithSlaTimers()
     {
         var requester = new User { Id = OwnerId };
@@ -550,28 +548,25 @@ public sealed class GetOwnTicketsQueryHandlerTests(IntegrationTestWebAppFactory 
             requester.Id,
             OpenedAtUtc);
 
-        return (ticket, [.. _slaCycle.Start(ticket, Calendar)]);
+        return (ticket, [.. ticket.SlaTimers]);
     }
 
     // Resolve o chamado no instante informado, passando por Em andamento, e o reabre uma hora depois; devolve o
     // cronômetro de resolução do ciclo novo, já acrescentado à lista.
-    private TicketSlaTimer ResolveAndReopen(Ticket ticket, List<TicketSlaTimer> timers, DateTime resolvedAtUtc)
+    private TicketSlaTimer ResolveAndReopen(Ticket ticket, DateTime resolvedAtUtc)
     {
         ticket.StartProgress(lastMessageIsFromAgent: false, AgentId, resolvedAtUtc);
-        _slaCycle.Resolve(ticket, timers, AgentId, resolvedAtUtc);
+        ticket.Resolve(AgentId, resolvedAtUtc);
 
-        TicketSlaTimer newCycle = _slaCycle
-            .Reopen(ticket, timers, Calendar, lastMessageIsFromAgent: false, AgentId, resolvedAtUtc.AddHours(1))
-            .Value.ResolutionCycle;
-        timers.Add(newCycle);
+        ticket.Reopen(Calendar, lastMessageIsFromAgent: false, AgentId, resolvedAtUtc.AddHours(1));
+        TicketSlaTimer newCycle = ticket.SlaTimers.Single(timer => timer.Metric == SlaMetric.Resolution && timer.Cycle == 2);
 
         return newCycle;
     }
 
-    private static async Task SaveAsync(ApplicationDbContext context, Ticket ticket, List<TicketSlaTimer> timers)
+    private static async Task SaveAsync(ApplicationDbContext context, Ticket ticket)
     {
         context.Tickets.Add(ticket);
-        context.TicketSlaTimers.AddRange(timers);
         await context.SaveChangesAsync();
     }
 

@@ -69,17 +69,13 @@ public abstract class BaseHandlerTest
             .With(nameof(Ticket.DueAtUtc), resolution.DueOnUtc)
             .With(nameof(Ticket.SlaWarningAtUtc), resolution.WarningOnUtc);
 
-        IReadOnlyList<TicketSlaTimer> timers = new TicketSlaCycleService().Start(ticket, calendar);
-
         context.Tickets.Add(ticket);
-        context.TicketSlaTimers.AddRange(timers);
         await context.SaveChangesAsync();
 
         return ticket;
     }
 
-    // Chamado de SeedTicketWithSlaAsync levado a Em andamento e resolvido em resolvedAtUtc pelo
-    // TicketSlaCycleService, que conclui os dois cronômetros nesse instante, como a API.
+    // Chamado de SeedTicketWithSlaAsync levado a Em andamento e resolvido em resolvedAtUtc pelo Ticket.
     protected static async Task<Ticket> SeedResolvedTicketWithSlaAsync(
         TestDbContext context,
         Guid requesterId,
@@ -87,9 +83,7 @@ public abstract class BaseHandlerTest
         DateTime resolvedAtUtc)
     {
         Ticket ticket = await SeedTicketWithSlaAsync(context, requesterId, createdAtUtc, TicketStatus.InProgress);
-        List<TicketSlaTimer> timers = await context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id).ToListAsync();
-
-        new TicketSlaCycleService().Resolve(ticket, timers, requesterId, resolvedAtUtc);
+        ticket.Resolve(requesterId, resolvedAtUtc);
         ticket.ClearDomainEvents();
 
         await context.SaveChangesAsync();

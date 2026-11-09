@@ -27,7 +27,9 @@ internal sealed class UpdateTicketCommandHandler(
 {
     public async Task<Result> Handle(UpdateTicketCommand command, CancellationToken cancellationToken)
     {
-        Ticket? ticket = await context.Tickets.SingleOrDefaultAsync(t => t.Id == command.TicketId, cancellationToken);
+        Ticket? ticket = await context.Tickets
+            .Include(t => t.SlaTimers)
+            .SingleOrDefaultAsync(t => t.Id == command.TicketId, cancellationToken);
 
         if (ticket is null)
         {
@@ -98,7 +100,7 @@ internal sealed class UpdateTicketCommandHandler(
             return Result.Failure<TicketHistoryEntry>(canChange.Error);
         }
 
-        // Cancelar segue as regras do Ticket (janela do dono e tickets:cancel), conferidas pelo TicketSlaCycleService.Cancel;
+        // Cancelar segue as regras do Ticket (janela do dono e tickets:cancel);
         // as demais trocas (Em andamento e Resolvido) exigem tickets:manage: o dono só edita a descrição e cancela.
         if (!intent.Cancels && !await HasPermissionToManageAsync(cancellationToken))
         {
@@ -106,22 +108,15 @@ internal sealed class UpdateTicketCommandHandler(
         }
 
         // Os cronômetros só mudam com o status; quem o chamado aguarda é recalculado na troca de status.
-        List<TicketSlaTimer> slaTimers = await context.TicketSlaTimers
-            .Where(t => t.TicketId == ticket.Id)
-            .ToListAsync(cancellationToken);
-
         bool lastMessageIsFromAgent = await agentLookup.IsLastValidMessageFromAgentAsync(ticket, cancellationToken);
 
-        var slaCycle = new TicketSlaCycleService();
         Guid callerId = userContext.UserId;
 
         return status switch
         {
             TicketStatus.InProgress => ticket.StartProgress(lastMessageIsFromAgent, callerId, nowUtc),
-            TicketStatus.Resolved => slaCycle.Resolve(ticket, slaTimers, callerId, nowUtc),
-            TicketStatus.Canceled => slaCycle.Cancel(
-                ticket,
-                slaTimers,
+            TicketStatus.Resolved => ticket.Resolve(callerId, nowUtc),
+            TicketStatus.Canceled => ticket.Cancel(
                 await HasPermissionToCancelAnyAsync(cancellationToken),
                 await HasPermissionToEditOwnAsync(ticket, cancellationToken),
                 callerId,

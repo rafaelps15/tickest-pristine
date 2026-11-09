@@ -84,10 +84,7 @@ internal sealed class CreateTicketCommandHandler(
             createdAtUtc);
 
         TicketHistoryEntry opening = ticket.RecordOpening(userContext.UserId);
-        IReadOnlyList<TicketSlaTimer> slaTimers = new TicketSlaCycleService().Start(ticket, calendar.Value);
-
         context.Tickets.Add(ticket);
-        context.TicketSlaTimers.AddRange(slaTimers);
         context.TicketHistories.Add(opening);
 
         await context.SaveChangesAsync(cancellationToken);

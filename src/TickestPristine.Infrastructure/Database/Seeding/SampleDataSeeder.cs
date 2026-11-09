@@ -76,12 +76,11 @@ internal sealed class SampleDataSeeder(
                 continue;
             }
 
-            (Ticket ticket, List<TicketHistoryEntry> history, IReadOnlyList<TicketSlaTimer> slaTimers) =
+            (Ticket ticket, List<TicketHistoryEntry> history, _) =
                 CreateTicket(faker, sampleTicket, sector, requesters, agents, now);
 
             context.Tickets.Add(ticket);
             context.TicketHistories.AddRange(history);
-            context.TicketSlaTimers.AddRange(slaTimers);
         }
 
         await context.SaveChangesAsync(cancellationToken);
@@ -167,7 +166,7 @@ internal sealed class SampleDataSeeder(
     /// resposta). Cada passo é conferido com <see cref="Ticket.CanTransitionTo"/>, para o seed nunca gerar um histórico
     /// que a API recusaria.
     /// </summary>
-    private static (Ticket Ticket, List<TicketHistoryEntry> History, IReadOnlyList<TicketSlaTimer> SlaTimers) CreateTicket(
+    private static (Ticket Ticket, List<TicketHistoryEntry> History, IReadOnlyCollection<TicketSlaTimer> SlaTimers) CreateTicket(
         Faker faker,
         SampleTicket sampleTicket,
         Sector sector,
@@ -207,8 +206,7 @@ internal sealed class SampleDataSeeder(
             requester.Id,
             createdAtUtc);
 
-        var slaCycle = new TicketSlaCycleService();
-        IReadOnlyList<TicketSlaTimer> slaTimers = slaCycle.Start(ticket, calendar);
+        IReadOnlyCollection<TicketSlaTimer> slaTimers = ticket.SlaTimers;
         List<TicketHistoryEntry> history = [ticket.RecordOpening(requester.Id)];
         DateTime occurredAtUtc = createdAtUtc;
 
@@ -234,9 +232,9 @@ internal sealed class SampleDataSeeder(
             Result<TicketHistoryEntry> statusChange = newStatus switch
             {
                 TicketStatus.InProgress => ticket.StartProgress(lastMessageIsFromAgent: false, changedByUserId, occurredAtUtc),
-                TicketStatus.Resolved => slaCycle.Resolve(ticket, slaTimers, changedByUserId, occurredAtUtc),
+                TicketStatus.Resolved => ticket.Resolve(changedByUserId, occurredAtUtc),
                 TicketStatus.Closed => ticket.Close(changedByUserId, occurredAtUtc),
-                TicketStatus.Canceled => slaCycle.Cancel(ticket, slaTimers, canCancelAny: true, isOwnerWhoCanEdit: false, changedByUserId, occurredAtUtc),
+                TicketStatus.Canceled => ticket.Cancel(canCancelAny: true, isOwnerWhoCanEdit: false, changedByUserId, occurredAtUtc),
                 _ => throw new InvalidOperationException($"Status sem transição nos dados de exemplo: {newStatus}.")
             };
 

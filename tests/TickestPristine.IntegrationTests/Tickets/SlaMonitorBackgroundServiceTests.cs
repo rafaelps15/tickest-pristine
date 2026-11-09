@@ -142,7 +142,6 @@ public sealed class SlaMonitorBackgroundServiceTests(IntegrationTestWebAppFactor
         Guid ticketId = ticket.Id;
 
         context.Tickets.Add(ticket);
-        context.TicketSlaTimers.AddRange(new TicketSlaCycleService().Start(ticket, ContinuousSlaCalendar.Create()));
         await context.SaveChangesAsync();
 
         var logger = new TestLogger<SlaMonitorBackgroundService>();

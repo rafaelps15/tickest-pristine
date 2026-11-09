@@ -89,6 +89,17 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
         });
 
         modelBuilder.Entity<Ticket>().HasQueryFilter(t => t.DeletedAtUtc == null);
+        modelBuilder.Entity<Ticket>()
+            .HasMany(t => t.SlaTimers)
+            .WithOne()
+            .HasForeignKey(t => t.TicketId);
+        modelBuilder.Entity<Ticket>()
+            .Navigation(t => t.SlaTimers)
+            .UsePropertyAccessMode(PropertyAccessMode.Field)
+            .HasField("_slaTimers");
+        modelBuilder.Entity<TicketSlaTimer>()
+            .Property(timer => timer.Id)
+            .ValueGeneratedNever();
 
         // A situação de espera só tem leitura na entidade (o banco a calcula); sem o mapeamento explícito da
         // Infrastructure, o EF não a incluiria no modelo.

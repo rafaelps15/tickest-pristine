@@ -22,22 +22,31 @@ internal sealed class ProcessSlaBreachesCommandHandler(
     {
         DateTime nowUtc = dateTimeProvider.UtcNow;
 
-        List<TicketSlaTimer> timers = await context.TicketSlaTimers
-            .Where(t => t.NextActionOnUtc != null && t.NextActionOnUtc <= nowUtc)
-            .OrderBy(t => t.NextActionOnUtc)
-            .ThenBy(t => t.Id)
+        var dueTimers = await context.Tickets
+            .SelectMany(ticket => ticket.SlaTimers
+                .Where(timer => timer.NextActionOnUtc != null && timer.NextActionOnUtc <= nowUtc)
+                .Select(timer => new { timer.TicketId, timer.Id, timer.NextActionOnUtc }))
+            .OrderBy(timer => timer.NextActionOnUtc)
+            .ThenBy(timer => timer.Id)
             .Take(command.BatchSize)
             .ToListAsync(cancellationToken);
 
-        if (timers.Count == 0)
+        if (dueTimers.Count == 0)
         {
             return new ProcessSlaBreachesResponse(0, 0);
         }
 
-        int breached = timers.Count(timer => timer.ProcessDue());
+        Guid[] ticketIds = dueTimers.Select(timer => timer.TicketId).Distinct().ToArray();
+        List<Ticket> tickets = await context.Tickets
+            .Include(ticket => ticket.SlaTimers)
+            .Where(ticket => ticketIds.Contains(ticket.Id))
+            .ToListAsync(cancellationToken);
+
+        var ticketsById = tickets.ToDictionary(ticket => ticket.Id);
+        int breached = dueTimers.Count(timer => ticketsById[timer.TicketId].SettleSlaDeadline(timer.Id));
 
         await context.SaveChangesAsync(cancellationToken);
 
-        return new ProcessSlaBreachesResponse(timers.Count, breached);
+        return new ProcessSlaBreachesResponse(dueTimers.Count, breached);
     }
 }

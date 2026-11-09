@@ -30,9 +30,5 @@ internal sealed class TicketSlaTimerConfiguration : IEntityTypeConfiguration<Tic
         // Fila do monitoramento: só os cronômetros com ação pendente entram no índice.
         builder.HasIndex(t => t.NextActionOnUtc).HasFilter("next_action_on_utc IS NOT NULL");
 
-        builder.HasOne<Ticket>()
-            .WithMany()
-            .HasForeignKey(t => t.TicketId)
-            .OnDelete(DeleteBehavior.Cascade);
     }
 }

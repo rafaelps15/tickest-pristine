@@ -509,7 +509,7 @@ public sealed class GetTicketsQueryHandlerTests(IntegrationTestWebAppFactory fac
 
         if (reopened)
         {
-            new TicketSlaCycleService().Reopen(ticket, [], ContinuousSlaCalendar.Create(), lastMessageIsFromAgent: false, requester.Id, resolvedAtUtc!.Value);
+            ticket.Reopen(ContinuousSlaCalendar.Create(), lastMessageIsFromAgent: false, requester.Id, resolvedAtUtc!.Value);
             ticket.ClearDomainEvents();
         }
 

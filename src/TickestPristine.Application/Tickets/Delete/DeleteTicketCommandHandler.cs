@@ -20,7 +20,9 @@ internal sealed class DeleteTicketCommandHandler(
 {
     public async Task<Result> Handle(DeleteTicketCommand command, CancellationToken cancellationToken)
     {
-        Ticket? ticket = await context.Tickets.SingleOrDefaultAsync(t => t.Id == command.TicketId, cancellationToken);
+        Ticket? ticket = await context.Tickets
+            .Include(t => t.SlaTimers)
+            .SingleOrDefaultAsync(t => t.Id == command.TicketId, cancellationToken);
 
         if (ticket is null)
         {
@@ -43,16 +45,7 @@ internal sealed class DeleteTicketCommandHandler(
             return Result.Failure(TicketErrors.NotActive(ticket.Id));
         }
 
-        // Os cronômetros do chamado excluído que ainda estão na fila do monitoramento saem dela, sem violação nem evento.
-        List<TicketSlaTimer> slaTimers = await context.TicketSlaTimers
-            .Where(t => t.TicketId == ticket.Id)
-            .ToListAsync(cancellationToken);
-
-        Result<TicketHistoryEntry> deletion = new TicketSlaCycleService().Delete(
-            ticket,
-            slaTimers,
-            userContext.UserId,
-            dateTimeProvider.UtcNow);
+        Result<TicketHistoryEntry> deletion = ticket.Delete(userContext.UserId, dateTimeProvider.UtcNow);
 
         if (deletion.IsFailure)
         {

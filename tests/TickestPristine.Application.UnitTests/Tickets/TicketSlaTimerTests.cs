@@ -20,7 +20,7 @@ public sealed class TicketSlaTimerTests
         new(2026, 10, 26, hour + 3, minute, second, DateTimeKind.Utc);
 
     // Chamado Urgente aberto às 08:10 com os cronômetros do ciclo 1, como a abertura pela API.
-    private static (Ticket Ticket, IReadOnlyList<TicketSlaTimer> Timers) OpenTicket(
+    private static (Ticket Ticket, IReadOnlyCollection<TicketSlaTimer> Timers) OpenTicket(
         TicketSlaPlan? plan = null,
         BusinessCalendar? calendar = null)
     {
@@ -38,9 +38,7 @@ public sealed class TicketSlaTimerTests
             requester.Id,
             SaoPaulo(8, 10));
 
-        IReadOnlyList<TicketSlaTimer> timers = new TicketSlaCycleService().Start(ticket, calendar ?? Calendar);
-
-        return (ticket, timers);
+        return (ticket, ticket.SlaTimers.ToList());
     }
 
     private static TicketSlaTimer UrgentResolution() => OpenTicket().Timers.Single(t => t.Metric == SlaMetric.Resolution);
@@ -49,7 +47,7 @@ public sealed class TicketSlaTimerTests
 
     private static (Ticket Ticket, TicketSlaTimer FirstResponse) OpenFirstResponse()
     {
-        (Ticket ticket, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket();
+        (Ticket ticket, IReadOnlyCollection<TicketSlaTimer> timers) = OpenTicket();
 
         return (ticket, timers.Single(t => t.Metric == SlaMetric.FirstResponse));
     }
@@ -68,7 +66,7 @@ public sealed class TicketSlaTimerTests
     public void RecordOpening_Should_CreateCycleOneTimersWithDeadlinesInBusinessTime()
     {
         // Act
-        (Ticket ticket, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket();
+        (Ticket ticket, IReadOnlyCollection<TicketSlaTimer> timers) = OpenTicket();
 
         // Assert
         TicketSlaTimer firstResponse = timers.Single(t => t.Metric == SlaMetric.FirstResponse);
@@ -89,7 +87,7 @@ public sealed class TicketSlaTimerTests
     public void Create_Should_TakeDeadlinesFromCycleOneResolution()
     {
         // Act
-        (Ticket ticket, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket();
+        (Ticket ticket, IReadOnlyCollection<TicketSlaTimer> timers) = OpenTicket();
 
         // Assert
         TicketSlaTimer resolution = timers.Single(t => t.Metric == SlaMetric.Resolution);
@@ -104,7 +102,7 @@ public sealed class TicketSlaTimerTests
         var legacyPlan = TicketSlaPlan.Legacy(TicketPriority.Urgent);
 
         // Act
-        (_, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket(legacyPlan, ContinuousSlaCalendar.Create());
+        (_, IReadOnlyCollection<TicketSlaTimer> timers) = OpenTicket(legacyPlan, ContinuousSlaCalendar.Create());
 
         // Assert
         TicketSlaTimer resolution = timers.ShouldHaveSingleItem();
@@ -159,7 +157,7 @@ public sealed class TicketSlaTimerTests
     {
         // Arrange
         (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
-        firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(8, 40));
+        ticket.PostMessage(AgentId, "Resposta", authorIsAgent: true, SaoPaulo(8, 40));
 
         // Act
         SlaObjectiveState state = firstResponse.StateAt(SaoPaulo(13, 0));
@@ -173,7 +171,7 @@ public sealed class TicketSlaTimerTests
     {
         // Arrange
         (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
-        firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(9, 0));
+        ticket.PostMessage(AgentId, "Resposta", authorIsAgent: true, SaoPaulo(9, 0));
 
         // Act
         SlaObjectiveState state = firstResponse.StateAt(SaoPaulo(13, 0));
@@ -186,9 +184,9 @@ public sealed class TicketSlaTimerTests
     public void GetState_Should_ReturnStopped_WhenStoppedEvenAfterDue()
     {
         // Arrange: cancelar o chamado às 09:00 para os cronômetros em aberto.
-        (Ticket ticket, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket();
+        (Ticket ticket, IReadOnlyCollection<TicketSlaTimer> timers) = OpenTicket();
         TicketSlaTimer resolution = timers.Single(t => t.Metric == SlaMetric.Resolution);
-        new TicketSlaCycleService().Cancel(ticket, timers, canCancelAny: true, isOwnerWhoCanEdit: false, ticket.CreatedByUserId, SaoPaulo(9, 0));
+        ticket.Cancel(canCancelAny: true, isOwnerWhoCanEdit: false, ticket.CreatedByUserId, SaoPaulo(9, 0));
 
         // Act
         SlaObjectiveState state = resolution.StateAt(SaoPaulo(17, 0));
@@ -204,10 +202,11 @@ public sealed class TicketSlaTimerTests
     {
         // Arrange
         (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
-        firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(8, 20));
+        ticket.PostMessage(AgentId, "Resposta", authorIsAgent: true, SaoPaulo(8, 20));
 
         // Act
-        bool completedAgain = firstResponse.CompleteFirstResponse(ticket, Guid.NewGuid(), authorIsAgent: true, SaoPaulo(8, 30));
+        ticket.PostMessage(Guid.NewGuid(), "Resposta", authorIsAgent: true, SaoPaulo(8, 30));
+        bool completedAgain = firstResponse.CompletedOnUtc == SaoPaulo(8, 30);
 
         // Assert
         completedAgain.ShouldBeFalse();
@@ -223,7 +222,8 @@ public sealed class TicketSlaTimerTests
         (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
 
         // Act
-        bool completed = firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(8, 20));
+        ticket.PostMessage(AgentId, "Resposta", authorIsAgent: true, SaoPaulo(8, 20));
+        bool completed = firstResponse.CompletedOnUtc == SaoPaulo(8, 20);
 
         // Assert
         completed.ShouldBeTrue();
@@ -238,8 +238,10 @@ public sealed class TicketSlaTimerTests
         (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
 
         // Act
-        bool byRequester = firstResponse.CompleteFirstResponse(ticket, ticket.CreatedByUserId, authorIsAgent: true, SaoPaulo(8, 20));
-        bool byNonAgent = firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: false, SaoPaulo(8, 25));
+        ticket.PostMessage(ticket.CreatedByUserId, "Resposta", authorIsAgent: true, SaoPaulo(8, 20));
+        bool byRequester = firstResponse.CompletedOnUtc == SaoPaulo(8, 20);
+        ticket.PostMessage(AgentId, "Resposta", authorIsAgent: false, SaoPaulo(8, 25));
+        bool byNonAgent = firstResponse.CompletedOnUtc == SaoPaulo(8, 25);
 
         // Assert
         byRequester.ShouldBeFalse();
@@ -251,16 +253,18 @@ public sealed class TicketSlaTimerTests
     public void CompleteFirstResponse_Should_ReturnFalseAndChangeNothing_WhenTimerIsNotOpenFirstResponseOfTicket()
     {
         // Arrange: o cronômetro de resolução do chamado, a primeira resposta de outro chamado e uma já concluída.
-        (Ticket ticket, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket();
+        (Ticket ticket, IReadOnlyCollection<TicketSlaTimer> timers) = OpenTicket();
         TicketSlaTimer resolution = timers.Single(t => t.Metric == SlaMetric.Resolution);
         TicketSlaTimer otherTicketFirstResponse = UrgentFirstResponse();
         (Ticket answeredTicket, TicketSlaTimer completed) = OpenFirstResponse();
-        completed.CompleteFirstResponse(answeredTicket, AgentId, authorIsAgent: true, SaoPaulo(8, 20));
+        answeredTicket.PostMessage(AgentId, "Resposta", authorIsAgent: true, SaoPaulo(8, 20));
 
         // Act
-        bool resolutionCompleted = resolution.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(8, 30));
-        bool otherTicketCompleted = otherTicketFirstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(8, 30));
-        bool completedAgain = completed.CompleteFirstResponse(answeredTicket, AgentId, authorIsAgent: true, SaoPaulo(8, 30));
+        ticket.PostMessage(AgentId, "Resposta", authorIsAgent: true, SaoPaulo(8, 30));
+        bool resolutionCompleted = resolution.CompletedOnUtc == SaoPaulo(8, 30);
+        bool otherTicketCompleted = otherTicketFirstResponse.CompletedOnUtc == SaoPaulo(8, 30);
+        answeredTicket.PostMessage(AgentId, "Resposta", authorIsAgent: true, SaoPaulo(8, 30));
+        bool completedAgain = completed.CompletedOnUtc == SaoPaulo(8, 30);
 
         // Assert
         resolutionCompleted.ShouldBeFalse();
@@ -277,12 +281,12 @@ public sealed class TicketSlaTimerTests
     public void Cancel_Should_NotStopTimer_WhenItWasAlreadyCompleted()
     {
         // Arrange
-        (Ticket ticket, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket();
+        (Ticket ticket, IReadOnlyCollection<TicketSlaTimer> timers) = OpenTicket();
         TicketSlaTimer firstResponse = timers.Single(t => t.Metric == SlaMetric.FirstResponse);
-        firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(8, 20));
+        ticket.PostMessage(AgentId, "Resposta", authorIsAgent: true, SaoPaulo(8, 20));
 
         // Act
-        new TicketSlaCycleService().Cancel(ticket, timers, canCancelAny: true, isOwnerWhoCanEdit: false, ticket.CreatedByUserId, SaoPaulo(9, 0));
+        ticket.Cancel(canCancelAny: true, isOwnerWhoCanEdit: false, ticket.CreatedByUserId, SaoPaulo(9, 0));
 
         // Assert
         firstResponse.CompletedOnUtc.ShouldBe(SaoPaulo(8, 20));
@@ -309,12 +313,12 @@ public sealed class TicketSlaTimerTests
     public void Reopen_Should_StartNewResolutionCycleWithFullTarget()
     {
         // Arrange
-        (Ticket ticket, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket();
-        new TicketSlaCycleService().Cancel(ticket, timers, canCancelAny: true, isOwnerWhoCanEdit: false, ticket.CreatedByUserId, SaoPaulo(9, 0));
+        (Ticket ticket, _) = OpenTicket();
+        ticket.Cancel(canCancelAny: true, isOwnerWhoCanEdit: false, ticket.CreatedByUserId, SaoPaulo(9, 0));
 
         // Act
-        TicketSlaTimer cycle = new TicketSlaCycleService()
-            .Reopen(ticket, timers, Calendar, lastMessageIsFromAgent: false, ticket.CreatedByUserId, SaoPaulo(14, 0)).Value.ResolutionCycle;
+        ticket.Reopen(Calendar, lastMessageIsFromAgent: false, ticket.CreatedByUserId, SaoPaulo(14, 0));
+        TicketSlaTimer cycle = ticket.SlaTimers.Single(timer => timer.Metric == SlaMetric.Resolution && timer.Cycle == 2);
 
         // Assert
         cycle.TicketId.ShouldBe(ticket.Id);
@@ -329,16 +333,14 @@ public sealed class TicketSlaTimerTests
     public void Resolve_Should_CompleteHighestResolutionCycle_WhenResolving()
     {
         // Arrange: ciclo 1 parado no cancelamento e ciclo 2 aberto na reabertura.
-        var slaCycle = new TicketSlaCycleService();
-        (Ticket ticket, IReadOnlyList<TicketSlaTimer> openingTimers) = OpenTicket();
-        slaCycle.Cancel(ticket, openingTimers, canCancelAny: true, isOwnerWhoCanEdit: false, ticket.CreatedByUserId, SaoPaulo(9, 0));
-        TicketSlaTimer cycle2 = slaCycle
-            .Reopen(ticket, openingTimers, Calendar, lastMessageIsFromAgent: false, ticket.CreatedByUserId, SaoPaulo(14, 0)).Value.ResolutionCycle;
-        List<TicketSlaTimer> timers = [.. openingTimers, cycle2];
+        (Ticket ticket, IReadOnlyCollection<TicketSlaTimer> openingTimers) = OpenTicket();
+        ticket.Cancel(canCancelAny: true, isOwnerWhoCanEdit: false, ticket.CreatedByUserId, SaoPaulo(9, 0));
+        ticket.Reopen(Calendar, lastMessageIsFromAgent: false, ticket.CreatedByUserId, SaoPaulo(14, 0));
+        TicketSlaTimer cycle2 = ticket.SlaTimers.Single(timer => timer.Metric == SlaMetric.Resolution && timer.Cycle == 2);
         ticket.StartProgress(lastMessageIsFromAgent: false, ticket.CreatedByUserId, SaoPaulo(14, 30));
 
         // Act
-        slaCycle.Resolve(ticket, timers, ticket.CreatedByUserId, SaoPaulo(15, 0));
+        ticket.Resolve(ticket.CreatedByUserId, SaoPaulo(15, 0));
 
         // Assert
         cycle2.CompletedOnUtc.ShouldBe(SaoPaulo(15, 0));
@@ -350,7 +352,7 @@ public sealed class TicketSlaTimerTests
     public void RecordOpening_Should_QueueEachTimerAtItsDeadline()
     {
         // Act
-        (_, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket();
+        (_, IReadOnlyCollection<TicketSlaTimer> timers) = OpenTicket();
 
         // Assert
         timers.ShouldAllBe(t => t.NextActionOnUtc == t.DueOnUtc && t.BreachedOnUtc == null);
@@ -363,7 +365,8 @@ public sealed class TicketSlaTimerTests
         (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
 
         // Act
-        bool completed = firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(8, 40));
+        ticket.PostMessage(AgentId, "Resposta", authorIsAgent: true, SaoPaulo(8, 40));
+        bool completed = firstResponse.CompletedOnUtc == SaoPaulo(8, 40);
 
         // Assert
         completed.ShouldBeTrue();
@@ -377,7 +380,7 @@ public sealed class TicketSlaTimerTests
         (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
 
         // Act
-        firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(9, 0));
+        ticket.PostMessage(AgentId, "Resposta", authorIsAgent: true, SaoPaulo(9, 0));
 
         // Assert
         firstResponse.NextActionOnUtc.ShouldBe(firstResponse.DueOnUtc);
@@ -388,10 +391,10 @@ public sealed class TicketSlaTimerTests
     public void Cancel_Should_StopAndDequeueOpenTimers_WhenCanceling()
     {
         // Arrange
-        (Ticket ticket, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket();
+        (Ticket ticket, IReadOnlyCollection<TicketSlaTimer> timers) = OpenTicket();
 
         // Act
-        new TicketSlaCycleService().Cancel(ticket, timers, canCancelAny: true, isOwnerWhoCanEdit: false, ticket.CreatedByUserId, SaoPaulo(13, 0));
+        ticket.Cancel(canCancelAny: true, isOwnerWhoCanEdit: false, ticket.CreatedByUserId, SaoPaulo(13, 0));
 
         // Assert
         timers.ShouldAllBe(t => t.StoppedOnUtc == SaoPaulo(13, 0) && t.NextActionOnUtc == null && t.BreachedOnUtc == null);
@@ -401,10 +404,10 @@ public sealed class TicketSlaTimerTests
     public void ProcessDue_Should_RecordBreachAtDeadlineAndRaiseEvent_WhenTimerIsOpen()
     {
         // Arrange
-        TicketSlaTimer firstResponse = UrgentFirstResponse();
+        (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
 
         // Act
-        bool breached = firstResponse.ProcessDue();
+        bool breached = ticket.SettleSlaDeadline(firstResponse.Id);
 
         // Assert
         breached.ShouldBeTrue();
@@ -419,10 +422,10 @@ public sealed class TicketSlaTimerTests
     {
         // Arrange
         (Ticket ticket, TicketSlaTimer firstResponse) = OpenFirstResponse();
-        firstResponse.CompleteFirstResponse(ticket, AgentId, authorIsAgent: true, SaoPaulo(8, 45));
+        ticket.PostMessage(AgentId, "Resposta", authorIsAgent: true, SaoPaulo(8, 45));
 
         // Act
-        bool breached = firstResponse.ProcessDue();
+        bool breached = ticket.SettleSlaDeadline(firstResponse.Id);
 
         // Assert
         breached.ShouldBeTrue();
@@ -436,16 +439,16 @@ public sealed class TicketSlaTimerTests
     {
         // Arrange: concluído no prazo, mas ainda na fila (lido antes da conclusão), e parado no cancelamento.
         (Ticket answeredTicket, TicketSlaTimer completedOnTime) = OpenFirstResponse();
-        completedOnTime.CompleteFirstResponse(answeredTicket, AgentId, authorIsAgent: true, SaoPaulo(8, 30));
+        answeredTicket.PostMessage(AgentId, "Resposta", authorIsAgent: true, SaoPaulo(8, 30));
         completedOnTime.With(nameof(TicketSlaTimer.NextActionOnUtc), completedOnTime.DueOnUtc);
 
-        (Ticket ticket, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket();
-        new TicketSlaCycleService().Cancel(ticket, timers, canCancelAny: true, isOwnerWhoCanEdit: false, ticket.CreatedByUserId, SaoPaulo(9, 0));
+        (Ticket ticket, IReadOnlyCollection<TicketSlaTimer> timers) = OpenTicket();
+        ticket.Cancel(canCancelAny: true, isOwnerWhoCanEdit: false, ticket.CreatedByUserId, SaoPaulo(9, 0));
         TicketSlaTimer stopped = timers.Single(t => t.Metric == SlaMetric.Resolution);
 
         // Act
-        bool completedBreached = completedOnTime.ProcessDue();
-        bool stoppedBreached = stopped.ProcessDue();
+        bool completedBreached = answeredTicket.SettleSlaDeadline(completedOnTime.Id);
+        bool stoppedBreached = ticket.SettleSlaDeadline(stopped.Id);
 
         // Assert
         completedBreached.ShouldBeFalse();
@@ -457,12 +460,12 @@ public sealed class TicketSlaTimerTests
     public void Reopen_Should_QueueNewCycleAtItsDeadline()
     {
         // Arrange
-        (Ticket ticket, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket();
-        new TicketSlaCycleService().Cancel(ticket, timers, canCancelAny: true, isOwnerWhoCanEdit: false, ticket.CreatedByUserId, SaoPaulo(9, 0));
+        (Ticket ticket, _) = OpenTicket();
+        ticket.Cancel(canCancelAny: true, isOwnerWhoCanEdit: false, ticket.CreatedByUserId, SaoPaulo(9, 0));
 
         // Act: reaberto às 14:00; 240 minutos úteis terminam às 18:00, na borda da faixa.
-        TicketSlaTimer cycle = new TicketSlaCycleService()
-            .Reopen(ticket, timers, Calendar, lastMessageIsFromAgent: false, ticket.CreatedByUserId, SaoPaulo(14, 0)).Value.ResolutionCycle;
+        ticket.Reopen(Calendar, lastMessageIsFromAgent: false, ticket.CreatedByUserId, SaoPaulo(14, 0));
+        TicketSlaTimer cycle = ticket.SlaTimers.Single(timer => timer.Metric == SlaMetric.Resolution && timer.Cycle == 2);
 
         // Assert
         cycle.NextActionOnUtc.ShouldBe(SaoPaulo(18, 0));
@@ -472,15 +475,14 @@ public sealed class TicketSlaTimerTests
     public void ResolveAndCancel_Should_IgnoreTimersOfAnotherTicket()
     {
         // Arrange
-        (Ticket resolved, IReadOnlyList<TicketSlaTimer> resolvedTimers) = OpenTicket();
-        (Ticket canceled, IReadOnlyList<TicketSlaTimer> canceledTimers) = OpenTicket();
-        (_, IReadOnlyList<TicketSlaTimer> otherTimers) = OpenTicket();
-        var slaCycle = new TicketSlaCycleService();
+        (Ticket resolved, IReadOnlyCollection<TicketSlaTimer> resolvedTimers) = OpenTicket();
+        (Ticket canceled, IReadOnlyCollection<TicketSlaTimer> canceledTimers) = OpenTicket();
+        (_, IReadOnlyCollection<TicketSlaTimer> otherTimers) = OpenTicket();
         resolved.StartProgress(lastMessageIsFromAgent: false, resolved.CreatedByUserId, SaoPaulo(8, 30));
 
         // Act
-        slaCycle.Resolve(resolved, [.. resolvedTimers, .. otherTimers], resolved.CreatedByUserId, SaoPaulo(9, 0));
-        slaCycle.Cancel(canceled, [.. canceledTimers, .. otherTimers], canCancelAny: true, isOwnerWhoCanEdit: false, canceled.CreatedByUserId, SaoPaulo(9, 0));
+        resolved.Resolve(resolved.CreatedByUserId, SaoPaulo(9, 0));
+        canceled.Cancel(canCancelAny: true, isOwnerWhoCanEdit: false, canceled.CreatedByUserId, SaoPaulo(9, 0));
 
         // Assert
         resolvedTimers.ShouldAllBe(t => t.CompletedOnUtc == SaoPaulo(9, 0));
@@ -492,17 +494,16 @@ public sealed class TicketSlaTimerTests
     public void Reopen_Should_CountOnlyCyclesOfTheSameTicket()
     {
         // Arrange: o outro chamado já está no ciclo 2.
-        (Ticket ticket, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket();
-        (Ticket other, IReadOnlyList<TicketSlaTimer> otherTimers) = OpenTicket();
-        var slaCycle = new TicketSlaCycleService();
-        slaCycle.Cancel(other, otherTimers, canCancelAny: true, isOwnerWhoCanEdit: false, other.CreatedByUserId, SaoPaulo(9, 0));
-        TicketSlaTimer otherCycle2 = slaCycle
-            .Reopen(other, otherTimers, Calendar, lastMessageIsFromAgent: false, other.CreatedByUserId, SaoPaulo(10, 0)).Value.ResolutionCycle;
-        slaCycle.Cancel(ticket, timers, canCancelAny: true, isOwnerWhoCanEdit: false, ticket.CreatedByUserId, SaoPaulo(9, 0));
+        Ticket ticket = OpenTicket().Ticket;
+        Ticket other = OpenTicket().Ticket;
+        other.Cancel(canCancelAny: true, isOwnerWhoCanEdit: false, other.CreatedByUserId, SaoPaulo(9, 0));
+        other.Reopen(Calendar, lastMessageIsFromAgent: false, other.CreatedByUserId, SaoPaulo(10, 0));
+        other.SlaTimers.Single(timer => timer.Metric == SlaMetric.Resolution && timer.Cycle == 2).ShouldNotBeNull();
+        ticket.Cancel(canCancelAny: true, isOwnerWhoCanEdit: false, ticket.CreatedByUserId, SaoPaulo(9, 0));
 
         // Act
-        TicketSlaTimer cycle = slaCycle
-            .Reopen(ticket, [.. timers, .. otherTimers, otherCycle2], Calendar, lastMessageIsFromAgent: false, ticket.CreatedByUserId, SaoPaulo(14, 0)).Value.ResolutionCycle;
+        ticket.Reopen(Calendar, lastMessageIsFromAgent: false, ticket.CreatedByUserId, SaoPaulo(14, 0));
+        TicketSlaTimer cycle = ticket.SlaTimers.Single(timer => timer.Metric == SlaMetric.Resolution && timer.Cycle == 2);
 
         // Assert
         cycle.Cycle.ShouldBe(2);
@@ -512,11 +513,11 @@ public sealed class TicketSlaTimerTests
     public void Delete_Should_IgnoreTimersOfAnotherTicket()
     {
         // Arrange
-        (Ticket ticket, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket();
-        (_, IReadOnlyList<TicketSlaTimer> otherTimers) = OpenTicket();
+        (Ticket ticket, IReadOnlyCollection<TicketSlaTimer> timers) = OpenTicket();
+        (_, IReadOnlyCollection<TicketSlaTimer> otherTimers) = OpenTicket();
 
         // Act
-        new TicketSlaCycleService().Delete(ticket, [.. timers, .. otherTimers], ticket.CreatedByUserId, SaoPaulo(9, 0));
+        ticket.Delete(ticket.CreatedByUserId, SaoPaulo(9, 0));
 
         // Assert
         timers.ShouldAllBe(t => t.NextActionOnUtc == null);
@@ -527,10 +528,10 @@ public sealed class TicketSlaTimerTests
     public void Delete_Should_DequeueTimersWithoutBreachOrStop()
     {
         // Arrange
-        (Ticket ticket, IReadOnlyList<TicketSlaTimer> timers) = OpenTicket();
+        (Ticket ticket, IReadOnlyCollection<TicketSlaTimer> timers) = OpenTicket();
 
         // Act
-        new TicketSlaCycleService().Delete(ticket, timers, ticket.CreatedByUserId, SaoPaulo(9, 0));
+        ticket.Delete(ticket.CreatedByUserId, SaoPaulo(9, 0));
 
         // Assert
         timers.ShouldAllBe(t =>

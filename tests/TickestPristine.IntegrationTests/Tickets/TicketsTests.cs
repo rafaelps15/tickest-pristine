@@ -605,7 +605,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         Guid sectorId = await CreateSectorAsAdminAsync();
         (Guid requesterId, AccessTokens requesterTokens) = await RegisterAndLoginAsync();
         Authenticate(requesterTokens.AccessToken);
-        Guid ticketId = await InsertOwnTicketAsync(requesterId, sectorId, TicketStatus.Open, "Printer is broken", DateTime.UtcNow.AddHours(-7));
+        Guid ticketId = await InsertOwnTicketAsync(requesterId, sectorId, TicketStatus.Open, "Printer is broken", DateTime.UtcNow.AddHours(-7), withoutSlaTimers: true);
 
         // Act
         OwnTicketItemDto ticket = await GetOwnTicketItemAsync(ticketId);
@@ -2688,7 +2688,8 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         TicketStatus status,
         string title,
         DateTime createdAtUtc,
-        string description = "The printer on the 3rd floor is not working")
+        string description = "The printer on the 3rd floor is not working",
+        bool withoutSlaTimers = false)
     {
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -2708,6 +2709,11 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         context.Tickets.Add(ticket);
         await context.SaveChangesAsync();
+
+        if (withoutSlaTimers)
+        {
+            await context.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM ticket_sla_timers WHERE ticket_id = {ticket.Id}");
+        }
 
         return ticket.Id;
     }
@@ -3457,7 +3463,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         return new AgingScenario(sectorId, SaoPauloToUtc("2026-10-28 12:00"));
     }
 
-    // Chamado resolvido no dia seguinte à abertura e reaberto pelo TicketSlaCycleService, como faz a reabertura pela API:
+        // Chamado resolvido no dia seguinte à abertura e reaberto pelo Ticket, como faz a reabertura pela API:
     // volta para Aberto com um ciclo novo de resolução e mantém a data de abertura original.
     private async Task InsertReopenedTicketAsync(Guid requesterId, Guid sectorId, DateTime openedAtUtc, DateTime reopenedAtUtc)
     {
@@ -3475,14 +3481,12 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             dueAtUtc: openedAtUtc.AddHours(24),
             slaWarningAtUtc: openedAtUtc.AddHours(18),
             resolvedAtUtc: openedAtUtc.AddDays(1));
-        TicketReopening reopening = new TicketSlaCycleService()
-            .Reopen(ticket, [], ContinuousSlaCalendar.Create(), lastMessageIsFromAgent: false, requesterId, reopenedAtUtc)
-            .Value;
+        ticket.Reopen(ContinuousSlaCalendar.Create(), lastMessageIsFromAgent: false, requesterId, reopenedAtUtc);
+        TicketSlaTimer reopening = ticket.SlaTimers.Single(timer => timer.Metric == SlaMetric.Resolution && timer.Cycle == 2);
         ticket.ClearDomainEvents();
-        reopening.ResolutionCycle.ClearDomainEvents();
+        reopening.ClearDomainEvents();
 
         context.Tickets.Add(ticket);
-        context.TicketSlaTimers.Add(reopening.ResolutionCycle);
         await context.SaveChangesAsync();
     }
 
@@ -3757,19 +3761,28 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             dueAtUtc: startUtc.AddHours(8),
             slaWarningAtUtc: startUtc.AddHours(6));
         context.Tickets.Add(ticket);
-        // Ciclo e causa em qualquer combinação, gravados direto como a consulta os lê.
-        context.TicketSlaTimers.AddRange(timers.Select(t => EntityTestState.New<TicketSlaTimer>()
-            .With(nameof(TicketSlaTimer.Id), Guid.NewGuid())
-            .With(nameof(TicketSlaTimer.TicketId), ticket.Id)
-            .With(nameof(TicketSlaTimer.Metric), t.Metric)
-            .With(nameof(TicketSlaTimer.Cycle), t.Cycle)
-            .With(nameof(TicketSlaTimer.TargetMinutes), 480)
-            .With(nameof(TicketSlaTimer.CalendarId), SlaCalendarIds.Continuous)
-            .With(nameof(TicketSlaTimer.StartedAtUtc), startUtc)
-            .With(nameof(TicketSlaTimer.WarningOnUtc), startUtc.AddHours(6))
-            .With(nameof(TicketSlaTimer.DueOnUtc), startUtc.AddHours(8))
-            .With(nameof(TicketSlaTimer.CompletedOnUtc), startUtc.AddMinutes(t.Minutes))
-            .With(nameof(TicketSlaTimer.CompletionCause), t.Cause)));
+        foreach ((SlaMetric metric, int cycle, int minutes, SlaCompletionCause cause) in timers)
+        {
+            TicketSlaTimer? timer = ticket.SlaTimers.SingleOrDefault(existing => existing.Metric == metric && existing.Cycle == cycle);
+            if (timer is null)
+            {
+                timer = EntityTestState.New<TicketSlaTimer>()
+                    .With(nameof(TicketSlaTimer.Id), Guid.NewGuid())
+                    .With(nameof(TicketSlaTimer.TicketId), ticket.Id)
+                    .With(nameof(TicketSlaTimer.Metric), metric)
+                    .With(nameof(TicketSlaTimer.Cycle), cycle)
+                    .With(nameof(TicketSlaTimer.TargetMinutes), 480)
+                    .With(nameof(TicketSlaTimer.CalendarId), SlaCalendarIds.Continuous);
+                context.TicketSlaTimers.Add(timer);
+            }
+
+            timer
+                .With(nameof(TicketSlaTimer.StartedAtUtc), startUtc)
+                .With(nameof(TicketSlaTimer.WarningOnUtc), startUtc.AddHours(6))
+                .With(nameof(TicketSlaTimer.DueOnUtc), startUtc.AddHours(8))
+                .With(nameof(TicketSlaTimer.CompletedOnUtc), startUtc.AddMinutes(minutes))
+                .With(nameof(TicketSlaTimer.CompletionCause), cause);
+        }
         await context.SaveChangesAsync();
     }
 
@@ -4581,19 +4594,17 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         ApplicationDbContext second = secondScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         // As duas mudanças leem o chamado e os cronômetros antes de qualquer uma salvar.
-        Ticket ticketToResolve = await first.Tickets.SingleAsync(t => t.Id == ticketId);
-        List<TicketSlaTimer> timersToComplete = await first.TicketSlaTimers.Where(t => t.TicketId == ticketId).ToListAsync();
-        Ticket ticketToCancel = await second.Tickets.SingleAsync(t => t.Id == ticketId);
-        List<TicketSlaTimer> timersToStop = await second.TicketSlaTimers.Where(t => t.TicketId == ticketId).ToListAsync();
+        Ticket ticketToResolve = await first.Tickets.Include(t => t.SlaTimers).SingleAsync(t => t.Id == ticketId);
+        Ticket ticketToCancel = await second.Tickets.Include(t => t.SlaTimers).SingleAsync(t => t.Id == ticketId);
 
-        new TicketSlaCycleService().Cancel(ticketToCancel, timersToStop, canCancelAny: true, isOwnerWhoCanEdit: false, ticketToCancel.CreatedByUserId, nowUtc);
+        ticketToCancel.Cancel(canCancelAny: true, isOwnerWhoCanEdit: false, ticketToCancel.CreatedByUserId, nowUtc);
         ticketToCancel.ClearDomainEvents();
         await second.SaveChangesAsync();
 
         // O Resolve grava a data de resolução na primeira resolução e conclui os cronômetros; o chamado aberto passa antes
         // por Em andamento, a transição que o Resolve exige.
         ticketToResolve.StartProgress(lastMessageIsFromAgent: false, ticketToResolve.CreatedByUserId, nowUtc);
-        new TicketSlaCycleService().Resolve(ticketToResolve, timersToComplete, ticketToResolve.CreatedByUserId, nowUtc);
+        ticketToResolve.Resolve(ticketToResolve.CreatedByUserId, nowUtc);
         ticketToResolve.ClearDomainEvents();
 
         // Act
@@ -5707,18 +5718,15 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         context.Tickets.Add(ticket);
 
         // Cronômetro legado como a migration o grava: concluído ou parado, mas sem causa nem fila.
-        context.TicketSlaTimers.Add(EntityTestState.New<TicketSlaTimer>()
-            .With(nameof(TicketSlaTimer.Id), Guid.NewGuid())
-            .With(nameof(TicketSlaTimer.TicketId), ticketId)
-            .With(nameof(TicketSlaTimer.Metric), SlaMetric.Resolution)
-            .With(nameof(TicketSlaTimer.Cycle), 1)
+        ticket.SlaTimers.Single(t => t.Metric == SlaMetric.Resolution && t.Cycle == 1)
             .With(nameof(TicketSlaTimer.TargetMinutes), 240)
-            .With(nameof(TicketSlaTimer.CalendarId), SlaCalendarIds.Continuous)
             .With(nameof(TicketSlaTimer.StartedAtUtc), createdAtUtc)
             .With(nameof(TicketSlaTimer.WarningOnUtc), warningAtUtc)
             .With(nameof(TicketSlaTimer.DueOnUtc), dueAtUtc)
             .With(nameof(TicketSlaTimer.CompletedOnUtc), completedAtUtc)
-            .With(nameof(TicketSlaTimer.StoppedOnUtc), createdAtUtc + stoppedAfter));
+            .With(nameof(TicketSlaTimer.CompletionCause), null)
+            .With(nameof(TicketSlaTimer.StoppedOnUtc), createdAtUtc + stoppedAfter)
+            .With(nameof(TicketSlaTimer.NextActionOnUtc), null);
 
         return ticketId;
     }

@@ -1124,3 +1124,11 @@ Saem os testes do comportamento retirado: `RecordAttachmentActivity_*` e `Record
 - **Documentação:** `SYSTEM_SPECIFICATION.md`, na RN-09, RN-31 e RN-34, na auditoria, nas gravações depois do commit, no fluxo de anexos, na atribuição e nas evidências E-07 e E-27.
 - **Pendências:** o `CLAUDE.md` ainda diz que o `TicketAttachment` cria a entrada do envio, que agora é do `Ticket.AddAttachment`, e cita `TicketHistory` em três trechos; mudar depende de autorização (DEC-14). A DEC-76 fica para o portão da G3-b, e a DEC-47 continua pendente. Depois do PR da fase 2, a diretriz das entidades entra pela `spec-new`, com o anexo F.
 - **Entrega:** PR #79 (https://github.com/rafaelps15/tickest-pristine/pull/79), aberto em 2026-11-06 da branch `refactor/SPEC-049-tickest-architecture-reassessment` para a `main`, com o commit `21144e1`. O merge é do responsável.
+
+## B.16 T-7 da G3-a (2026-11-09)
+
+- **Implementação:** `Ticket` passou a possuir internamente os cronômetros e a coordenar os ciclos; `TicketSlaCycleService` e `TicketReopening` foram removidos; o mapeamento e o `SampleDataSeeder` foram adaptados. Os testes que dependiam do serviço, dos setters ou dos cronômetros separados foram atualizados.
+- **Teste do seeder (AC-31):** `SampleDataSeederTests.Migrate_ShouldCreateSampleTicketsWithCycleOneTimers_WhenSampleDataIsEnabled` usa uma fábrica isolada com `Seeding:SampleData` ligado e confere que os chamados de exemplo têm um cronômetro de resolução no ciclo 1.
+- **Build:** `dotnet build TickestPristine.slnx`, sem avisos e sem erros, depois da última alteração.
+- **Testes da tarefa:** `TickestPristine.Application.UnitTests`, filtro `FullyQualifiedName~Ticket`, 441 aprovados; `TickestPristine.ArchitectureTests`, 156 aprovados. O teste de integração do AC-31 fica para a verificação final da fase, conforme o critério de impacto do projeto.
+- **T-8:** os handlers de abertura, atualização, reabertura, exclusão e publicação de mensagem usam a nova API do `Ticket`. A inspeção do diff dos testes de integração não encontrou mudanças nas asserções. Os 441 testes unitários do recorte passaram; a integração completa fica para a verificação da fase.

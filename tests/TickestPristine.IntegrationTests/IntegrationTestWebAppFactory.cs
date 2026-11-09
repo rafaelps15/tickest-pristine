@@ -26,6 +26,18 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
     /// </summary>
     internal const string AdminInitialPassword = "ChangeMe123!";
 
+    private readonly bool _enableSampleData;
+
+    public IntegrationTestWebAppFactory()
+        : this(enableSampleData: false)
+    {
+    }
+
+    public IntegrationTestWebAppFactory(bool enableSampleData)
+    {
+        _enableSampleData = enableSampleData;
+    }
+
     private readonly PostgreSqlContainer _dbContainer = new PostgreSqlBuilder(PostgresImage)
         .WithDatabase("tickestpristine")
         .WithUsername("postgres")
@@ -63,8 +75,12 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         builder.UseSetting("Cors:AllowLoopbackOrigins", "true");
         builder.UseSetting("Cors:AllowedOrigins:0", "https://app.example.com/");
 
-        // Os testes não usam os dados fictícios de desenvolvimento.
-        builder.UseSetting("Seeding:SampleData", "false");
+        // Os testes não usam os dados fictícios de desenvolvimento, exceto o teste dedicado ao seeder.
+        builder.UseSetting("Seeding:SampleData", _enableSampleData.ToString());
+        if (_enableSampleData)
+        {
+            builder.UseSetting("Seeding:SampleUserPassword", "SampleUser123!");
+        }
 
         // O monitoramento do SLA alteraria cronômetros no meio dos outros testes da coleção: os testes chamam as voltas
         // dele diretamente. Os eventos de violação ficam guardados para as asserções.

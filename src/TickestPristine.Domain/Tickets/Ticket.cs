@@ -13,6 +13,8 @@ public sealed class Ticket : Entity, IAuditable
 {
     public const int OwnerCancelWindowMinutes = 15;
 
+    private readonly List<TicketSlaTimer> _slaTimers = [];
+
     private Ticket()
     {
     }
@@ -51,6 +53,8 @@ public sealed class Ticket : Entity, IAuditable
 
     public bool IsActive => Status is TicketStatus.Open or TicketStatus.InProgress;
 
+    public IReadOnlyCollection<TicketSlaTimer> SlaTimers => _slaTimers;
+
     /// <summary>
     /// A regra de <see cref="IsActive"/> como filtro que o EF traduz para SQL, para os commands que procuram chamados
     /// ativos pelo contexto; as consultas em SQL usam o trecho com o mesmo nome da Application.
@@ -58,11 +62,7 @@ public sealed class Ticket : Entity, IAuditable
     public static Expression<Func<Ticket, bool>> Active { get; } =
         ticket => ticket.Status == TicketStatus.Open || ticket.Status == TicketStatus.InProgress;
 
-    /// <summary>
-    /// Abre o chamado com o plano de SLA e o prazo e o alerta de resolução do ciclo 1, no tempo útil do calendário do
-    /// plano. Os cronômetros do ciclo 1 são criados pelo <see cref="TicketSlaCycleService.Start"/>. Sem mensagens, o
-    /// chamado aguarda quem atende.
-    /// </summary>
+    /// <summary>Abre o chamado e cria os cronômetros do primeiro ciclo no tempo útil do calendário.</summary>
     public static Ticket Create(
         string title,
         string description,
@@ -76,6 +76,9 @@ public sealed class Ticket : Entity, IAuditable
         DateTime utcNow)
     {
         SlaDeadlines resolution = TicketSlaPlan.CalculateDeadlines(slaPlan.ResolutionMinutes, calendar, utcNow);
+        SlaDeadlines? firstResponse = slaPlan.FirstResponseMinutes is { } firstResponseMinutes
+            ? TicketSlaPlan.CalculateDeadlines(firstResponseMinutes, calendar, utcNow)
+            : null;
 
         var ticket = new Ticket
         {
@@ -94,6 +97,27 @@ public sealed class Ticket : Entity, IAuditable
             SlaWarningAtUtc = resolution.WarningOnUtc,
             SlaPlan = slaPlan
         };
+
+        ticket._slaTimers.Add(TicketSlaTimer.Create(
+            ticket.Id,
+            SlaMetric.Resolution,
+            1,
+            slaPlan.ResolutionMinutes,
+            slaPlan.CalendarId,
+            utcNow,
+            resolution));
+
+        if (firstResponse is { } firstResponseDeadlines)
+        {
+            ticket._slaTimers.Add(TicketSlaTimer.Create(
+                ticket.Id,
+                SlaMetric.FirstResponse,
+                1,
+                slaPlan.FirstResponseMinutes!.Value,
+                slaPlan.CalendarId,
+                utcNow,
+                firstResponseDeadlines));
+        }
 
         ticket.Raise(new TicketCreatedDomainEvent(ticket.Id, openedByUserId));
 
@@ -186,16 +210,25 @@ public sealed class Ticket : Entity, IAuditable
     }
 
     /// <summary>
-    /// Publica uma mensagem no chamado e devolve a mensagem e a entrada do histórico, que o handler adiciona antes de
-    /// salvar. O chamado não muda: a última atividade e quem ele aguarda saem da projeção, depois do commit.
+    /// Publica uma mensagem e conclui a primeira resposta quando o autor é atendente.
     /// </summary>
-    public TicketMessagePosting PostMessage(Guid authorUserId, string content, DateTime utcNow)
+    public TicketMessagePosting PostMessage(Guid authorUserId, string content, bool authorIsAgent, DateTime utcNow)
     {
         var message = TicketMessage.Create(Id, authorUserId, content, utcNow);
         var history = TicketHistoryEntry.Create(Id, authorUserId, TicketHistoryAction.MessageAdded, utcNow);
 
+        if (IsAgentReply(authorUserId, authorIsAgent))
+        {
+            _slaTimers.FirstOrDefault(timer => timer.Metric == SlaMetric.FirstResponse)?.Complete(
+                utcNow,
+                SlaCompletionCause.Message);
+        }
+
         return new TicketMessagePosting(message, history);
     }
+
+    public TicketMessagePosting PostMessage(Guid authorUserId, string content, DateTime utcNow) =>
+        PostMessage(authorUserId, content, authorIsAgent: false, utcNow);
 
     /// <summary>
     /// Anexa um arquivo ao chamado e devolve o anexo e a entrada do histórico, que o handler adiciona antes de salvar.
@@ -285,13 +318,8 @@ public sealed class Ticket : Entity, IAuditable
         return history;
     }
 
-    /// <summary>
-    /// Resolve o chamado, grava a data da primeira resolução e deixa de aguardar alguém. Falha com
-    /// <see cref="TicketErrors.NotActive"/> para o chamado inativo e com <see cref="TicketErrors.InvalidStatusTransition"/>
-    /// quando a transição não é permitida, sem mudar nada. Chamado só pelo <see cref="TicketSlaCycleService"/>, que fecha
-    /// o ciclo de resolução.
-    /// </summary>
-    internal Result<TicketHistoryEntry> Resolve(Guid resolvedByUserId, DateTime utcNow)
+    /// <summary>Resolve o chamado e conclui os cronômetros abertos do ciclo corrente.</summary>
+    public Result<TicketHistoryEntry> Resolve(Guid resolvedByUserId, DateTime utcNow)
     {
         Result transition = EnsureCanChangeStatusTo(TicketStatus.Resolved);
 
@@ -300,7 +328,15 @@ public sealed class Ticket : Entity, IAuditable
             return Result.Failure<TicketHistoryEntry>(transition.Error);
         }
 
-        // O SLA é medido até a primeira resolução; reaberturas não mudam o resultado.
+        TicketSlaTimer? currentResolution = _slaTimers
+            .Where(timer => timer.Metric == SlaMetric.Resolution)
+            .MaxBy(timer => timer.Cycle);
+
+        TicketSlaTimer? firstResponse = _slaTimers.FirstOrDefault(timer => timer.Metric == SlaMetric.FirstResponse);
+
+        currentResolution?.Complete(utcNow, SlaCompletionCause.Resolution);
+        firstResponse?.Complete(utcNow, SlaCompletionCause.Resolution);
+
         ResolvedAtUtc ??= utcNow;
 
         return ChangeStatus(TicketStatus.Resolved, resolvedByUserId, utcNow);
@@ -320,15 +356,8 @@ public sealed class Ticket : Entity, IAuditable
         return ChangeStatus(TicketStatus.Closed, changedByUserId, utcNow);
     }
 
-    /// <summary>
-    /// Cancela o chamado, que deixa de aguardar alguém: por quem pode cancelar qualquer chamado, enquanto ele estiver
-    /// ativo; pelo dono que pode editar o próprio chamado, só até o <see cref="OwnerCancelDeadline"/>, para desfazer um
-    /// chamado aberto por engano. Falha, sem mudar nada, com <see cref="TicketErrors.NotActive"/> para o chamado inativo,
-    /// com <see cref="TicketErrors.CancelWindowExpired"/> para o dono fora do prazo e com
-    /// <see cref="TicketErrors.CancelForbidden"/> para os demais. Chamado só pelo <see cref="TicketSlaCycleService"/>, que
-    /// para os cronômetros.
-    /// </summary>
-    internal Result<TicketHistoryEntry> Cancel(bool canCancelAny, bool isOwnerWhoCanEdit, Guid canceledByUserId, DateTime utcNow)
+    /// <summary>Cancela o chamado e para os cronômetros abertos.</summary>
+    public Result<TicketHistoryEntry> Cancel(bool canCancelAny, bool isOwnerWhoCanEdit, Guid canceledByUserId, DateTime utcNow)
     {
         Result transition = EnsureCanChangeStatusTo(TicketStatus.Canceled);
 
@@ -344,15 +373,18 @@ public sealed class Ticket : Entity, IAuditable
                 : TicketErrors.CancelForbidden);
         }
 
-        return ChangeStatus(TicketStatus.Canceled, canceledByUserId, utcNow);
+        TicketHistoryEntry history = ChangeStatus(TicketStatus.Canceled, canceledByUserId, utcNow);
+
+        foreach (TicketSlaTimer timer in _slaTimers)
+        {
+            timer.Stop(utcNow);
+        }
+
+        return history;
     }
 
-    /// <summary>
-    /// As conferências do <see cref="Reopen"/>, sem mudar nada, na ordem dele: <see cref="TicketErrors.AlreadyActive"/>,
-    /// <see cref="TicketErrors.InvalidStatusTransition"/> e <see cref="TicketErrors.ResolutionCycleAlreadyOpen"/>. O
-    /// <see cref="TicketSlaCycleService"/> as consulta antes de calcular o novo ciclo, que pode lançar exceção.
-    /// </summary>
-    public Result EnsureCanReopen(bool hasOpenResolutionCycle)
+    /// <summary>Confere se o chamado pode ser reaberto sem alterar seu estado.</summary>
+    public Result EnsureCanReopen()
     {
         if (IsActive)
         {
@@ -364,30 +396,38 @@ public sealed class Ticket : Entity, IAuditable
             return Result.Failure(TicketErrors.InvalidStatusTransition(Status, TicketStatus.Open));
         }
 
-        return hasOpenResolutionCycle
+        return _slaTimers.Any(timer => timer.Metric == SlaMetric.Resolution && timer.IsOpen)
             ? Result.Failure(TicketErrors.ResolutionCycleAlreadyOpen(Id))
             : Result.Success();
     }
 
-    /// <summary>
-    /// Volta o chamado para Aberto e recalcula quem ele aguarda; os prazos gravados no chamado (os do primeiro ciclo) e
-    /// a data de resolução não mudam. Falha, sem mudar nada, com <see cref="TicketErrors.AlreadyActive"/> para o chamado
-    /// ativo, com <see cref="TicketErrors.InvalidStatusTransition"/> quando a transição para Aberto não é permitida e com
-    /// <see cref="TicketErrors.ResolutionCycleAlreadyOpen"/> quando o chamado ainda tem um ciclo de resolução aberto.
-    /// Chamado só pelo <see cref="TicketSlaCycleService"/>, que abre o novo ciclo de resolução.
-    /// </summary>
-    internal Result<TicketHistoryEntry> Reopen(
-        bool hasOpenResolutionCycle,
+    /// <summary>Reabre o chamado e cria o próximo ciclo de resolução.</summary>
+    public Result<TicketHistoryEntry> Reopen(
+        BusinessCalendar calendar,
         bool lastMessageIsFromAgent,
         Guid reopenedByUserId,
         DateTime utcNow)
     {
-        Result canReopen = EnsureCanReopen(hasOpenResolutionCycle);
+        Result canReopen = EnsureCanReopen();
 
         if (canReopen.IsFailure)
         {
             return Result.Failure<TicketHistoryEntry>(canReopen.Error);
         }
+
+        TicketSlaTimer? currentResolution = _slaTimers
+            .Where(timer => timer.Metric == SlaMetric.Resolution)
+            .MaxBy(timer => timer.Cycle);
+        TicketSlaPlan plan = SlaPlan;
+        SlaDeadlines deadlines = TicketSlaPlan.CalculateDeadlines(plan.ResolutionMinutes, calendar, utcNow);
+        var resolutionCycle = TicketSlaTimer.Create(
+            Id,
+            SlaMetric.Resolution,
+            currentResolution?.Cycle + 1 ?? 1,
+            plan.ResolutionMinutes,
+            plan.CalendarId,
+            utcNow,
+            deadlines);
 
         TicketStatus previousStatus = Status;
 
@@ -397,6 +437,8 @@ public sealed class Ticket : Entity, IAuditable
 
         Raise(new TicketReopenedDomainEvent(Id, reopenedByUserId));
 
+        _slaTimers.Add(resolutionCycle);
+
         return RecordHistory(
             reopenedByUserId,
             TicketHistoryAction.Reopened,
@@ -405,11 +447,8 @@ public sealed class Ticket : Entity, IAuditable
             TicketStatus.Open.ToString());
     }
 
-    /// <summary>
-    /// Exclui o chamado logicamente. Falha com <see cref="TicketErrors.NotActive"/>, sem mudar nada, para o chamado
-    /// inativo. Chamado só pelo <see cref="TicketSlaCycleService"/>, que tira os cronômetros da fila.
-    /// </summary>
-    internal Result<TicketHistoryEntry> Delete(Guid deletedByUserId, DateTime utcNow)
+    /// <summary>Exclui o chamado logicamente e remove seus cronômetros da fila.</summary>
+    public Result<TicketHistoryEntry> Delete(Guid deletedByUserId, DateTime utcNow)
     {
         if (!IsActive)
         {
@@ -418,10 +457,19 @@ public sealed class Ticket : Entity, IAuditable
 
         DeletedAtUtc = utcNow;
 
+        foreach (TicketSlaTimer timer in _slaTimers.Where(timer => timer.NextActionOnUtc is not null))
+        {
+            timer.Dequeue();
+        }
+
         Raise(new TicketDeletedDomainEvent(Id));
 
         return RecordHistory(deletedByUserId, TicketHistoryAction.Deleted, utcNow);
     }
+
+    /// <summary>Apura um cronômetro deste chamado e devolve se uma violação foi registrada.</summary>
+    public bool SettleSlaDeadline(Guid slaTimerId) =>
+        _slaTimers.FirstOrDefault(timer => timer.Id == slaTimerId)?.SettleDeadline() is true;
 
     /// <summary>
     /// Indica se o status pode ir para <paramref name="status"/>; o mesmo status não é uma transição.

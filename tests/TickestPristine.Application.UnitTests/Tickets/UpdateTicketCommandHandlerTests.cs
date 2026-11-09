@@ -433,9 +433,8 @@ public sealed class UpdateTicketCommandHandlerTests : BaseHandlerTest
 
         // Resolvido pela primeira vez, reaberto e de volta a Em andamento.
         Ticket seeded = await context.Tickets.SingleAsync(t => t.Id == ticketId);
-        var slaCycle = new TicketSlaCycleService();
-        slaCycle.Resolve(seeded, [], OwnerId, firstResolutionUtc);
-        slaCycle.Reopen(seeded, [], ContinuousSlaCalendar.Create(), lastMessageIsFromAgent: false, OwnerId, firstResolutionUtc.AddDays(1));
+        seeded.Resolve(OwnerId, firstResolutionUtc);
+        seeded.Reopen(ContinuousSlaCalendar.Create(), lastMessageIsFromAgent: false, OwnerId, firstResolutionUtc.AddDays(1));
         seeded.StartProgress(lastMessageIsFromAgent: false, OwnerId, firstResolutionUtc.AddDays(1));
         seeded.ClearDomainEvents();
         await context.SaveChangesAsync();

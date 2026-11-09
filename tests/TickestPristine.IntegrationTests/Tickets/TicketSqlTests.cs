@@ -1,5 +1,6 @@
 using System.Data.Common;
 using Dapper;
+using Microsoft.EntityFrameworkCore;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Domain.SlaCalendars;
 using TickestPristine.Domain.Tickets;
@@ -84,7 +85,7 @@ public sealed class TicketSqlTests(IntegrationTestWebAppFactory factory) : BaseQ
 
         void AddTimer(Ticket ticket, int cycle, DateTime warningOnUtc, DateTime dueOnUtc, DateTime? completedOnUtc = null, DateTime? stoppedOnUtc = null)
         {
-            TicketSlaTimer timer = new TicketSlaCycleService().Start(ticket, ContinuousSlaCalendar.Create()).Single()
+            TicketSlaTimer timer = ticket.SlaTimers.Single(t => t.Metric == SlaMetric.Resolution && t.Cycle == cycle)
                 .With(nameof(TicketSlaTimer.Cycle), cycle)
                 .With(nameof(TicketSlaTimer.WarningOnUtc), warningOnUtc)
                 .With(nameof(TicketSlaTimer.DueOnUtc), dueOnUtc)
@@ -109,14 +110,17 @@ public sealed class TicketSqlTests(IntegrationTestWebAppFactory factory) : BaseQ
         AddTimer(NewTicket(), 1, nowUtc.AddHours(1), nowUtc.AddHours(2), stoppedOnUtc: nowUtc.AddHours(-1));
         Ticket withoutTimer = NewTicket();
         Ticket reopened = NewTicket();
+        reopened.StartProgress(lastMessageIsFromAgent: false, reopened.CreatedByUserId, OpenedAtUtc);
+        reopened.Resolve(reopened.CreatedByUserId, OpenedAtUtc.AddMinutes(1));
+        reopened.Reopen(ContinuousSlaCalendar.Create(), lastMessageIsFromAgent: false, reopened.CreatedByUserId, OpenedAtUtc.AddMinutes(2));
         AddTimer(reopened, 1, nowUtc.AddHours(-4), nowUtc.AddHours(-3), completedOnUtc: nowUtc.AddHours(-5));
         AddTimer(reopened, 2, nowUtc.AddHours(1), nowUtc.AddHours(2));
 
         await using (ApplicationDbContext context = CreateDbContext())
         {
             context.Tickets.AddRange(tickets);
-            context.TicketSlaTimers.AddRange(timers);
             await context.SaveChangesAsync();
+            await context.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM ticket_sla_timers WHERE ticket_id = {withoutTimer.Id}");
         }
 
         // Act

@@ -68,8 +68,7 @@ public sealed class ProcessSlaBreachesCommandHandlerTests : BaseHandlerTest
         List<TicketSlaTimer> seeded = await context.TicketSlaTimers.Where(t => t.TicketId == ticket.Id).ToListAsync();
 
         // A primeira resposta veio às 08:45, depois do prazo; a resolução, às 11:00, dentro dele.
-        seeded.Single(t => t.Metric == SlaMetric.FirstResponse)
-            .CompleteFirstResponse(ticket, Guid.NewGuid(), authorIsAgent: true, OpenedAtUtc.AddMinutes(35));
+        ticket.PostMessage(Guid.NewGuid(), "Resposta", authorIsAgent: true, OpenedAtUtc.AddMinutes(35));
         TicketSlaTimer resolution = seeded.Single(t => t.Metric == SlaMetric.Resolution);
         // Concluída, mas ainda na fila: lida pelo monitoramento antes de sair dela.
         resolution.With(nameof(TicketSlaTimer.CompletedOnUtc), OpenedAtUtc.AddMinutes(170));

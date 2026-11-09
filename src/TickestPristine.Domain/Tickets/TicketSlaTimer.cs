@@ -4,10 +4,8 @@ using TickestPristine.SharedKernel;
 namespace TickestPristine.Domain.Tickets;
 
 /// <summary>
-/// Cronômetro de um objetivo do SLA num ciclo do chamado. A reabertura cria um novo ciclo de resolução; início,
-/// conclusão, parada e violação, uma vez gravados, não mudam. O <see cref="NextActionOnUtc"/> é o próximo instante em
-/// que o monitoramento precisa agir sobre o cronômetro; nulo quando não há mais nada a fazer. A
-/// <see cref="CompletionCause"/> diz o que concluiu o cronômetro e só existe quando ele foi concluído.
+/// Cronômetro interno de um objetivo do SLA num ciclo do chamado. O próximo instante de ação é sempre nulo ou o prazo
+/// do cronômetro; não existe outro estado de fila válido.
 /// </summary>
 public sealed class TicketSlaTimer : Entity, IAuditable
 {
@@ -45,13 +43,9 @@ public sealed class TicketSlaTimer : Entity, IAuditable
 
     public bool IsOpen => CompletedOnUtc is null && StoppedOnUtc is null;
 
-    internal bool IsQueued => NextActionOnUtc is not null;
+    public bool IsDueForMonitoring(DateTime utcNow) => NextActionOnUtc is { } nextAction && nextAction <= utcNow;
 
-    /// <summary>
-    /// Cria o cronômetro com a meta, o calendário e o prazo e o alerta já calculados pelo
-    /// <see cref="TicketSlaPlan.CalculateDeadlines"/>, na fila do monitoramento até o prazo; chamado só pelo
-    /// <see cref="TicketSlaCycleService"/>, na abertura e na reabertura.
-    /// </summary>
+    /// <summary>Cria um cronômetro já calculado pelo agregado dono.</summary>
     internal static TicketSlaTimer Create(
         Guid ticketId,
         SlaMetric metric,
@@ -98,24 +92,6 @@ public sealed class TicketSlaTimer : Entity, IAuditable
     }
 
     /// <summary>
-    /// Conclui a primeira resposta do chamado com a mensagem de quem atende, no instante dela. Devolve <c>false</c>, sem
-    /// mudar nada, quando o cronômetro não é a primeira resposta deste chamado, já está concluído ou parado, o autor é o
-    /// solicitante ou não atende chamados.
-    /// </summary>
-    public bool CompleteFirstResponse(Ticket ticket, Guid authorUserId, bool authorIsAgent, DateTime utcNow)
-    {
-        if (Metric != SlaMetric.FirstResponse ||
-            !BelongsTo(ticket) ||
-            authorUserId == ticket.CreatedByUserId ||
-            !authorIsAgent)
-        {
-            return false;
-        }
-
-        return Complete(utcNow, SlaCompletionCause.Message);
-    }
-
-    /// <summary>
     /// Para o cronômetro em aberto e o tira da fila (parado não conta como violação); devolve <c>false</c> quando ele já
     /// estava concluído ou parado.
     /// </summary>
@@ -137,12 +113,8 @@ public sealed class TicketSlaTimer : Entity, IAuditable
     /// </summary>
     internal void Dequeue() => NextActionOnUtc = null;
 
-    /// <summary>
-    /// Ação do monitoramento sobre um cronômetro da fila: o não cumprido (em aberto, ou concluído depois do prazo) tem a
-    /// violação gravada no próprio prazo e dispara o evento; o concluído até o prazo e o parado só saem da fila. Devolve
-    /// <c>false</c> quando o cronômetro não foi violado.
-    /// </summary>
-    public bool ProcessDue()
+    /// <summary>Apura o prazo e dispara o evento quando o objetivo não foi cumprido.</summary>
+    internal bool SettleDeadline()
     {
         NextActionOnUtc = null;
 
@@ -183,8 +155,6 @@ public sealed class TicketSlaTimer : Entity, IAuditable
 
         return utcNow >= WarningOnUtc ? SlaObjectiveState.AtRisk : SlaObjectiveState.Running;
     }
-
-    internal bool BelongsTo(Ticket ticket) => TicketId == ticket.Id;
 
     /// <summary>
     /// Tempo útil consumido entre o início e o menor instante entre agora, a conclusão e a parada.

@@ -27,7 +27,7 @@ public sealed class TestDbContextInventoryTests : BaseHandlerTest
         "TicketAttachment: filter; key(Id); props(ContentType,DeletedAtUtc,FileName,FileSizeBytes,Id,PurgedAtUtc,StorageKey,TicketId,UploadedAtUtc,UploadedByUserId)",
         "TicketHistoryEntry: key(Id); props(Action,ChangedByUserId,Id,NewValue,OccurredAtUtc,OldValue,TicketId)",
         "TicketMessage: filter; key(Id); props(AuthorUserId,Content,CreatedAtUtc,DeletedAtUtc,EditedAtUtc,Id,TicketId)",
-        "TicketSlaTimer: key(Id); props(BreachedOnUtc,CalendarId,CompletedOnUtc,CompletionCause,Cycle,DueOnUtc,Id,Metric,NextActionOnUtc,StartedAtUtc,StoppedOnUtc,TargetMinutes,TicketId,WarningOnUtc)",
+        "TicketSlaTimer: fk(TicketId->Ticket); key(Id); props(BreachedOnUtc,CalendarId,CompletedOnUtc,CompletionCause,Cycle,DueOnUtc,Id,Metric,NextActionOnUtc,StartedAtUtc,StoppedOnUtc,TargetMinutes,TicketId,WarningOnUtc)",
         "User: key(Id); props(Code,CreatedAtUtc,DeactivatedAtUtc,Email,FirstName,Id,IsActive,LastName,SectorId)",
         "UserCredential: key(Id); props(FailedLoginAttempts,Id,LockoutEndsAtUtc,MustChangePassword,PasswordHash,SecurityStamp,UserId)",
         "UserInvitation: key(Id); props(CreatedAtUtc,ExpiresAtUtc,Id,RevokedAtUtc,TokenHash,UsedAtUtc,UserId)",

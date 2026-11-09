@@ -25,7 +25,7 @@ public sealed class TicketConcurrencyTests(IntegrationTestWebAppFactory factory)
         Ticket secondCopy = await secondContext.Tickets.SingleAsync(t => t.Id == ticketId);
 
         firstCopy.StartProgress(lastMessageIsFromAgent: false, firstCopy.CreatedByUserId, DateTime.UtcNow);
-        new TicketSlaCycleService().Cancel(secondCopy, [], canCancelAny: true, isOwnerWhoCanEdit: false, secondCopy.CreatedByUserId, DateTime.UtcNow);
+        secondCopy.Cancel(canCancelAny: true, isOwnerWhoCanEdit: false, secondCopy.CreatedByUserId, DateTime.UtcNow);
         firstCopy.ClearDomainEvents();
         secondCopy.ClearDomainEvents();
 

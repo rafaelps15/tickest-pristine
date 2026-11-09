@@ -77,5 +77,14 @@ internal sealed class TicketConfiguration : IEntityTypeConfiguration<Ticket>
             .WithMany()
             .HasForeignKey(t => t.SectorId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasMany(t => t.SlaTimers)
+            .WithOne()
+            .HasForeignKey(t => t.TicketId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Navigation(t => t.SlaTimers)
+            .UsePropertyAccessMode(PropertyAccessMode.Field)
+            .HasField("_slaTimers");
     }
 }

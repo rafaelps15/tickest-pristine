@@ -48,8 +48,6 @@ internal static class QueryTicketTestData
             requester.Id,
             openedAtUtc);
 
-        var slaCycle = new TicketSlaCycleService();
-
         if (status is TicketStatus.InProgress or TicketStatus.Resolved or TicketStatus.Closed)
         {
             ticket.StartProgress(lastMessageIsFromAgent: false, requester.Id, openedAtUtc);
@@ -57,7 +55,7 @@ internal static class QueryTicketTestData
 
         if (status is TicketStatus.Resolved or TicketStatus.Closed)
         {
-            slaCycle.Resolve(ticket, [], requester.Id, resolvedAtUtc ?? openedAtUtc);
+            ticket.Resolve(requester.Id, resolvedAtUtc ?? openedAtUtc);
         }
 
         if (status == TicketStatus.Closed)
@@ -67,12 +65,12 @@ internal static class QueryTicketTestData
 
         if (status == TicketStatus.Canceled)
         {
-            slaCycle.Cancel(ticket, [], canCancelAny: true, isOwnerWhoCanEdit: false, requester.Id, openedAtUtc);
+            ticket.Cancel(canCancelAny: true, isOwnerWhoCanEdit: false, requester.Id, openedAtUtc);
         }
 
         if (deletedAtUtc is { } deletedAt)
         {
-            slaCycle.Delete(ticket, [], requester.Id, deletedAt);
+            ticket.Delete(requester.Id, deletedAt);
         }
 
         ticket
@@ -97,7 +95,7 @@ internal static class QueryTicketTestData
         Guid? id = null)
     {
         // O chamado só dá o id: os testes de mensagem não precisam dele gravado.
-        TicketMessage message = Create().PostMessage(authorUserId, content, createdAtUtc).Message
+        TicketMessage message = Create().PostMessage(authorUserId, content, authorIsAgent: false, createdAtUtc).Message
             .With(nameof(TicketMessage.TicketId), ticketId);
 
         if (deletedAtUtc is { } deletedAt)

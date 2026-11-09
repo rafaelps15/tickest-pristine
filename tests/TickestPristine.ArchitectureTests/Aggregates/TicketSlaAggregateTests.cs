@@ -1,6 +1,5 @@
 using System.Reflection;
 using Shouldly;
-using TickestPristine.Domain.SlaCalendars;
 using TickestPristine.Domain.Tickets;
 
 namespace TickestPristine.ArchitectureTests.Aggregates;
@@ -11,7 +10,7 @@ public class TicketSlaAggregateTests : BaseTest
         BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
 
     [Fact]
-    public void Ticket_Should_ReceiveTimerOrCalendarOnlyInCreate()
+    public void Ticket_Should_NotExposeTimerParameters()
     {
         // Arrange
         MethodInfo[] methods = PublicMethods(typeof(Ticket));
@@ -20,14 +19,13 @@ public class TicketSlaAggregateTests : BaseTest
         string[] receivers =
         [
             .. methods
-                .Where(m => m.GetParameters().Any(p =>
-                    Mentions(p.ParameterType, typeof(TicketSlaTimer)) || Mentions(p.ParameterType, typeof(BusinessCalendar))))
+            .Where(m => m.GetParameters().Any(p => Mentions(p.ParameterType, typeof(TicketSlaTimer))))
                 .Select(m => m.Name)
                 .Distinct()
         ];
 
         // Assert
-        receivers.ShouldBe([nameof(Ticket.Create)]);
+        receivers.ShouldBeEmpty();
     }
 
     [Fact]
@@ -46,28 +44,11 @@ public class TicketSlaAggregateTests : BaseTest
         // Assert
         methods.ShouldBe(
         [
-            nameof(TicketSlaTimer.CompleteFirstResponse),
             nameof(TicketSlaTimer.ConsumedBusinessTime),
-            nameof(TicketSlaTimer.ProcessDue),
+            nameof(TicketSlaTimer.IsDueForMonitoring),
             nameof(TicketSlaTimer.StateAt)
         ]);
         computedProperties.ShouldBe([nameof(TicketSlaTimer.IsOpen)]);
-    }
-
-    [Fact]
-    public void TicketSlaCycleService_Should_BeSealedWithoutConstructorDependencies()
-    {
-        // Arrange
-        Type service = typeof(TicketSlaCycleService);
-
-        // Act
-        ConstructorInfo[] constructors = service.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-
-        // Assert
-        service.IsSealed.ShouldBeTrue();
-        ConstructorInfo constructor = constructors.ShouldHaveSingleItem();
-        constructor.IsPublic.ShouldBeTrue();
-        constructor.GetParameters().ShouldBeEmpty();
     }
 
     private static MethodInfo[] PublicMethods(Type type) =>

@@ -9,6 +9,7 @@ using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 using TickestPristine.Domain.SlaCalendars;
+using TickestPristine.Domain.TicketHistories;
 
 namespace TickestPristine.Application.Tickets.Reopen;
 
@@ -24,7 +25,9 @@ internal sealed class ReopenTicketCommandHandler(
 {
     public async Task<Result> Handle(ReopenTicketCommand command, CancellationToken cancellationToken)
     {
-        Ticket? ticket = await context.Tickets.SingleOrDefaultAsync(t => t.Id == command.TicketId, cancellationToken);
+        Ticket? ticket = await context.Tickets
+            .Include(t => t.SlaTimers)
+            .SingleOrDefaultAsync(t => t.Id == command.TicketId, cancellationToken);
 
         if (ticket is null)
         {
@@ -41,8 +44,7 @@ internal sealed class ReopenTicketCommandHandler(
             return Result.Failure(UserErrors.Unauthorized());
         }
 
-        // O chamado ativo é recusado antes de carregar o calendário; as demais conferências são do EnsureCanReopen, que a
-        // reabertura faz antes de calcular o novo ciclo.
+        // O chamado ativo é recusado antes de carregar o calendário; as demais conferências são feitas pelo agregado.
         if (ticket.IsActive)
         {
             return Result.Failure(TicketErrors.AlreadyActive(ticket.Id));
@@ -60,21 +62,14 @@ internal sealed class ReopenTicketCommandHandler(
         string? reason = command.Reason?.Trim();
         bool hasReason = !string.IsNullOrEmpty(reason);
 
-        List<TicketSlaTimer> slaTimers = await context.TicketSlaTimers
-            .Where(t => t.TicketId == ticket.Id)
-            .ToListAsync(cancellationToken);
-
         // Com motivo, a mensagem de quem reabriu passa a ser a última e decide quem o chamado aguarda; sem motivo, decide
         // a última mensagem válida.
+        bool authorIsAgent = await agentDirectory.IsAgentAsync(callerId, cancellationToken);
         bool lastMessageIsFromAgent = hasReason
-            ? ticket.IsAgentReply(callerId, await agentDirectory.IsAgentAsync(callerId, cancellationToken))
+            ? ticket.IsAgentReply(callerId, authorIsAgent)
             : await agentLookup.IsLastValidMessageFromAgentAsync(ticket, cancellationToken);
 
-        // A reabertura abre um novo ciclo de resolução com a meta integral do plano; os ciclos anteriores e a primeira
-        // resposta não mudam.
-        Result<TicketReopening> reopening = new TicketSlaCycleService().Reopen(
-            ticket,
-            slaTimers,
+        Result<TicketHistoryEntry> reopening = ticket.Reopen(
             calendar.Value,
             lastMessageIsFromAgent,
             callerId,
@@ -85,13 +80,11 @@ internal sealed class ReopenTicketCommandHandler(
             return reopening;
         }
 
-        context.TicketHistories.Add(reopening.Value.History);
-        context.TicketSlaTimers.Add(reopening.Value.ResolutionCycle);
-
+        context.TicketHistories.Add(reopening.Value);
         // Com motivo, a mensagem de quem reabriu entra no mesmo SaveChanges da reabertura: as duas ou nenhuma.
         if (hasReason)
         {
-            TicketMessagePosting posting = ticket.PostMessage(callerId, reason!, nowUtc);
+            TicketMessagePosting posting = ticket.PostMessage(callerId, reason!, authorIsAgent, nowUtc);
 
             context.TicketMessages.Add(posting.Message);
             context.TicketHistories.Add(posting.History);

@@ -337,7 +337,7 @@ public sealed class TicketTests
         Ticket ticket = CreateTicketIn(TicketStatus.InProgress);
 
         // Act
-        new TicketSlaCycleService().Resolve(ticket, [], AgentId, OccurredAtUtc);
+        ticket.Resolve(AgentId, OccurredAtUtc);
 
         // Assert
         ticket.Status.ShouldBe(TicketStatus.Resolved);
@@ -348,14 +348,13 @@ public sealed class TicketTests
     public void Resolve_Should_KeepFirstResolutionTime_WhenReopenedTicketIsResolvedAgain()
     {
         // Arrange
-        var slaCycle = new TicketSlaCycleService();
         Ticket ticket = CreateTicketIn(TicketStatus.Resolved);
         DateTime firstResolutionUtc = ticket.ResolvedAtUtc!.Value;
-        slaCycle.Reopen(ticket, [], Calendar, lastMessageIsFromAgent: false, AgentId, OccurredAtUtc);
+        ticket.Reopen(Calendar, lastMessageIsFromAgent: false, AgentId, OccurredAtUtc);
         ticket.StartProgress(lastMessageIsFromAgent: false, AgentId, OccurredAtUtc);
 
         // Act
-        slaCycle.Resolve(ticket, [], AgentId, OccurredAtUtc.AddHours(1));
+        ticket.Resolve(AgentId, OccurredAtUtc.AddHours(1));
 
         // Assert
         ticket.ResolvedAtUtc.ShouldBe(firstResolutionUtc);
@@ -512,8 +511,7 @@ public sealed class TicketTests
         DateTime? resolvedAtUtc = ticket.ResolvedAtUtc;
 
         // Act
-        TicketHistoryEntry history = new TicketSlaCycleService()
-            .Reopen(ticket, [], Calendar, lastMessageIsFromAgent: false, AgentId, OccurredAtUtc).Value.History;
+        TicketHistoryEntry history = ticket.Reopen(Calendar, lastMessageIsFromAgent: false, AgentId, OccurredAtUtc).Value;
 
         // Assert
         ticket.Status.ShouldBe(TicketStatus.Open);
@@ -537,7 +535,7 @@ public sealed class TicketTests
         Ticket ticket = CreateTicket();
 
         // Act
-        TicketHistoryEntry history = new TicketSlaCycleService().Delete(ticket, [], AgentId, OccurredAtUtc).Value;
+        TicketHistoryEntry history = ticket.Delete(AgentId, OccurredAtUtc).Value;
 
         // Assert
         ticket.DeletedAtUtc.ShouldBe(OccurredAtUtc);
@@ -595,8 +593,7 @@ public sealed class TicketTests
         Ticket ticket = CreateTicketIn(status);
 
         // Act
-        Result result = new TicketSlaCycleService()
-            .Cancel(ticket, [], canCancelAny, isOwnerWhoCanEdit, AgentId, OpenedAtUtc.AddMinutes(minutesAfterOpening));
+        Result result = ticket.Cancel(canCancelAny, isOwnerWhoCanEdit, AgentId, OpenedAtUtc.AddMinutes(minutesAfterOpening));
 
         // Assert
         if (expectedErrorCode is null)
@@ -616,8 +613,7 @@ public sealed class TicketTests
         Ticket ticket = CreateTicket();
 
         // Act
-        Result result = new TicketSlaCycleService()
-            .Cancel(ticket, [], canCancelAny: false, isOwnerWhoCanEdit: true, AgentId, OpenedAtUtc.AddMinutes(16));
+        Result result = ticket.Cancel(canCancelAny: false, isOwnerWhoCanEdit: true, AgentId, OpenedAtUtc.AddMinutes(16));
 
         // Assert
         result.Error.ShouldBe(TicketErrors.CancelWindowExpired(Ticket.OwnerCancelWindowMinutes));
@@ -648,10 +644,9 @@ public sealed class TicketTests
         Ticket ticket = CreateTicketIn(TicketStatus.InProgress);
 
         // Act
-        var slaCycle = new TicketSlaCycleService();
         _ = status == TicketStatus.Resolved
-            ? slaCycle.Resolve(ticket, [], AgentId, OccurredAtUtc)
-            : slaCycle.Cancel(ticket, [], canCancelAny: true, isOwnerWhoCanEdit: false, AgentId, OccurredAtUtc);
+            ? ticket.Resolve(AgentId, OccurredAtUtc)
+            : ticket.Cancel(canCancelAny: true, isOwnerWhoCanEdit: false, AgentId, OccurredAtUtc);
 
         // Assert
         ticket.WaitingOn.ShouldBeNull();
@@ -692,7 +687,7 @@ public sealed class TicketTests
         Ticket ticket = CreateTicketIn(TicketStatus.Resolved);
 
         // Act
-        new TicketSlaCycleService().Reopen(ticket, [], Calendar, lastMessageIsFromAgent, AgentId, OccurredAtUtc);
+        ticket.Reopen(Calendar, lastMessageIsFromAgent, AgentId, OccurredAtUtc);
 
         // Assert
         ticket.WaitingOn.ShouldBe(expected);
@@ -894,9 +889,8 @@ public sealed class TicketTests
     {
         // Arrange
         Ticket ticket = CreateTicketIn(TicketStatus.InProgress);
-        var slaCycle = new TicketSlaCycleService();
-        slaCycle.Resolve(ticket, [], AgentId, OpenedAtUtc.AddMinutes(resolvedMinutesAfterOpening));
-        slaCycle.Reopen(ticket, [], Calendar, lastMessageIsFromAgent: false, AgentId, OpenedAtUtc.AddDays(1));
+        ticket.Resolve(AgentId, OpenedAtUtc.AddMinutes(resolvedMinutesAfterOpening));
+        ticket.Reopen(Calendar, lastMessageIsFromAgent: false, AgentId, OpenedAtUtc.AddDays(1));
 
         // Act
         TicketSlaStatus status = GetSlaStatus(ticket, OpenedAtUtc.AddDays(10));
@@ -941,7 +935,7 @@ public sealed class TicketTests
 
         // Assert
         canBeCanceled.ShouldBe(expected);
-        new TicketSlaCycleService().Cancel(ticket, [], canCancelAny, isOwnerWhoCanEdit, AgentId, utcNow).IsSuccess.ShouldBe(expected);
+        ticket.Cancel(canCancelAny, isOwnerWhoCanEdit, AgentId, utcNow).IsSuccess.ShouldBe(expected);
     }
 
     private static TicketSlaStatus GetSlaStatus(Ticket ticket, DateTime utcNow) =>
@@ -972,8 +966,6 @@ public sealed class TicketTests
     private static Ticket CreateTicketIn(TicketStatus status, User? assignee = null)
     {
         Ticket ticket = CreateTicket(assignee);
-        var slaCycle = new TicketSlaCycleService();
-
         if (status is TicketStatus.InProgress or TicketStatus.Resolved or TicketStatus.Closed)
         {
             ticket.StartProgress(lastMessageIsFromAgent: false, AgentId, OpenedAtUtc);
@@ -981,7 +973,7 @@ public sealed class TicketTests
 
         if (status is TicketStatus.Resolved or TicketStatus.Closed)
         {
-            slaCycle.Resolve(ticket, [], AgentId, OpenedAtUtc.AddMinutes(30));
+            ticket.Resolve(AgentId, OpenedAtUtc.AddMinutes(30));
         }
 
         if (status == TicketStatus.Closed)
@@ -991,7 +983,7 @@ public sealed class TicketTests
 
         if (status == TicketStatus.Canceled)
         {
-            slaCycle.Cancel(ticket, [], canCancelAny: true, isOwnerWhoCanEdit: false, AgentId, OpenedAtUtc);
+            ticket.Cancel(canCancelAny: true, isOwnerWhoCanEdit: false, AgentId, OpenedAtUtc);
         }
 
         ticket.ClearDomainEvents();

@@ -136,10 +136,7 @@ public abstract class BaseQueryHandlerTest(IntegrationTestWebAppFactory factory)
             .With(nameof(Ticket.DueAtUtc), resolution.DueOnUtc)
             .With(nameof(Ticket.SlaWarningAtUtc), resolution.WarningOnUtc);
 
-        IReadOnlyList<TicketSlaTimer> timers = new TicketSlaCycleService().Start(ticket, calendar);
-
         context.Tickets.Add(ticket);
-        context.TicketSlaTimers.AddRange(timers);
         await context.SaveChangesAsync();
 
         return ticket;

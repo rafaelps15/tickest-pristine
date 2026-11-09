@@ -116,7 +116,7 @@ public sealed class GetTicketSlaSummaryQueryHandlerTests(IntegrationTestWebAppFa
 
         if (reopened)
         {
-            new TicketSlaCycleService().Reopen(ticket, [], ContinuousSlaCalendar.Create(), lastMessageIsFromAgent: false, ticket.CreatedByUserId, resolvedAtUtc!.Value);
+            ticket.Reopen(ContinuousSlaCalendar.Create(), lastMessageIsFromAgent: false, ticket.CreatedByUserId, resolvedAtUtc!.Value);
             ticket.ClearDomainEvents();
         }
 
