@@ -45,6 +45,7 @@ Código de cada um: [references/patterns.md](references/patterns.md).
 8. **`Result` para o que pode falhar, `bool` para o que pode não mudar nada** — `Complete` devolve `Result`; `ChangeDescription` devolve `bool` e só dispara `TodoItemDescriptionChangedDomainEvent` quando mudou, levando o valor anterior. Nunca os dois. Quando o handler já conferiu o estado antes da chamada, o método é `void` (`project.Archive()`) e não repete a conferência. Conferências que leem o estado antes da chamada, ou que precisam de consulta ("já é membro"), ficam no handler.
 9. **Regras que só leem o estado da entidade são membros dela** — uma estática `TodoItemRules.IsOverdue(todoItem, utcNow)` vira `todoItem.IsOverdue(utcNow)` para uma entidade carregada; uma consulta escreve a condição no SQL ou usa um trecho de SQL com nome (`TodoItemSql.IsOverdue`), e um command que lê pelo EF Core usa um `Expression<Func<TodoItem, bool>>` como `TodoItem.OverdueAt(utcNow)`.
 10. **Eventos são records com ids** — `sealed record {Entity}{PastTenseVerb}DomainEvent(Guid {Entity}Id)`; um evento de alteração leva também o valor anterior. Sem `OccurredOnUtc`.
+11. **A regra com nome próprio é uma classe de regra** — a regra com nome de negócio que recebe dados de fora ou se repete entre métodos é `{Name}Rule : IBusinessRule` em `Domain/{Feature}/Rules/`, conferida pelo método com `CheckRule(...)`, que devolve `Result`; a conferência simples do próprio estado da entidade continua um `if`. Fronteira, nomes e concorrência: `aggregate-design`.
 
 Um `<summary>` curto em português só onde explica algo: em toda interface e nos métodos cujo comportamento não é óbvio pelo nome e pela assinatura (o que acontece em falha, quando devolve `false`, efeitos colaterais). Nada em propriedades, construtores, DTOs, endpoints, testes e métodos simples; nunca vazio.
 
@@ -60,9 +61,10 @@ Uma classe estática da Application que recebe uma entidade e a altera (ex.: `To
 | Precisa de algo calculado fora (conferir um hash) | 5 — interface no Domain passada como argumento |
 | Abrange vários agregados | 6 — serviço de domínio |
 | Responde uma pergunta sobre a entidade (`IsOverdue`, transição permitida) | 9 — propriedade ou método na entidade |
+| Confere uma regra com nome que usa dados de fora | 11 — classe de regra, conferida pelo método da entidade |
 | Monta a resposta da API | O query handler daquele slice, projetando para o `{X}Response` dele |
 | Trabalho técnico sem entidade (bytes, arquivos, ZIP, criptografia) | Não é domínio: interface em `Application/Abstractions/{Area}/`, implementação na Infrastructure (`add-feature`, [../add-feature/references/abstraction.md](../add-feature/references/abstraction.md)) |
 
 ## Não usado
 
-Repositórios e `IUnitOfWork` (use `IApplicationDbContext`), `Maybe<T>` (use tipos anuláveis), uma classe central `DomainErrors` (use `{Entity}Errors`), eventos com entidades (eles levam ids) e serviços de domínio que lançam exceção para falha de negócio (eles devolvem `Result`).
+Repositórios e `IUnitOfWork` (use `IApplicationDbContext`), `Maybe<T>` (use tipos anuláveis), uma classe central `DomainErrors` (use `{Entity}Errors`), eventos com entidades (eles levam ids), serviços de domínio que lançam exceção para falha de negócio (eles devolvem `Result`) e regras que lançam exceção (o `CheckRule` devolve `Result`).

@@ -20,7 +20,7 @@ argument-hint: '<descrição da entidade, ex.: "Project with a name, owner, and 
 > escreva código: procure em `specs/` uma spec que cubra o pedido e indique o comando de implementação
 > dela; se não houver, use a skill de especificação.
 
-Crie uma entidade que guarda o próprio estado e as próprias regras, e ligue-a em todas as camadas. Modelos completos: [references/rich-entity.md](references/rich-entity.md) (entidade, filho, mapeamento do objeto de valor) e [references/persistence.md](references/persistence.md) (coleções, datas UTC, auditoria). Os padrões de domínio estão na `domain-modeling`.
+Crie uma entidade que guarda o próprio estado e as próprias regras, e ligue-a em todas as camadas. Modelos completos: [references/rich-entity.md](references/rich-entity.md) (entidade, filho e a configuração dele, mapeamento do objeto de valor) e [references/persistence.md](references/persistence.md) (coleções, datas UTC, auditoria). Os padrões de domínio estão na `domain-modeling`.
 
 ## Arquivos a criar/alterar
 
@@ -86,34 +86,7 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
 }
 ```
 
-O filho criado pelo agregado tem o `Id` gerado pelo código e um índice único para o par que não pode repetir:
-
-```csharp
-using Domain.Projects;
-using Domain.Users;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
-
-namespace Infrastructure.Projects;
-
-internal sealed class ProjectMemberConfiguration : IEntityTypeConfiguration<ProjectMember>
-{
-    public void Configure(EntityTypeBuilder<ProjectMember> builder)
-    {
-        builder.HasKey(m => m.Id);
-
-        builder.Property(m => m.Id).ValueGeneratedNever();
-
-        builder.HasOne<Project>().WithMany().HasForeignKey(m => m.ProjectId);
-
-        builder.HasOne<User>().WithMany().HasForeignKey(m => m.UserId);
-
-        builder.HasIndex(m => new { m.ProjectId, m.UserId }).IsUnique();
-    }
-}
-```
-
-Os relacionamentos são configurados no estilo shadow (`HasOne<User>().WithMany()`): as entidades guardam ids de chave estrangeira, não propriedades de navegação. O `Id` que o código gera leva `ValueGeneratedNever()`; um valor que não pode repetir é um índice único (`HasIndex(...).IsUnique()`). Uma coluna `string` simples recebe o tamanho aqui e só aqui (`builder.Property(u => u.FirstName).HasMaxLength(200);`); objetos de valor usam `OwnsOne` com o `MaxLength` deles; uma coleção é mapeada pelo campo (`references/persistence.md`). As configurações são encontradas pelo `ApplyConfigurationsFromAssembly`.
+Os relacionamentos são configurados no estilo shadow (`HasOne<User>().WithMany()`): as entidades guardam ids de chave estrangeira, não propriedades de navegação. O `Id` que o código gera leva `ValueGeneratedNever()`; um valor que não pode repetir é um índice único (`HasIndex(...).IsUnique()`), como na configuração do filho criado pelo agregado (`references/rich-entity.md`). Uma coluna `string` simples recebe o tamanho aqui e só aqui (`builder.Property(u => u.FirstName).HasMaxLength(200);`); objetos de valor usam `OwnsOne` com o `MaxLength` deles; uma coleção é mapeada pelo campo (`references/persistence.md`). As configurações são encontradas pelo `ApplyConfigurationsFromAssembly`.
 
 5. **Ligação no DbContext** — adicione `DbSet<{Entity}> {Plural}` **nos dois**:
    - `src/Application/Abstractions/Data/IApplicationDbContext.cs`

@@ -389,3 +389,27 @@ public sealed record TodoItemDescriptionChangedDomainEvent(Guid TodoItemId, stri
 - Um `sealed record`, um por arquivo, com o nome `{Entity}{PastTenseVerb}DomainEvent`, disparado só pelos métodos da própria entidade.
 - Leva ids, nunca a entidade; um evento de alteração leva também o valor anterior.
 - Sem `OccurredOnUtc`: um handler que precisa de hora usa o momento em que processa o evento (`IDateTimeProvider`).
+
+## 11. A regra com nome próprio é uma classe de regra
+
+```csharp
+internal sealed class ProjectMustHaveAtLeastOneMaintainerRule(int remainingMaintainers) : IBusinessRule
+{
+    public bool IsBroken() => remainingMaintainers == 0;
+
+    public Error Error => ProjectErrors.LastMaintainer;
+}
+```
+
+```csharp
+Result rule = CheckRule(new ProjectMustHaveAtLeastOneMaintainerRule(_maintainers.Count - 1));
+
+if (rule.IsFailure)
+{
+    return rule;
+}
+```
+
+- A regra vira classe quando tem nome de negócio próprio e recebe dados de fora (permissões, contagens) ou se repete entre métodos; a conferência simples do próprio estado da entidade continua um `if` com o erro do `{Entity}Errors`.
+- Uma classe por invariante, `internal sealed`, em `Domain/{Feature}/Rules/`; ela nunca consulta nada e nunca muda estado.
+- O `CheckRule` devolve `Result`: regra quebrada nunca lança exceção. O contrato, os nomes e os testes estão na `aggregate-design` ([../../aggregate-design/references/rules.md](../../aggregate-design/references/rules.md)).
