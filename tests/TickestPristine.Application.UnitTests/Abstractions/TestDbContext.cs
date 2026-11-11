@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Audit;
@@ -43,7 +43,6 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
 
     public DbSet<Role> Roles { get; set; }
 
-    public DbSet<Permission> Permissions { get; set; }
 
     public DbSet<RolePermission> RolePermissions { get; set; }
 
@@ -66,7 +65,9 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
         {
             role.HasKey(r => r.Id);
             role.HasAlternateKey(r => r.Name);
-            role.Property<int>(RoleConcurrencyToken.PropertyName).IsConcurrencyToken();
+            role.Property(r => r.Version).IsConcurrencyToken();
+            role.HasMany(r => r.Permissions).WithOne().HasForeignKey(p => p.RoleName).HasPrincipalKey(r => r.Name);
+            role.Navigation(r => r.Permissions).HasField("_permissions").UsePropertyAccessMode(PropertyAccessMode.Field);
         });
         modelBuilder.Entity<Permission>(permission =>
         {
@@ -81,6 +82,8 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
         {
             rolePermission.HasKey(p => p.Id);
             rolePermission.Property(p => p.Id).ValueGeneratedNever();
+            rolePermission.HasIndex(p => new { p.RoleName, p.PermissionCode }).IsUnique();
+            rolePermission.HasOne<Permission>().WithMany().HasForeignKey(p => p.PermissionCode).HasPrincipalKey(p => p.Code);
         });
         modelBuilder.Entity<UserRole>(userRole =>
         {
@@ -118,3 +121,6 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
         modelBuilder.Entity<SlaCalendar>().Ignore(c => c.WorkSchedule);
     }
 }
+
+
+

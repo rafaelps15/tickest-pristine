@@ -3,7 +3,7 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Sla;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
@@ -92,3 +92,4 @@ internal sealed class CreateTicketCommandHandler(
         return ticket.Id;
     }
 }
+

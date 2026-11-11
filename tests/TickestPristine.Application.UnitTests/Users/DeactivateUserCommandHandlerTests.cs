@@ -2,7 +2,7 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Users.Deactivate;
 using TickestPristine.Application.UnitTests.Abstractions;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
@@ -146,7 +146,7 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(RoleErrors.LastAdministrator);
-        context.Entry(await context.Roles.SingleAsync(r => r.Name == administratorRole.Name)).Property<int>(RoleConcurrencyToken.PropertyName).CurrentValue.ShouldBe(0);
+        context.Entry(await context.Roles.SingleAsync(r => r.Name == administratorRole.Name)).Property(role => role.Version).CurrentValue.ShouldBe(0);
         await permissionProvider.DidNotReceive().InvalidateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
@@ -171,7 +171,7 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsSuccess.ShouldBeTrue();
         (await context.Users.SingleAsync(u => u.Id == administratorId)).IsActive.ShouldBeFalse();
-        context.Entry(await context.Roles.SingleAsync(r => r.Name == administratorRole.Name)).Property<int>(RoleConcurrencyToken.PropertyName).CurrentValue.ShouldBe(1);
+        context.Entry(await context.Roles.SingleAsync(r => r.Name == administratorRole.Name)).Property(role => role.Version).CurrentValue.ShouldBe(1);
     }
 
     [Fact]
@@ -304,3 +304,4 @@ public sealed class DeactivateUserCommandHandlerTests : BaseHandlerTest
         return userId;
     }
 }
+

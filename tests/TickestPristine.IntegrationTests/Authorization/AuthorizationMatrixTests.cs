@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Patterns;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Infrastructure.Authorization;
 using TickestPristine.Web.Api.Endpoints;
 
@@ -375,3 +375,4 @@ internal sealed class EndpointWithoutAuthorization : IEndpoint
         app.MapGet(Route, () => Results.Ok());
     }
 }
+

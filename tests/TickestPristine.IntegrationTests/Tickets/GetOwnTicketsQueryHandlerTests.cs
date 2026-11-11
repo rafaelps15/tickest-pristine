@@ -1,7 +1,7 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Pagination;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Tickets.GetOwn;
 using TickestPristine.IntegrationTests.Abstractions;
@@ -645,3 +645,4 @@ public sealed class GetOwnTicketsQueryHandlerTests(IntegrationTestWebAppFactory 
         return ticket;
     }
 }
+

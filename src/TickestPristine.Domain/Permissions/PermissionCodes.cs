@@ -1,4 +1,4 @@
-namespace TickestPristine.Application.Permissions;
+namespace TickestPristine.Domain.Permissions;
 
 /// <summary>
 /// Códigos das permissões, como constantes para uso nos endpoints, nos handlers e nos testes. Cada código tem a sua
@@ -48,3 +48,4 @@ public static class PermissionCodes
         public const string Read = "audit:read";
     }
 }
+

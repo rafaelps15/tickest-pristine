@@ -1,7 +1,7 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Pagination;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.IntegrationTests.Abstractions;
 using TickestPristine.Infrastructure.Database;
 using TickestPristine.Application.Users.GetAttendants;
@@ -264,3 +264,4 @@ public sealed class GetBacklogAttendantsQueryHandlerTests(IntegrationTestWebAppF
         return (sector.Id, department.Id);
     }
 }
+

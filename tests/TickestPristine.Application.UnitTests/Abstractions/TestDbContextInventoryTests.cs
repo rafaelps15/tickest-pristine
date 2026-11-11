@@ -13,13 +13,13 @@ public sealed class TestDbContextInventoryTests : BaseHandlerTest
     // tradução de SQL) vai para a integração.
     private static readonly string[] ApprovedInventory =
     [
-        "DbSets: AuditLogs=AuditLogEntry, Departments=Department, Permissions=Permission, RefreshTokens=RefreshToken, RolePermissions=RolePermission, Roles=Role, Sectors=Sector, SlaCalendarHolidays=SlaCalendarHoliday, SlaCalendars=SlaCalendar, TicketAttachments=TicketAttachment, TicketHistories=TicketHistoryEntry, TicketMessages=TicketMessage, TicketSlaTimers=TicketSlaTimer, Tickets=Ticket, UserCredentials=UserCredential, UserInvitations=UserInvitation, UserRoles=UserRole, Users=User",
+        "DbSets: AuditLogs=AuditLogEntry, Departments=Department, RefreshTokens=RefreshToken, RolePermissions=RolePermission, Roles=Role, Sectors=Sector, SlaCalendarHolidays=SlaCalendarHoliday, SlaCalendars=SlaCalendar, TicketAttachments=TicketAttachment, TicketHistories=TicketHistoryEntry, TicketMessages=TicketMessage, TicketSlaTimers=TicketSlaTimer, Tickets=Ticket, UserCredentials=UserCredential, UserInvitations=UserInvitation, UserRoles=UserRole, Users=User",
         "AuditLogEntry: key(Id); props(Action,AffectedColumns,EntityId,EntityName,Id,NewValues,OldValues,Timestamp,UserId)",
         "Department: key(Id); props(Description,Id,IsActive,Name,ResponsibleUserId)",
         "Permission: alt(Code); key(Id); props(Code,Description,Group,Id,IsAdministrative,Name)",
         "RefreshToken: key(Id); props(ExpiresOnUtc,Id,PreviousTokenHash,RotatedAtUtc,SecurityStamp,SessionExpiresOnUtc,TokenHash,UserId)",
         "Role: alt(Name); key(Id); props(Id,Name,Version); token(Version)",
-        "RolePermission: key(Id); props(Id,PermissionCode,RoleName)",
+        "RolePermission: fk(PermissionCode->Permission); fk(RoleName->Role); index(PermissionCode,RoleName unique); key(Id); props(Id,PermissionCode,RoleName)",
         "Sector: key(Id); props(DepartmentId,Description,Id,IsActive,Name)",
         "SlaCalendar: key(Id); props(Id,Is24x7,Name,TimeZoneId)",
         "SlaCalendarHoliday: key(Id); props(Date,Description,Id,SlaCalendarId)",
@@ -85,3 +85,5 @@ public sealed class TestDbContextInventoryTests : BaseHandlerTest
     private static string Names(IEnumerable<IReadOnlyProperty>? properties) =>
         properties is null ? "-" : string.Join(",", properties.Select(property => property.Name).Order(StringComparer.Ordinal));
 }
+
+

@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Roles;
 using TickestPristine.Application.Users;
 using TickestPristine.Domain.Roles;
@@ -2576,3 +2576,4 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         string? DepartmentName,
         bool? SectorIsActive);
 }
+

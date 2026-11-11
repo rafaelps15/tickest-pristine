@@ -1,4 +1,4 @@
-﻿using TickestPristine.Domain.Audit;
+using TickestPristine.Domain.Audit;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Sectors;
@@ -30,7 +30,6 @@ public interface IApplicationDbContext
     DbSet<TicketMessage> TicketMessages { get; }
     DbSet<TicketHistoryEntry> TicketHistories { get; }
     DbSet<Role> Roles { get; }
-    DbSet<Permission> Permissions { get; }
     DbSet<RolePermission> RolePermissions { get; }
     DbSet<UserRole> UserRoles { get; }
     DbSet<AuditLogEntry> AuditLogs { get; }
@@ -42,3 +41,5 @@ public interface IApplicationDbContext
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
+
+

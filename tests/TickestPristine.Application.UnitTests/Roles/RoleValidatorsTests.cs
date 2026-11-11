@@ -1,4 +1,4 @@
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Roles.AssignPermissions;
 using FluentValidation.TestHelper;
 
@@ -77,3 +77,4 @@ public sealed class RoleValidatorsTests
         result.ShouldHaveValidationErrorFor(c => c.PermissionCodes);
     }
 }
+

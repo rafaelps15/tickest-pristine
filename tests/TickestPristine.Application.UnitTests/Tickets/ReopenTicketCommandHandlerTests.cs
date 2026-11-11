@@ -1,6 +1,6 @@
-﻿using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Tickets.Reopen;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
@@ -548,3 +548,4 @@ public sealed class ReopenTicketCommandHandlerTests : BaseHandlerTest
         (await context.TicketSlaTimers.CountAsync(t => t.TicketId == ticket.Id)).ShouldBe(2);
     }
 }
+

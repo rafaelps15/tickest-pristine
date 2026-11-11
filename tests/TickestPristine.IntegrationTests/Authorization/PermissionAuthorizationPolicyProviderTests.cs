@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Infrastructure.Authorization;
 
 namespace TickestPristine.IntegrationTests.Authorization;
@@ -86,3 +86,4 @@ public sealed class PermissionAuthorizationPolicyProviderTests(IntegrationTestWe
         options.GetPolicy(permission).ShouldBeNull();
     }
 }
+

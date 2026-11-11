@@ -30,6 +30,7 @@ using TickestPristine.Application.Abstractions.Telemetry;
 using TickestPristine.Domain.SlaCalendars;
 using TickestPristine.Domain.TicketHistories;
 using TickestPristine.Domain.TicketMessages;
+using TickestPristine.Domain.Roles;
 
 namespace TickestPristine.IntegrationTests.Tickets;
 
@@ -2318,12 +2319,12 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
 
         await ExecuteInScopeAsync(async context =>
         {
-            (await context.Permissions.AnyAsync(p => p.Code == "tickets:delete-own")).ShouldBeFalse();
+            (await context.Set<Domain.Roles.Permission>().AnyAsync(p => p.Code == "tickets:delete-own")).ShouldBeFalse();
             (await context.RolePermissions.AnyAsync(rp => rp.PermissionCode == "tickets:delete-own")).ShouldBeFalse();
 
             foreach (string code in NewTicketPermissions)
             {
-                (await context.Permissions.SingleAsync(p => p.Code == code)).IsAdministrative.ShouldBeTrue();
+                (await context.Set<Domain.Roles.Permission>().SingleAsync(p => p.Code == code)).IsAdministrative.ShouldBeTrue();
                 (await context.RolePermissions.Where(rp => rp.PermissionCode == code).Select(rp => rp.RoleName).ToListAsync())
                     .ShouldBe([RoleNames.Administrator]);
             }
@@ -5875,7 +5876,7 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
             Add_User_Sector_And_Tickets_Assign_Permission.InsertTicketsAssignPermissionSql);
 
         // Assert
-        Domain.Roles.Permission permission = await context.Permissions.AsNoTracking()
+        Domain.Roles.Permission permission = await context.Set<Domain.Roles.Permission>().AsNoTracking()
             .SingleAsync(p => p.Code == "tickets:assign");
         permission.IsAdministrative.ShouldBeTrue();
 
@@ -6119,3 +6120,5 @@ public sealed class TicketsTests(IntegrationTestWebAppFactory factory) : BaseInt
         return context.Users.Where(u => u.Id == userId).Select(u => u.FirstName + " " + u.LastName).Single();
     }
 }
+
+

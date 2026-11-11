@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
+using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
 using TickestPristine.Application.Users;
@@ -244,3 +245,4 @@ internal sealed class SampleDataSeeder(
         return (ticket, history, slaTimers);
     }
 }
+

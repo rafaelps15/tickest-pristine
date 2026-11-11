@@ -1,4 +1,3 @@
-using TickestPristine.Application.Roles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Domain.Roles;
@@ -24,8 +23,8 @@ public sealed class RoleConcurrencyTests(IntegrationTestWebAppFactory factory) :
         Role firstCopy = await firstContext.Roles.SingleAsync(r => r.Name == RoleNames.Administrator);
         Role secondCopy = await secondContext.Roles.SingleAsync(r => r.Name == RoleNames.Administrator);
 
-        firstContext.Entry(firstCopy).Property<int>(RoleConcurrencyToken.PropertyName).CurrentValue++;
-        secondContext.Entry(secondCopy).Property<int>(RoleConcurrencyToken.PropertyName).CurrentValue++;
+        firstContext.Entry(firstCopy).Property(role => role.Version).CurrentValue++;
+        secondContext.Entry(secondCopy).Property(role => role.Version).CurrentValue++;
 
         // Act
         await firstContext.SaveChangesAsync();

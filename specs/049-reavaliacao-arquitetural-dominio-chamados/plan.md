@@ -1,14 +1,11 @@
 # Plano — SPEC-049
 
-Este arquivo é o índice curto do plano técnico da SPEC-049. A definição canônica permanece em [`spec.md`](spec.md), seção 7 (plano técnico), especialmente 7.7 (chamados com EF), 7.9 (estratégia de testes), 7.15 (plano por etapas) e 7.16 (dependências). O inventário, decisões e evidências detalhadas ficam nos anexos A a F.
+Este arquivo é o índice curto do plano técnico da SPEC-049. A definição canônica permanece em [`spec.md`](spec.md), seção 7 (plano técnico), especialmente 7.15 (etapas e portões) e 7.16 (dependências). O inventário, decisões e evidências detalhadas ficam nos anexos A a F.
 
-## Etapa atual: G3-a, fase 3
+## Etapa concluída: G3-b, AZ-3 — funções e permissões
 
-1. Incorporar os cronômetros ao agregado `Ticket` e adaptar persistência e seeder (T-7).
-2. Migrar os handlers de abertura, atualização, reabertura, exclusão e mensagem para a API do agregado (T-8).
-3. Renomear o command do monitor e retirar o prazo da fila por `UPDATE` condicional, sem token global. O agregado e a auditoria são salvos num único `SaveChangesAsync`; o interceptor padrão publica eventos depois do save bem-sucedido (T-9).
-4. Confirmar as fronteiras com testes de arquitetura e revisar a qualidade (T-10).
-5. Atualizar os fatos afetados em `SYSTEM_SPECIFICATION.md` (T-11).
-6. Verificar os critérios da fase, testes, auditoria e documentação (T-12).
+1. Migrar `Role` para agregado rico, manter `RolePermission` como entidade interna e carregar as permissões pela consulta nomeada do command (T-208).
+2. Mover o catálogo de permissões para o domínio, ler a tabela com Dapper e comparar os dados persistidos com o catálogo (T-210).
+3. Conferir build, testes unitários, arquitetura, integrações de roles/permissões/migrations e auditoria SDD; registrar os resultados na rastreabilidade e no anexo B.18.
 
-O escopo, os critérios de aceite, as dependências e o plano completo por entregas continuam definidos em `spec.md`; este índice não substitui nem altera esses contratos.
+A AZ-3 está concluída. O AC-23 global e a T-14 continuam abertos até a cobertura de carga dos demais agregados; a próxima entrega da trilha de funções é a spec 036. O escopo, os critérios e as dependências completos continuam definidos em `spec.md`.

@@ -3,7 +3,7 @@ using TickestPristine.Application.Users.GetAttendants;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Pagination;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Tickets.GetAssignees;
 using TickestPristine.IntegrationTests.Abstractions;
 using TickestPristine.Infrastructure.Database;
@@ -185,3 +185,4 @@ public sealed class GetTicketAssigneesQueryHandlerTests(IntegrationTestWebAppFac
         return user;
     }
 }
+

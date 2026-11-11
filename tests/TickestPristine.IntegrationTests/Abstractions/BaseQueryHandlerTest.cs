@@ -155,7 +155,7 @@ public abstract class BaseQueryHandlerTest(IntegrationTestWebAppFactory factory)
     };
 
     // Role com qualquer nome, como as que já existem no banco além das fixas de RoleNames.
-    protected static Role CreateRole(string name) => new() { Id = Guid.NewGuid(), Name = name };
+    protected static Role CreateRole(string name) => Role.Create(name);
 
     // Setor num departamento novo, gravados no banco, para os testes que leem o setor do usuário.
     protected static async Task<Sector> SeedSectorAsync(
@@ -187,12 +187,7 @@ public abstract class BaseQueryHandlerTest(IntegrationTestWebAppFactory factory)
 
         context.Roles.Add(role);
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = userId, RoleName = role.Name });
-        context.RolePermissions.AddRange(permissionCodes.Select(code => new RolePermission
-        {
-            Id = Guid.NewGuid(),
-            RoleName = role.Name,
-            PermissionCode = code
-        }));
+        context.RolePermissions.AddRange(permissionCodes.Select(code => RolePermission.Create(role.Name, code)));
 
         await context.SaveChangesAsync();
     }
@@ -291,3 +286,6 @@ public abstract class BaseQueryHandlerTest(IntegrationTestWebAppFactory factory)
         await command.ExecuteNonQueryAsync();
     }
 }
+
+
+

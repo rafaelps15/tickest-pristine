@@ -1,4 +1,5 @@
 using FluentValidation;
+using TickestPristine.Domain.Roles;
 
 using TickestPristine.Application.Roles;
 
@@ -13,3 +14,4 @@ internal sealed class AssignUserRolesCommandValidator : AbstractValidator<Assign
         RuleFor(c => c.RoleNames).NotNull();
     }
 }
+

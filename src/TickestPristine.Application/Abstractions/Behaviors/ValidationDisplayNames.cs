@@ -1,7 +1,8 @@
 using System.Linq.Expressions;
 using System.Reflection;
+using TickestPristine.Domain.Roles;
 
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 
 using TickestPristine.Application.Roles;
 
@@ -55,3 +56,5 @@ internal static class ValidationDisplayNames
     public static string? Resolve(Type type, MemberInfo? member, LambdaExpression? expression) =>
         member is not null && Names.TryGetValue(member.Name, out string? name) ? name : null;
 }
+
+

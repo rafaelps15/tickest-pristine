@@ -1,7 +1,7 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Storage;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Application.TicketAttachments.Upload;
@@ -427,3 +427,4 @@ public sealed class UploadTicketAttachmentCommandHandlerTests : BaseHandlerTest
         return ticket.Id;
     }
 }
+

@@ -1,7 +1,7 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Tickets.GetVolume;
 using TickestPristine.Application.UnitTests.Abstractions;
@@ -92,3 +92,4 @@ public sealed class GetTicketVolumeQueryHandlerTests : BaseHandlerTest
         return new GetTicketVolumeQueryHandler(dbConnectionFactory, CreateClock(), userContext, permissionProvider);
     }
 }
+

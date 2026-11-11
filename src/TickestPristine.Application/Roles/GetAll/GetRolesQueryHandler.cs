@@ -2,6 +2,7 @@ using System.Data.Common;
 using Dapper;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
+using TickestPristine.Domain.Roles;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Roles.GetAll;
@@ -53,3 +54,4 @@ internal sealed class GetRolesQueryHandler(IDbConnectionFactory dbConnectionFact
         return roles;
     }
 }
+

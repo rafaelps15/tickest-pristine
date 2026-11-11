@@ -1,4 +1,4 @@
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 
 namespace TickestPristine.Application.Roles.GetAll;
 
@@ -9,3 +9,4 @@ public sealed class RoleResponse
     public bool IsAdministrator { get; set; }
     public List<string> PermissionCodes { get; set; } = [];
 }
+

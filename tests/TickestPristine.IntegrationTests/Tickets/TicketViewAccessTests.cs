@@ -1,7 +1,7 @@
 using System.Data.Common;
 using NSubstitute;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
@@ -113,3 +113,4 @@ public sealed class TicketViewAccessTests(IntegrationTestWebAppFactory factory) 
         return ticket.Id;
     }
 }
+

@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Infrastructure.Database;
+using TickestPristine.Domain.Roles;
 
 namespace TickestPristine.IntegrationTests.AuditLogs;
 
@@ -273,3 +274,4 @@ public sealed class AuditLogsTests(IntegrationTestWebAppFactory factory) : BaseI
         string? NewValues,
         string? AffectedColumns);
 }
+

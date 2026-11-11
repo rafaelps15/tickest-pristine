@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Infrastructure.Authorization;
 
 namespace TickestPristine.IntegrationTests.Authorization;
@@ -98,3 +98,4 @@ public sealed class PermissionAuthorizationHandlerTests
     private static ClaimsPrincipal AuthenticatedUser() =>
         new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())], "Test"));
 }
+

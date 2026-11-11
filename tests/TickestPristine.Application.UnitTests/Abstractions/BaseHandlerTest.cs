@@ -1,4 +1,4 @@
-﻿using TickestPristine.Application.Roles;
+using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Sectors;
@@ -115,7 +115,7 @@ public abstract class BaseHandlerTest
     };
 
     // Role com qualquer nome, como as que já existem no banco além das fixas de RoleNames.
-    protected static Role CreateRole(string name) => new() { Id = Guid.NewGuid(), Name = name };
+    protected static Role CreateRole(string name) => Role.Create(name);
 
     // Provedor de permissões em que ninguém tem permissão: o teste define só as do usuário que interessa.
     protected static IPermissionProvider CreatePermissionProvider()
@@ -179,12 +179,7 @@ public abstract class BaseHandlerTest
 
         context.Roles.Add(role);
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = userId, RoleName = role.Name });
-        context.RolePermissions.AddRange(permissionCodes.Select(code => new RolePermission
-        {
-            Id = Guid.NewGuid(),
-            RoleName = role.Name,
-            PermissionCode = code
-        }));
+        context.RolePermissions.AddRange(permissionCodes.Select(code => RolePermission.Create(role.Name, code)));
 
         await context.SaveChangesAsync();
     }
@@ -198,3 +193,6 @@ public abstract class BaseHandlerTest
         return provider;
     }
 }
+
+
+

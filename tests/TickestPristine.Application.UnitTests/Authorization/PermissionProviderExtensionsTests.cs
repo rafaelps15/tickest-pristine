@@ -1,5 +1,5 @@
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 
 namespace TickestPristine.Application.UnitTests.Authorization;
 
@@ -41,3 +41,4 @@ public sealed class PermissionProviderExtensionsTests
         allowed.ShouldBe(hasPermission);
     }
 }
+

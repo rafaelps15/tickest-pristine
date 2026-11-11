@@ -1,6 +1,6 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Tickets.GetSla;
 using TickestPristine.IntegrationTests.Abstractions;
 using TickestPristine.Infrastructure.Database;
@@ -212,3 +212,4 @@ public sealed class GetTicketSlaQueryHandlerTests(IntegrationTestWebAppFactory f
         result.Error.ShouldBe(SlaCalendarErrors.NotFound(ticket.SlaPlan.CalendarId));
     }
 }
+

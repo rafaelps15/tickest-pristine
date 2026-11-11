@@ -13,7 +13,6 @@ public class SourceRuleTests : BaseTest
     // o método da entidade (usuários e identidade, funções). A lista só encolhe.
     private static readonly string[] LegacyRaiseFiles =
     [
-        "src/TickestPristine.Application/Roles/AssignPermissions/AssignRolePermissionsCommandHandler.cs",
         "src/TickestPristine.Application/Users/Activate/ActivateUserCommandHandler.cs",
         "src/TickestPristine.Application/Users/ActivateAccount/ActivateUserAccountCommandHandler.cs",
         "src/TickestPristine.Application/Users/AssignRoles/AssignUserRolesCommandHandler.cs",
@@ -231,3 +230,6 @@ public class SourceRuleTests : BaseTest
             .Select(type => type.Name)];
     }
 }
+
+
+

@@ -1,6 +1,6 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.TicketMessages.Post;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
@@ -330,3 +330,4 @@ public sealed class PostTicketMessageCommandHandlerTests : BaseHandlerTest
         (await GetFirstResponseAsync(context, ticket.Id)).CompletedOnUtc.ShouldBeNull();
     }
 }
+

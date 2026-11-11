@@ -1,7 +1,7 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Notifications;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Roles;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Users;
@@ -204,3 +204,4 @@ public sealed class ResendUserInvitationCommandHandlerTests : BaseHandlerTest
         return invitation;
     }
 }
+

@@ -1,4 +1,4 @@
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 
 namespace TickestPristine.Web.Api.Endpoints.Users;
 
@@ -10,3 +10,4 @@ internal static class Permissions
     internal const string UsersDeactivate = PermissionCodes.Users.Deactivate;
     internal const string UsersAssignRoles = PermissionCodes.Users.AssignRoles;
 }
+

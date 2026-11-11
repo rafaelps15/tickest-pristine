@@ -2,7 +2,7 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Users.AssignRoles;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
@@ -131,8 +131,8 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
 
         Role managerRole = CreateRole("Gestor");
         context.Roles.Add(managerRole);
-        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = managerRole.Name, PermissionCode = PermissionCodes.Users.Read });
-        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = managerRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
+        context.RolePermissions.Add(RolePermission.Create(managerRole.Name, PermissionCodes.Users.Read));
+        context.RolePermissions.Add(RolePermission.Create(managerRole.Name, PermissionCodes.Roles.Manage));
 
         await context.SaveChangesAsync();
 
@@ -174,7 +174,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
 
         Role agentRole = CreateRole("Agente");
         context.Roles.Add(agentRole);
-        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = agentRole.Name, PermissionCode = PermissionCodes.Tickets.Manage });
+        context.RolePermissions.Add(RolePermission.Create(agentRole.Name, PermissionCodes.Tickets.Manage));
 
         await context.SaveChangesAsync();
 
@@ -212,8 +212,8 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
 
         Role adminRole = CreateRole("Administrador");
         context.Roles.Add(adminRole);
-        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = adminRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
-        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = adminRole.Name, PermissionCode = PermissionCodes.Users.AssignRoles });
+        context.RolePermissions.Add(RolePermission.Create(adminRole.Name, PermissionCodes.Roles.Manage));
+        context.RolePermissions.Add(RolePermission.Create(adminRole.Name, PermissionCodes.Users.AssignRoles));
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = admin.Id, RoleName = adminRole.Name });
 
         await context.SaveChangesAsync();
@@ -261,8 +261,8 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         Role agentRole = CreateRole("Agente");
         context.Roles.Add(managerRole);
         context.Roles.Add(agentRole);
-        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = managerRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
-        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = agentRole.Name, PermissionCode = PermissionCodes.Tickets.Manage });
+        context.RolePermissions.Add(RolePermission.Create(managerRole.Name, PermissionCodes.Roles.Manage));
+        context.RolePermissions.Add(RolePermission.Create(agentRole.Name, PermissionCodes.Tickets.Manage));
         context.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = user.Id, RoleName = managerRole.Name });
 
         await context.SaveChangesAsync();
@@ -320,7 +320,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(RoleErrors.LastAdministrator);
         (await context.UserRoles.AnyAsync(ur => ur.UserId == admin.Id && ur.RoleName == adminRole.Name)).ShouldBeTrue();
-        context.Entry(await context.Roles.SingleAsync(r => r.Name == adminRole.Name)).Property<int>(RoleConcurrencyToken.PropertyName).CurrentValue.ShouldBe(0);
+        context.Entry(await context.Roles.SingleAsync(r => r.Name == adminRole.Name)).Property(role => role.Version).CurrentValue.ShouldBe(0);
     }
 
     [Fact]
@@ -371,7 +371,7 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
         (await context.UserRoles.AnyAsync(ur => ur.UserId == admin.Id)).ShouldBeFalse();
 
         Role administratorRole = await context.Roles.SingleAsync(r => r.Name == adminRole.Name);
-        context.Entry(administratorRole).Property<int>(RoleConcurrencyToken.PropertyName).CurrentValue.ShouldBe(1);
+        context.Entry(administratorRole).Property(role => role.Version).CurrentValue.ShouldBe(1);
     }
 
     [Fact]
@@ -478,3 +478,5 @@ public sealed class AssignUserRolesCommandHandlerTests : BaseHandlerTest
             new PrivilegeEscalationCheck(permissionProvider),
             new LastAdministratorCheck(context));
 }
+
+

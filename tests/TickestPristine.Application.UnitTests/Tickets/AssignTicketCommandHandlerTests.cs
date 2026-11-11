@@ -1,6 +1,6 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Tickets.Assign;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
@@ -282,3 +282,4 @@ public sealed class AssignTicketCommandHandlerTests : BaseHandlerTest
         return ticket.Id;
     }
 }
+

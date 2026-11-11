@@ -2,7 +2,7 @@ using TickestPristine.Application.Tickets;
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Storage;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.TicketAttachments.GetContent;
 using TickestPristine.IntegrationTests.Abstractions;
 using TickestPristine.Infrastructure.Database;
@@ -219,3 +219,4 @@ public sealed class GetTicketAttachmentContentQueryHandlerTests(IntegrationTestW
         return attachment.Id;
     }
 }
+

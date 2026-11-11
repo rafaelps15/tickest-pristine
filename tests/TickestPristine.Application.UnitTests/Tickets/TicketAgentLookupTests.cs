@@ -1,4 +1,4 @@
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Tickets;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
@@ -84,3 +84,4 @@ public sealed class TicketAgentLookupTests : BaseHandlerTest
         return user;
     }
 }
+

@@ -1,6 +1,6 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Users.GetById;
 using TickestPristine.IntegrationTests.Abstractions;
 using TickestPristine.Infrastructure.Database;
@@ -256,3 +256,4 @@ public sealed class GetUserByIdQueryHandlerTests(IntegrationTestWebAppFactory fa
         return new GetUserByIdQueryHandler(DbConnectionFactory, userContext, Substitute.For<IPermissionProvider>(), CreateClock());
     }
 }
+

@@ -1,4 +1,4 @@
-namespace TickestPristine.Application.Permissions;
+namespace TickestPristine.Domain.Permissions;
 
 /// <summary>
 /// Catálogo completo das permissões, com o nome, a descrição e o grupo exibidos na tela. É a fonte da tabela de
@@ -62,3 +62,4 @@ public sealed record PermissionCatalogEntry(
     string Description,
     string Group,
     bool IsAdministrative = true);
+

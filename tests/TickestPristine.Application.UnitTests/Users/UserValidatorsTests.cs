@@ -11,6 +11,7 @@ using TickestPristine.Application.Users.Refresh;
 using TickestPristine.Application.Users.Register;
 using TickestPristine.Application.Users.UpdateProfile;
 using FluentValidation.TestHelper;
+using TickestPristine.Domain.Roles;
 
 using TickestPristine.Application.Roles;
 
@@ -728,3 +729,4 @@ public sealed class UserValidatorsTests
         result.ShouldNotHaveAnyValidationErrors();
     }
 }
+

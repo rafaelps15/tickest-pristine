@@ -2,7 +2,7 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Users.Activate;
 using TickestPristine.Application.UnitTests.Abstractions;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -116,3 +116,4 @@ public sealed class ActivateUserCommandHandlerTests : BaseHandlerTest
         return user.Id;
     }
 }
+

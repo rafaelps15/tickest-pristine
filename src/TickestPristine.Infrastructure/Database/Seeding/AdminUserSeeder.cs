@@ -2,6 +2,7 @@ using TickestPristine.Application.Roles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TickestPristine.Application.Abstractions.Authentication;
+using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
 using TickestPristine.Application.Users;
@@ -76,3 +77,4 @@ internal sealed class AdminUserSeeder(
             cancellationToken);
     }
 }
+

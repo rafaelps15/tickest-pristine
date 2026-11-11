@@ -1,7 +1,7 @@
 using System.Data.Common;
 using Dapper;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
@@ -61,3 +61,4 @@ internal sealed class TicketViewAccess(IPermissionProvider permissionProvider)
         public Guid? AssignedToUserId { get; init; }
     }
 }
+

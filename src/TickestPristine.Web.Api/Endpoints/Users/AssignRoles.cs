@@ -4,6 +4,7 @@ using TickestPristine.Application.Roles;
 using TickestPristine.SharedKernel;
 using TickestPristine.Web.Api.Extensions;
 using TickestPristine.Web.Api.Infrastructure;
+using TickestPristine.Domain.Roles;
 
 namespace TickestPristine.Web.Api.Endpoints.Users;
 
@@ -29,3 +30,4 @@ internal sealed class AssignRoles : IEndpoint
         .HasPermission(Permissions.UsersAssignRoles);
     }
 }
+

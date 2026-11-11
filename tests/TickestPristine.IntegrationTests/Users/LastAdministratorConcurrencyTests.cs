@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using TickestPristine.Application.Roles;
 using TickestPristine.Infrastructure.Database;
 using TickestPristine.Web.Api;
+using TickestPristine.Domain.Roles;
 
 namespace TickestPristine.IntegrationTests.Users;
 
@@ -218,3 +219,4 @@ public sealed class LastAdministratorConcurrencyTests(IntegrationTestWebAppFacto
         public ValueTask DisposeAsync() => _host.DisposeAsync();
     }
 }
+

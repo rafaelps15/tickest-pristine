@@ -1,10 +1,10 @@
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Notifications;
-using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TickestPristine.Domain.Roles;
 using TickestPristine.SharedKernel;
 
 namespace TickestPristine.Application.Users.Register;
@@ -56,3 +56,5 @@ internal sealed class RegisterUserCommandHandler(
         return user.Id;
     }
 }
+
+

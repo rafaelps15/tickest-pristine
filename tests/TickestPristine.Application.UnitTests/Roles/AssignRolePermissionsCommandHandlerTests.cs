@@ -2,7 +2,7 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Roles.AssignPermissions;
 using TickestPristine.Application.UnitTests.Abstractions;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
@@ -45,7 +45,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
 
         Role role = CreateRole("Manager");
         context.Roles.Add(role);
-        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = role.Name, PermissionCode = PermissionCodes.Tickets.ReopenOwn });
+        context.RolePermissions.Add(RolePermission.Create(role.Name, PermissionCodes.Tickets.ReopenOwn));
 
         var firstUserId = Guid.NewGuid();
         var secondUserId = Guid.NewGuid();
@@ -92,7 +92,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
 
         Role role = CreateRole("Gestor");
         context.Roles.Add(role);
-        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = role.Name, PermissionCode = PermissionCodes.Tickets.Create });
+        context.RolePermissions.Add(RolePermission.Create(role.Name, PermissionCodes.Tickets.Create));
         await context.SaveChangesAsync();
 
         var callerId = Guid.NewGuid();
@@ -131,8 +131,8 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
 
         Role managerRole = CreateRole("Gestor");
         context.Roles.Add(managerRole);
-        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = managerRole.Name, PermissionCode = PermissionCodes.Roles.Manage });
-        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = managerRole.Name, PermissionCode = PermissionCodes.Users.AssignRoles });
+        context.RolePermissions.Add(RolePermission.Create(managerRole.Name, PermissionCodes.Roles.Manage));
+        context.RolePermissions.Add(RolePermission.Create(managerRole.Name, PermissionCodes.Users.AssignRoles));
         await context.SaveChangesAsync();
 
         var callerId = Guid.NewGuid();
@@ -171,7 +171,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
 
         Role adminRole = CreateRole(RoleNames.Administrator);
         context.Roles.Add(adminRole);
-        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = adminRole.Name, PermissionCode = PermissionCodes.Users.Read });
+        context.RolePermissions.Add(RolePermission.Create(adminRole.Name, PermissionCodes.Users.Read));
         await context.SaveChangesAsync();
 
         IUserContext userContext = Substitute.For<IUserContext>();
@@ -227,7 +227,7 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
         TestDbContext context,
         IUserContext userContext,
         IPermissionProvider permissionProvider) =>
-        new(context, userContext, permissionProvider, new PrivilegeEscalationCheck(permissionProvider));
+        new(context, userContext, permissionProvider);
 
     private static TestDbContext CreateDbContext(string databaseName, params IInterceptor[] interceptors) =>
         new(new DbContextOptionsBuilder<TestDbContext>()
@@ -251,3 +251,6 @@ public sealed class AssignRolePermissionsCommandHandlerTests : BaseHandlerTest
         }
     }
 }
+
+
+

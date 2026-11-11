@@ -17,10 +17,7 @@ public class RichEntityTests : BaseTest
     internal static readonly Type[] LegacyAnemicEntities =
     [
         typeof(AuditLogEntry),
-        typeof(Permission),
         typeof(RefreshToken),
-        typeof(Role),
-        typeof(RolePermission),
         typeof(SlaCalendar),
         typeof(SlaCalendarHoliday),
         typeof(User),
@@ -61,30 +58,7 @@ public class RichEntityTests : BaseTest
             nameof(AuditLogEntry.UserId)),
         EntityModelChecker.WithoutCreate(typeof(AuditLogEntry)),
 
-        EntityModelChecker.WrongConstructor(typeof(Permission)),
-        .. EntityModelChecker.NonPrivateSetters(
-            typeof(Permission),
-            nameof(Permission.Code),
-            nameof(Permission.Description),
-            nameof(Permission.Group),
-            nameof(Permission.Id),
-            nameof(Permission.IsAdministrative),
-            nameof(Permission.Name)),
-        EntityModelChecker.WithoutCreate(typeof(Permission)),
-
-        EntityModelChecker.WrongConstructor(typeof(Role)),
-        .. EntityModelChecker.NonPrivateSetters(typeof(Role), nameof(Role.Id), nameof(Role.Name)),
-        EntityModelChecker.WithoutCreate(typeof(Role)),
-
-        EntityModelChecker.WrongConstructor(typeof(RolePermission)),
-        .. EntityModelChecker.NonPrivateSetters(
-            typeof(RolePermission),
-            nameof(RolePermission.Id),
-            nameof(RolePermission.PermissionCode),
-            nameof(RolePermission.RoleName)),
-        EntityModelChecker.WithoutCreate(typeof(RolePermission)),
-
-        EntityModelChecker.WrongConstructor(typeof(SlaCalendar)),
+EntityModelChecker.WrongConstructor(typeof(SlaCalendar)),
         .. EntityModelChecker.NonPrivateSetters(
             typeof(SlaCalendar),
             nameof(SlaCalendar.Id),
@@ -328,3 +302,5 @@ public class RichEntityTests : BaseTest
         message.ShouldContain("não deriva de Entity");
     }
 }
+
+

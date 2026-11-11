@@ -1,4 +1,4 @@
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 
 namespace TickestPristine.Application.Users;
 
@@ -49,3 +49,4 @@ internal static class UserSql
              WHERE up.user_id = u.id AND up.permission_code = '{PermissionCodes.Tickets.Manage}')
          """;
 }
+

@@ -1,6 +1,6 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Users.UpdateProfile;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Users;
@@ -177,3 +177,4 @@ public sealed class UpdateUserProfileCommandHandlerTests : BaseHandlerTest
         user.DomainEvents.ShouldNotContain(domainEvent => domainEvent is UserProfileUpdatedDomainEvent);
     }
 }
+

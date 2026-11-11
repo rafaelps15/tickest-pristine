@@ -1,7 +1,8 @@
-﻿using TickestPristine.Application.Abstractions.Notifications;
+using TickestPristine.Application.Abstractions.Notifications;
 using TickestPristine.Application.Users.Register;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Roles;
+using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -162,3 +163,4 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
             CreateClock(),
             logger ?? new TestLogger<RegisterUserCommandHandler>());
 }
+

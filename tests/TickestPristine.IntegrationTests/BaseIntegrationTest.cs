@@ -160,7 +160,7 @@ public abstract class BaseIntegrationTest
 
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        context.Roles.Add(new Role { Id = Guid.NewGuid(), Name = name });
+        context.Roles.Add(Role.Create(name));
         await context.SaveChangesAsync();
 
         return name;
@@ -245,3 +245,5 @@ public abstract class BaseIntegrationTest
         return new NpgsqlConnectionStringBuilder(connectionString) { Database = databaseName }.ConnectionString;
     }
 }
+
+

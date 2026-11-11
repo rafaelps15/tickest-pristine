@@ -1,4 +1,4 @@
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 
 namespace TickestPristine.Web.Api.Endpoints.Tickets;
 
@@ -8,3 +8,4 @@ internal static class Permissions
     internal const string TicketsManage = PermissionCodes.Tickets.Manage;
     internal const string TicketsViewOwn = PermissionCodes.Tickets.ViewOwn;
 }
+

@@ -1,5 +1,5 @@
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 
 namespace TickestPristine.Application.Roles;
 
@@ -65,3 +65,4 @@ internal sealed class PrivilegeEscalationCheck(IPermissionProvider permissionPro
             .ToList();
     }
 }
+

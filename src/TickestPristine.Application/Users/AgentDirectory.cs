@@ -1,5 +1,5 @@
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 
 namespace TickestPristine.Application.Users;
 
@@ -16,3 +16,4 @@ internal sealed class AgentDirectory(IPermissionProvider permissionProvider) : I
         return permissions.Contains(PermissionCodes.Tickets.Manage);
     }
 }
+

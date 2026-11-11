@@ -1,4 +1,4 @@
-namespace TickestPristine.Application.Roles;
+namespace TickestPristine.Domain.Roles;
 
 /// <summary>
 /// Nomes das roles fixas, criadas pelas migrations, como constantes para uso nos handlers, nos seeds e nos testes.
@@ -9,3 +9,4 @@ public static class RoleNames
     public const string Agent = "Atendente";
     public const string Collaborator = "Colaborador";
 }
+

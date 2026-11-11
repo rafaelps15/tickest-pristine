@@ -5,7 +5,7 @@ using Npgsql;
 using TickestPristine.Application.Roles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
@@ -172,3 +172,4 @@ public sealed class DatabaseSeedingTests(IntegrationTestWebAppFactory factory) :
 
     private sealed record RoleDto(string Name, bool IsDefault, bool IsAdministrator, List<string> PermissionCodes);
 }
+

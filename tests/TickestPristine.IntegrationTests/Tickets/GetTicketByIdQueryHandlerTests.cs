@@ -5,7 +5,7 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Tickets.GetById;
 using TickestPristine.IntegrationTests.Abstractions;
 using TickestPristine.Infrastructure.Database;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Sectors;
 using TickestPristine.Domain.Tickets;
@@ -257,3 +257,4 @@ public sealed class GetTicketByIdQueryHandlerTests(IntegrationTestWebAppFactory 
         return ticket;
     }
 }
+

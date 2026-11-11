@@ -5,6 +5,7 @@ using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Roles;
 using TickestPristine.Domain.Users;
+using RoleNames = TickestPristine.Domain.Roles.RoleNames;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
 
@@ -100,3 +101,4 @@ internal sealed class AssignUserRolesCommandHandler(
         return Result.Success();
     }
 }
+

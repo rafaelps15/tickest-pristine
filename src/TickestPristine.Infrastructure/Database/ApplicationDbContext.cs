@@ -1,4 +1,4 @@
-﻿using TickestPristine.Application.Abstractions.Data;
+using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Domain.Audit;
 using TickestPristine.Domain.Departments;
 using TickestPristine.Domain.Roles;
@@ -41,7 +41,6 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<Role> Roles { get; set; }
 
-    public DbSet<Permission> Permissions { get; set; }
 
     public DbSet<RolePermission> RolePermissions { get; set; }
 
@@ -65,3 +64,5 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         modelBuilder.HasDefaultSchema(Schemas.Default);
     }
 }
+
+

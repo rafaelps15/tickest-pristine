@@ -4,7 +4,8 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Pagination;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Application.Users;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Domain.Users;
 using TickestPristine.SharedKernel;
 
@@ -20,11 +21,8 @@ internal sealed class GetBacklogAttendantsQueryHandler(
     IPermissionProvider permissionProvider)
     : IQueryHandler<GetBacklogAttendantsQuery, PagedResponse<AttendantResponse>>
 {
-    // Tamanho aceito do termo de busca, depois do Trim.
     private const int SearchTermMinLength = 2;
     private const int SearchTermMaxLength = 100;
-
-    // Palavras do termo de busca que entram no filtro; as demais são ignoradas.
     private const int SearchTermMaxWords = 5;
 
     public async Task<Result<PagedResponse<AttendantResponse>>> Handle(
@@ -52,9 +50,7 @@ internal sealed class GetBacklogAttendantsQueryHandler(
 
         await using DbConnection connection = await dbConnectionFactory.OpenConnectionAsync(cancellationToken);
 
-        // Cada palavra precisa estar em algum dos campos. As colunas são citext, então o LIKE não diferencia maiúsculas, e
-        // cada palavra vai como padrão escapado (%, _ e \ contam como texto); um nome de setor ou departamento nulo não
-        // atende à palavra.
+        // Cada palavra precisa estar em algum campo; nomes nulos de setor e departamento não atendem à palavra.
         const string filter =
             $"""
              {UserSql.IsTicketAgent}
@@ -69,7 +65,6 @@ internal sealed class GetBacklogAttendantsQueryHandler(
                               OR (d.name IS NOT NULL AND d.name LIKE w.pattern)))
              """;
 
-        // Setor e departamento são opcionais: as junções à esquerda mantêm quem não tem setor, e aí os nomes vêm nulos.
         const string sql =
             $"""
              SELECT COUNT(*)::int

@@ -1,5 +1,5 @@
 using System.Reflection;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 
 namespace TickestPristine.Application.UnitTests.Permissions;
 
@@ -66,3 +66,4 @@ public sealed class PermissionCatalogTests
         displayName.ShouldBe(unknownCode);
     }
 }
+

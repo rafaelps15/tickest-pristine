@@ -1,6 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Roles;
 
@@ -41,6 +41,11 @@ public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseInteg
         string roleName = await CreateTestRoleAsync();
 
         // Act
+        HttpResponseMessage initialResponse = await HttpClient.PutAsJsonAsync(
+            $"roles/{roleName}/permissions",
+            new { permissionCodes = RoleManagerPermissionCodes });
+        initialResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
         HttpResponseMessage assignResponse = await HttpClient.PutAsJsonAsync(
             $"roles/{roleName}/permissions",
             new { permissionCodes = AssignedPermissionCodes });
@@ -254,3 +259,5 @@ public sealed class RolesTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
     private sealed record ProblemDto(int Status, string Title, string Detail);
 }
+
+

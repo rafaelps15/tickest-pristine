@@ -82,14 +82,14 @@
 
 ### 2.1 Contexto de negócio conhecido
 
-- **[Fato]** O idioma do produto é o português do Brasil. Mensagens de erro, nomes de roles e permissões estão em pt-BR (`src/TickestPristine.Domain/*/*Errors.cs`, `src/TickestPristine.Application/Permissions/PermissionCatalog.cs`), e o FluentValidation é configurado para `pt-BR` (`src/TickestPristine.Application/DependencyInjection.cs:14-15`).
+- **[Fato]** O idioma do produto é o português do Brasil. Mensagens de erro, nomes de roles e permissões estão em pt-BR (`src/TickestPristine.Domain/*/*Errors.cs`, `src/TickestPristine.Domain/Permissions/PermissionCatalog.cs`), e o FluentValidation é configurado para `pt-BR` (`src/TickestPristine.Application/DependencyInjection.cs:14-15`).
 - **[Fato]** Há fuso horário de negócio fixo: o gráfico de volume agrupa os chamados pelo horário de `America/Sao_Paulo` (`src/TickestPristine.Application/Tickets/GetVolume/GetTicketVolumeQueryHandler.cs:26,36`).
 - **[Fato, spec 025]** Os períodos de `GET tickets` (abertura e primeira resolução) são datas locais de `America/Sao_Paulo`, convertidas para UTC por `SlaCalendars/LocalDatePeriod.cs` (fuso IANA, do início do primeiro dia ao início do dia seguinte ao último); as specs 026 a 028 reaproveitam a mesma conversão. O `GET users` ainda trata `createdFrom`/`createdTo` como datas UTC, então as duas telas podem divergir para cadastros perto da meia-noite (R-1 da spec 025).
 - **[Fato]** Não há multi-tenancy. Nenhuma entidade tem identificador de organização ou tenant.
 
 ### 2.2 Atores e perfis identificados
 
-Os perfis são **roles fixas criadas por migration** (`src/TickestPristine.Infrastructure/Roles/RoleConfiguration.cs:23-26`, nomes em `src/TickestPristine.Application/Roles/RoleNames.cs:8-10`). A API **não cria nem exclui roles**: só edita as permissões das que existem, menos a de administrador.
+Os perfis são **roles fixas semeadas pelo modelo do EF** (`src/TickestPristine.Infrastructure/Roles/RoleConfiguration.cs`, nomes em `src/TickestPristine.Domain/Roles/RoleNames.cs`). A `Role` é a raiz do agregado e mantém `RolePermission` numa coleção interna; `ReplacePermissions` aplica a RN-17, emite evento com os valores anterior e novo e incrementa `Version`, token de concorrência configurado por expressão no EF. A API **não cria nem exclui roles**: só edita as permissões das que existem, menos a de administrador.
 
 | Ator / role | Permissões padrão (`RolePermissionConfiguration.cs:33-51`) | Observações |
 |---|---|---|
@@ -99,7 +99,7 @@ Os perfis são **roles fixas criadas por migration** (`src/TickestPristine.Infra
 | **Administrador** | Todas as permissões do catálogo (18) | As permissões da role são gerenciadas pelo sistema e não podem ser editadas (`AssignRolePermissionsCommandHandler.cs:29-32`). O sistema impede ficar sem nenhum administrador ativo e com senha (**[Spec 049]** a conta pendente não conta; `Roles/LastAdministratorCheck.cs`). |
 | **Participantes do chamado** (papel contextual) | — | O solicitante (`CreatedByUserId`) e o responsável atual (`AssignedToUserId`) sempre podem **ver** o chamado e os itens dele (**[spec 043]** `Tickets/TicketViewAccess.cs`, peça injetada das consultas; antes `TicketAccessGuard`). Quem deixa de ser o responsável (remoção, spec 001) perde esse acesso, salvo se for o solicitante ou tiver `tickets:manage` (RN-23). |
 
-**Catálogo de permissões** (`src/TickestPristine.Application/Permissions/PermissionCatalog.cs:16-44`, códigos em `PermissionCodes.cs`):
+**Catálogo de permissões** (`src/TickestPristine.Domain/Permissions/PermissionCatalog.cs`, códigos em `PermissionCodes.cs`): `Permission` é dado de referência do domínio; o endpoint de listagem consulta a tabela `permissions` com Dapper. A Application não expõe um `DbSet<Permission>`.
 
 | Grupo | Código | Administrativa? | Exigida por algum endpoint/handler? |
 |---|---|---|---|
@@ -112,7 +112,7 @@ Os perfis são **roles fixas criadas por migration** (`src/TickestPristine.Infra
 | Estrutura | `departments:manage`, `sectors:manage` | Sim | Sim |
 | Auditoria | `audit:read` | Sim | Sim |
 
-"Administrativa" significa que a permissão só pode ser concedida ou removida por quem já a possui (**[Spec 049]** `Roles/PrivilegeEscalationCheck.cs`).
+"Administrativa" significa que a permissão só pode ser concedida ou removida por quem já a possui (**[Spec 049]** `Roles/Rules/OnlyPermissionHolderCanGrantOrRemoveAdministrativePermissionRule.cs`).
 
 ### 2.3 Módulos e áreas funcionais
 

@@ -1,6 +1,6 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.TicketAttachments.Delete;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Domain.Tickets;
@@ -193,3 +193,4 @@ public sealed class DeleteTicketAttachmentCommandHandlerTests : BaseHandlerTest
         return attachment.Id;
     }
 }
+

@@ -1,7 +1,7 @@
 using TickestPristine.Application.Roles.GetAll;
 using TickestPristine.IntegrationTests.Abstractions;
 using TickestPristine.Infrastructure.Database;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Roles;
 using TickestPristine.Domain.Roles;
 using NSubstitute;
@@ -20,7 +20,7 @@ public sealed class GetRolesQueryHandlerTests(IntegrationTestWebAppFactory facto
         Role manager = CreateRole("Manager");
         Role agent = CreateRole("Atendente");
         context.Roles.AddRange(manager, agent);
-        context.RolePermissions.Add(new RolePermission { Id = Guid.NewGuid(), RoleName = manager.Name, PermissionCode = "tickets:manage" });
+        context.RolePermissions.Add(RolePermission.Create(manager.Name, "tickets:manage"));
         await context.SaveChangesAsync();
 
         var handler = new GetRolesQueryHandler(DbConnectionFactory);
@@ -72,3 +72,5 @@ public sealed class GetRolesQueryHandlerTests(IntegrationTestWebAppFactory facto
         agentResponse.IsAdministrator.ShouldBeFalse();
     }
 }
+
+

@@ -63,7 +63,7 @@ public sealed class LastAdministratorCheckTests : BaseHandlerTest
 
         // Assert
         isLast.ShouldBeTrue();
-        context.Entry(administratorRole).Property<int>(RoleConcurrencyToken.PropertyName).IsModified.ShouldBeFalse();
+        context.Entry(administratorRole).Property(role => role.Version).IsModified.ShouldBeFalse();
     }
 
     private static TestDbContext CreateDbContext(string databaseName) =>

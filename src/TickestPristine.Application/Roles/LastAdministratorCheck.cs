@@ -48,7 +48,7 @@ internal sealed class LastAdministratorCheck(IApplicationDbContext context)
             return true;
         }
 
-        context.Entry(administratorRole).Property<int>(RoleConcurrencyToken.PropertyName).CurrentValue++;
+        context.Entry(administratorRole).Property(role => role.Version).CurrentValue++;
 
         return false;
     }

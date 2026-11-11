@@ -4,7 +4,7 @@ using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
 using TickestPristine.Application.Abstractions.Pagination;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Domain.Tickets;
 using TickestPristine.SharedKernel;
 
@@ -102,3 +102,4 @@ internal sealed class GetOwnTicketsQueryHandler(
         return tickets;
     }
 }
+

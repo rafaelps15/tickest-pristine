@@ -2,7 +2,6 @@ using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
 using TickestPristine.Application.Abstractions.Data;
 using TickestPristine.Application.Abstractions.Messaging;
-using TickestPristine.Application.Permissions;
 using TickestPristine.Domain.Roles;
 using Microsoft.EntityFrameworkCore;
 using TickestPristine.SharedKernel;
@@ -12,65 +11,31 @@ namespace TickestPristine.Application.Roles.AssignPermissions;
 internal sealed class AssignRolePermissionsCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IPermissionProvider permissionProvider,
-    PrivilegeEscalationCheck privilegeEscalationCheck)
+    IPermissionProvider permissionProvider)
     : ICommandHandler<AssignRolePermissionsCommand>
 {
     public async Task<Result> Handle(AssignRolePermissionsCommand command, CancellationToken cancellationToken)
     {
-        Role? role = await context.Roles.SingleOrDefaultAsync(r => r.Name == command.RoleName, cancellationToken);
+        Role? role = await RoleQueries.WithPermissions(context.Roles)
+            .SingleOrDefaultAsync(candidate => candidate.Name == command.RoleName, cancellationToken);
 
         if (role is null)
         {
             return Result.Failure(RoleErrors.NotFound(command.RoleName));
         }
 
-        // A role de administrador sempre recebe todas as permissões, por isso não pode ser editada.
-        if (role.Name == RoleNames.Administrator)
-        {
-            return Result.Failure(RoleErrors.AdministratorRoleIsManaged);
-        }
-
-        List<RolePermission> existingPermissions = await context.RolePermissions
-            .Where(p => p.RoleName == role.Name)
-            .ToListAsync(cancellationToken);
-
-        HashSet<string> currentCodes = [.. existingPermissions.Select(p => p.PermissionCode)];
-        HashSet<string> requestedCodes = [.. command.PermissionCodes];
-
-        // Considera tanto as permissões adicionadas quanto as removidas.
-        HashSet<string> changedCodes = [.. currentCodes];
-        changedCodes.SymmetricExceptWith(requestedCodes);
-
-        List<string> missingPermissions = await privilegeEscalationCheck.GetMissingPermissionsToChangeAsync(
+        HashSet<string> callerPermissionCodes = await permissionProvider.GetCurrentForUserIdAsync(
             userContext.UserId,
-            changedCodes,
             cancellationToken);
+        Result<RolePermissionsChange> change = role.ReplacePermissions(command.PermissionCodes, callerPermissionCodes);
 
-        if (missingPermissions.Count > 0)
+        if (change.IsFailure)
         {
-            return Result.Failure(RoleErrors.PrivilegeEscalation(missingPermissions));
+            return Result.Failure(change.Error);
         }
-
-        // O par (RoleName, PermissionCode) é único: remove só as que saíram e inclui só as que entraram.
-        context.RolePermissions.RemoveRange(existingPermissions.Where(p => !requestedCodes.Contains(p.PermissionCode)));
-
-        foreach (string permissionCode in requestedCodes.Except(currentCodes))
-        {
-            context.RolePermissions.Add(new RolePermission
-            {
-                Id = Guid.NewGuid(),
-                RoleName = role.Name,
-                PermissionCode = permissionCode
-            });
-        }
-
-        role.Raise(new RolePermissionsAssignedDomainEvent(role.Id));
 
         await context.SaveChangesAsync(cancellationToken);
 
-        // Os membros são lidos depois do commit, para quem entrou na função durante a gravação também perder o cache.
-        // Depois do commit, nem a leitura nem a invalidação podem ser canceladas junto com a requisição.
         List<Guid> affectedUserIds = await context.UserRoles
             .Where(userRole => userRole.RoleName == role.Name)
             .Select(userRole => userRole.UserId)

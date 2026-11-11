@@ -1,6 +1,8 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <InternalsVisibleTo Include="TickestPristine.Application.UnitTests" />
+    <InternalsVisibleTo Include="TickestPristine.IntegrationTests" />
     <ProjectReference Include="..\TickestPristine.SharedKernel\TickestPristine.SharedKernel.csproj" />
   </ItemGroup>
 

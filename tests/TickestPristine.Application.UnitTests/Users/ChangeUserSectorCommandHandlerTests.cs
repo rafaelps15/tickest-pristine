@@ -1,6 +1,6 @@
 using TickestPristine.Application.Abstractions.Authentication;
 using TickestPristine.Application.Abstractions.Authorization;
-using TickestPristine.Application.Permissions;
+using TickestPristine.Domain.Permissions;
 using TickestPristine.Application.Roles;
 using TickestPristine.Application.UnitTests.Abstractions;
 using TickestPristine.Application.Users.ChangeSector;
@@ -187,3 +187,4 @@ public sealed class ChangeUserSectorCommandHandlerTests : BaseHandlerTest
         return sector;
     }
 }
+
