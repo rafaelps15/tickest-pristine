@@ -2,7 +2,7 @@
 # Dependabot as atualiza.
 
 # Estágio base: só o runtime do ASP.NET; o Visual Studio usa este estágio para depurar no modo rápido.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.14 AS base
+FROM mcr.microsoft.com/dotnet/aspnet:11.0.0 AS base
 # O curl serve só à sonda de saúde (HEALTHCHECK). A pasta dos anexos fica com o usuário da API, que não é root: sem
 # isso, o envio de anexo e o health/ready falham no contêiner.
 RUN apt-get update \
