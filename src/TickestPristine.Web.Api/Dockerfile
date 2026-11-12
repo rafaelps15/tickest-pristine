@@ -17,7 +17,7 @@ EXPOSE 8081
 
 
 # Estágio de build: restaura os pacotes e compila a API, com o SDK do global.json.
-FROM mcr.microsoft.com/dotnet/sdk:10.0.403 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0.100 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["global.json", "."]
